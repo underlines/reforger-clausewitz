@@ -33,7 +33,23 @@ class CLW_GameMode : SCR_BaseGameMode
 		if (IssueMove(group, target))
 			Print("CLW: MOVE issued to CLW_Squad_US_1 -> " + target.ToString(), LogLevel.NORMAL);
 
-		GetGame().GetCallqueue().CallLater(LogSquad, 60000, false, "CLW_Squad_US_1");
+		LogOrderState(group);
+		foreach (int delay : {5000, 15000, 30000, 60000})
+		{
+			GetGame().GetCallqueue().CallLater(LogOrderState, delay, false, group);
+		}
+	}
+
+	protected void LogOrderState(SCR_AIGroup group)
+	{
+		array<AIWaypoint> waypoints = {};
+		group.GetWaypoints(waypoints);
+		AIWaypoint current = group.GetCurrentWaypoint();
+		vector leaderPos;
+		if (group.GetLeaderEntity())
+			leaderPos = group.GetLeaderEntity().GetOrigin();
+
+		Print(string.Format("CLW: order state waypoints=%1 current=%2 leader=%3", waypoints.Count(), current, leaderPos), LogLevel.NORMAL);
 	}
 
 	protected bool IssueMove(SCR_AIGroup group, vector target)

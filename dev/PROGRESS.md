@@ -15,7 +15,7 @@ Updated: 2026-10-11. Roadmap: `VISION.md` section 13. Decisions: `notes/`.
 - [ ] Player can join a faction, spawn as soldier, join an AI squad (section 2a); verify which base-game spawn/loadout/group components are reusable
 - [ ] Spike: REST GET/POST/headers to local echo server (risk 1)
 - [ ] Spike: perception tap, per-group enemy clusters -> `Contact` record
-- [ ] Spike: order loop, canned MOVE -> waypoint on a group (script written in CLW_GameMode.SpikeOrderLoop, not yet verified in play)
+- [x] Spike: order loop, canned MOVE -> waypoint on a group: verified, US leader walked 150 m east in <60 s on the Arland navmesh (CLW_GameMode.SpikeOrderLoop)
 - [ ] RuleCommander v0: one squad per side, MOVE/ATTACK/DEFEND
 
 - [ ] OPEN: decide player-request approach (VISION 5a): (A) fixed request commands vs (B) tool registry; evaluate both, prototype A after M2, check scriptable Game Master functions
@@ -28,3 +28,4 @@ CLW_GameMode skeleton, then the perception and order spikes.
 - 2026-10-11: Human participation made central (VISION 2a): soldiers and squad leaders get HQ orders as missions.  Players pick from several offered assignments.
 - 2026-10-11: Player-request approach (fixed request commands vs tool registry) drafted in VISION 5a; decision still open.
 - 2026-10-11: First playable world. Gotchas (no AIWorld in sub-scenes, Diag "Resources are leaking" assert, base-game GUID lookup) recorded in workspace skills and `_tools/guid-lookup.ps1`.
+- 2026-10-11: Order loop verified in play (MOVE waypoint followed, waypoint cleared on arrival). Navmesh works. Earlier failed runs used stale scripts: after editing, run wb_reload and check the log for 'Reloading game scripts'.
