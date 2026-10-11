@@ -17,3 +17,6 @@ dist/
 publish/
 
 # NOT ignored on purpose: *.meta, *.rdb, *.gproj
+
+# MCP handler scripts, copied in by wb_launch and removed by wb_cleanup
+addon/Scripts/WorkbenchGame/
