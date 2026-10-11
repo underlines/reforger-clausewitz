@@ -51,6 +51,15 @@ FactionPicture (own units + known contacts, fog applied)
 
 Both see exactly the same fog-limited picture and share validator, executor, SITREPs and everything below; only the decision-making differs. New features get a rule-based version first; the LLM gets them through the shared vocabulary.
 
+### 1a. Middle tier: small label-probability model (JEV-like) [verify]
+
+Between the full LLM/agent commander and the plain RuleCommander, add an optional **cheap classifier tier**. Per the project owner: JEV is a small, fast decision model introduced September 2026 that needs no finetuning; open variants exist besides the original commercial JEV, which has very low pricing and latency. Input is a context plus **custom labels**; output is a **probability per label** at runtime. Details of the real API/licence are unverified, check before designing (the idea does not depend on that exact model; any such zero-shot classifier fits).
+
+- **Use:** pick among a fixed set of discrete choices per squad or faction, e.g. {ATTACK, DEFEND, MOVE/SEARCH, FALL_BACK, HOLD}, or choose which candidate objective/contact to act on, from a short text rendering of the situation. Far cheaper and faster than an LLM call, so it can run per squad every cycle (also a good fit for squad-leader decisions, section 4a).
+- **Fallback ladder:** LLM/agent -> small classifier -> RuleCommander. Step down on timeout, budget exhaustion or offline; step up again when healthy. The classifier may also run *between* LLM calls so squads keep reasonable behaviour while HQ thinks.
+- **Limits:** it only chooses among given labels (no free-form plans, coordinates come from rules/candidates), so the validator and executor stay unchanged. Probabilities can gate behaviour: low confidence -> keep the current order or escalate to the LLM.
+- **Hosting:** behind the same sidecar interface (a new `CLW_LLM` backend mode, e.g. `classifier`), local open model or the commercial API; the dashboard (12a) can show label probabilities per decision.
+
 ---
 
 ## 2. Scope: what the agents command
