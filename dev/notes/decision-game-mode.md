@@ -23,3 +23,6 @@
 
 ## Revisit if
 The M0 spike shows base capture/spawning must be vanilla to get working AI behaviour, or M3 logistics proves far cheaper through Conflict's economy than through our ledger.
+
+## Addendum: human players are central (2026-10-11)
+Players join either side as soldiers or squad leaders (VISION section 2a). That raises the cost of owning the game mode: faction join, spawn/loadout, respawn and group join/leave are now our job in M0. The decision still stands because these come from base-game components, not Conflict-specific code `[verify in M0]`: `SCR_BaseGameMode`, respawn system and loadout manager, `SCR_GroupsManagerComponent`. Lighter vanilla modes (e.g. Capture & Hold) are better references for the player flow than Conflict. **Explicit revisit trigger:** if the M0 player-join/spawn path takes much longer than ~1 week or needs heavy Conflict internals, reconsider extending Conflict (augment mode).

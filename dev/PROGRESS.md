@@ -10,6 +10,7 @@ Updated: 2026-10-11. Roadmap: `VISION.md` section 13. Decisions: `notes/`.
 - [x] Branch `main` in workspace and mod repo; MCP project path -> `Clausewitz/addon`
 - [x] MCP verified: `project browse` resolves to Clausewitz/addon
 - [ ] `CLW_GameMode` + minimal world (two factions, spawn points), compiles and Plays
+- [ ] Player can join a faction, spawn as soldier, join an AI squad (section 2a); verify which base-game spawn/loadout/group components are reusable
 - [ ] Spike: REST GET/POST/headers to local echo server (risk 1)
 - [ ] Spike: perception tap, per-group enemy clusters -> `Contact` record
 - [ ] Spike: order loop, canned MOVE -> waypoint on a group
@@ -20,3 +21,4 @@ CLW_GameMode skeleton, then the perception and order spikes.
 
 ## Log
 - 2026-10-11: Vision and research committed; game-mode decision made; roadmap condensed to M0-M5; branch naming unified on `main`.
+- 2026-10-11: Human participation made central (VISION 2a): soldiers and squad leaders get HQ orders as missions.

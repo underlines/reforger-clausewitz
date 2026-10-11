@@ -11,7 +11,7 @@ AI High Command for Arma Reforger (built-in rule-based commander, optional LLM):
   - `research/feasibility-research.md` - what is known to be possible, sources, risks, first spikes
 
 ## Status
-Vision, research and game-mode decision done; no code yet. Next: M0 skeleton (`CLW_GameMode`, perception + rule-based commander + waypoints), see `dev/PROGRESS.md`.
+Vision (incl. human players as soldiers and squad leaders), research and game-mode decision done; no code yet. Next: M0 skeleton (`CLW_GameMode`, perception + rule-based commander + waypoints), see `dev/PROGRESS.md`.
 
 ## Dependencies
 None yet (base game only). RHS / WCS planned as optional compatibility.

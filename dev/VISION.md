@@ -61,6 +61,33 @@ Both see exactly the same fog-limited picture and share validator, executor, SIT
 
 ---
 
+## 2a. Humans take part in the war (central)
+
+Players are **not spectators**. They fight on either side, inside the same chain of command as the AI, and the AI HQ treats them as units it can task. Draft, to be refined:
+
+**Roles**
+- **Soldier:** joins a faction and drops into an AI squad (taking a free or AI-held slot). Fights normally, receives the squad's current task through the squad leader, sees the faction picture on the map (section 8).
+- **Squad leader:** takes over an AI group. AI members follow the player; HQ orders that would go to the AI leader go to the player instead. Higher echelons (platoon/company leader) follow the same pattern later.
+- **HQ staff / observer** (optional): sees the faction picture, can talk to HQ (section 11); no direct unit control.
+- Join and leave at any time: when a human leaves, the AI leader resumes; when one joins, the AI hands over without a hiccup.
+
+**Orders as missions**
+- The same command vocabulary (section 5) is rendered for humans as a **mission**: short briefing text (intent, objective, constraints, timeout), objective and route on the map, priority. Rule commander uses text templates, the LLM writes the prose; the structured order stays identical.
+- Player responds: **Accept / Cannot comply (reason) / Complete**; HQ treats a refusal like an AI "cannot comply" and re-plans.
+- **No forced waypoints on human groups.** The leader may deviate; HQ sees the deviation through reports and the squad's actual position and adapts.
+- A player-led squad produces SITREPs automatically from its real state (position, strength, ammo, contacts); the leader can add a quick report (section 8, option B).
+- Mission delivery uses the vanilla task system if it fits `[verify]`, else our own small task list + map markers.
+
+**Consequences for the design**
+- Faction join, spawn/loadout, respawn (tied to the resource ledger: supplies or tickets, spawn at base/FOB/squad), and group join/leave are now core, not optional: M0 must let a player join a side and spawn as a soldier.
+- Human squads are scored for the commander's picture like any other group, but with higher-uncertainty behaviour (they may refuse, deviate or die without warning).
+- Fog of war for humans = the faction's known picture, shown on their map, nothing more.
+- Server authority: all state on the server, mission UI on clients.
+
+Open questions: how a leader hands a squad back to AI; whether a lone player may refuse missions indefinitely (ROE for AI HQ); PvP balance when one side has more humans; how many AI slots a player may displace; late-join in the middle of an assault.
+
+---
+
 ## 3. Scenario setup screen (first player joins)
 
 A lobby UI shown to the first (admin) player before the war starts. Dedicated-server friendly (can also be pre-set from a config file / JSON for headless runs).
@@ -76,7 +103,7 @@ A lobby UI shown to the first (admin) player before the war starts. Dedicated-se
 | Max total AI / "size of war" | Auto-derived from server performance budget, adjustable |
 | Cleanup policy | See section 9 |
 | Fog of war strictness | Full / Reduced (some free intel) / Off (debug) |
-| Human participation | Players join a faction as ordinary soldiers, as HQ observers, as a commander with LLM staff support |
+| Human participation | Allowed sides, slots per side, roles (soldier / squad leader / HQ staff), AI backfill of empty slots, respawn rules (section 2a) |
 | Commander (per faction) | Rules (difficulty) / LLM (with Rules fallback) |
 | LLM settings | Model/endpoint, planning interval, "think budget", dry-run flag |
 | Win conditions | Capture/destroy HQ, hold objectives for N minutes, attrition threshold, time limit |
@@ -236,9 +263,9 @@ Own game mode `CLW_GameMode` (see `notes/decision-game-mode.md`). Live status: `
 
 | Milestone | Contents | Proves |
 |---|---|---|
-| **M0 - Skeleton** | Game mode + minimal world, one squad per side, per-faction contacts, RuleCommander issues MOVE/ATTACK/DEFEND waypoints, logs. Spikes: perception tap, order loop | Perception + waypoint APIs, core loop, playable without LLM |
+| **M0 - Skeleton** | Game mode + minimal world, player can join a side and spawn as a soldier in an AI squad, one AI squad per side, per-faction contacts, RuleCommander issues MOVE/ATTACK/DEFEND waypoints, logs. Spikes: perception tap, order loop | Perception + waypoint APIs, core loop, playable without LLM |
 | **M1 - LLM bridge** | REST spike (POST/headers/polling), sidecar, RemoteCommander, schema validation, fallback to Rules | LLM loop |
-| **M2 - Real war** | More commands, SITREPs, win conditions, spawn budget, resource ledger, bases, supply convoys | AI vs AI with economy |
+| **M2 - Real war** | Player squad leaders receive HQ orders as missions (accept/refuse/complete), more commands, SITREPs, win conditions, spawn budget, resource ledger, bases, supply convoys | AI vs AI with economy |
 | **M3 - Mechanized & intel** | Vehicle groups, embark/dismount, convoys; map markers, expiry, player reports, setup screen | Vehicle AI, humans in the loop |
 | **M4 - Scale & realism** | Chain-of-command echelons with delayed reports, population manager (cleanup, collapse/expand), FOBs | Size of war |
 | **M5 - Content compat** | RHS / WCS profiles, role classifier | Custom factions |
