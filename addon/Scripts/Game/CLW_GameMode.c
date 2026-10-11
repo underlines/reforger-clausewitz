@@ -127,9 +127,12 @@ class CLW_GameMode : SCR_BaseGameMode
 
 		if (squad.GetGroupID() < 0)
 			groups.RegisterGroup(squad);
-		groups.AssignGroupID(squad);
+		if (squad.GetGroupID() < 0)
+			groups.AssignGroupID(squad);
 		Print(string.Format("CLW: squad %1 groupId=%2 playable=%3", squad, squad.GetGroupID(), squad.IsPlayable()), LogLevel.NORMAL);
 		groups.AddPlayerToGroup(squad.GetGroupID(), playerId);
+		array<SCR_AIGroup> factionGroups = groups.GetPlayableGroupsByFaction(faction);
+		Print(string.Format("CLW: playable groups of faction %1: %2", faction.GetFactionKey(), factionGroups.Count()), LogLevel.NORMAL);
 		Print(string.Format("CLW: player %1 in squad=%2 players=%3 leaderId=%4", playerId, squad.IsPlayerInGroup(playerId), squad.GetPlayerCount(), squad.GetLeaderID()), LogLevel.NORMAL);
 	}
 

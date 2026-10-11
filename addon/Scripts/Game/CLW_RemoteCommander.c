@@ -147,6 +147,7 @@ class CLW_RemoteCommander
 				m_fLastKeepAt = keepNow;
 				Print(string.Format("CLW: RemoteCommander %1: keeping current orders", m_sFaction), LogLevel.NORMAL);
 			}
+			m_Rules.ThinkHumanLed();
 			return;
 		}
 
@@ -193,6 +194,7 @@ class CLW_RemoteCommander
 		}
 
 		m_sLastReason = "";
+		m_Rules.ThinkHumanLed();
 		CLW_Debug.Say(string.Format("%1 HQ (LLM): %2 order(s): %3", m_sFaction, applied, summary));
 	}
 

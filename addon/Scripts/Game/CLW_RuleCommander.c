@@ -53,6 +53,25 @@ class CLW_RuleCommander
 		m_aPatrolPoints.Copy(points);
 	}
 
+	// Human-led squads that never got a mission (e.g. the LLM ignored them) get one from the rules, so they always have an objective.
+	void ThinkHumanLed()
+	{
+		if (!m_Book || !Replication.IsServer())
+			return;
+
+		array<CLW_Contact> contacts = {};
+		m_Book.GetContacts(contacts);
+		for (int i = 0; i < m_aSquads.Count(); i++)
+		{
+			if (m_aMode[i] != MODE_NONE)
+				continue;
+
+			SCR_AIGroup group = SCR_AIGroup.Cast(GetGame().GetWorld().FindEntityByName(m_aSquads[i]));
+			if (group && HasHumanLeader(group))
+				ThinkSquad(i, contacts);
+		}
+	}
+
 	void Think()
 	{
 		if (!m_Book || !Replication.IsServer())
@@ -370,7 +389,9 @@ class CLW_RuleCommander
 		}
 
 		// Scene-placed squads have GroupID -1; tasks address groups by ID.
-		SCR_GroupsManagerComponent.GetInstance().AssignGroupID(group);
+		// Only when missing: a second AssignGroupID on the player squad is the suspected cause of duplicate squad leaders / dead commanding (2026-10-12).
+		if (group.GetGroupID() < 0)
+			SCR_GroupsManagerComponent.GetInstance().AssignGroupID(group);
 		int groupId = group.GetGroupID();
 		taskSystem.SetTaskOwnership(task, SCR_ETaskOwnership.GROUP);
 		taskSystem.SetTaskVisibility(task, SCR_ETaskVisibility.GROUP);
