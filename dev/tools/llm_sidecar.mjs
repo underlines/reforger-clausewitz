@@ -179,6 +179,33 @@ function budget() {
   const level = remaining <= 0 ? "reached" : pct >= 95 ? "crit" : pct >= 80 ? "warn" : "ok";
   return { limit: d.limit, remaining, pct, level, resetting: d.limit_reset ?? null };
 }
+// Spending pace. Assumption: OpenRouter resets on UTC boundaries (daily 00:00, weekly Monday 00:00, monthly 1st 00:00).
+// Period limit: projected = u / elapsedFraction (needs f >= 0.05 and u > 0). No reset: session burn rate (needs >= 5 min). No limit: $/h only.
+function periodBounds(reset, now) {
+  const d = new Date(now), y = d.getUTCFullYear(), m = d.getUTCMonth(), day = d.getUTCDate();
+  if (reset === "daily") { const s = Date.UTC(y, m, day); return [s, s + 86400000]; }
+  if (reset === "weekly") { const s = Date.UTC(y, m, day - ((d.getUTCDay() + 6) % 7)); return [s, s + 7 * 86400000]; }
+  if (reset === "monthly") return [Date.UTC(y, m, 1), Date.UTC(y, m + 1, 1)];
+  return null;
+}
+function pace() {
+  const d = keyState.data;
+  if (cfg.provider !== "openrouter" || !d) return null;
+  const now = Date.now(), hours = (now - state.startedAt) / 3600000;
+  const rate = hours * 60 >= 5 && session.cost > 0 ? session.cost / hours : null;
+  const hasLimit = isNum(d.limit) && d.limit > 0;
+  if (!hasLimit) return { kind: "rate", ratePerHour: rate };
+  const bounds = periodBounds(d.limit_reset, now);
+  if (!bounds) {
+    const remaining = (d.limit_remaining ?? (d.limit - (d.usage ?? 0))) - keyState.costSincePoll;
+    return { kind: "rate", ratePerHour: rate, hoursToLimit: rate && remaining > 0 ? remaining / rate : null };
+  }
+  const [start, end] = bounds, f = (now - start) / (end - start);
+  const u = (d[{ daily: "usage_daily", weekly: "usage_weekly", monthly: "usage_monthly" }[d.limit_reset]] ?? 0) + keyState.costSincePoll;
+  const out = { kind: "period", reset: d.limit_reset, elapsed: f, expected: d.limit * f, used: u, resetsInMs: end - now, projected: null, delta: null };
+  if (f >= 0.05 && u > 0) { out.projected = u / f; out.delta = out.projected - d.limit; }
+  return out;
+}
 const LEVELS = ["ok", "warn", "crit", "reached"];
 function checkBudget() {
   const b = budget(), level = b ? b.level : "ok";
@@ -218,7 +245,8 @@ function usageView() {
   return {
     enabled: on, session, stopAtLimit: cfg.stopAtLimit,
     key: on ? { data: keyState.data, ts: keyState.ts, error: keyState.error, polling: keyState.polling, costSincePoll: keyState.costSincePoll, keySet: !!cfg.apiKey } : null,
-    budget: on ? budget() : null,
+    budget: on ? (budget() ? { ...budget(), pace: pace() } : null) : null,
+    pace: on ? pace() : null, // also present without a limit (rate only)
   };
 }
 const budgetStopped = (c) => c.provider === "openrouter" && c.stopAtLimit && budget()?.level === "reached";

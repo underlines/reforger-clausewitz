@@ -8,7 +8,7 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 ### Added
 - LLM bridge: HQ commanders send the contact picture to a local sidecar (`dev/tools/llm_sidecar.mjs`) and apply the validated orders; falls back to the rule commander on errors or empty replies.
 - Sidecar providers: fake, Anthropic, OpenAI-compatible.
-- OpenRouter provider with usage monitoring: per-request cost, session totals by model and faction, key spending-limit bar in the Configuration view, 80%/95% warnings, and an optional automatic stop of LLM calls at the limit (falls back to the rule commander).
+- OpenRouter provider with usage monitoring and spending-pace estimate (over/under by reset): per-request cost, session totals by model and faction, key spending-limit bar in the Configuration view, 80%/95% warnings, and an optional automatic stop of LLM calls at the limit (falls back to the rule commander).
 - Web panel at http://127.0.0.1:8788/ : HQ view (map, squads table, SITREP, exchange log) and configuration view.
 - More squad data in the situation (type, wounded, health, speed, heading, state, objective).
 - Sidecar cost control: `minIntervalSec` and `skipUnchanged` settings; skipped cycles keep current orders. 20 s provider cooldown after HTTP 429/5xx.

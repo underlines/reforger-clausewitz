@@ -460,6 +460,19 @@ function UsageCard({ u, now, toast, refresh }) {
   } else if (d) {
     numbers = [["Today", d.usage_daily], ["Week", d.usage_weekly], ["Month", d.usage_monthly], ["Total", d.usage]];
   }
+  const pc = u.pace, dur = (ms) => { const m = Math.max(0, Math.round(ms / 60000)), dd = Math.floor(m / 1440), hh = Math.floor((m % 1440) / 60); return dd ? `${dd}d ${hh}h` : hh ? `${hh}h ${m % 60}m` : `${m}m`; };
+  let chip = null, mark = null;
+  if (pc?.kind === "period" && d) {
+    mark = Math.min(100, (100 * pc.expected) / d.limit);
+    const rs = ` · resets in ${dur(pc.resetsInMs)}`;
+    if (pc.projected === null) chip = { cls: "", txt: "not enough data yet" + rs };
+    else {
+      const r = pc.projected / d.limit, cls = r > 1 ? "bad" : r >= 0.9 ? "warn" : "ok";
+      chip = { cls, txt: pc.delta > 0 ? `▲ +${usd(pc.delta)} over by reset (proj. ${usd(pc.projected)} of ${usd(d.limit)})${rs}` : `▼ ${usd(-pc.delta)} under (proj. ${usd(pc.projected)} of ${usd(d.limit)})${rs}` };
+    }
+  } else if (pc?.kind === "rate") {
+    chip = { cls: "", txt: pc.ratePerHour === null ? "not enough data yet" : `${usd(pc.ratePerHour)}/h${pc.hoursToLimit ? `, limit reached in ~${pc.hoursToLimit < 10 ? pc.hoursToLimit.toFixed(1) : Math.round(pc.hoursToLimit)} h` : ""}` };
+  }
   const col = !bar ? "" : bar.pct >= 95 ? "var(--bad)" : bar.pct >= 80 ? "var(--warn)" : "var(--ok)";
   const models = Object.entries(s.byModel ?? {}).sort((a, c) => c[1].cost - a[1].cost);
   const facs = Object.entries(s.byFaction ?? {}).sort((a, c) => c[1].cost - a[1].cost);
@@ -468,10 +481,11 @@ function UsageCard({ u, now, toast, refresh }) {
     <div class="cfgbody">
       ${b && b.level !== "ok" && html`<div class=${"banner " + (b.level === "warn" ? "warn" : "bad")}>${b.level === "reached"
         ? `Spending limit reached (${usd(b.limit)}).${u.stopAtLimit ? " Provider calls are stopped; the game uses its rule commander until budget is available again." : ""}`
-        : `${b.pct.toFixed(0)}% of the key's spending limit used (${usd(b.remaining)} left).`}</div>`}
+        : `${b.pct.toFixed(0)}% of the key's spending limit used (${usd(b.remaining)} left).${b.pace?.delta > 0 ? ` At this pace you will overshoot by ${usd(b.pace.delta)} by reset.` : ""}`}</div>`}
       ${k?.error && html`<div class="banner bad">Budget poll failed: ${k.error}</div>`}
       ${!k?.keySet && html`<div class="muted">No API key stored: budget polling is off.</div>`}
-      ${bar && html`<div><div class="ubar"><i style=${{ width: bar.pct + "%", background: col }}></i></div><div class="ulabel">${bar.label}${num(d.limit_remaining) ? html` <span class="muted">, ${usd(d.limit_remaining - (k.costSincePoll ?? 0))} left</span>` : ""}</div></div>`}
+      ${!bar && chip && html`<div class=${"upace " + chip.cls}>${chip.txt}</div>`}
+      ${bar && html`<div><div class="ubar"><i style=${{ width: bar.pct + "%", background: col }}></i>${mark !== null && html`<span class="umark" style=${{ left: mark + "%" }} title="on pace marker"></span>`}</div><div class="ulabel">${bar.label}${chip && html` <span class=${"upace " + chip.cls}>${chip.txt}</span>`}${num(d.limit_remaining) ? html` <span class="muted">, ${usd(d.limit_remaining - (k.costSincePoll ?? 0))} left</span>` : ""}</div></div>`}
       ${numbers && html`<div><div class="unums">${numbers.map(([l, v]) => html`<div><span class="muted">${l}</span><b>${usd(v)}</b></div>`)}</div><div class="muted">no spending limit set</div></div>`}
       <div class="unums">
         <div><span class="muted">Session cost</span><b>${usd4(s.cost)}</b></div>
