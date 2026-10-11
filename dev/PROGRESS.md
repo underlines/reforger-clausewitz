@@ -23,7 +23,7 @@ Updated: 2026-10-11. Roadmap: `VISION.md` section 13. Decisions: `notes/`.
 - [ ] OPEN: decide player-request approach (VISION 5a): (A) fixed request commands vs (B) tool registry; evaluate both, prototype A after M2, check scriptable Game Master functions
 
 ## Next up
-RuleCommander v0 (step 4): consume Contact records, issue MOVE/ATTACK/DEFEND to the AI-led squad. Note: a squad containing a player follows the player, so HQ orders must go to AI-only squads or become missions for the player-led squad (VISION 2a). Also: REST spike.
+Confirm contact markers visually on the map and test DEFEND; then REST spike (M1 risk 1). A squad containing a player follows the player, so HQ orders go to AI-only squads or become missions for the player-led squad (VISION 2a, M2).
 
 ## Log
 - 2026-10-11: Vision and research committed; game-mode decision made; roadmap condensed to M0-M5; branch naming unified on `main`.
