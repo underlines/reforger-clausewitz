@@ -695,6 +695,7 @@ const worldState = { info: null, key: "", ts: 0 };
 const mapState = { status: "none", key: "", pngPath: null, width: 0, height: 0, source: "", texturePath: "", calibration: null, error: null, ts: 0, detectedGameDir: "" };
 const vectors = new Map();   // worldKey -> {roads: [...]|null, locations: [...]|null}
 const roadAsm = new Map();   // worldKey -> {chunks: Map(idx -> roads), total: -1}
+const bldAsm = new Map();    // same for buildings: chunks of [cx,cz,w,d,yaw,cat]
 const numArr = (a, n) => Array.isArray(a) && a.length >= n && a.slice(0, n).every(isNum);
 
 function worldKeyOf(info) {
@@ -715,8 +716,8 @@ function cleanWorld(b) {
 
 function loadVectors(key) {
   if (!vectors.has(key)) {
-    let v = { roads: null, locations: null };
-    try { const j = JSON.parse(fs.readFileSync(path.join(VECTOR_DIR, key + ".json"), "utf8")); v = { roads: Array.isArray(j.roads) ? j.roads : null, locations: Array.isArray(j.locations) ? j.locations : null }; } catch { /* none cached */ }
+    let v = { roads: null, locations: null, buildings: null };
+    try { const j = JSON.parse(fs.readFileSync(path.join(VECTOR_DIR, key + ".json"), "utf8")); v = { roads: Array.isArray(j.roads) ? j.roads : null, locations: Array.isArray(j.locations) ? j.locations : null, buildings: Array.isArray(j.buildings) ? j.buildings : null }; } catch { /* none cached */ }
     vectors.set(key, v);
   }
   return vectors.get(key);
@@ -762,11 +763,11 @@ function mapExtent() {
 }
 
 function worldView() {
-  const v = worldState.key ? loadVectors(worldState.key) : { roads: null, locations: null };
+  const v = worldState.key ? loadVectors(worldState.key) : { roads: null, locations: null, buildings: null };
   return {
     worldKey: worldState.key, info: worldState.info, ts: worldState.ts, extent: mapExtent(),
     map: { status: mapState.status, width: mapState.width, height: mapState.height, source: mapState.source, texturePath: mapState.texturePath, flipY: !!mapState.calibration?.flipY, error: mapState.error, ts: mapState.ts, extent: mapExtent() },
-    vector: { roads: v.roads ? v.roads.length : null, locations: v.locations ? v.locations.length : null },
+    vector: { roads: v.roads ? v.roads.length : null, locations: v.locations ? v.locations.length : null, buildings: v.buildings ? v.buildings.length : null },
     gameDir: cfg.gameDir, detectedGameDir: mapState.detectedGameDir, mapMaxSize: cfg.mapMaxSize,
   };
 }
@@ -804,17 +805,31 @@ async function handleWorldPost(req, res, url) {
     if (!info) return send(res, 400, { error: "bad world info" });
     setWorld(info);
     const v = loadVectors(worldState.key);
-    return send(res, 200, { ok: true, worldKey: worldState.key, needRoads: !v.roads, needLocations: !v.locations });
+    return send(res, 200, { ok: true, worldKey: worldState.key, needRoads: !v.roads, needLocations: !v.locations, needBuildings: !v.buildings });
   }
   const key = typeof b?.worldKey === "string" ? b.worldKey.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 60) : "";
   if (!key) return send(res, 400, { error: "worldKey missing" });
   const v = loadVectors(key);
   if (url === "/world/locations") {
     const items = (Array.isArray(b.items) ? b.items : []).filter((i) => i && typeof i.name === "string" && numArr(i.pos, 2))
-      .map((i) => ({ name: i.name.slice(0, 80), type: typeof i.type === "string" ? i.type.slice(0, 30) : "", pos: [i.pos[0], i.pos[1]] })).slice(0, 2000);
+      .map((i) => ({ name: i.name.slice(0, 80), type: typeof i.type === "string" ? i.type.slice(0, 30) : "", kind: typeof i.kind === "string" && /^[a-z]{1,20}$/.test(i.kind) ? i.kind : "", faction: typeof i.faction === "string" ? i.faction.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 20) : "", pos: [i.pos[0], i.pos[1]] })).slice(0, 2000);
     v.locations = items; saveVectors(key);
     console.log(`world ${key}: locations n=${items.length}`);
     return send(res, 200, { ok: true, n: items.length });
+  }
+  if (url === "/world/buildings") {
+    if (!Number.isInteger(b.chunk) || b.chunk < 0) return send(res, 400, { error: "bad chunk" });
+    if (b.chunk === 0 && bldAsm.get(key)?.chunks.has(0)) bldAsm.set(key, { chunks: new Map(), total: -1 }); // real restart only (parallel POSTs may arrive out of order)
+    const basm = bldAsm.get(key) ?? (bldAsm.set(key, { chunks: new Map(), total: -1 }), bldAsm.get(key));
+    basm.chunks.set(b.chunk, (Array.isArray(b.b) ? b.b : []).filter((r) => Array.isArray(r) && r.length >= 5 && r.slice(0, 5).every(isNum)).map((r) => [r[0], r[1], r[2], r[3], r[4], isNum(r[5]) ? r[5] : 0]));
+    if (b.last === true && Number.isInteger(b.total)) basm.total = b.total;
+    if (basm.total >= 0 && basm.chunks.size >= basm.total) {
+      const list = [];
+      for (let i = 0; i < basm.total; i++) for (const r of basm.chunks.get(i) ?? []) list.push(r);
+      v.buildings = list; bldAsm.delete(key); saveVectors(key);
+      console.log(`world ${key}: buildings n=${list.length} chunks=${basm.total}`);
+    }
+    return send(res, 200, { ok: true });
   }
   // /world/roads
   if (!Number.isInteger(b.chunk) || b.chunk < 0) return send(res, 400, { error: "bad chunk" });
@@ -834,8 +849,8 @@ async function handleWorldPost(req, res, url) {
 function handleWorldApi(req, res, url) {
   if (req.method === "GET" && url === "/api/world") return send(res, 200, worldView());
   if (req.method === "GET" && url === "/api/vector") {
-    const v = worldState.key ? loadVectors(worldState.key) : { roads: null, locations: null };
-    return send(res, 200, { roads: v.roads ?? [], locations: v.locations ?? [] });
+    const v = worldState.key ? loadVectors(worldState.key) : { roads: null, locations: null, buildings: null };
+    return send(res, 200, { roads: v.roads ?? [], locations: v.locations ?? [], buildings: v.buildings ?? [] });
   }
   if (req.method === "GET" && url === "/api/map.png") {
     if (mapState.status !== "ready" || !mapState.pngPath) return send(res, 404, { error: "no map image" });
@@ -849,7 +864,7 @@ function handleWorldApi(req, res, url) {
     if (!originOk(req)) return send(res, 403, { error: "forbidden origin" });
     if (url === "/api/map/reload") { void resolveMap(true); return send(res, 200, { ok: true }); }
     const key = worldState.key;
-    if (key) { vectors.set(key, { roads: null, locations: null }); roadAsm.delete(key); try { fs.rmSync(path.join(VECTOR_DIR, key + ".json"), { force: true }); } catch { /* ignore */ } }
+    if (key) { vectors.set(key, { roads: null, locations: null, buildings: null }); roadAsm.delete(key); bldAsm.delete(key); try { fs.rmSync(path.join(VECTOR_DIR, key + ".json"), { force: true }); } catch { /* ignore */ } }
     return send(res, 200, { ok: true });
   }
   return false;
@@ -930,7 +945,7 @@ http.createServer((req, res) => {
   if (req.method === "POST" && url === "/orders") {
     return void handleOrders(req, res).catch((e) => { console.log(`  handler error: ${e?.message ?? e}`); if (!res.headersSent) send(res, 500, { error: "internal" }); });
   }
-  if (req.method === "POST" && (url === "/world" || url === "/world/roads" || url === "/world/locations")) {
+  if (req.method === "POST" && (url === "/world" || url === "/world/roads" || url === "/world/locations" || url === "/world/buildings")) {
     return void handleWorldPost(req, res, url).catch((e) => { if (!res.headersSent) send(res, 500, { error: String(e?.message ?? e) }); });
   }
   if (url.startsWith("/api/")) {

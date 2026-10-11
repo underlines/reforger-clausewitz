@@ -6,6 +6,7 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 ## [Unreleased]
 
 ### Added
+- Dashboard map: building footprints (cached vector layer, toggle `buildings`) and base / airport / port symbols with bold labels (toggle `objects`), including vanilla military bases with faction.
 - LLM bridge: HQ commanders send the contact picture to a local sidecar (`dev/tools/llm_sidecar.mjs`) and apply the validated orders; falls back to the rule commander on errors or empty replies.
 - Sidecar providers: fake, Anthropic, OpenAI-compatible.
 - OpenRouter provider with usage monitoring and spending-pace estimate (over/under by reset): per-request cost, session totals by model and faction, key spending-limit bar in the Configuration view, 80%/95% warnings, and an optional automatic stop of LLM calls at the limit (falls back to the rule commander).

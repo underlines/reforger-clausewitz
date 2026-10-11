@@ -248,9 +248,57 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world }) {
       }
       ctx.lineCap = "butt"; ctx.lineJoin = "miter";
     }
+    if (layers.buildings && world.buildings?.length && v.s >= 0.03) {
+      // footprints: x = local width axis, y = local depth axis. Assumption: yaw is the Enforce heading (0 = +Z = north, 90 = +X = east),
+      // so on this north-up canvas the rect is rotated clockwise by yaw (verify in game against a known building if it looks off).
+      const bl = world.buildings, vx0 = (0 - v.ox) / v.s - 120, vx1 = (r.width - v.ox) / v.s + 120;
+      const zTop = E.z1 - (0 - v.oy) / v.s + 120, zBot = E.z1 - (r.height - v.oy) / v.s - 120; // world z at screen top / bottom
+      let lo = 0, hi = bl.length;
+      while (lo < hi) { const m = (lo + hi) >> 1; if (bl[m].x < vx0) lo = m + 1; else hi = m; }
+      const detail = v.s >= 0.6, onlyBig = v.s < 0.15;
+      const fills = ["rgba(215,200,178,.50)", "rgba(226,206,170,.62)", "rgba(232,164,108,.70)"];
+      const paths = [new Path2D(), new Path2D(), new Path2D()];
+      for (let i = lo; i < bl.length; i++) {
+        const b = bl[i];
+        if (b.x > vx1) break;
+        if (b.z > zTop || b.z < zBot || (onlyBig && b.cat < 1)) continue;
+        const x = sx(b.x), y = sy(b.z);
+        let hw = b.w * v.s / 2, hd = b.d * v.s / 2;
+        const P = paths[b.cat] ?? paths[0];
+        if (hw < 1.5 && hd < 1.5) { P.rect(x - 1, y - 1, 2, 2); continue; } // too small to show the shape: 2 px dot
+        hw = Math.max(hw, 1); hd = Math.max(hd, 1);
+        P.moveTo(x + (-hw) * b.c - (-hd) * b.s, y + (-hw) * b.s + (-hd) * b.c);
+        P.lineTo(x + hw * b.c - (-hd) * b.s, y + hw * b.s + (-hd) * b.c);
+        P.lineTo(x + hw * b.c - hd * b.s, y + hw * b.s + hd * b.c);
+        P.lineTo(x + (-hw) * b.c - hd * b.s, y + (-hw) * b.s + hd * b.c);
+        P.closePath();
+      }
+      for (let k = 0; k < 3; k++) { ctx.fillStyle = fills[k]; ctx.fill(paths[k]); }
+      if (detail) { ctx.lineWidth = 0.75; ctx.strokeStyle = "rgba(24,18,12,.6)"; for (let k = 0; k < 3; k++) ctx.stroke(paths[k]); }
+    }
+    const used = []; // label boxes already taken; objects are drawn first so they always win over town names
+    if (layers.objects) { // bases / airports / ports: symbol + bold label, never culled by the overlap check
+      ctx.font = "bold 12px system-ui, sans-serif"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+      for (const ob of world.objects ?? []) {
+        if (v.s < ob.minZoom) continue;
+        const x = sx(ob.pos[0]), y = sy(ob.pos[1]);
+        if (x < -60 || x > r.width + 60 || y < -20 || y > r.height + 20) continue;
+        ctx.lineWidth = 1.5; ctx.strokeStyle = "rgba(8,11,16,.95)"; ctx.fillStyle = "#f2c94c";
+        ctx.beginPath();
+        if (ob.kind === "base") { ctx.moveTo(x, y - 7); ctx.lineTo(x + 7, y); ctx.lineTo(x, y + 7); ctx.lineTo(x - 7, y); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+        else if (ob.kind === "airport") {
+          ctx.moveTo(x, y - 8); ctx.lineTo(x + 6, y + 3); ctx.lineTo(x - 6, y + 3); ctx.closePath(); ctx.fill(); ctx.stroke();
+          ctx.fillRect(x - 8, y + 5, 16, 3); ctx.strokeRect(x - 8, y + 5, 16, 3);
+        } else { ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = "#6ec1ff"; ctx.fill(); ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2); ctx.fillStyle = "#08111a"; ctx.fill(); }
+        const w = ctx.measureText(ob.name).width;
+        used.push([x - 8, y - 9, x + w + 14, y + 9]);
+        ctx.lineWidth = 3.5; ctx.strokeStyle = "rgba(8,11,16,.9)"; ctx.strokeText(ob.name, x + 11, y);
+        ctx.fillStyle = "#fff3c4"; ctx.fillText(ob.name, x + 11, y);
+      }
+      ctx.lineJoin = "miter";
+    }
     if (layers.places) { // named places, important first; a label is skipped when it would overlap an earlier one
       ctx.font = "11px system-ui, sans-serif"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
-      const used = [];
       for (const pl of world.places ?? []) {
         if (v.s < pl.minZoom) continue;
         const x = sx(pl.pos[0]), y = sy(pl.pos[1]);
@@ -481,21 +529,34 @@ function prepVector(vec) {
     if (!groups.has(w)) groups.set(w, { w, list: [] });
     groups.get(w).list.push({ p: r.p, x0, x1, z0, z1 });
   }
-  const places = (Array.isArray(vec.locations) ? vec.locations : []).filter((l) => l && Array.isArray(l.pos)).map((l) => {
-    const [rank, minZoom] = PLACE_RANK(String(l.type ?? ""));
-    return { name: String(l.name), pos: l.pos, rank, minZoom };
+  const all = (Array.isArray(vec.locations) ? vec.locations : []).filter((l) => l && Array.isArray(l.pos)).map((l) => {
+    const type = String(l.type ?? "");
+    // kind from the game; entries cached before it existed fall back to the descriptor type name
+    let kind = typeof l.kind === "string" && l.kind ? l.kind : /airport/.test(type) ? "airport" : /port/.test(type) ? "port" : /base/.test(type) ? "base" : "other";
+    if (kind === "other") { // generic descriptors ("name_generic"): classify by the display name
+      const nm = String(l.name ?? "").toLowerCase();
+      kind = /air(field|port|strip)|runway/.test(nm) ? "airport" : /harbou?r|\bport\b|\bdock/.test(nm) ? "port" : /military|\bbase\b|barracks|\bcamp\b|outpost/.test(nm) ? "base" : "other";
+    }
+    const [rank, minZoom] = PLACE_RANK(type);
+    return { name: String(l.name), pos: l.pos, rank, minZoom, kind, faction: String(l.faction ?? "") };
   }).sort((a, b) => a.rank - b.rank);
-  return { roadGroups: [...groups.values()].sort((a, b) => a.w - b.w), places };
+  const OBJ_ZOOM = { airport: 0, base: 0.02, port: 0.03 };
+  const objects = all.filter((l) => l.kind in OBJ_ZOOM).map((l) => ({ ...l, minZoom: OBJ_ZOOM[l.kind] }));
+  const places = all.filter((l) => !(l.kind in OBJ_ZOOM));
+  // buildings [cx, cz, w, d, yawDeg, cat], sorted by cx so drawing can binary-search the viewport's x range
+  const buildings = (Array.isArray(vec.buildings) ? vec.buildings : []).filter((b) => Array.isArray(b) && b.length >= 5).map((b) => ({ x: b[0], z: b[1], w: b[2], d: b[3], c: Math.cos(b[4] * Math.PI / 180), s: Math.sin(b[4] * Math.PI / 180), cat: b[5] | 0 }));
+  buildings.sort((a, b) => a.x - b.x);
+  return { roadGroups: [...groups.values()].sort((a, b) => a.w - b.w), places, objects, buildings };
 }
 function useWorld() {
-  const [w, setW] = useState({ extent: null, map: { status: "none" }, roadGroups: [], places: [] });
+  const [w, setW] = useState({ extent: null, map: { status: "none" }, roadGroups: [], places: [], objects: [], buildings: [] });
   useEffect(() => {
     let alive = true, vkey = "";
     const load = async () => {
       try {
         const j = await (await fetch("/api/world", { cache: "no-store" })).json();
         let vec = null;
-        const key = `${j.worldKey}/${j.vector?.roads}/${j.vector?.locations}`;
+        const key = `${j.worldKey}/${j.vector?.roads}/${j.vector?.locations}/${j.vector?.buildings}`;
         if (key !== vkey) { vec = prepVector(await (await fetch("/api/vector", { cache: "no-store" })).json()); vkey = key; }
         if (alive) setW((p) => ({ ...p, extent: j.extent, map: j.map, ...(vec ?? {}) }));
       } catch { /* sidecar offline: keep the last known world */ }
@@ -509,7 +570,7 @@ function useWorld() {
 
 // ---------- HQ view ----------
 const LAYER_KEY = "clw.mapLayers";
-const LAYER_DEFAULTS = { image: true, roads: true, places: true, grid: true, squads: true, contacts: true, orders: true, labels: true, flip: false, dim: 0.8 };
+const LAYER_DEFAULTS = { image: true, roads: true, buildings: true, objects: true, places: true, grid: true, squads: true, contacts: true, orders: true, labels: true, flip: false, dim: 0.8 };
 function loadLayers() {
   try { return { ...LAYER_DEFAULTS, ...JSON.parse(localStorage.getItem(LAYER_KEY) ?? "{}") }; } catch { return { ...LAYER_DEFAULTS }; }
 }
@@ -527,7 +588,8 @@ function HQ({ st }) {
       <div class="seg">${["all", ...names].map((n) => html`<button class=${faction === n ? "on" : ""} onClick=${() => setFaction(n)}>${n}</button>`)}</div>
       <div class="toggles">${["grid", "squads", "contacts", "orders", "labels"].map(tog)}</div>
       <div class="toggles" title="Map background: toggles, image opacity; flip = image y axis inverted (calibration)">
-        ${["image", "roads", "places", "flip"].map(tog)}
+        ${["image", "roads", "buildings", "objects", "places", "flip"].map(tog)}
+        <span class="muted" title="Objects key: diamond = base, triangle over a bar = airport, ring = port. Buildings: grey = house, large = bigger than 250 m2, orange = military / industrial">◆ base ▲ airport ◎ port</span>
         <label>dim <input type="range" min="0.1" max="1" step="0.05" value=${layers.dim} onInput=${(e) => setLayers((l) => ({ ...l, dim: Number(e.target.value) }))} style=${{ width: "80px", verticalAlign: "middle" }} /></label>
       </div>
     </div>
@@ -565,7 +627,7 @@ function MapCard({ toast }) {
     <div class="cfgbody">
       <div class="muted">World <b>${w?.worldKey || "(game has not reported yet)"}</b>${w?.info?.mapPrefab ? " / " + w.info.mapPrefab : ""}</div>
       <div>Image: <b>${m.status ?? "none"}</b>${m.source ? html` <span class="muted">${m.source}, ${m.width}x${m.height}</span>` : ""}${m.error ? html` <span class="muted">${m.error}</span>` : ""}</div>
-      <div>Roads: <b>${v.roads ?? "not received"}</b>, places: <b>${v.locations ?? "not received"}</b></div>
+      <div>Roads: <b>${v.roads ?? "not received"}</b>, places: <b>${v.locations ?? "not received"}</b>, buildings: <b>${v.buildings ?? "not received"}</b></div>
       <div class="muted">Detected game dir: ${w?.detectedGameDir || "none"}</div>
       <label class="field"><span>Game dir (empty = auto-detect)</span><input type="text" value=${gameDir ?? ""} placeholder="e.g. E:/Games/steam/steamapps/common/Arma Reforger" onInput=${(e) => setGameDir(e.target.value)} /></label>
       <label class="field"><span>Max image size (px)</span><input type="number" min="256" max="8192" value=${maxSize} onInput=${(e) => setMaxSize(e.target.value)} /></label>
