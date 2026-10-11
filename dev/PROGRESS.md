@@ -12,16 +12,16 @@ Updated: 2026-10-11. Roadmap: `VISION.md` section 13. Decisions: `notes/`.
 - [x] `CLW_GameMode` script + prefab (inherits GameMode_Base.et), world `Worlds/CLW_Arland.ent` (sub-scene of vanilla Arland): US vs USSR factions, loadouts, spawn points, AIWorld with Arland navmeshes; Play runs, marker logged
 - [x] One AI rifle squad per side spawns (US 9 agents, USSR 6)
 - [x] Research: vanilla player flow lives in GameMode_Base.et, not Conflict (`research/player-flow-components.md`)
-- [ ] Player can join a faction, spawn as soldier, join an AI squad (section 2a); verify which base-game spawn/loadout/group components are reusable
+- [x] Player spawns as US soldier (SCR_AutoSpawnLogic, m_sForcedFaction "US") and joins the AI rifle squad: needs `m_bPlayable 1` on the scene-placed SCR_AIGroup plus `SCR_GroupsManagerComponent.RegisterGroup(group)` (GroupID is -1 until then), then `AddPlayerToGroup`. Verified: `player 1 in squad=1`; the AI squad then follows the player in formation. Open: player is not made leader (leaderId=-1), AI-leader hand-over and USSR-side join not tested
 - [ ] Spike: REST GET/POST/headers to local echo server (risk 1)
-- [ ] Spike: perception tap, per-group enemy clusters -> `Contact` record
+- [x] Spike: perception tap, per-group enemy clusters -> `Contact` record (`CLW_Contact.FromGroup`, reads `SCR_AIGroupUtilityComponent.m_Perception.m_aTargetClusters`): verified, US squad reported the USSR squad at its exact position (400 m apart, player walked within ~100-150 m). Without the player, squads 400 m apart did not detect each other
 - [x] Spike: order loop, canned MOVE -> waypoint on a group: verified, US leader walked 150 m east in <60 s on the Arland navmesh (CLW_GameMode.SpikeOrderLoop)
 - [ ] RuleCommander v0: one squad per side, MOVE/ATTACK/DEFEND
 
 - [ ] OPEN: decide player-request approach (VISION 5a): (A) fixed request commands vs (B) tool registry; evaluate both, prototype A after M2, check scriptable Game Master functions
 
 ## Next up
-CLW_GameMode skeleton, then the perception and order spikes.
+RuleCommander v0 (step 4): consume Contact records, issue MOVE/ATTACK/DEFEND to the AI-led squad. Note: a squad containing a player follows the player, so HQ orders must go to AI-only squads or become missions for the player-led squad (VISION 2a). Also: REST spike.
 
 ## Log
 - 2026-10-11: Vision and research committed; game-mode decision made; roadmap condensed to M0-M5; branch naming unified on `main`.

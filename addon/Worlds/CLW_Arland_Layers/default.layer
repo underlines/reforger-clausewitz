@@ -21,7 +21,9 @@ SCR_LoadoutManager CLW_LoadoutManager : "{97EF4C1A41F63DDB}Prefabs/MP/Managers/L
 }
 SCR_AIGroup CLW_Squad_US_1 : "{DDF3799FA1387848}Prefabs/Groups/BLUFOR/Group_US_RifleSquad.et" {
  coords 2030 52 3030
+ m_bPlayable 1
 }
 SCR_AIGroup CLW_Squad_USSR_1 : "{E552DABF3636C2AD}Prefabs/Groups/OPFOR/Group_USSR_RifleSquad.et" {
- coords 2970 48 2030
+ coords 2030 50 2630
+ m_bPlayable 1
 }
