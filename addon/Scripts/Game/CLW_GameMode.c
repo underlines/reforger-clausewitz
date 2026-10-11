@@ -30,7 +30,7 @@ class CLW_GameMode : SCR_BaseGameMode
 			if (RUN_ORDER_SPIKE)
 				GetGame().GetCallqueue().CallLater(SpikeOrderLoop, 15000);
 			// RuleCommander drives only AI-only squads; each side's first squad is the player squad.
-			array<string> commandedUS = {"CLW_Squad_US_2"};
+			array<string> commandedUS = {"CLW_Squad_US_1", "CLW_Squad_US_2"};
 			array<string> commandedUSSR = {"CLW_Squad_USSR_1", "CLW_Squad_USSR_2"};
 			m_CommanderUS.Init("US", m_BookUS, commandedUS);
 			m_CommanderUSSR.Init("USSR", m_BookUSSR, commandedUSSR);
@@ -62,6 +62,11 @@ class CLW_GameMode : SCR_BaseGameMode
 			array<ref CLW_Contact> sightings = {};
 			CLW_Contact.FromGroup(group, name, sightings);
 			book.Report(factionKey, sightings);
+
+			vector leaderPos;
+			if (group.GetLeaderEntity())
+				leaderPos = group.GetLeaderEntity().GetOrigin();
+			Print(string.Format("CLW: squad %1 leader=%2 players=%3 playerLeader=%4 waypoint=%5", name, leaderPos, group.GetPlayerCount(), group.GetFirstPlayerLeaderID(), group.GetCurrentWaypoint() != null), LogLevel.NORMAL);
 		}
 
 		array<int> removed = {};

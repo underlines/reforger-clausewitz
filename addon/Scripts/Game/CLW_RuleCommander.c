@@ -60,7 +60,8 @@ class CLW_RuleCommander
 	protected void ThinkSquad(int i, notnull array<CLW_Contact> contacts)
 	{
 		SCR_AIGroup group = SCR_AIGroup.Cast(GetGame().GetWorld().FindEntityByName(m_aSquads[i]));
-		if (!group || group.GetPlayerCount() > 0)
+		// A human-led squad gets missions instead of waypoints (VISION 2a); a player who is just a member does not block orders to the AI leader.
+		if (!group || group.GetFirstPlayerLeaderID() > 0)
 			return;
 
 		IEntity leader = group.GetLeaderEntity();
