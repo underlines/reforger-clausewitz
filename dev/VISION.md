@@ -304,6 +304,13 @@ Design rules:
 - **Compact state**: summarise to stay far below the 1 MB REST limit and keep tokens low; the LLM never sees information its faction has not earned.
 - **The mod is complete without an LLM.** The in-game RuleCommander is the default and the fallback when the LLM is slow, offline, or budget-limited (section 1, Commander modes).
 
+### 12a. HQ dashboard (build early: read-only first, control later)
+
+Because the game already talks to the sidecar over HTTP, the sidecar can serve a **web dashboard** showing what each HQ knows and does. Build the basic version early; it also makes LLM debugging far easier.
+
+- **Basic (early, read-only):** per faction: map with own squads, known contacts (age/confidence) and active orders; squad list (strength, mode, human/AI led); latest situation sent, raw LLM reply, validation drops, fallback events; request latency and token/cost counters. Fed by the `/orders` traffic the sidecar already sees (keep a ring buffer of recent situations/replies), served as a static page + JSON/SSE endpoint on the sidecar port.
+- **Advanced (later, editable):** pause/resume the LLM per faction, switch commander mode (Rules / LLM), edit the prompt or settings live, issue or cancel orders by hand from the map, approve/reject LLM orders before execution, replay a timeline of the war. Needs an authenticated command channel back to the game (game polls the sidecar for queued commands, section 1) and must respect the same validation rules as LLM orders.
+
 ---
 
 ## 13. Roadmap
@@ -314,6 +321,7 @@ Own game mode `CLW_GameMode` (see `notes/decision-game-mode.md`). Live status: `
 |---|---|---|
 | **M0 - Skeleton** | Game mode + minimal world, player can join a side and spawn as a soldier in an AI squad, one AI squad per side, per-faction contacts, RuleCommander issues MOVE/ATTACK/DEFEND waypoints, logs. Spikes: perception tap, order loop | Perception + waypoint APIs, core loop, playable without LLM |
 | **M1 - LLM bridge** | REST spike (POST/headers/polling), sidecar, RemoteCommander, schema validation, fallback to Rules | LLM loop |
+| **M1.5 - Dashboard** | Read-only web dashboard served by the sidecar (section 12a basic); editing/commands later | Observability |
 | **M2 - Real war** | Player squad leaders receive HQ orders as missions (choose from offered assignments, accept/refuse/complete), more commands, SITREPs, win conditions, spawn budget, resource ledger, bases, supply convoys | AI vs AI with economy |
 | **M3 - Mechanized & intel** | Player requests via chat, approach to be chosen (section 5a, option A or B); Vehicle groups, embark/dismount, convoys; map markers, expiry, player reports, setup screen | Vehicle AI, humans in the loop |
 | **M4 - Scale & realism** | Chain-of-command echelons with delayed reports, population manager (cleanup, collapse/expand), FOBs | Size of war |
