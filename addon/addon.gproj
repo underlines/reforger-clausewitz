@@ -1,0 +1,14 @@
+GameProject {
+ ID "Clausewitz"
+ GUID "C1A05E7B3D9F4A28"
+ TITLE "Clausewitz - AI High Command"
+ Dependencies {
+  "58D0FB3206B6F859"
+ }
+ Configurations {
+  GameProjectConfig PC {
+  }
+  GameProjectConfig HEADLESS {
+  }
+ }
+}

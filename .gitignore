@@ -1,0 +1,19 @@
+# IDE / user state
+.idea/
+*.user
+
+# Temp / backup / logs
+*.tmp
+*.bak
+*.log
+logs/
+
+# Tooling
+.claude/
+
+# Build output
+build/
+dist/
+publish/
+
+# NOT ignored on purpose: *.meta, *.rdb, *.gproj
