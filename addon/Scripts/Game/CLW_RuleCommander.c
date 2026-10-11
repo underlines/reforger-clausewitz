@@ -129,7 +129,7 @@ class CLW_RuleCommander
 			if (!group)
 				continue;
 
-			IEntity leader = group.GetLeaderEntity();
+			IEntity leader = CLW_SquadInfo.LeaderEntity(group);
 			int agents = CLW_SquadInfo.AliveCount(group);
 			if (!leader || agents <= 0)
 				continue;
@@ -239,7 +239,7 @@ class CLW_RuleCommander
 			return false;
 
 		SCR_AIGroup group = SCR_AIGroup.Cast(GetGame().GetWorld().FindEntityByName(squadName));
-		if (!group || !group.GetLeaderEntity() || CLW_SquadInfo.AliveCount(group) <= 0)
+		if (!group || !CLW_SquadInfo.LeaderEntity(group) || CLW_SquadInfo.AliveCount(group) <= 0)
 			return false;
 
 		if (m_aStartCount[i] < CLW_SquadInfo.AliveCount(group))
@@ -271,7 +271,7 @@ class CLW_RuleCommander
 			m_iMissionSquad = -1;
 		}
 
-		IEntity leader = group.GetLeaderEntity();
+		IEntity leader = CLW_SquadInfo.LeaderEntity(group);
 		int agents = CLW_SquadInfo.AliveCount(group);
 		if (!leader || agents <= 0)
 			return;	// dead, dormant or not spawned yet
@@ -329,11 +329,7 @@ class CLW_RuleCommander
 	// soldier still holds the leader entity (verified 2026-10-11: "commanding only for group leaders").
 	static bool HasHumanLeader(notnull SCR_AIGroup group)
 	{
-		IEntity leader = group.GetLeaderEntity();
-		if (!leader)
-			return false;
-
-		return GetGame().GetPlayerManager().GetPlayerIdFromControlledEntity(leader) > 0;
+		return CLW_SquadInfo.HumanLeaderEntity(group) != null;
 	}
 
 	// Same decision, two deliveries: waypoint for AI squads, message + map marker for human-led squads.
@@ -389,7 +385,7 @@ class CLW_RuleCommander
 		}
 
 		// Address the task to the leading PLAYER, not the group: giving the squad a real GroupID (AssignGroupID) silences the commander voice and move marker.
-		IEntity leader = group.GetLeaderEntity();
+		IEntity leader = CLW_SquadInfo.HumanLeaderEntity(group);
 		int playerId = 0;
 		if (leader)
 			playerId = GetGame().GetPlayerManager().GetPlayerIdFromControlledEntity(leader);

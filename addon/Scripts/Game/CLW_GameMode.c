@@ -26,6 +26,7 @@ class CLW_GameMode : SCR_BaseGameMode
 		super.OnGameStart();
 		Print("CLW: build " + CLW_Build.STAMP, LogLevel.NORMAL);
 		Print("CLW: game mode started", LogLevel.NORMAL);
+		CLW_PlayerSquad.ApplyCommandingLimit();
 
 		if (Replication.IsServer())
 		{
@@ -74,8 +75,9 @@ class CLW_GameMode : SCR_BaseGameMode
 			book.Report(factionKey, sightings);
 
 			vector leaderPos;
-			if (group.GetLeaderEntity())
-				leaderPos = group.GetLeaderEntity().GetOrigin();
+			IEntity squadLeader = CLW_SquadInfo.LeaderEntity(group);
+			if (squadLeader)
+				leaderPos = squadLeader.GetOrigin();
 			array<IEntity> members = CLW_SquadInfo.Members(group);
 			float maxDist;
 			foreach (IEntity member : members)
@@ -83,6 +85,19 @@ class CLW_GameMode : SCR_BaseGameMode
 				maxDist = Math.Max(maxDist, vector.Distance(leaderPos, member.GetOrigin()));
 			}
 			Print(string.Format("CLW: squad %1 leader=%2 players=%3 firstPlayerLeader=%4 humanLeader=%5 leaderId=%6 waypoint=%7", name, leaderPos, group.GetPlayerCount(), group.GetFirstPlayerLeaderID(), CLW_RuleCommander.HasHumanLeader(group), group.GetLeaderID(), group.GetCurrentWaypoint() != null), LogLevel.NORMAL);
+			SCR_AIGroup slave = group.GetSlave();
+			if (slave)
+			{
+				vector slaveWp;
+				AIWaypoint slaveCurrent = slave.GetCurrentWaypoint();
+				if (slaveCurrent)
+					slaveWp = slaveCurrent.GetOrigin();
+				Print(string.Format("CLW: squad %1 slave=%2 slaveAgents=%3 slaveWaypoint=%4 slaveWpPos=%5 groupId=%6", name, slave, slave.GetAgentsCount(), slaveCurrent != null, slaveWp, group.GetGroupID()), LogLevel.NORMAL);
+			}
+			else
+			{
+				Print(string.Format("CLW: squad %1 slave=none groupId=%2", name, group.GetGroupID()), LogLevel.NORMAL);
+			}
 			PrintFormat("CLW: squad %1 agents=%2 alive=%3 aiMembers=%4 maxDist=%5", name, group.GetAgentsCount(), CLW_SquadInfo.AliveCount(group), members.Count(), Math.Round(maxDist), level: LogLevel.NORMAL);
 		}
 
@@ -125,11 +140,9 @@ class CLW_GameMode : SCR_BaseGameMode
 			return;
 		}
 
-		if (squad.GetGroupID() < 0)
-			groups.RegisterGroup(squad);
-		// Do NOT AssignGroupID here or anywhere on the player squad: a real group ID silences the commander voice and move marker (bisected 2026-10-12).
-		Print(string.Format("CLW: squad %1 groupId=%2 playable=%3", squad, squad.GetGroupID(), squad.IsPlayable()), LogLevel.NORMAL);
-		groups.AddPlayerToGroup(squad.GetGroupID(), playerId);
+		// Never AddPlayerToGroup/AssignGroupID directly: CLW_PlayerSquad.Join does group ID + controller join + leader + slave group + AI move.
+		Print(string.Format("CLW: squad %1 groupId=%2 playable=%3 (before Join)", squad, squad.GetGroupID(), squad.IsPlayable()), LogLevel.NORMAL);
+		CLW_PlayerSquad.Join(squad, playerId);
 		array<SCR_AIGroup> factionGroups = groups.GetPlayableGroupsByFaction(faction);
 		Print(string.Format("CLW: playable groups of faction %1: %2", faction.GetFactionKey(), factionGroups.Count()), LogLevel.NORMAL);
 		Print(string.Format("CLW: player %1 in squad=%2 players=%3 leaderId=%4", playerId, squad.IsPlayerInGroup(playerId), squad.GetPlayerCount(), squad.GetLeaderID()), LogLevel.NORMAL);

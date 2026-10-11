@@ -33,9 +33,20 @@ class CLW_SquadInfo
 	}
 
 	// Controlled entities of the group agents (GetAIMembers() returns nothing for scene-placed squads; verified 2026-10-12).
+	// Includes the agents of the slave group (player-led squads keep their AI there, see CLW_PlayerSquad).
 	static array<IEntity> Members(notnull SCR_AIGroup group)
 	{
 		array<IEntity> result = {};
+		AddAgents(group, result);
+		SCR_AIGroup slave = group.GetSlave();
+		if (slave)
+			AddAgents(slave, result);
+
+		return result;
+	}
+
+	protected static void AddAgents(notnull SCR_AIGroup group, notnull array<IEntity> result)
+	{
 		array<AIAgent> agents = {};
 		group.GetAgents(agents);
 		foreach (AIAgent agent : agents)
@@ -44,11 +55,41 @@ class CLW_SquadInfo
 				continue;
 
 			IEntity entity = agent.GetControlledEntity();
-			if (entity)
+			if (entity && !result.Contains(entity))
 				result.Insert(entity);
 		}
+	}
 
-		return result;
+	// Entity of the human leading the group (master leader entity, or the controlled entity of the leader player id), else null.
+	static IEntity HumanLeaderEntity(notnull SCR_AIGroup group)
+	{
+		IEntity leader = group.GetLeaderEntity();
+		if (leader && GetGame().GetPlayerManager().GetPlayerIdFromControlledEntity(leader) > 0)
+			return leader;
+
+		int leaderId = group.GetLeaderID();
+		if (leaderId > 0 && group.IsPlayerInGroup(leaderId))
+			return GetGame().GetPlayerManager().GetPlayerControlledEntity(leaderId);
+
+		return null;
+	}
+
+	// Position reference of the squad: its leader, else (player-led squad with the player dead) the slave group's leader.
+	static IEntity LeaderEntity(notnull SCR_AIGroup group)
+	{
+		IEntity leader = group.GetLeaderEntity();
+		if (leader)
+			return leader;
+
+		leader = HumanLeaderEntity(group);
+		if (leader)
+			return leader;
+
+		SCR_AIGroup slave = group.GetSlave();
+		if (slave)
+			return slave.GetLeaderEntity();
+
+		return null;
 	}
 
 	// Living AI members. group.GetAgentsCount() still counts agents whose body is dead (a corpse leader keeps the squad "alive" at 1/6).
