@@ -16,7 +16,7 @@ Updated: 2026-10-11. Roadmap: `VISION.md` section 13. Decisions: `notes/`.
 - [ ] Spike: order loop, canned MOVE -> waypoint on a group
 - [ ] RuleCommander v0: one squad per side, MOVE/ATTACK/DEFEND
 
-- [ ] (decide after M2) Whether to build the freeform tool registry at all (VISION 5a); until then use fixed player-request commands
+- [ ] OPEN: decide player-request approach (VISION 5a): (A) fixed request commands vs (B) tool registry; evaluate both, prototype A after M2, check scriptable Game Master functions
 
 ## Next up
 CLW_GameMode skeleton, then the perception and order spikes.
@@ -24,4 +24,4 @@ CLW_GameMode skeleton, then the perception and order spikes.
 ## Log
 - 2026-10-11: Vision and research committed; game-mode decision made; roadmap condensed to M0-M5; branch naming unified on `main`.
 - 2026-10-11: Human participation made central (VISION 2a): soldiers and squad leaders get HQ orders as missions.  Players pick from several offered assignments.
-- 2026-10-11: Freeform agent tool registry drafted (VISION 5a) but deferred; default is fixed commands plus player-request commands.
+- 2026-10-11: Player-request approach (fixed request commands vs tool registry) drafted in VISION 5a; decision still open.

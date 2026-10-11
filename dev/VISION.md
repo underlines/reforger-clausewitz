@@ -153,9 +153,9 @@ Commands are first-class objects with an ID, state (pending, active, done, faile
 
 ---
 
-## 5a. Freeform agent tools (DEFERRED idea, not committed)
+## 5a. Freeform agent tools (open decision: A vs B)
 
-> **Status:** undecided. Default plan: stay with the fixed vocabulary (section 5) and add a handful of **player-request commands** (`FORM_SQUAD <composition>`, `REQUEST_RESUPPLY`, `REQUEST_RECON`, ...) that HQ grants or refuses under the same ledger, authority and validation rules. Revisit the tool registry below only if real play shows the fixed set is too narrow (decide after M2).
+> **Status: OPEN DECISION.** Two candidate approaches, not yet chosen: **(A)** extend the fixed vocabulary (section 5) with a handful of player-request commands (`FORM_SQUAD <composition>`, `REQUEST_RESUPPLY`, `REQUEST_RECON`, ...) that HQ grants or refuses under the same ledger, authority and validation rules; **(B)** the tool registry described below (optionally with the raw-command escape hatch). Evaluate both before committing: compare player experience, implementation cost, safety and token cost, ideally with a small prototype of (A) after M2 and a look at what Game Master functions are scriptable. Until decided, design the validator/executor so either can plug in.
 
 Section 5 is the **predictable core**: a small fixed set of commands the Rules commander and the LLM both use for the war itself. Humans asking HQ things in natural language (chat now, voice later) need more: *"Can I get a jeep and 3 infantry for a recon?"* HQ must be able to reason, decide, and act with a broad set of game functions, as an agent (reason -> act -> observe -> reply). Example: grant the request by spawning or reassigning a jeep and three infantry, forming a new squad, handing it to the player as leader, and answering by chat.
 
@@ -269,7 +269,7 @@ The mod must not hard-code vanilla prefabs. Instead:
 Goal: a player talks to HQ (and HQ to the player) in natural language.
 - **Phase 1 - text:** in-game chat (`SCR_ChatComponent`) -> mod forwards to the faction agent; replies appear in chat (and radio-style UI). Cheap, certain to work.
 - **Phase 2 - voice (research needed):** the Reforger script API exposes VoN capture only through components; **no script access to raw microphone audio was found** `[verify]`. Likely route: a small **companion app on the player's PC** (push-to-talk -> Whisper/other STT -> HTTP to the sidecar or to a local mod endpoint), with TTS for HQ replies. A server-side tap of the VoN stream may be possible but is unconfirmed.
-- Natural-language requests from players are handled by the LLM agent, which may use the fixed vocabulary or the broader tool registry (section 5a), and answers by chat/radio.
+- Natural-language requests from players are handled by the LLM agent, using whichever approach section 5a settles on (fixed request commands or a tool registry), and answers by chat/radio.
 
 ---
 
@@ -300,7 +300,7 @@ Own game mode `CLW_GameMode` (see `notes/decision-game-mode.md`). Live status: `
 | **M0 - Skeleton** | Game mode + minimal world, player can join a side and spawn as a soldier in an AI squad, one AI squad per side, per-faction contacts, RuleCommander issues MOVE/ATTACK/DEFEND waypoints, logs. Spikes: perception tap, order loop | Perception + waypoint APIs, core loop, playable without LLM |
 | **M1 - LLM bridge** | REST spike (POST/headers/polling), sidecar, RemoteCommander, schema validation, fallback to Rules | LLM loop |
 | **M2 - Real war** | Player squad leaders receive HQ orders as missions (choose from offered assignments, accept/refuse/complete), more commands, SITREPs, win conditions, spawn budget, resource ledger, bases, supply convoys | AI vs AI with economy |
-| **M3 - Mechanized & intel** | Player requests via chat mapped to request commands (section 5a, default plan); Vehicle groups, embark/dismount, convoys; map markers, expiry, player reports, setup screen | Vehicle AI, humans in the loop |
+| **M3 - Mechanized & intel** | Player requests via chat via chat, approach to be chosen (section 5a, option A or B); Vehicle groups, embark/dismount, convoys; map markers, expiry, player reports, setup screen | Vehicle AI, humans in the loop |
 | **M4 - Scale & realism** | Chain-of-command echelons with delayed reports, population manager (cleanup, collapse/expand), FOBs | Size of war |
 | **M5 - Content compat** | RHS / WCS profiles, role classifier | Custom factions |
 | **Later** | Voice/radio, virtual battlefield (experimental), Conflict adapter | - |
