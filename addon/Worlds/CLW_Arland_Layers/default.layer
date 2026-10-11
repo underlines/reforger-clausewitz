@@ -1,0 +1,21 @@
+SCR_FactionManager CLW_FactionManager : "{589540B35EBA8CDC}Prefabs/MP/Managers/Factions/FactionManager_USxUSSR.et" {
+ coords 2048 0 2058
+}
+CLW_GameMode CLW_GameMode : "{CB770FDC19B2CC62}Prefabs/GameModes/CLW_GameMode.et" {
+ coords 2048 0 2048
+}
+SCR_SpawnPoint CLW_Spawn_USSR : "{4FEA25583D0975F7}Prefabs/MP/Spawning/SpawnPoint_USSR.et" {
+ coords 3000 48 2000
+}
+SCR_SpawnPoint CLW_Spawn_US : "{5A2220DD0C16958B}Prefabs/MP/Spawning/SpawnPoint_US.et" {
+ coords 2000 51.7 3000
+}
+SCR_LoadoutManager CLW_LoadoutManager : "{97EF4C1A41F63DDB}Prefabs/MP/Managers/Loadouts/LoadoutManager_USxUSSR.et" {
+ coords 2048 0 2068
+}
+SCR_AIGroup CLW_Squad_US_1 : "{DDF3799FA1387848}Prefabs/Groups/BLUFOR/Group_US_RifleSquad.et" {
+ coords 2030 52 3030
+}
+SCR_AIGroup CLW_Squad_USSR_1 : "{E552DABF3636C2AD}Prefabs/Groups/OPFOR/Group_USSR_RifleSquad.et" {
+ coords 2970 48 2030
+}
