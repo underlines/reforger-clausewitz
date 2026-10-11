@@ -222,6 +222,11 @@ Every group has an **orders age** timer. If no order arrives for N minutes AND t
   - Option A: players place standard map markers; the mod parses them (marker type/icon/text) into contacts for HQ and removes them when stale.
   - Option B: an **in-game "report contact" quick menu**: look toward the enemy, open a radial menu, choose Infantry/Vehicle/Armor/Air/Unknown -> count -> moving/stationary -> bearing/distance taken from the player's view/range estimation. Creates a marker plus a SITREP entry.
   - Human reports are treated as lower/higher-confidence sources, configurable.
+- **Human report channels (API checked 2026-10-11, not yet tested in play):**
+  - A, marker parsing: `SCR_MapMarkerManagerComponent` syncs player markers to the server (`OnAddSynchedMarker`, `GetStaticMarkers()`); parse type/icon/text into a `Contact`.
+  - Chat command: `SCR_ChatPanelManager.GetCommandInvoker("report")` registers e.g. `/report 3 inf 250 N`; cheapest channel.
+  - B, quick menu: custom radial/layout UI, most work.
+  - Order: A, then chat, then B (all M3). Contacts -> faction map markers (server `InsertStaticMarker` with faction flags, removed on expiry) is automatic and goes into M0.
 - Same pipeline whether the report came from AI or player: `Contact` objects -> faction picture -> prompt context + map.
 
 ---
