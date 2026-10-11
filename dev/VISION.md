@@ -153,7 +153,9 @@ Commands are first-class objects with an ID, state (pending, active, done, faile
 
 ---
 
-## 5a. Freeform agent tools (beyond the fixed vocabulary)
+## 5a. Freeform agent tools (DEFERRED idea, not committed)
+
+> **Status:** undecided. Default plan: stay with the fixed vocabulary (section 5) and add a handful of **player-request commands** (`FORM_SQUAD <composition>`, `REQUEST_RESUPPLY`, `REQUEST_RECON`, ...) that HQ grants or refuses under the same ledger, authority and validation rules. Revisit the tool registry below only if real play shows the fixed set is too narrow (decide after M2).
 
 Section 5 is the **predictable core**: a small fixed set of commands the Rules commander and the LLM both use for the war itself. Humans asking HQ things in natural language (chat now, voice later) need more: *"Can I get a jeep and 3 infantry for a recon?"* HQ must be able to reason, decide, and act with a broad set of game functions, as an agent (reason -> act -> observe -> reply). Example: grant the request by spawning or reassigning a jeep and three infantry, forming a new squad, handing it to the player as leader, and answering by chat.
 
@@ -296,9 +298,9 @@ Own game mode `CLW_GameMode` (see `notes/decision-game-mode.md`). Live status: `
 | Milestone | Contents | Proves |
 |---|---|---|
 | **M0 - Skeleton** | Game mode + minimal world, player can join a side and spawn as a soldier in an AI squad, one AI squad per side, per-faction contacts, RuleCommander issues MOVE/ATTACK/DEFEND waypoints, logs. Spikes: perception tap, order loop | Perception + waypoint APIs, core loop, playable without LLM |
-| **M1 - LLM bridge** | REST spike (POST/headers/polling), sidecar, first tool-registry entries (`list_tools`, `reply_to_player`), RemoteCommander, schema validation, fallback to Rules | LLM loop |
+| **M1 - LLM bridge** | REST spike (POST/headers/polling), sidecar, RemoteCommander, schema validation, fallback to Rules | LLM loop |
 | **M2 - Real war** | Player squad leaders receive HQ orders as missions (choose from offered assignments, accept/refuse/complete), more commands, SITREPs, win conditions, spawn budget, resource ledger, bases, supply convoys | AI vs AI with economy |
-| **M3 - Mechanized & intel** | Player requests via chat (spawn/reassign/form squad through the tool registry, section 5a); Vehicle groups, embark/dismount, convoys; map markers, expiry, player reports, setup screen | Vehicle AI, humans in the loop |
+| **M3 - Mechanized & intel** | Player requests via chat mapped to request commands (section 5a, default plan); Vehicle groups, embark/dismount, convoys; map markers, expiry, player reports, setup screen | Vehicle AI, humans in the loop |
 | **M4 - Scale & realism** | Chain-of-command echelons with delayed reports, population manager (cleanup, collapse/expand), FOBs | Size of war |
 | **M5 - Content compat** | RHS / WCS profiles, role classifier | Custom factions |
 | **Later** | Voice/radio, virtual battlefield (experimental), Conflict adapter | - |
