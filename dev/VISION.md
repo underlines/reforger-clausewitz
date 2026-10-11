@@ -300,7 +300,7 @@ Own game mode `CLW_GameMode` (see `notes/decision-game-mode.md`). Live status: `
 | **M0 - Skeleton** | Game mode + minimal world, player can join a side and spawn as a soldier in an AI squad, one AI squad per side, per-faction contacts, RuleCommander issues MOVE/ATTACK/DEFEND waypoints, logs. Spikes: perception tap, order loop | Perception + waypoint APIs, core loop, playable without LLM |
 | **M1 - LLM bridge** | REST spike (POST/headers/polling), sidecar, RemoteCommander, schema validation, fallback to Rules | LLM loop |
 | **M2 - Real war** | Player squad leaders receive HQ orders as missions (choose from offered assignments, accept/refuse/complete), more commands, SITREPs, win conditions, spawn budget, resource ledger, bases, supply convoys | AI vs AI with economy |
-| **M3 - Mechanized & intel** | Player requests via chat via chat, approach to be chosen (section 5a, option A or B); Vehicle groups, embark/dismount, convoys; map markers, expiry, player reports, setup screen | Vehicle AI, humans in the loop |
+| **M3 - Mechanized & intel** | Player requests via chat, approach to be chosen (section 5a, option A or B); Vehicle groups, embark/dismount, convoys; map markers, expiry, player reports, setup screen | Vehicle AI, humans in the loop |
 | **M4 - Scale & realism** | Chain-of-command echelons with delayed reports, population manager (cleanup, collapse/expand), FOBs | Size of war |
 | **M5 - Content compat** | RHS / WCS profiles, role classifier | Custom factions |
 | **Later** | Voice/radio, virtual battlefield (experimental), Conflict adapter | - |
