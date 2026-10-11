@@ -153,6 +153,37 @@ Commands are first-class objects with an ID, state (pending, active, done, faile
 
 ---
 
+## 5a. Freeform agent tools (beyond the fixed vocabulary)
+
+Section 5 is the **predictable core**: a small fixed set of commands the Rules commander and the LLM both use for the war itself. Humans asking HQ things in natural language (chat now, voice later) need more: *"Can I get a jeep and 3 infantry for a recon?"* HQ must be able to reason, decide, and act with a broad set of game functions, as an agent (reason -> act -> observe -> reply). Example: grant the request by spawning or reassigning a jeep and three infantry, forming a new squad, handing it to the player as leader, and answering by chat.
+
+**Three tiers, one validator/executor pipeline**
+
+| Tier | What | Who may use it | Default |
+|---|---|---|---|
+| **1. Command vocabulary** | Fixed meta-commands (section 5) | Rules and LLM | on |
+| **2. Tool registry** | Broad catalogue of **typed tools**, each with a name, description, parameter schema, authority level, cost and validator. The agent can list the registry (`list_tools`) and call any entry. Examples: `spawn_group`, `reassign_units`, `form_squad`, `assign_leader`, `create_task`, `place_marker`, `grant_supplies`, `set_group_behaviour`, `teleport_to_base`, `query_world` (read-only, fog-limited), `reply_to_player` | LLM (ReAct loop), triggered by player requests or by HQ's own planning | on |
+| **3. Raw game command** | `execute_game_command("<name>", args)`: call a server/Game Master function by name when no typed tool exists | LLM, only with an **allowlist** | **off**; admin opt-in, always logged, dry-run first |
+
+Recommendation: build tier 2 and grow the registry, with tier 3 as an escape hatch. Free-form code or arbitrary function execution is deliberately not offered: the LLM hallucinates, players try to abuse it, and a bad call on a multiplayer server is hard to revert. A typed registry gives the agent nearly the same reach while staying checkable. The tool catalogue is seeded from the Game Master / editor actions the base game already exposes `[verify what can be called from script]`, plus our own functions.
+
+**Guard rails for every tool call**
+- **Authority:** each tool has a minimum level (HQ-only, player request, admin). A player cannot make HQ do what only an admin could.
+- **Grant logic:** requests are decisions, not entitlements. HQ weighs the war plan, the resource ledger (a jeep and 3 infantry cost supplies/manpower, same as everything else), priority, and the requester's role and trust; it may grant, partly grant, counter-offer, or refuse with a reason.
+- **Budget and rate limits:** per-faction spawn budget and the AI cap (section 9) apply to tier-2/3 spawns too; per-player request cooldown.
+- **Fog of war:** `query_world` returns only what the faction knows.
+- **Validate, dry-run, log, revert** as in section 12; every call is recorded with who asked and why.
+- **Human in the loop:** big or odd actions can ask an admin/commander to confirm.
+
+**Where it applies**
+- Player chat/voice requests (section 11): the agent parses intent, calls tools, replies in chat/radio.
+- HQ's own planning may use tier 2 when the fixed vocabulary is too narrow (e.g. create a temporary quick-reaction force).
+- The Rules commander stays on tier 1; it can answer a few canned player requests (request resupply, request recon, request reinforcement) through fixed intents, but open-ended requests are an LLM feature, with a polite "HQ cannot process that" fallback.
+
+Open questions: which Game Master functions are scriptable from a mod; how to describe 100+ tools to the LLM without blowing the token budget (tool search / grouped catalogues / on-demand `list_tools`); how to scale trust for requests from low-rank players; whether tier 3 is worth shipping at all.
+
+---
+
 ## 6. Economy, bases, logistics, building
 
 - Each faction has **resource pools** (supplies, optionally fuel/ammo/manpower) held at bases; spending = spawning units, building, resupply. Income from bases/objectives (Conflict-style) or a rate set in the scenario.
@@ -236,7 +267,7 @@ The mod must not hard-code vanilla prefabs. Instead:
 Goal: a player talks to HQ (and HQ to the player) in natural language.
 - **Phase 1 - text:** in-game chat (`SCR_ChatComponent`) -> mod forwards to the faction agent; replies appear in chat (and radio-style UI). Cheap, certain to work.
 - **Phase 2 - voice (research needed):** the Reforger script API exposes VoN capture only through components; **no script access to raw microphone audio was found** `[verify]`. Likely route: a small **companion app on the player's PC** (push-to-talk -> Whisper/other STT -> HTTP to the sidecar or to a local mod endpoint), with TTS for HQ replies. A server-side tap of the VoN stream may be possible but is unconfirmed.
-- Natural-language commands from players are parsed by the LLM into the same command vocabulary.
+- Natural-language requests from players are handled by the LLM agent, which may use the fixed vocabulary or the broader tool registry (section 5a), and answers by chat/radio.
 
 ---
 
@@ -265,9 +296,9 @@ Own game mode `CLW_GameMode` (see `notes/decision-game-mode.md`). Live status: `
 | Milestone | Contents | Proves |
 |---|---|---|
 | **M0 - Skeleton** | Game mode + minimal world, player can join a side and spawn as a soldier in an AI squad, one AI squad per side, per-faction contacts, RuleCommander issues MOVE/ATTACK/DEFEND waypoints, logs. Spikes: perception tap, order loop | Perception + waypoint APIs, core loop, playable without LLM |
-| **M1 - LLM bridge** | REST spike (POST/headers/polling), sidecar, RemoteCommander, schema validation, fallback to Rules | LLM loop |
+| **M1 - LLM bridge** | REST spike (POST/headers/polling), sidecar, first tool-registry entries (`list_tools`, `reply_to_player`), RemoteCommander, schema validation, fallback to Rules | LLM loop |
 | **M2 - Real war** | Player squad leaders receive HQ orders as missions (choose from offered assignments, accept/refuse/complete), more commands, SITREPs, win conditions, spawn budget, resource ledger, bases, supply convoys | AI vs AI with economy |
-| **M3 - Mechanized & intel** | Vehicle groups, embark/dismount, convoys; map markers, expiry, player reports, setup screen | Vehicle AI, humans in the loop |
+| **M3 - Mechanized & intel** | Player requests via chat (spawn/reassign/form squad through the tool registry, section 5a); Vehicle groups, embark/dismount, convoys; map markers, expiry, player reports, setup screen | Vehicle AI, humans in the loop |
 | **M4 - Scale & realism** | Chain-of-command echelons with delayed reports, population manager (cleanup, collapse/expand), FOBs | Size of war |
 | **M5 - Content compat** | RHS / WCS profiles, role classifier | Custom factions |
 | **Later** | Voice/radio, virtual battlefield (experimental), Conflict adapter | - |

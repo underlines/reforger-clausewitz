@@ -16,9 +16,12 @@ Updated: 2026-10-11. Roadmap: `VISION.md` section 13. Decisions: `notes/`.
 - [ ] Spike: order loop, canned MOVE -> waypoint on a group
 - [ ] RuleCommander v0: one squad per side, MOVE/ATTACK/DEFEND
 
+- [ ] (M1) Tool registry skeleton: typed tools with schema, authority, cost, validator (VISION 5a); check which Game Master functions are scriptable
+
 ## Next up
 CLW_GameMode skeleton, then the perception and order spikes.
 
 ## Log
 - 2026-10-11: Vision and research committed; game-mode decision made; roadmap condensed to M0-M5; branch naming unified on `main`.
 - 2026-10-11: Human participation made central (VISION 2a): soldiers and squad leaders get HQ orders as missions.  Players pick from several offered assignments.
+- 2026-10-11: Added freeform agent tool registry (VISION 5a) for natural-language player requests.
