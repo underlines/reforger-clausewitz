@@ -1,6 +1,8 @@
 // A believed enemy position as seen by one of our groups. Input for the RuleCommander.
 class CLW_Contact
 {
+	int m_iId;				// unique within a CLW_ContactBook, 0 until reported
+	string m_sObserverFaction;	// faction whose book holds this contact
 	string m_sObserver;		// name of the group that sees the enemy
 	string m_sEnemyFaction;
 	vector m_vPos;			// average position of the cluster

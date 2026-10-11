@@ -7,8 +7,17 @@ class CLW_GameModeClass : SCR_BaseGameModeClass
 
 class CLW_GameMode : SCR_BaseGameMode
 {
-	protected static const bool RUN_ORDER_SPIKE = true;
-	protected static const ref array<string> SQUADS = {"CLW_Squad_US_1", "CLW_Squad_USSR_1"};
+	protected static const bool RUN_ORDER_SPIKE = false;
+	protected static const ref array<string> SQUADS_US = {"CLW_Squad_US_1", "CLW_Squad_US_2"};
+	protected static const ref array<string> SQUADS_USSR = {"CLW_Squad_USSR_1", "CLW_Squad_USSR_2"};
+
+	// One contact picture, marker set and rule commander per faction.
+	protected ref CLW_ContactBook m_BookUS = new CLW_ContactBook();
+	protected ref CLW_ContactBook m_BookUSSR = new CLW_ContactBook();
+	protected ref CLW_ContactMarkers m_MarkersUS = new CLW_ContactMarkers();
+	protected ref CLW_ContactMarkers m_MarkersUSSR = new CLW_ContactMarkers();
+	protected ref CLW_RuleCommander m_CommanderUS = new CLW_RuleCommander();
+	protected ref CLW_RuleCommander m_CommanderUSSR = new CLW_RuleCommander();
 	protected static const ResourceName WAYPOINT_MOVE = "{750A8D1695BD6998}Prefabs/AI/Waypoints/AIWaypoint_Move.et";
 
 	protected override void OnGameStart()
@@ -20,27 +29,59 @@ class CLW_GameMode : SCR_BaseGameMode
 		{
 			if (RUN_ORDER_SPIKE)
 				GetGame().GetCallqueue().CallLater(SpikeOrderLoop, 15000);
+			// RuleCommander drives only AI-only squads; each side's first squad is the player squad.
+			array<string> commandedUS = {"CLW_Squad_US_2"};
+			array<string> commandedUSSR = {"CLW_Squad_USSR_1", "CLW_Squad_USSR_2"};
+			m_CommanderUS.Init("US", m_BookUS, commandedUS);
+			m_CommanderUSSR.Init("USSR", m_BookUSSR, commandedUSSR);
+			array<vector> patrolUS = {Vector(2030, 0, 2630), Vector(2150, 0, 2630)};
+			array<vector> patrolUSSR = {Vector(2030, 0, 3030), Vector(2150, 0, 3030)};
+			m_CommanderUS.SetPatrolPoints(patrolUS);
+			m_CommanderUSSR.SetPatrolPoints(patrolUSSR);
+
 			GetGame().GetCallqueue().CallLater(PollContacts, 20000, true);
+			GetGame().GetCallqueue().CallLater(ThinkCommanders, 25000, true);
 		}
 	}
 
-	// M0 spike: every squad's perception clusters -> Contact records.
+	// Perception -> contact book -> map markers, for both factions.
 	protected void PollContacts()
 	{
-		foreach (string name : SQUADS)
+		UpdateFaction("US", SQUADS_US, m_BookUS, m_MarkersUS);
+		UpdateFaction("USSR", SQUADS_USSR, m_BookUSSR, m_MarkersUSSR);
+	}
+
+	protected void UpdateFaction(string factionKey, array<string> squads, CLW_ContactBook book, CLW_ContactMarkers markers)
+	{
+		foreach (string name : squads)
 		{
 			SCR_AIGroup group = FindSquad(name);
 			if (!group)
 				continue;
 
-			array<ref CLW_Contact> contacts = {};
-			CLW_Contact.FromGroup(group, name, contacts);
-			Print(string.Format("CLW: contacts of %1: %2", name, contacts.Count()), LogLevel.NORMAL);
-			foreach (CLW_Contact contact : contacts)
-			{
-				Print("CLW: contact " + contact.Describe(), LogLevel.NORMAL);
-			}
+			array<ref CLW_Contact> sightings = {};
+			CLW_Contact.FromGroup(group, name, sightings);
+			book.Report(factionKey, sightings);
 		}
+
+		array<int> removed = {};
+		book.Expire(removed);
+		markers.Remove(removed);
+
+		array<CLW_Contact> known = {};
+		book.GetContacts(known);
+		markers.Sync(factionKey, known);
+		Print(string.Format("CLW: %1 book contacts=%2 removed=%3", factionKey, known.Count(), removed.Count()), LogLevel.NORMAL);
+		foreach (CLW_Contact contact : known)
+		{
+			Print("CLW: contact " + contact.Describe(), LogLevel.NORMAL);
+		}
+	}
+
+	protected void ThinkCommanders()
+	{
+		m_CommanderUS.Think();
+		m_CommanderUSSR.Think();
 	}
 
 	// Player flow: after the auto-spawn, put the player into the AI rifle squad of their faction.
