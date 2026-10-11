@@ -388,17 +388,18 @@ class CLW_RuleCommander
 			return;
 		}
 
-		// Scene-placed squads have GroupID -1; tasks address groups by ID.
-		// Only when missing: a second AssignGroupID on the player squad is the suspected cause of duplicate squad leaders / dead commanding (2026-10-12).
-		if (group.GetGroupID() < 0)
-			SCR_GroupsManagerComponent.GetInstance().AssignGroupID(group);
-		int groupId = group.GetGroupID();
-		taskSystem.SetTaskOwnership(task, SCR_ETaskOwnership.GROUP);
-		taskSystem.SetTaskVisibility(task, SCR_ETaskVisibility.GROUP);
+		// Address the task to the leading PLAYER, not the group: giving the squad a real GroupID (AssignGroupID) silences the commander voice and move marker.
+		IEntity leader = group.GetLeaderEntity();
+		int playerId = 0;
+		if (leader)
+			playerId = GetGame().GetPlayerManager().GetPlayerIdFromControlledEntity(leader);
+		taskSystem.SetTaskOwnership(task, SCR_ETaskOwnership.FACTION);
+		taskSystem.SetTaskVisibility(task, SCR_ETaskVisibility.ASSIGNEES);
 		taskSystem.AddTaskFaction(task, m_sFaction);
-		taskSystem.AddTaskGroup(task, groupId);
 
-		SCR_TaskExecutor executor = SCR_TaskSystem.TaskExecutorFromGroup(groupId);
+		SCR_TaskExecutor executor;
+		if (playerId > 0)
+			executor = SCR_TaskExecutor.FromPlayerID(playerId);
 		if (executor)
 			taskSystem.AssignTask(task, executor, true);
 

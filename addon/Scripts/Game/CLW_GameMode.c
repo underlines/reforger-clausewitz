@@ -127,8 +127,7 @@ class CLW_GameMode : SCR_BaseGameMode
 
 		if (squad.GetGroupID() < 0)
 			groups.RegisterGroup(squad);
-		if (squad.GetGroupID() < 0)
-			groups.AssignGroupID(squad);
+		// Do NOT AssignGroupID here or anywhere on the player squad: a real group ID silences the commander voice and move marker (bisected 2026-10-12).
 		Print(string.Format("CLW: squad %1 groupId=%2 playable=%3", squad, squad.GetGroupID(), squad.IsPlayable()), LogLevel.NORMAL);
 		groups.AddPlayerToGroup(squad.GetGroupID(), playerId);
 		array<SCR_AIGroup> factionGroups = groups.GetPlayableGroupsByFaction(faction);

@@ -15,7 +15,7 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 ### Fixed
 - Squads whose leader died no longer count as alive (corpse agents showed as 1/6 strength).
 - Squads you lead always get an objective: if the LLM ignores a human-led squad, the rule commander issues its first mission.
-- Group ID is no longer assigned twice to the player squad (suspected cause of duplicate squad leaders / dead Follow me; unverified).
+- Commander voice and move marker work again: the player squad no longer gets a group ID assigned (a real ID made the controller/group IDs disagree). Missions are vanilla tasks assigned to the leading player (faction-owned), visible in the J menu and on the map.
 
 ## [0.1.0] - 2026-10-11
 
