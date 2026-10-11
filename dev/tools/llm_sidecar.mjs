@@ -1,7 +1,7 @@
 // Clausewitz LLM bridge sidecar + read-only web dashboard. Plain Node 18+, no npm deps.
 //   node dev/tools/llm_sidecar.mjs
 // Env (initial defaults only; saved settings in dev/tools/sidecar-config.json win):
-//   CLW_PORT (default 8788), CLW_LLM=fake|anthropic|openai-compatible (default fake),
+//   CLW_PORT (default 8788), CLW_LLM=fake|anthropic|openai-compatible|openrouter (default fake),
 //   ANTHROPIC_API_KEY, CLW_MODEL (default claude-sonnet-5-5)
 // Listens on 127.0.0.1 only.
 //
@@ -20,10 +20,19 @@
 //   same ids/modes/agents, every squad and contact moved < 75 m, same contact count). A skipped request
 //   answers 200 {"orders":[],"keep":true}: the game keeps its current orders (no rule fallback).
 //
+// OpenRouter provider ("openrouter", baseUrl defaults to https://openrouter.ai/api/v1; a saved "openai-compatible" config
+//   pointing at openrouter.ai is migrated automatically): each request adds usage:{include:true} and records usage.cost (USD).
+//   Local metrics (session cost/requests/tokens, cost by model and by faction; reset on restart) are in /api/state "usage".
+//   Key budget: GET <baseUrl>/key is polled at startup, after a config save, every 10 min (60 s while the limit is reached)
+//   and on POST /api/usage/refresh. Warnings at 80 % / 95 % of the key limit (polled value minus local cost since the poll);
+//   at 100 % and setting stopAtLimit (default true) real provider calls stop: /orders answers {"orders":[]} (reason
+//   "budget limit reached", counted as fallback) until a refresh shows budget again.
+//
 // Dashboard (http://127.0.0.1:8788/, static files from dev/tools/dashboard/):
 //   GET  /api/state   -> factions, latest situations/orders, recent exchanges (ring of 100), counters, config (no secrets)
 //   GET  /api/config  -> current settings; apiKey is reported only as {apiKeySet, apiKeyLast4}
 //   POST /api/config  -> change settings (JSON, localhost Origin/Host only), persisted to sidecar-config.json
+//   POST /api/usage/refresh -> re-poll the OpenRouter key budget now -> {ok,usage}
 //   POST /api/test    -> send a tiny canned situation through the current provider -> {ok,orders,error,latencyMs}
 import http from "node:http";
 import fs from "node:fs";
@@ -35,7 +44,8 @@ const DASH_DIR = path.join(DIR, "dashboard");
 const CONFIG_FILE = path.join(DIR, "sidecar-config.json");
 const PORT = Number(process.env.CLW_PORT) || 8788;
 const COMMANDS = new Set(["MOVE", "ATTACK", "DEFEND"]);
-const PROVIDERS = ["fake", "anthropic", "openai-compatible"];
+const PROVIDERS = ["fake", "anthropic", "openai-compatible", "openrouter"];
+const OR_BASE = "https://openrouter.ai/api/v1";
 const RING_MAX = 100;
 const isNum = (n) => typeof n === "number" && Number.isFinite(n);
 
@@ -62,6 +72,7 @@ const cfg = {
   enabled: true,
   minIntervalSec: 0,
   skipUnchanged: true,
+  stopAtLimit: true,
 };
 
 function validateConfig(inp) {
@@ -102,6 +113,9 @@ function validateConfig(inp) {
       case "skipUnchanged":
         if (typeof v !== "boolean") return { error: "skipUnchanged must be boolean" };
         out.skipUnchanged = v; break;
+      case "stopAtLimit":
+        if (typeof v !== "boolean") return { error: "stopAtLimit must be boolean" };
+        out.stopAtLimit = v; break;
       default:
         return { error: `unknown setting ${k}` };
     }
@@ -109,9 +123,14 @@ function validateConfig(inp) {
   return { value: out };
 }
 
+// A saved openai-compatible config that points at openrouter.ai is the openrouter provider (key is kept).
+function migrateOpenRouter(c) {
+  if (c.provider === "openai-compatible" && /openrouter\.ai/i.test(c.baseUrl)) { c.provider = "openrouter"; c.baseUrl = ""; console.log("migrated provider openai-compatible (openrouter.ai) -> openrouter"); }
+}
+
 try {
   const saved = validateConfig(JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")));
-  if (saved.value) Object.assign(cfg, saved.value);
+  if (saved.value) { Object.assign(cfg, saved.value); migrateOpenRouter(cfg); }
   else console.log(`ignoring ${CONFIG_FILE}: ${saved.error}`);
 } catch (e) {
   if (e.code !== "ENOENT") console.log(`could not read ${CONFIG_FILE}: ${e.message}`);
@@ -135,6 +154,74 @@ const state = {
   counters: { requests: 0, skipped: 0, errors: 0, fallbacks: 0, inputTokens: 0, outputTokens: 0 },
   lastRequestTs: 0,
 };
+
+// ---------- OpenRouter usage / budget ----------
+const POLL_MS = 10 * 60 * 1000, POLL_REACHED_MS = 60 * 1000;
+const session = { cost: 0, requests: 0, tokensIn: 0, tokensOut: 0, byModel: {}, byFaction: {} };
+const keyState = { data: null, ts: 0, error: null, polling: false, costSincePoll: 0 };
+let budgetLevel = "ok"; // last logged level: ok | warn | crit | reached
+
+function recordUsage(model, faction, u) {
+  const cost = isNum(u?.cost) ? u.cost : 0;
+  session.cost += cost; session.tokensIn += u?.input ?? 0; session.tokensOut += u?.output ?? 0;
+  keyState.costSincePoll += cost;
+  const add = (m, k) => { const e = (m[k] ??= { cost: 0, requests: 0 }); e.cost += cost; e.requests++; };
+  add(session.byModel, model || "?"); add(session.byFaction, faction || "?");
+  checkBudget();
+}
+
+// Budget of the active key limit: polled limit_remaining minus local cost since that poll. null = no limit known.
+function budget() {
+  const d = keyState.data;
+  if (cfg.provider !== "openrouter" || !d || !isNum(d.limit) || d.limit <= 0 || !isNum(d.limit_remaining)) return null;
+  const remaining = d.limit_remaining - keyState.costSincePoll;
+  const pct = Math.max(0, Math.min(100, 100 * (d.limit - remaining) / d.limit));
+  const level = remaining <= 0 ? "reached" : pct >= 95 ? "crit" : pct >= 80 ? "warn" : "ok";
+  return { limit: d.limit, remaining, pct, level, resetting: d.limit_reset ?? null };
+}
+const LEVELS = ["ok", "warn", "crit", "reached"];
+function checkBudget() {
+  const b = budget(), level = b ? b.level : "ok";
+  if (level !== budgetLevel) {
+    if (LEVELS.indexOf(level) > LEVELS.indexOf(budgetLevel)) {
+      console.log(`BUDGET ${level === "reached" ? "LIMIT REACHED" : level === "crit" ? "95% used" : "80% used"}: $${(b.limit - b.remaining).toFixed(4)} of $${b.limit} (${b.pct.toFixed(1)}%)${level === "reached" && cfg.stopAtLimit ? " - provider calls stopped" : ""}`);
+    } else console.log(`budget back to ${level}`);
+    budgetLevel = level;
+  }
+}
+
+const KEY_FIELDS = ["usage", "usage_daily", "usage_weekly", "usage_monthly", "limit", "limit_remaining"];
+async function pollKey() {
+  if (cfg.provider !== "openrouter" || !cfg.apiKey || keyState.polling) return;
+  keyState.polling = true;
+  const ac = new AbortController(), timer = setTimeout(() => ac.abort(), 10000);
+  try {
+    const r = await fetch((cfg.baseUrl || OR_BASE) + "/key", { signal: ac.signal, headers: { authorization: "Bearer " + cfg.apiKey } });
+    if (!r.ok) throw new Error(`HTTP ${r.status}: ${(await r.text()).slice(0, 150)}`);
+    const d = (await r.json())?.data ?? {};
+    const k = { label: typeof d.label === "string" ? d.label : "", limit_reset: typeof d.limit_reset === "string" ? d.limit_reset : null, is_free_tier: !!d.is_free_tier };
+    for (const f of KEY_FIELDS) k[f] = isNum(d[f]) ? d[f] : null;
+    if (k.limit !== null && k.limit_remaining === null) k.limit_remaining = k.limit - (k.usage ?? 0); // tolerate a missing field
+    keyState.data = k; keyState.error = null; keyState.costSincePoll = 0;
+  } catch (e) {
+    keyState.error = e?.name === "AbortError" ? "timeout" : String(e?.message ?? e);
+    console.log(`  key poll failed: ${keyState.error}`);
+  } finally { clearTimeout(timer); keyState.polling = false; keyState.ts = Date.now(); checkBudget(); }
+}
+setInterval(() => {
+  const age = Date.now() - keyState.ts;
+  if (age >= POLL_MS || (budgetLevel === "reached" && age >= POLL_REACHED_MS)) void pollKey();
+}, 15000).unref();
+
+function usageView() {
+  const on = cfg.provider === "openrouter";
+  return {
+    enabled: on, session, stopAtLimit: cfg.stopAtLimit,
+    key: on ? { data: keyState.data, ts: keyState.ts, error: keyState.error, polling: keyState.polling, costSincePoll: keyState.costSincePoll, keySet: !!cfg.apiKey } : null,
+    budget: on ? budget() : null,
+  };
+}
+const budgetStopped = (c) => c.provider === "openrouter" && c.stopAtLimit && budget()?.level === "reached";
 
 // ---------- providers ----------
 function fakeOrders(sit) {
@@ -179,11 +266,13 @@ async function callProvider(c, sit) {
       headers = { "x-api-key": c.apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" };
       body = { model: c.model, max_tokens: c.maxTokens, system: SYSTEM, messages: [{ role: "user", content: userMsg }] };
     } else {
-      if (!c.baseUrl) throw new Error("baseUrl not set");
-      url = c.baseUrl + "/chat/completions";
+      const base = c.provider === "openrouter" ? (c.baseUrl || OR_BASE) : c.baseUrl;
+      if (!base) throw new Error("baseUrl not set");
+      url = base + "/chat/completions";
       headers = { "content-type": "application/json" };
       if (c.apiKey) headers.authorization = "Bearer " + c.apiKey;
       body = { model: c.model, max_tokens: c.maxTokens, messages: [{ role: "system", content: SYSTEM }, { role: "user", content: userMsg }] };
+      if (c.provider === "openrouter") body.usage = { include: true };
     }
     const r = await fetch(url, { method: "POST", signal: ac.signal, headers, body: JSON.stringify(body) });
     if (!r.ok) {
@@ -199,6 +288,7 @@ async function callProvider(c, sit) {
     } else {
       text = j.choices?.[0]?.message?.content ?? "";
       usage = { input: j.usage?.prompt_tokens ?? 0, output: j.usage?.completion_tokens ?? 0 };
+      if (isNum(j.usage?.cost)) usage.cost = j.usage.cost;
     }
     return { raw: text, usage };
   } finally {
@@ -236,7 +326,9 @@ async function computeOrders(c, sit, isTest = false) {
     let raw;
     if (c.provider === "fake") raw = fakeOrders(sit);
     else {
+      session.requests++;
       const p = await callProvider(c, sit);
+      if (c.provider === "openrouter") recordUsage(c.model, typeof sit.faction === "string" ? sit.faction : "?", p.usage);
       r.rawReply = p.raw; r.usage = p.usage;
       raw = extractOrders(p.raw);
     }
@@ -319,7 +411,8 @@ async function handleOrders(req, res) {
     else if (snapshot.skipUnchanged && lc.sit && unchanged(lc.sit, sit)) skip = "skipped: unchanged";
   }
   let r;
-  if (!snapshot.enabled) r = { orders: [], dropped: [], rawReply: null, usage: null, ok: false, reason: "disabled" };
+  if (snapshot.enabled && sit && Array.isArray(sit.squads) && budgetStopped(snapshot)) r = { orders: [], dropped: [], rawReply: null, usage: null, ok: false, reason: "budget limit reached" };
+  else if (!snapshot.enabled) r = { orders: [], dropped: [], rawReply: null, usage: null, ok: false, reason: "disabled" };
   else if (skip) r = { orders: [], dropped: [], rawReply: null, usage: null, ok: true, reason: skip, skipped: true };
   else {
     if (snapshot.provider !== "fake") lc.ts = Date.now();
@@ -330,7 +423,7 @@ async function handleOrders(req, res) {
 
   state.counters.requests++;
   if (r.skipped) state.counters.skipped++;
-  if (!r.ok && r.reason !== "disabled") state.counters.errors++;
+  if (!r.ok && r.reason !== "disabled" && r.reason !== "budget limit reached") state.counters.errors++;
   if (!r.skipped && (!r.ok || r.orders.length === 0)) state.counters.fallbacks++;
   if (r.usage) { state.counters.inputTokens += r.usage.input; state.counters.outputTokens += r.usage.output; }
   state.lastRequestTs = Date.now();
@@ -363,8 +456,13 @@ async function handleApi(req, res, url) {
   if (req.method === "GET" && url === "/api/state") {
     return send(res, 200, {
       now: Date.now(), startedAt: state.startedAt, lastRequestTs: state.lastRequestTs,
-      factions: state.factions, exchanges: state.exchanges, counters: state.counters, config: publicConfig(),
+      factions: state.factions, exchanges: state.exchanges, counters: state.counters, config: publicConfig(), usage: usageView(),
     });
+  }
+  if (req.method === "POST" && url === "/api/usage/refresh") {
+    if (!originOk(req)) return send(res, 403, { error: "forbidden origin" });
+    await pollKey();
+    return send(res, 200, { ok: !keyState.error, usage: usageView() });
   }
   if (req.method === "GET" && url === "/api/config") return send(res, 200, publicConfig());
   if (req.method === "POST" && (url === "/api/config" || url === "/api/test")) {
@@ -377,6 +475,9 @@ async function handleApi(req, res, url) {
     if (v.value.apiKey === "") delete v.value.apiKey; // empty = keep stored key
     if (url === "/api/config") {
       Object.assign(cfg, v.value);
+      migrateOpenRouter(cfg);
+      keyState.data = null; keyState.error = null; keyState.costSincePoll = 0; checkBudget();
+      void pollKey();
       const saved = saveConfig();
       return send(res, 200, { ok: true, saved, config: publicConfig() });
     }
@@ -413,4 +514,7 @@ http.createServer((req, res) => {
     if (m && !m[1].includes("..") && MIME[path.extname(m[1]).toLowerCase()]) return serveStatic(res, "vendor/" + m[1]);
   }
   send(res, 404, { error: "not found" });
-}).listen(PORT, "127.0.0.1", () => console.log(`clausewitz llm sidecar (${cfg.provider}${cfg.enabled ? "" : ", DISABLED"}) on http://127.0.0.1:${PORT}  (dashboard at /)`));
+}).listen(PORT, "127.0.0.1", () => {
+  console.log(`clausewitz llm sidecar (${cfg.provider}${cfg.enabled ? "" : ", DISABLED"}) on http://127.0.0.1:${PORT}  (dashboard at /)`);
+  void pollKey();
+});

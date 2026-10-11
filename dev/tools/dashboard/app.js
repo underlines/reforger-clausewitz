@@ -84,7 +84,7 @@ function buildRows(state, faction) {
 
 // ---------- status strip ----------
 function Strip({ st }) {
-  const c = st.counters ?? {}, cf = st.config ?? {};
+  const c = st.counters ?? {}, cf = st.config ?? {}, bud = st.usage?.budget;
   const age = st.lastRequestTs ? ((st.now ?? Date.now()) - st.lastRequestTs) / 1000 : null;
   const stale = st.offline || age === null || age * 1000 > STALE_MS;
   const ageTxt = st.offline ? "sidecar unreachable" : age === null ? "no request yet" : `${age.toFixed(0)} s ago`;
@@ -96,6 +96,7 @@ function Strip({ st }) {
     <div class="chip" title="Requests answered without a provider call (interval / unchanged)">skipped <b>${c.skipped ?? 0}</b></div>
     <div class=${"chip" + (c.errors ? " bad" : "")}>errors <b>${c.errors ?? 0}</b></div>
     <div class="chip">tokens in/out <b>${c.inputTokens ?? 0} / ${c.outputTokens ?? 0}</b></div>
+    ${bud && bud.level !== "ok" && html`<div class=${"chip " + (bud.level === "warn" ? "warn" : "bad")} title="OpenRouter key budget (see Configuration)"><span class="dot"></span>${bud.level === "reached" ? "budget limit reached" : `budget ${bud.pct.toFixed(0)}% used`}</div>`}
     <div class=${"chip " + (stale ? "bad" : "ok")} title="Red when the game has not contacted the sidecar for 30 s"><span class="dot"></span>last request <b>${ageTxt}</b></div>
   </div>`;
 }
@@ -335,7 +336,7 @@ function Log({ st, faction }) {
       <span class="muted">${x.provider}${x.model ? " / " + x.model : ""}</span>
       ${x.ok && String(x.reason ?? "").startsWith("skipped") ? html`<span class="badge info">${x.reason}</span>` : x.ok ? html`<span class=${"badge " + (x.orders.length ? "ok" : "warn")}>${x.orders.length ? "ok" : "ok, no orders"}</span>` : html`<span class="badge bad">fallback: ${x.reason}</span>`}
       ${x.dropped?.length ? html`<span class="badge warn">${x.dropped.length} dropped</span>` : ""}
-      <span>${x.orders.length} orders</span><span class="muted">${x.latencyMs} ms${x.usage ? ` , ${x.usage.input}/${x.usage.output} tok` : ""}</span></summary>
+      <span>${x.orders.length} orders</span><span class="muted">${x.latencyMs} ms${x.usage ? ` , ${x.usage.input}/${x.usage.output} tok` : ""}${num(x.usage?.cost) ? ` , $${x.usage.cost.toFixed(4)}` : ""}</span></summary>
       <div class="body"><h3>Orders</h3><pre>${J(x.orders)}</pre>
       ${x.dropped?.length ? html`<h3>Dropped (with reason)</h3><pre>${J(x.dropped)}</pre>` : ""}
       ${x.rawReply != null ? html`<h3>Raw LLM reply</h3><pre>${x.rawReply}</pre>` : ""}
@@ -368,7 +369,7 @@ async function postJson(url, body) {
   let j = {}; try { j = await r.json(); } catch { /* ignore */ }
   return { ok: r.ok, j };
 }
-function Config({ toast, refresh }) {
+function Config({ st, toast, refresh }) {
   const [f, setF] = useState(null);
   const [keyMeta, setKeyMeta] = useState({ set: false, last4: "" });
   const [busy, setBusy] = useState(false);
@@ -376,7 +377,7 @@ function Config({ toast, refresh }) {
   const load = useCallback(async () => {
     try {
       const c = await (await fetch("/api/config", { cache: "no-store" })).json();
-      setF({ provider: c.provider, model: c.model, baseUrl: c.baseUrl, apiKey: "", timeoutSec: c.timeoutSec, maxTokens: c.maxTokens, enabled: !!c.enabled, minIntervalSec: c.minIntervalSec ?? 0, skipUnchanged: c.skipUnchanged !== false });
+      setF({ provider: c.provider, model: c.model, baseUrl: c.baseUrl, apiKey: "", timeoutSec: c.timeoutSec, maxTokens: c.maxTokens, enabled: !!c.enabled, minIntervalSec: c.minIntervalSec ?? 0, skipUnchanged: c.skipUnchanged !== false, stopAtLimit: c.stopAtLimit !== false });
       setKeyMeta({ set: c.apiKeySet, last4: c.apiKeyLast4 });
     } catch (e) { toast("Could not load config: " + e.message, "err"); }
   }, []);
@@ -384,7 +385,7 @@ function Config({ toast, refresh }) {
   if (!f) return html`<main><div class="empty">Loading...</div></main>`;
   const set = (k, v) => setF((o) => ({ ...o, [k]: v }));
   const body = () => {
-    const b = { provider: f.provider, model: f.model, baseUrl: f.baseUrl, timeoutSec: Number(f.timeoutSec), maxTokens: Number(f.maxTokens), enabled: f.enabled, minIntervalSec: Number(f.minIntervalSec), skipUnchanged: f.skipUnchanged };
+    const b = { provider: f.provider, model: f.model, baseUrl: f.baseUrl, timeoutSec: Number(f.timeoutSec), maxTokens: Number(f.maxTokens), enabled: f.enabled, minIntervalSec: Number(f.minIntervalSec), skipUnchanged: f.skipUnchanged, stopAtLimit: f.stopAtLimit };
     if (f.apiKey) b.apiKey = f.apiKey;
     return b;
   };
@@ -411,9 +412,10 @@ function Config({ toast, refresh }) {
       <label class="field"><span>Provider</span><select value=${f.provider} onChange=${(e) => set("provider", e.target.value)}>
         <option value="fake">fake (rule-based stub, no network)</option>
         <option value="anthropic">anthropic</option>
-        <option value="openai-compatible">openai-compatible (Ollama, LM Studio, OpenRouter...)</option></select></label>
+        <option value="openai-compatible">openai-compatible (Ollama, LM Studio, ...)</option>
+        <option value="openrouter">openrouter (with usage / budget monitoring)</option></select></label>
       <label class="field"><span>Model</span><input type="text" value=${f.model} onInput=${(e) => set("model", e.target.value)} /></label>
-      <label class="field"><span>Base URL</span><input type="text" value=${f.baseUrl} placeholder="e.g. http://127.0.0.1:11434/v1  (openai-compatible; /chat/completions is appended)" onInput=${(e) => set("baseUrl", e.target.value)} /></label>
+      <label class="field"><span>Base URL</span><input type="text" value=${f.baseUrl} placeholder=${f.provider === "openrouter" ? "optional, default https://openrouter.ai/api/v1" : "e.g. http://127.0.0.1:11434/v1  (openai-compatible; /chat/completions is appended)"} onInput=${(e) => set("baseUrl", e.target.value)} /></label>
       <label class="field"><span>API key</span><input type="password" autocomplete="new-password" value=${f.apiKey} placeholder=${keyMeta.set ? `stored key ending ...${keyMeta.last4} (leave empty to keep)` : "not set"} onInput=${(e) => set("apiKey", e.target.value)} />
         <small>Write-only: the sidecar never sends the key back.</small></label>
       <div class="pair">
@@ -423,12 +425,64 @@ function Config({ toast, refresh }) {
         <label class="field"><span>Min interval per faction (s, 0 = every request)</span><input type="number" min="0" max="600" value=${f.minIntervalSec} onInput=${(e) => set("minIntervalSec", e.target.value)} /></label>
         <label class="switch"><input type="checkbox" checked=${f.skipUnchanged} onChange=${(e) => set("skipUnchanged", e.target.checked)} /><span>Skip unchanged situations</span></label></div>
       <small class="muted">Batch APIs (24 h latency) don't fit a live war, so we cut call frequency instead. Skipped requests answer "keep current orders"; applies to real providers only (not fake).</small>
+      ${f.provider === "openrouter" && html`<label class="switch"><input type="checkbox" checked=${f.stopAtLimit} onChange=${(e) => set("stopAtLimit", e.target.checked)} />
+        <span>Stop provider calls at the key's spending limit <span class="muted">(/orders then answers no orders; resumes when budget is available again)</span></span></label>`}
       <label class="switch"><input type="checkbox" checked=${f.enabled} onChange=${(e) => set("enabled", e.target.checked)} />
         <span>Enabled <span class="muted">(off: /orders returns no orders, the game uses its rule commander)</span></span></label>
       <div class="btns"><button class="btn" type="submit" disabled=${busy}><${Icon} n="save" /> Save</button>
         <button class="btn ghost" type="button" disabled=${busy} onClick=${doTest}><${Icon} n="plug" /> Test connection</button></div>
       ${test && html`<pre>${test.pending ? "testing with the form values (nothing is saved)..." : J(test)}</pre>`}
-    </form></section></div></main>`;
+    </form></section>
+    ${st.config?.provider === "openrouter" && f.provider === "openrouter" && html`<${UsageCard} u=${st.usage} now=${st.now} toast=${toast} refresh=${refresh} />`}
+    </div></main>`;
+}
+
+// ---------- OpenRouter usage card ----------
+const usd = (v) => (num(v) ? "$" + (Math.abs(v) < 10 ? v.toFixed(2) : v.toFixed(1)) : "-");
+const usd4 = (v) => (num(v) ? "$" + v.toFixed(4) : "-");
+const PERIOD = { daily: ["usage_daily", "Today"], weekly: ["usage_weekly", "This week"], monthly: ["usage_monthly", "This month"] };
+function UsageCard({ u, now, toast, refresh }) {
+  const [busy, setBusy] = useState(false);
+  if (!u?.enabled) return null;
+  const k = u.key, d = k?.data, s = u.session ?? {}, b = u.budget;
+  const doRefresh = async () => {
+    setBusy(true);
+    try { const { ok, j } = await postJson("/api/usage/refresh", {}); toast(ok && j.ok ? "Usage refreshed" : "Refresh failed: " + (j.usage?.key?.error ?? j.error ?? "request failed"), ok && j.ok ? "ok" : "err"); refresh(); }
+    catch (err) { toast("Error: " + err.message, "err"); }
+    setBusy(false);
+  };
+  // bar: period usage vs limit, or all-time usage vs limit
+  let bar = null, numbers = null;
+  if (d && num(d.limit) && d.limit > 0) {
+    const per = PERIOD[d.limit_reset], used = per ? d[per[0]] : d.usage;
+    const est = (used ?? 0) + (k.costSincePoll ?? 0), pct = Math.min(100, (100 * est) / d.limit);
+    bar = { pct, label: `${per ? per[1] : "Total"} ${usd(est)} / ${usd(d.limit)} (${per ? "resets " + d.limit_reset : "no reset"})` };
+  } else if (d) {
+    numbers = [["Today", d.usage_daily], ["Week", d.usage_weekly], ["Month", d.usage_monthly], ["Total", d.usage]];
+  }
+  const col = !bar ? "" : bar.pct >= 95 ? "var(--bad)" : bar.pct >= 80 ? "var(--warn)" : "var(--ok)";
+  const models = Object.entries(s.byModel ?? {}).sort((a, c) => c[1].cost - a[1].cost);
+  const facs = Object.entries(s.byFaction ?? {}).sort((a, c) => c[1].cost - a[1].cost);
+  const polled = k?.ts ? `${Math.round(((now ?? Date.now()) - k.ts) / 1000)} s ago` : "never";
+  return html`<section class="panel" style=${{ marginTop: "12px" }}><h2>Usage <span class="sub">OpenRouter${d?.label ? " key " + d.label : ""}</span></h2>
+    <div class="cfgbody">
+      ${b && b.level !== "ok" && html`<div class=${"banner " + (b.level === "warn" ? "warn" : "bad")}>${b.level === "reached"
+        ? `Spending limit reached (${usd(b.limit)}).${u.stopAtLimit ? " Provider calls are stopped; the game uses its rule commander until budget is available again." : ""}`
+        : `${b.pct.toFixed(0)}% of the key's spending limit used (${usd(b.remaining)} left).`}</div>`}
+      ${k?.error && html`<div class="banner bad">Budget poll failed: ${k.error}</div>`}
+      ${!k?.keySet && html`<div class="muted">No API key stored: budget polling is off.</div>`}
+      ${bar && html`<div><div class="ubar"><i style=${{ width: bar.pct + "%", background: col }}></i></div><div class="ulabel">${bar.label}${num(d.limit_remaining) ? html` <span class="muted">, ${usd(d.limit_remaining - (k.costSincePoll ?? 0))} left</span>` : ""}</div></div>`}
+      ${numbers && html`<div><div class="unums">${numbers.map(([l, v]) => html`<div><span class="muted">${l}</span><b>${usd(v)}</b></div>`)}</div><div class="muted">no spending limit set</div></div>`}
+      <div class="unums">
+        <div><span class="muted">Session cost</span><b>${usd4(s.cost)}</b></div>
+        <div><span class="muted">Requests</span><b>${s.requests ?? 0}</b></div>
+        <div><span class="muted">Tokens in / out</span><b>${s.tokensIn ?? 0} / ${s.tokensOut ?? 0}</b></div></div>
+      ${models.length > 0 && html`<table><thead><tr><th>Model</th><th>Requests</th><th>Cost</th></tr></thead><tbody>${models.map(([m, e]) => html`<tr><td>${m}</td><td>${e.requests}</td><td class="mono">${usd4(e.cost)}</td></tr>`)}</tbody></table>`}
+      ${facs.length > 0 && html`<table><thead><tr><th>Faction (unit)</th><th>Requests</th><th>Cost</th></tr></thead><tbody>${facs.map(([m, e]) => html`<tr><td>${m}</td><td>${e.requests}</td><td class="mono">${usd4(e.cost)}</td></tr>`)}</tbody></table>`}
+      <div class="btns"><button class="btn ghost" type="button" disabled=${busy || !k?.keySet} onClick=${doRefresh}><${Icon} n="reset" /> Refresh</button>
+        <span class="muted" style=${{ alignSelf: "center" }}>last poll ${polled}; session figures reset when the sidecar restarts</span></div>
+      <small class="muted">Use a dedicated OpenRouter key with a hard spending limit.</small>
+    </div></section>`;
 }
 
 // ---------- app ----------
@@ -444,7 +498,7 @@ function App() {
       <nav><a href="#hq" class=${cfg ? "" : "active"}>HQ</a><a href="#config" class=${cfg ? "active" : ""}>Configuration</a></nav>
       <${Strip} st=${st} />
     </header>
-    ${cfg ? html`<${Config} toast=${toast} refresh=${refresh} />` : html`<${HQ} st=${st} />`}
+    ${cfg ? html`<${Config} st=${st} toast=${toast} refresh=${refresh} />` : html`<${HQ} st=${st} />`}
     <div class="toasts">${toasts.map((t) => html`<div class=${"toast " + t.kind} key=${t.id}>${t.text}</div>`)}</div>
   </div>`;
 }
