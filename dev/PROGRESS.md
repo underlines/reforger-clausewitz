@@ -16,7 +16,7 @@ Updated: 2026-10-11. Roadmap: `VISION.md` section 13. Decisions: `notes/`.
 - [ ] Spike: REST GET/POST/headers to local echo server (risk 1)
 - [x] Spike: perception tap, per-group enemy clusters -> `Contact` record (`CLW_Contact.FromGroup`, reads `SCR_AIGroupUtilityComponent.m_Perception.m_aTargetClusters`): verified, US squad reported the USSR squad at its exact position (400 m apart, player walked within ~100-150 m). Without the player, squads 400 m apart did not detect each other
 - [x] Spike: order loop, canned MOVE -> waypoint on a group: verified, US leader walked 150 m east in <60 s on the Arland navmesh (CLW_GameMode.SpikeOrderLoop)
-- [x] Contact book (merge 60 m, expire 120 s) + faction map markers (`CLW_ContactBook`, `CLW_ContactMarkers`): contacts verified in the log; marker visibility on the map NOT yet confirmed by eye
+- [x] Contact book (merge 60 m, expire 120 s) + faction map markers (`CLW_ContactBook`, `CLW_ContactMarkers`): contacts verified in the log; map markers confirmed visible by the user (2026-10-11); expiry on the map not yet watched
 - [x] RuleCommander v0 (`CLW_RuleCommander`): verified in play, patrol MOVE with no contacts, ATTACK (search-and-destroy) on nearest contact; DEFEND untested. Second AI-only squad per side added. Game Master: `CLW_EditorSettings` (SCR_EditorSettingsEntity, unlimited editor legal); hold Y 0.5 s opens it (EditorToggle)
 
 - [ ] LATER (M3): human reports via map-marker parsing, `/report` chat command, quick menu (VISION 8)
@@ -26,7 +26,7 @@ Updated: 2026-10-11. Roadmap: `VISION.md` section 13. Decisions: `notes/`.
 - [ ] Verify later (needs 2 players or a way to join as non-leader): does an AI leader obey HQ waypoints while a player is a plain member? RuleCommander already skips only squads with a human LEADER
 
 ## Next up
-Confirm contact markers visually on the map and test DEFEND; then REST spike (M1 risk 1). A squad containing a player follows the player, so HQ orders go to AI-only squads or become missions for the player-led squad (VISION 2a, M2).
+Test DEFEND and marker expiry; then REST spike (M1 risk 1). A squad containing a player follows the player, so HQ orders go to AI-only squads or become missions for the player-led squad (VISION 2a, M2).
 
 ## Log
 - 2026-10-11: Vision and research committed; game-mode decision made; roadmap condensed to M0-M5; branch naming unified on `main`.
