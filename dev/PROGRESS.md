@@ -10,6 +10,7 @@ Updated: 2026-10-11. Roadmap: `VISION.md` section 13. Decisions: `notes/`.
 - [x] Branch `main` in workspace and mod repo; MCP project path -> `Clausewitz/addon`
 - [x] MCP verified: `project browse` resolves to Clausewitz/addon
 - [ ] `CLW_GameMode` + minimal world (two factions, spawn points), compiles and Plays
+- [x] Research: vanilla player flow lives in GameMode_Base.et, not Conflict (`research/player-flow-components.md`)
 - [ ] Player can join a faction, spawn as soldier, join an AI squad (section 2a); verify which base-game spawn/loadout/group components are reusable
 - [ ] Spike: REST GET/POST/headers to local echo server (risk 1)
 - [ ] Spike: perception tap, per-group enemy clusters -> `Contact` record
