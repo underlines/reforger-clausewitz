@@ -23,6 +23,8 @@ class CLW_RuleCommander
 	protected ref array<int> m_aPatrolIndex = {};
 	protected ref array<vector> m_aTarget = {};		// target of the last issued order
 	protected ref array<vector> m_aPatrolPoints = {};
+	protected ref CLW_MissionMarker m_Mission = new CLW_MissionMarker();	// the one mission marker of this faction (human squads)
+	protected int m_iMissionSquad = -1;	// squad index the marker belongs to
 
 	void Init(string factionKey, CLW_ContactBook book, notnull array<string> squadNames)
 	{
@@ -61,8 +63,16 @@ class CLW_RuleCommander
 	{
 		SCR_AIGroup group = SCR_AIGroup.Cast(GetGame().GetWorld().FindEntityByName(m_aSquads[i]));
 		// A human-led squad gets missions instead of waypoints (VISION 2a); a player who is just a member does not block orders to the AI leader.
-		if (!group || HasHumanLeader(group))
+		if (!group)
 			return;
+
+		bool human = HasHumanLeader(group);
+		if (!human && m_Mission.IsShown() && m_iMissionSquad == i)
+		{
+			// leadership went back to the AI: drop the stale mission marker
+			m_Mission.Clear();
+			m_iMissionSquad = -1;
+		}
 
 		IEntity leader = group.GetLeaderEntity();
 		int agents = group.GetAgentsCount();
@@ -73,7 +83,10 @@ class CLW_RuleCommander
 			m_aStartCount[i] = agents;
 
 		vector pos = leader.GetOrigin();
+		// a human squad has no waypoints: it is "idle" until its first mission was delivered
 		bool idle = (group.GetCurrentWaypoint() == null);
+		if (human)
+			idle = (m_aMode[i] == MODE_NONE);
 		bool weak = agents < m_aStartCount[i] * WEAK_STRENGTH;
 
 		CLW_Contact nearest;
@@ -95,7 +108,7 @@ class CLW_RuleCommander
 				return;
 			vector point = m_aPatrolPoints[m_aPatrolIndex[i] % m_aPatrolPoints.Count()];
 			m_aPatrolIndex[i] = m_aPatrolIndex[i] + 1;
-			Issue(i, group, MODE_SEARCH, point, "no contacts");
+			Deliver(human, i, group, MODE_SEARCH, point, "no contacts");
 			return;
 		}
 
@@ -104,13 +117,13 @@ class CLW_RuleCommander
 		{
 			// Hold where we are; only (re-)issue when not already defending or the order is gone.
 			if (!defending || idle)
-				Issue(i, group, MODE_DEFEND, pos, string.Format("strength %1/%2 or contact at %3 m", agents, m_aStartCount[i], Math.Round(nearestDist)));
+				Deliver(human, i, group, MODE_DEFEND, pos, string.Format("strength %1/%2 or contact at %3 m", agents, m_aStartCount[i], Math.Round(nearestDist)));
 			return;
 		}
 
 		bool targetMoved = vector.DistanceXZ(m_aTarget[i], nearest.m_vPos) > REISSUE_DISTANCE;
 		if (idle || m_aMode[i] != MODE_ATTACK || targetMoved)
-			Issue(i, group, MODE_ATTACK, nearest.m_vPos, "contact " + nearest.Describe());
+			Deliver(human, i, group, MODE_ATTACK, nearest.m_vPos, "contact " + nearest.Describe());
 	}
 
 	// Replace all waypoints of the group by exactly one of the given mode.
@@ -124,6 +137,36 @@ class CLW_RuleCommander
 			return false;
 
 		return GetGame().GetPlayerManager().GetPlayerIdFromControlledEntity(leader) > 0;
+	}
+
+	// Same decision, two deliveries: waypoint for AI squads, message + map marker for human-led squads.
+	protected void Deliver(bool human, int i, SCR_AIGroup group, int mode, vector target, string reason)
+	{
+		if (human)
+			IssueMission(i, mode, target, reason);
+		else
+			Issue(i, group, mode, target, reason);
+	}
+
+	// Deliver the order to a human squad leader as a mission (chat/debug message + faction-only map marker).
+	protected void IssueMission(int i, int mode, vector target, string reason)
+	{
+		string label = "Search";
+		if (mode == MODE_ATTACK)
+			label = "Attack";
+		else if (mode == MODE_DEFEND)
+			label = "Defend";
+
+		target[1] = GetGame().GetWorld().GetSurfaceY(target[0], target[2]);
+		m_aMode[i] = mode;
+		m_aTarget[i] = target;
+
+		m_Mission.Show(m_sFaction, "MISSION: " + label, target);
+		m_iMissionSquad = i;
+
+		string msg = string.Format("MISSION %1 (%2): %3 at %4 / %5 (%6)", m_aSquads[i], m_sFaction, label, Math.Round(target[0]), Math.Round(target[2]), reason);
+		CLW_Debug.Say(msg);
+		Print("CLW: RuleCommander " + msg, LogLevel.NORMAL);
 	}
 
 	protected bool Issue(int i, SCR_AIGroup group, int mode, vector target, string reason)
@@ -159,6 +202,7 @@ class CLW_RuleCommander
 		m_aMode[i] = mode;
 		m_aTarget[i] = target;
 		Print(string.Format("CLW: RuleCommander %1: %2 %3 -> %4 (%5)", m_sFaction, label, m_aSquads[i], target.ToString(), reason), LogLevel.NORMAL);
+		CLW_Debug.Say(string.Format("%1: %2 %3 -> %4 (%5)", m_sFaction, label, m_aSquads[i], target.ToString(), reason));
 		return true;
 	}
 

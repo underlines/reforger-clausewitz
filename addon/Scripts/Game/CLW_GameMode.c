@@ -8,6 +8,7 @@ class CLW_GameModeClass : SCR_BaseGameModeClass
 class CLW_GameMode : SCR_BaseGameMode
 {
 	protected static const bool RUN_ORDER_SPIKE = false;
+	protected static const bool RUN_REST_SPIKE = true;
 	protected static const ref array<string> SQUADS_US = {"CLW_Squad_US_1", "CLW_Squad_US_2"};
 	protected static const ref array<string> SQUADS_USSR = {"CLW_Squad_USSR_1", "CLW_Squad_USSR_2"};
 
@@ -28,6 +29,8 @@ class CLW_GameMode : SCR_BaseGameMode
 
 		if (Replication.IsServer())
 		{
+			if (RUN_REST_SPIKE)
+				GetGame().GetCallqueue().CallLater(CLW_RestSpike.Run, 10000);
 			if (RUN_ORDER_SPIKE)
 				GetGame().GetCallqueue().CallLater(SpikeOrderLoop, 15000);
 			// RuleCommander drives only AI-only squads; each side's first squad is the player squad.
@@ -40,9 +43,15 @@ class CLW_GameMode : SCR_BaseGameMode
 			m_CommanderUS.SetPatrolPoints(patrolUS);
 			m_CommanderUSSR.SetPatrolPoints(patrolUSSR);
 
+			GetGame().GetCallqueue().CallLater(SayBuild, 8000);
 			GetGame().GetCallqueue().CallLater(PollContacts, 20000, true);
 			GetGame().GetCallqueue().CallLater(ThinkCommanders, 25000, true);
 		}
+	}
+
+	protected void SayBuild()
+	{
+		CLW_Debug.Say("build " + CLW_Build.STAMP);
 	}
 
 	// Perception -> contact book -> map markers, for both factions.

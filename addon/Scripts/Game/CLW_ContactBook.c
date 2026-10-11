@@ -26,6 +26,7 @@ class CLW_ContactBook
 
 			sighting.m_iId = m_iNextId++;
 			m_aContacts.Insert(sighting);
+			CLW_Debug.Say(observerFaction + ": new contact " + sighting.Describe());
 		}
 	}
 
