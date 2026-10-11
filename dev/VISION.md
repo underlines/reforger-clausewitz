@@ -230,22 +230,19 @@ Design rules:
 
 ---
 
-## 13. Roadmap (suggested)
+## 13. Roadmap
+
+Own game mode `CLW_GameMode` (see `notes/decision-game-mode.md`). Live status: `PROGRESS.md`.
 
 | Milestone | Contents | Proves |
 |---|---|---|
-| **M0 - Skeleton (no LLM)** | One squad per side, per-faction contacts, RuleCommander issues MOVE/ATTACK/DEFEND as waypoints, logs | Perception + waypoint APIs, the core loop, already playable |
-| **M1 - LLM bridge** | REST spike, RemoteCommander, sidecar, LLM for one or both sides, validation, dry-run, fallback to Rules | REST (POST body, headers, polling), LLM loop |
-| **M2 - Real war** | More commands, SITREPs, win conditions, spawn budget, both commander modes | AI vs AI |
-| **M3 - Economy** | Resource ledger, base spawning, supply convoys, multiple bases | Logistics |
-| **M4 - Mechanized** | Vehicle groups, embark/dismount, convoys, tanks | Vehicle AI reality |
-| **M5 - Intel & UI** | Map markers, auto-expire, player reporting, scenario screen | Human-in-the-loop |
-| **M6 - Chain of command** | Echelon agents, report delay/distortion, autonomy fallback | Realism |
-| **M7 - Population manager** | Collapse/expand, cleanup policies, scaling tests | Size of war |
-| **M8 - Building/FOBs** | Fortifications, FOB create/destroy, fake-build fallback | Base play |
-| **M9 - Content compat** | RHS / WCS profiles, role classifier | Custom factions |
-| **M10 - Voice** | Chat then companion STT/TTS | Natural-language radio |
-| **M11 - Virtual battlefield** (experimental) | Records, virtual movement/combat, materialise/collapse, admin toggle | War larger than the engine can keep live |
+| **M0 - Skeleton** | Game mode + minimal world, one squad per side, per-faction contacts, RuleCommander issues MOVE/ATTACK/DEFEND waypoints, logs. Spikes: perception tap, order loop | Perception + waypoint APIs, core loop, playable without LLM |
+| **M1 - LLM bridge** | REST spike (POST/headers/polling), sidecar, RemoteCommander, schema validation, fallback to Rules | LLM loop |
+| **M2 - Real war** | More commands, SITREPs, win conditions, spawn budget, resource ledger, bases, supply convoys | AI vs AI with economy |
+| **M3 - Mechanized & intel** | Vehicle groups, embark/dismount, convoys; map markers, expiry, player reports, setup screen | Vehicle AI, humans in the loop |
+| **M4 - Scale & realism** | Chain-of-command echelons with delayed reports, population manager (cleanup, collapse/expand), FOBs | Size of war |
+| **M5 - Content compat** | RHS / WCS profiles, role classifier | Custom factions |
+| **Later** | Voice/radio, virtual battlefield (experimental), Conflict adapter | - |
 
 ## 14. Open questions / risks
 
