@@ -61,7 +61,7 @@ class CLW_RuleCommander
 	{
 		SCR_AIGroup group = SCR_AIGroup.Cast(GetGame().GetWorld().FindEntityByName(m_aSquads[i]));
 		// A human-led squad gets missions instead of waypoints (VISION 2a); a player who is just a member does not block orders to the AI leader.
-		if (!group || group.GetFirstPlayerLeaderID() > 0)
+		if (!group || HasHumanLeader(group))
 			return;
 
 		IEntity leader = group.GetLeaderEntity();
@@ -114,6 +114,21 @@ class CLW_RuleCommander
 	}
 
 	// Replace all waypoints of the group by exactly one of the given mode.
+	// True only if one of the squad's players is its leader (GetFirstPlayerLeaderID proved unreliable).
+	static bool HasHumanLeader(notnull SCR_AIGroup group)
+	{
+		array<int> playerIds = group.GetPlayerIDs();
+		if (!playerIds)
+			return false;
+
+		foreach (int playerId : playerIds)
+		{
+			if (group.IsPlayerLeader(playerId))
+				return true;
+		}
+		return false;
+	}
+
 	protected bool Issue(int i, SCR_AIGroup group, int mode, vector target, string reason)
 	{
 		ResourceName prefab = WAYPOINT_MOVE;

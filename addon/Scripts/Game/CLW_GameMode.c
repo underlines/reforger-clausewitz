@@ -23,6 +23,7 @@ class CLW_GameMode : SCR_BaseGameMode
 	protected override void OnGameStart()
 	{
 		super.OnGameStart();
+		Print("CLW: build " + CLW_Build.STAMP, LogLevel.NORMAL);
 		Print("CLW: game mode started", LogLevel.NORMAL);
 
 		if (Replication.IsServer())
@@ -66,7 +67,7 @@ class CLW_GameMode : SCR_BaseGameMode
 			vector leaderPos;
 			if (group.GetLeaderEntity())
 				leaderPos = group.GetLeaderEntity().GetOrigin();
-			Print(string.Format("CLW: squad %1 leader=%2 players=%3 playerLeader=%4 waypoint=%5", name, leaderPos, group.GetPlayerCount(), group.GetFirstPlayerLeaderID(), group.GetCurrentWaypoint() != null), LogLevel.NORMAL);
+			Print(string.Format("CLW: squad %1 leader=%2 players=%3 firstPlayerLeader=%4 humanLeader=%5 leaderId=%6 waypoint=%7", name, leaderPos, group.GetPlayerCount(), group.GetFirstPlayerLeaderID(), CLW_RuleCommander.HasHumanLeader(group), group.GetLeaderID(), group.GetCurrentWaypoint() != null), LogLevel.NORMAL);
 		}
 
 		array<int> removed = {};
