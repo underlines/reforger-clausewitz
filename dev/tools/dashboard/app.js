@@ -426,9 +426,9 @@ function Config({ st, toast, refresh }) {
         <label class="switch"><input type="checkbox" checked=${f.skipUnchanged} onChange=${(e) => set("skipUnchanged", e.target.checked)} /><span>Skip unchanged situations</span></label></div>
       <small class="muted">Batch APIs (24 h latency) don't fit a live war, so we cut call frequency instead. Skipped requests answer "keep current orders"; applies to real providers only (not fake).</small>
       ${f.provider === "openrouter" && html`<label class="switch"><input type="checkbox" checked=${f.stopAtLimit} onChange=${(e) => set("stopAtLimit", e.target.checked)} />
-        <span>Stop provider calls at the key's spending limit <span class="muted">(/orders then answers no orders; resumes when budget is available again)</span></span></label>`}
+        <span>Stop provider calls at the key's spending limit <span class="muted">(the game then runs on its rule commander; LLM resumes automatically when budget is available again)</span></span></label>`}
       <label class="switch"><input type="checkbox" checked=${f.enabled} onChange=${(e) => set("enabled", e.target.checked)} />
-        <span>Enabled <span class="muted">(off: /orders returns no orders, the game uses its rule commander)</span></span></label>
+        <span>Enabled <span class="muted">(off: no LLM calls, the game runs on its rule commander)</span></span></label>
       <div class="btns"><button class="btn" type="submit" disabled=${busy}><${Icon} n="save" /> Save</button>
         <button class="btn ghost" type="button" disabled=${busy} onClick=${doTest}><${Icon} n="plug" /> Test connection</button></div>
       ${test && html`<pre>${test.pending ? "testing with the form values (nothing is saved)..." : J(test)}</pre>`}
