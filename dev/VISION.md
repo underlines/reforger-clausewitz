@@ -122,6 +122,16 @@ A lobby UI shown to the first (admin) player before the war starts. Dedicated-se
 
 Generated scenario = a data object (`ScenarioConfig`) that is saved/loaded, so a setup can be repeated, shared or run headless.
 
+### 3a. Story mode (far-future idea)
+
+An optional mode in the initial scenario setup (section 3), next to the usual settings (force strengths of BLUFOR/REDFOR, mechanization level, location). Besides the sandbox "realistic war", the host can pick or generate a **story and a plan for each side**, and the two HQs then play *loosely along that storyline* instead of purely optimising.
+
+- **Story generator:** an LLM drafts the narrative from the scenario (setting, forces, location, tone): background, each side's objectives and intended arc (e.g. "REDFOR seizes the harbour at dawn, BLUFOR counterattacks from the hills at dusk"), key beats and a rough timeline. The host can edit, reroll or write it by hand; one story brief per side plus a shared omniscient "director" view.
+- **Influence, not scripting:** the story is fed to the HQ agents as soft guidance (intent, expected beats, things to avoid), so behaviour stays reactive to the real battle but drifts toward the narrative. Deviations are allowed and the director can nudge back.
+- **Narrative cheats allowed:** the director may bend realism to serve the story: spawn in reinforcements, vehicles or objectives ignoring the economy ledger (section 6), trigger scripted beats (a convoy arrives, a radio message), as long as it is logged and optional (setting: "strict economy" / "story may cheat").
+- **Optional audio:** story intro, radio chatter and briefings as generated voice clips (TTS or another external audio API). Playing arbitrary audio in-game via the REST bridge is probably not possible (Reforger cannot stream audio from HTTP); candidates are pre-generated clips packaged as mod sounds, or playing them on the dashboard / host machine instead. [verify]
+- Builds on: M1 (LLM bridge), M2 (orders/missions), the dashboard (12a) as director/storyboard UI, and the squad-leader agents (4a).
+
 ---
 
 ## 4. Chain of command & SITREPs
@@ -335,7 +345,7 @@ Own game mode `CLW_GameMode` (see `notes/decision-game-mode.md`). Live status: `
 | **M3 - Mechanized & intel** | Player requests via chat, approach to be chosen (section 5a, option A or B); Vehicle groups, embark/dismount, convoys; map markers, expiry, player reports, setup screen | Vehicle AI, humans in the loop |
 | **M4 - Scale & realism** | Chain-of-command echelons with delayed reports, population manager (cleanup, collapse/expand), FOBs | Size of war |
 | **M5 - Content compat** | RHS / WCS profiles, role classifier | Custom factions |
-| **Later** | Squad-leader LLM agents (section 4a), Voice/radio, virtual battlefield (experimental), Conflict adapter | - |
+| **Later** | Story mode (section 3a), Squad-leader LLM agents (section 4a), Voice/radio, virtual battlefield (experimental), Conflict adapter | - |
 
 ## 14. Open questions / risks
 
