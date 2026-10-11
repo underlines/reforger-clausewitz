@@ -120,6 +120,7 @@ class CLW_GameMode : SCR_BaseGameMode
 
 		if (squad.GetGroupID() < 0)
 			groups.RegisterGroup(squad);
+		groups.AssignGroupID(squad);
 		Print(string.Format("CLW: squad %1 groupId=%2 playable=%3", squad, squad.GetGroupID(), squad.IsPlayable()), LogLevel.NORMAL);
 		groups.AddPlayerToGroup(squad.GetGroupID(), playerId);
 		Print(string.Format("CLW: player %1 in squad=%2 players=%3 leaderId=%4", playerId, squad.IsPlayerInGroup(playerId), squad.GetPlayerCount(), squad.GetLeaderID()), LogLevel.NORMAL);

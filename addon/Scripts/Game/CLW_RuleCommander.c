@@ -23,8 +23,10 @@ class CLW_RuleCommander
 	protected ref array<int> m_aPatrolIndex = {};
 	protected ref array<vector> m_aTarget = {};		// target of the last issued order
 	protected ref array<vector> m_aPatrolPoints = {};
-	protected ref CLW_MissionMarker m_Mission = new CLW_MissionMarker();	// the one mission marker of this faction (human squads)
-	protected int m_iMissionSquad = -1;	// squad index the marker belongs to
+	static const ResourceName TASK_PREFAB = "{1D0F815858EE24AD}Prefabs/Tasks/BaseTask.et";	// vanilla generic SCR_Task
+	protected static int s_iMissionCounter;	// unique task IDs (a deleted task's ID may linger in the task system for a moment)
+	protected SCR_Task m_MissionTask;		// the one vanilla task (J menu + map) of this faction's human squad
+	protected int m_iMissionSquad = -1;	// squad index the task belongs to
 
 	void Init(string factionKey, CLW_ContactBook book, notnull array<string> squadNames)
 	{
@@ -67,10 +69,10 @@ class CLW_RuleCommander
 			return;
 
 		bool human = HasHumanLeader(group);
-		if (!human && m_Mission.IsShown() && m_iMissionSquad == i)
+		if (!human && m_MissionTask && m_iMissionSquad == i)
 		{
-			// leadership went back to the AI: drop the stale mission marker
-			m_Mission.Clear();
+			// leadership went back to the AI: drop the stale mission task
+			ClearMissionTask();
 			m_iMissionSquad = -1;
 		}
 
@@ -143,13 +145,72 @@ class CLW_RuleCommander
 	protected void Deliver(bool human, int i, SCR_AIGroup group, int mode, vector target, string reason)
 	{
 		if (human)
-			IssueMission(i, mode, target, reason);
+			IssueMission(i, group, mode, target, reason);
 		else
 			Issue(i, group, mode, target, reason);
 	}
 
-	// Deliver the order to a human squad leader as a mission (chat/debug message + faction-only map marker).
-	protected void IssueMission(int i, int mode, vector target, string reason)
+	protected void ClearMissionTask()
+	{
+		if (!m_MissionTask)
+			return;
+
+		SCR_TaskSystem taskSystem = SCR_TaskSystem.GetInstance();
+		if (taskSystem)
+			taskSystem.DeleteTask(m_MissionTask);
+
+		m_MissionTask = null;
+	}
+
+	// Create (or update in place) the squad's vanilla task: shown in the J menu and on the map of that group only.
+	protected void ShowMissionTask(int i, SCR_AIGroup group, string label, vector target, string reason)
+	{
+		SCR_TaskSystem taskSystem = SCR_TaskSystem.GetInstance();
+		if (!taskSystem || !group)
+		{
+			Print("CLW: RuleCommander: no SCR_TaskSystem / group, mission task skipped", LogLevel.WARNING);
+			return;
+		}
+
+		string desc = string.Format("%1 (%2 / %3)", reason, Math.Round(target[0]), Math.Round(target[2]));
+		if (m_MissionTask && m_iMissionSquad == i)
+		{
+			// same squad: keep the task (and its assignment), just change what it says and where it is
+			taskSystem.MoveTask(m_MissionTask, target);
+			m_MissionTask.SetTaskName(label);
+			m_MissionTask.SetTaskDescription(desc);
+			return;
+		}
+
+		ClearMissionTask();
+
+		s_iMissionCounter++;
+		string taskId = "CLW_Mission_" + m_sFaction + "_" + s_iMissionCounter;
+		SCR_Task task = taskSystem.CreateTask(TASK_PREFAB, taskId, label, desc, target);
+		if (!task)
+		{
+			Print("CLW: RuleCommander: CreateTask failed for " + taskId, LogLevel.WARNING);
+			return;
+		}
+
+		// Scene-placed squads have GroupID -1; tasks address groups by ID.
+		SCR_GroupsManagerComponent.GetInstance().AssignGroupID(group);
+		int groupId = group.GetGroupID();
+		taskSystem.SetTaskOwnership(task, SCR_ETaskOwnership.GROUP);
+		taskSystem.SetTaskVisibility(task, SCR_ETaskVisibility.GROUP);
+		taskSystem.AddTaskFaction(task, m_sFaction);
+		taskSystem.AddTaskGroup(task, groupId);
+
+		SCR_TaskExecutor executor = SCR_TaskSystem.TaskExecutorFromGroup(groupId);
+		if (executor)
+			taskSystem.AssignTask(task, executor, true);
+
+		m_MissionTask = task;
+		m_iMissionSquad = i;
+	}
+
+	// Deliver the order to a human squad leader as a mission (chat/debug message + vanilla task for the squad).
+	protected void IssueMission(int i, SCR_AIGroup group, int mode, vector target, string reason)
 	{
 		string label = "Search";
 		if (mode == MODE_ATTACK)
@@ -161,8 +222,7 @@ class CLW_RuleCommander
 		m_aMode[i] = mode;
 		m_aTarget[i] = target;
 
-		m_Mission.Show(m_sFaction, "MISSION: " + label, target);
-		m_iMissionSquad = i;
+		ShowMissionTask(i, group, label, target, reason);
 
 		string msg = string.Format("MISSION %1 (%2): %3 at %4 / %5 (%6)", m_aSquads[i], m_sFaction, label, Math.Round(target[0]), Math.Round(target[2]), reason);
 		CLW_Debug.Say(msg);
