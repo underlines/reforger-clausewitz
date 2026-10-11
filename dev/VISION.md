@@ -73,6 +73,7 @@ Players are **not spectators**. They fight on either side, inside the same chain
 
 **Orders as missions**
 - The same command vocabulary (section 5) is rendered for humans as a **mission**: short briefing text (intent, objective, constraints, timeout), objective and route on the map, priority. Rule commander uses text templates, the LLM writes the prose; the structured order stays identical.
+- **Choice, not coercion:** HQ offers a squad leader a **menu of 2-4 assignments** (e.g. secure the ridge, recon the crossroads, ambush the road, support the neighbouring squad), each with its intent, risk and value to the plan. The player picks one (or declines all); HQ plans around the choice. Offers are generated from the commander's real needs, so every option is useful, and varied enough that play does not become a forced, repetitive checklist. Unchosen offers expire or go to AI squads. Soldiers can vote or follow their leader's pick. Tuning knobs: number of offers, how binding a pick is (reward/priority vs. HQ planning on it), time to decide.
 - Player responds: **Accept / Cannot comply (reason) / Complete**; HQ treats a refusal like an AI "cannot comply" and re-plans.
 - **No forced waypoints on human groups.** The leader may deviate; HQ sees the deviation through reports and the squad's actual position and adapts.
 - A player-led squad produces SITREPs automatically from its real state (position, strength, ammo, contacts); the leader can add a quick report (section 8, option B).
@@ -84,7 +85,7 @@ Players are **not spectators**. They fight on either side, inside the same chain
 - Fog of war for humans = the faction's known picture, shown on their map, nothing more.
 - Server authority: all state on the server, mission UI on clients.
 
-Open questions: how a leader hands a squad back to AI; whether a lone player may refuse missions indefinitely (ROE for AI HQ); PvP balance when one side has more humans; how many AI slots a player may displace; late-join in the middle of an assault.
+Open questions: how many offers is right and how to keep them distinct; how a leader hands a squad back to AI; whether a lone player may refuse missions indefinitely (ROE for AI HQ); PvP balance when one side has more humans; how many AI slots a player may displace; late-join in the middle of an assault.
 
 ---
 
@@ -265,7 +266,7 @@ Own game mode `CLW_GameMode` (see `notes/decision-game-mode.md`). Live status: `
 |---|---|---|
 | **M0 - Skeleton** | Game mode + minimal world, player can join a side and spawn as a soldier in an AI squad, one AI squad per side, per-faction contacts, RuleCommander issues MOVE/ATTACK/DEFEND waypoints, logs. Spikes: perception tap, order loop | Perception + waypoint APIs, core loop, playable without LLM |
 | **M1 - LLM bridge** | REST spike (POST/headers/polling), sidecar, RemoteCommander, schema validation, fallback to Rules | LLM loop |
-| **M2 - Real war** | Player squad leaders receive HQ orders as missions (accept/refuse/complete), more commands, SITREPs, win conditions, spawn budget, resource ledger, bases, supply convoys | AI vs AI with economy |
+| **M2 - Real war** | Player squad leaders receive HQ orders as missions (choose from offered assignments, accept/refuse/complete), more commands, SITREPs, win conditions, spawn budget, resource ledger, bases, supply convoys | AI vs AI with economy |
 | **M3 - Mechanized & intel** | Vehicle groups, embark/dismount, convoys; map markers, expiry, player reports, setup screen | Vehicle AI, humans in the loop |
 | **M4 - Scale & realism** | Chain-of-command echelons with delayed reports, population manager (cleanup, collapse/expand), FOBs | Size of war |
 | **M5 - Content compat** | RHS / WCS profiles, role classifier | Custom factions |
