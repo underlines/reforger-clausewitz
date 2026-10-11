@@ -127,6 +127,15 @@ Generated scenario = a data object (`ScenarioConfig`) that is saved/loaded, so a
 - Orders carry: intent, objective, constraints (ROE, route, avoid), priority, and a timeout.
 - Units acknowledge, report progress, and report failure (cannot comply: blocked, no fuel, outgunned).
 
+### 4a. Squad-leader agents (very late feature, not planned soon)
+
+Not only HQ decides: AI **squad leaders can run their own LLM agent loop**, giving a proper hierarchical tree. HQ makes high-level decisions (troop movements, objectives) and hands each squad leader a **goal**, not a step-by-step order. The leader then works toward that goal autonomously over a longer period instead of waiting for HQ on every move.
+
+- Each leader agent gets: its objective, its own squad state and local contacts (own fog of war), and a small command set for its squad: **move**, **attack**, **defend**, **report to HQ**, **cancel / fall back** when too dangerous, **request new or further instructions** from HQ.
+- Runs its own agent loop (observe -> decide -> act) at a slow cadence, separate from HQ, with its own token budget; falls back to the rule behaviour when offline or over budget.
+- HQ stays in charge of the big picture: it can reassign or recall a leader, and receives its reports and requests as SITREPs (section 4).
+- Builds on M1 (LLM bridge) and the M2 order/mission model; fits the "full chain" echelon setting of M4.
+
 ---
 
 ## 5. Command vocabulary (repeatable meta-commands)
@@ -309,7 +318,7 @@ Own game mode `CLW_GameMode` (see `notes/decision-game-mode.md`). Live status: `
 | **M3 - Mechanized & intel** | Player requests via chat, approach to be chosen (section 5a, option A or B); Vehicle groups, embark/dismount, convoys; map markers, expiry, player reports, setup screen | Vehicle AI, humans in the loop |
 | **M4 - Scale & realism** | Chain-of-command echelons with delayed reports, population manager (cleanup, collapse/expand), FOBs | Size of war |
 | **M5 - Content compat** | RHS / WCS profiles, role classifier | Custom factions |
-| **Later** | Voice/radio, virtual battlefield (experimental), Conflict adapter | - |
+| **Later** | Squad-leader LLM agents (section 4a), Voice/radio, virtual battlefield (experimental), Conflict adapter | - |
 
 ## 14. Open questions / risks
 
