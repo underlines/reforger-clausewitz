@@ -26,3 +26,6 @@ dev/tools/sidecar-config.json
 
 # Local secrets / sidecar settings
 dev/.env
+
+# Extracted map imagery cache (do not commit BI content)
+dev/tools/.cache/

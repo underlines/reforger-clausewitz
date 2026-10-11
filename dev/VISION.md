@@ -60,6 +60,21 @@ Between the full LLM/agent commander and the plain RuleCommander, add an optiona
 - **Limits:** it only chooses among given labels (no free-form plans, coordinates come from rules/candidates), so the validator and executor stay unchanged. Probabilities can gate behaviour: low confidence -> keep the current order or escalate to the LLM.
 - **Hosting:** behind the same sidecar interface (a new `CLW_LLM` backend mode, e.g. `classifier`), local open model or the commercial API; the dashboard (12a) can show label probabilities per decision.
 
+### 1b. Adaptive HQ wakeup: later improvements
+
+Basic version (built): game polls every 10 s, the sidecar scheduler calls the LLM only on first request, at a model-chosen `next_check_sec` (clamped, budget-stretched) or when a trigger fires (new contact, contact near squad, casualties, squad lost, strength drop, objective reached, squad change) or a manual wake. Later:
+
+- **Game-side event push:** POST immediately on engagement/kill/contact events instead of waiting for the 10 s poll (lower latency, no polling load).
+- **LLM-defined watch conditions:** the model returns conditions ("wake me if an enemy is within 500 m of X", "if squad Y reaches Z") that the sidecar/game evaluates cheaply, replacing the fixed trigger set.
+- **Weighted alert score:** combine events into a score with decay (contact near + casualties + lost squad) instead of single thresholds; wake on score crossing, scale the cooldown by score.
+- **Per-squad / per-sector wakeups** and squad-leader agents (section 4a) that handle local events so HQ is only woken for strategic changes.
+- **Cheap classifier tier (1a)** decides whether an event is worth escalating to the big model.
+- **Delta / summary prompts:** send only what changed since the last call plus a rolling summary to cut input tokens.
+- **Budget-aware model downgrade:** switch to a cheaper model when pace overshoots, instead of only stretching intervals.
+- **Learning per-mission default intervals** from past sessions (how often calls actually changed orders).
+- **Selectable HQ engines (prepared):** the dashboard engine selector (`engine` config: `llm` | `rules` | `model`) plus a global pause. `rules` = rules-only tier (sidecar answers no orders, the game's rule commander drives, zero LLM calls); `model` = future trained decision model / classifier tier (1a) as a cheaper HQ engine; selector option is shown disabled ("soon") until it exists.
+- Order-age awareness: skip waking while all squads still follow fresh orders with healthy ETA; wake when an order stalls (no movement progress).
+
 ---
 
 ## 2. Scope: what the agents command

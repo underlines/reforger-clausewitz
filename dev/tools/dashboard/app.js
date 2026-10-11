@@ -2,7 +2,8 @@
 // (auto-escaped); no dangerouslySetInnerHTML anywhere.
 import { html, render, useState, useEffect, useRef, useMemo, useCallback } from "/vendor/standalone.module.js";
 
-const WORLD = 4096, GRID = 512, STALE_MS = 30000;
+const WORLD = 4096, GRID = 512, STALE_MS = 30000; // WORLD = fallback extent until /api/world reports the real one
+const DEF_EXT = { x0: 0, z0: 0, x1: WORLD, z1: WORLD };
 const COLORS = { US: "#4aa3ff", USSR: "#ff5c5c" };
 const colorOf = (f) => COLORS[f] ?? "#f0b429";
 const enemyColor = (f) => (f === "US" ? COLORS.USSR : f === "USSR" ? COLORS.US : "#f0b429");
@@ -29,7 +30,7 @@ function useState2() {
   const poll = useCallback(async () => {
     try {
       const r = await fetch("/api/state", { cache: "no-store" });
-      setSt({ ...(await r.json()), offline: false });
+      setSt({ ...(await r.json()), offline: false, recvAt: Date.now() });
     } catch { setSt((s) => ({ ...s, offline: true })); }
   }, []);
   useEffect(() => { poll(); const t = setInterval(poll, 2000); return () => clearInterval(t); }, [poll]);
@@ -83,7 +84,55 @@ function buildRows(state, faction) {
 }
 
 // ---------- status strip ----------
-function Strip({ st }) {
+// Per-faction HQ scheduler chip: live countdown between /api/state polls, tooltip with the scheduler details, "wake now" button.
+function WakeChip({ name, s, recvAt, toast, refresh, paused, engine }) {
+  const [, tick] = useState(0);
+  useEffect(() => { const t = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(t); }, []);
+  const left = Math.max(0, Math.round(s.nextDueInSec - (Date.now() - (recvAt ?? Date.now())) / 1000));
+  const wake = async () => {
+    try {
+      const { ok, j } = await postJson("/api/wake", { faction: name });
+      toast(ok ? `${name} HQ will be consulted on the next poll` : "Wake failed: " + (j.error ?? "request failed"), ok ? "ok" : "err");
+      refresh();
+    } catch (e) { toast("Error: " + e.message, "err"); }
+  };
+  const trig = s.lastWakeTriggers?.length ? ` (${s.lastWakeTriggers.join("; ")})` : "";
+  const tip = [
+    `Interval: ${dash(s.intervalSec)} s (chosen ${dash(s.chosenSec)} s${s.chosenReason ? ": " + s.chosenReason : ""}), budget stretch x${(s.stretch ?? 1).toFixed(2)}`,
+    `Last wake: ${s.lastWakeReason ?? "-"}${trig}`,
+    `Gated polls (no LLM call): ${s.gated ?? 0}${s.failed ? "; last call failed, rule fallback active" : ""}`,
+  ].join("\n");
+  const idle = engine && engine !== "llm";
+  const txt = idle ? "rules" : paused ? "paused" : s.manual ? "wake pending" : left > 0 ? `in ${left} s` : "due";
+  return html`<div class=${"chip wake" + (s.failed && !idle && !paused ? " bad" : "")} title=${tip}><b class=${facClass(name)}>${name}</b> next HQ call <b>${txt}</b>
+    <button class="mini" type="button" disabled=${idle || paused} onClick=${wake} title="Call the LLM on the next poll">wake now</button></div>`;
+}
+
+// Global HQ controls: pause toggle (runtime) and engine selector (persisted config).
+function HqControls({ st, toast, refresh }) {
+  const engine = st.config?.engine ?? "llm", paused = !!st.paused;
+  const togglePause = async () => {
+    try {
+      const { ok, j } = await postJson("/api/pause", { paused: !paused });
+      if (!ok) toast("Pause failed: " + (j.error ?? "request failed"), "err");
+      refresh();
+    } catch (e) { toast("Error: " + e.message, "err"); }
+  };
+  const setEngine = async (e) => {
+    try {
+      const { ok, j } = await postJson("/api/config", { engine: e.target.value });
+      if (!ok) toast("Engine not changed: " + (j.error ?? "request failed"), "err");
+      refresh();
+    } catch (err) { toast("Error: " + err.message, "err"); }
+  };
+  return html`<div class="chip hqctl">
+    <button class=${"mini pausebtn" + (paused ? " on" : "")} type="button" onClick=${togglePause} title=${paused ? "Resume: the HQ is consulted on the next poll" : "Pause: no LLM calls, the game keeps its current orders"}>${paused ? "resume" : "pause"}</button>
+    <label class="engsel" title="HQ engine: llm = LLM decides; rules = game rule commander, no LLM calls; model = trained decision model (not available yet)">engine
+      <select value=${engine} onChange=${setEngine}>
+        <option value="llm">llm</option><option value="rules">rules</option><option value="model" disabled>model (soon)</option></select></label></div>`;
+}
+
+function Strip({ st, toast, refresh }) {
   const c = st.counters ?? {}, cf = st.config ?? {}, bud = st.usage?.budget;
   const age = st.lastRequestTs ? ((st.now ?? Date.now()) - st.lastRequestTs) / 1000 : null;
   const stale = st.offline || age === null || age * 1000 > STALE_MS;
@@ -94,6 +143,9 @@ function Strip({ st }) {
     <div class=${"chip" + (cf.enabled === false ? " bad" : "")}>enabled <b>${cf.enabled === false ? "NO" : "yes"}</b></div>
     <div class="chip">requests <b>${c.requests ?? 0}</b></div>
     <div class="chip" title="Requests answered without a provider call (interval / unchanged)">skipped <b>${c.skipped ?? 0}</b></div>
+    ${cf.enabled !== false && Object.keys(st.scheduler ?? {}).sort().map((n) => html`<${WakeChip} key=${n} name=${n} s=${st.scheduler[n]} recvAt=${st.recvAt} toast=${toast} refresh=${refresh} paused=${!!st.paused} engine=${cf.engine} />`)}
+    <${HqControls} st=${st} toast=${toast} refresh=${refresh} />
+    ${(st.paused || (cf.engine && cf.engine !== "llm")) && html`<div class="chip hqnote">HQ engine: <b>${cf.engine && cf.engine !== "llm" ? cf.engine : "llm"}</b>${st.paused ? " (paused)" : ""}, no LLM calls</div>`}
     <div class=${"chip" + (c.errors ? " bad" : "")}>errors <b>${c.errors ?? 0}</b></div>
     <div class="chip">tokens in/out <b>${c.inputTokens ?? 0} / ${c.outputTokens ?? 0}</b></div>
     ${bud && bud.level !== "ok" && html`<div class=${"chip " + (bud.level === "warn" ? "warn" : "bad")} title="OpenRouter key budget (see Configuration)"><span class="dot"></span>${bud.level === "reached" ? "budget limit reached" : `budget ${bud.pct.toFixed(0)}% used`}</div>`}
@@ -102,14 +154,23 @@ function Strip({ st }) {
 }
 
 // ---------- map (canvas renderer with pan/zoom, tooltips, layers) ----------
-function MapPanel({ st, faction, rows, sel, onSel, layers }) {
+function MapPanel({ st, faction, rows, sel, onSel, layers, world }) {
   const box = useRef(), cv = useRef();
   const view = useRef({ s: 0.1, ox: 0, oy: 0, fitted: false });
   const hits = useRef([]);
   const drag = useRef(null);
   const latest = useRef({});
   const [tip, setTip] = useState(null);
-  latest.current = { st, faction, sel, layers };
+  latest.current = { st, faction, sel, layers, world };
+  const imgRef = useRef(null);
+  const ext = world.extent ?? DEF_EXT;
+  useEffect(() => { // map background: reload when the sidecar (re)resolves the image
+    imgRef.current = null;
+    if (world.map?.status !== "ready") return;
+    const im = new Image();
+    im.onload = () => { imgRef.current = im; };
+    im.src = "/api/map.png?v=" + (world.map.ts ?? 0);
+  }, [world.map?.status, world.map?.ts]);
 
   // Fit to the bounding box of all squads+contacts (padded, min span 400 m); whole world if there is no data.
   const fit = () => {
@@ -124,39 +185,85 @@ function MapPanel({ st, faction, rows, sel, onSel, layers }) {
       }
     }
     const hasData = x0 <= x1;
-    if (!hasData) { x0 = 0; x1 = WORLD; z0 = 0; z1 = WORLD; }
-    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, span = hasData ? Math.max(x1 - x0, z1 - z0, 400) : WORLD;
-    const wx = hasData ? Math.max(x1 - x0, 400) : WORLD, wz = hasData ? Math.max(z1 - z0, 400) : WORLD;
+    const E = latest.current.world.extent ?? DEF_EXT, EW = E.x1 - E.x0, EH = E.z1 - E.z0;
+    if (!hasData) { x0 = E.x0; x1 = E.x1; z0 = E.z0; z1 = E.z1; }
+    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+    const wx = hasData ? Math.max(x1 - x0, 400) : EW, wz = hasData ? Math.max(z1 - z0, 400) : EH;
     v.s = Math.min(r.width / (wx * 1.3), r.height / (wz * 1.3));
-    v.ox = r.width / 2 - cx * v.s; v.oy = r.height / 2 - (WORLD - cz) * v.s;
+    v.ox = r.width / 2 - cx * v.s; v.oy = r.height / 2 - (E.z1 - cz) * v.s;
     v.fitted = hasData; v.user = false;
   };
 
   const draw = useCallback((t) => {
     const c = cv.current;
     if (!c) return;
-    const { st, faction, sel, layers } = latest.current, v = view.current;
+    const { st, faction, sel, layers, world } = latest.current, v = view.current;
+    const E = world.extent ?? DEF_EXT, EW = E.x1 - E.x0, EH = E.z1 - E.z0;
     const r = c.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
     if (!r.width) return;
     if (c.width !== Math.round(r.width * dpr) || c.height !== Math.round(r.height * dpr)) { c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr); }
     if (!v.fitted) fit(); // refits every frame until the first squad/contact arrives, then once
     const ctx = c.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const sx = (x) => v.ox + x * v.s, sy = (z) => v.oy + (WORLD - z) * v.s;
+    const sx = (x) => v.ox + x * v.s, sy = (z) => v.oy + (E.z1 - z) * v.s;
+    const bx = sx(E.x0), by = sy(E.z1), bw = EW * v.s, bh = EH * v.s; // world rectangle on screen
     ctx.fillStyle = "#0a0d12"; ctx.fillRect(0, 0, r.width, r.height);
-    const g = ctx.createLinearGradient(sx(0), sy(WORLD), sx(WORLD), sy(0));
+    const g = ctx.createLinearGradient(bx, by, bx + bw, by + bh);
     g.addColorStop(0, "#131b27"); g.addColorStop(1, "#0f1620");
-    ctx.fillStyle = g; ctx.fillRect(sx(0), sy(WORLD), WORLD * v.s, WORLD * v.s);
+    ctx.fillStyle = g; ctx.fillRect(bx, by, bw, bh);
+    const img = imgRef.current;
+    if (layers.image && img) { // north up; layers.flip = image y axis inverted (calibration), world.map.flipY from the override json
+      ctx.save();
+      ctx.globalAlpha = num(layers.dim) ? layers.dim : 0.8;
+      if (!!layers.flip !== !!world.map?.flipY) { ctx.translate(0, 2 * by + bh); ctx.scale(1, -1); }
+      ctx.imageSmoothingQuality = "high"; ctx.drawImage(img, bx, by, bw, bh);
+      ctx.restore();
+    }
     if (layers.grid) {
       ctx.lineWidth = 1; ctx.font = "10px sans-serif";
-      for (let k = 0; k <= WORLD; k += GRID) {
+      for (let k = Math.ceil(E.x0 / GRID) * GRID; k <= E.x1; k += GRID) {
         ctx.strokeStyle = k % 1024 === 0 ? "rgba(140,160,190,.22)" : "rgba(140,160,190,.10)";
-        ctx.beginPath(); ctx.moveTo(sx(k), sy(0)); ctx.lineTo(sx(k), sy(WORLD)); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(sx(0), sy(k)); ctx.lineTo(sx(WORLD), sy(k)); ctx.stroke();
-        if (k < WORLD) { ctx.fillStyle = "#586377"; ctx.fillText(String(k), sx(k) + 3, sy(0) - 4); ctx.fillText(String(k), sx(0) + 3, sy(k) - 3); }
+        ctx.beginPath(); ctx.moveTo(sx(k), sy(E.z0)); ctx.lineTo(sx(k), sy(E.z1)); ctx.stroke();
+        ctx.fillStyle = "#586377"; ctx.fillText(String(k), sx(k) + 3, sy(E.z0) - 4);
+      }
+      for (let k = Math.ceil(E.z0 / GRID) * GRID; k <= E.z1; k += GRID) {
+        ctx.strokeStyle = k % 1024 === 0 ? "rgba(140,160,190,.22)" : "rgba(140,160,190,.10)";
+        ctx.beginPath(); ctx.moveTo(sx(E.x0), sy(k)); ctx.lineTo(sx(E.x1), sy(k)); ctx.stroke();
+        ctx.fillStyle = "#586377"; ctx.fillText(String(k), sx(E.x0) + 3, sy(k) - 3);
       }
     }
-    ctx.strokeStyle = "rgba(140,160,190,.4)"; ctx.lineWidth = 1.5; ctx.strokeRect(sx(0), sy(WORLD), WORLD * v.s, WORLD * v.s);
+    ctx.strokeStyle = "rgba(140,160,190,.4)"; ctx.lineWidth = 1.5; ctx.strokeRect(bx, by, bw, bh);
+    if (layers.roads) { // one stroked path per width bucket; roads outside the viewport are skipped
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+      for (const grp of world.roadGroups ?? []) {
+        ctx.strokeStyle = img && layers.image ? "rgba(255,238,190,.55)" : "rgba(196,176,128,.5)";
+        ctx.lineWidth = Math.min(6, Math.max(0.8, grp.w * v.s * 0.9));
+        ctx.beginPath();
+        for (const rd of grp.list) {
+          if (sx(rd.x1) < 0 || sx(rd.x0) > r.width || sy(rd.z0) < 0 || sy(rd.z1) > r.height) continue;
+          ctx.moveTo(sx(rd.p[0]), sy(rd.p[1]));
+          for (let i = 2; i < rd.p.length; i += 2) ctx.lineTo(sx(rd.p[i]), sy(rd.p[i + 1]));
+        }
+        ctx.stroke();
+      }
+      ctx.lineCap = "butt"; ctx.lineJoin = "miter";
+    }
+    if (layers.places) { // named places, important first; a label is skipped when it would overlap an earlier one
+      ctx.font = "11px system-ui, sans-serif"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+      const used = [];
+      for (const pl of world.places ?? []) {
+        if (v.s < pl.minZoom) continue;
+        const x = sx(pl.pos[0]), y = sy(pl.pos[1]);
+        if (x < -40 || x > r.width + 40 || y < -10 || y > r.height + 10) continue;
+        const w = ctx.measureText(pl.name).width;
+        if (used.some((u) => x < u[2] && x + w + 8 > u[0] && y - 7 < u[3] && y + 7 > u[1])) continue;
+        used.push([x, y - 7, x + w + 8, y + 7]);
+        ctx.fillStyle = "rgba(230,236,245,.85)"; ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2); ctx.fill();
+        ctx.lineWidth = 3; ctx.strokeStyle = "rgba(8,11,16,.85)"; ctx.strokeText(pl.name, x + 6, y);
+        ctx.fillText(pl.name, x + 6, y);
+      }
+      ctx.lineJoin = "miter";
+    }
     const h = [];
     ctx.font = "11px system-ui, sans-serif"; ctx.textBaseline = "middle";
     const shown = Object.keys(st.factions ?? {}).filter((f) => faction === "all" || f === faction);
@@ -175,7 +282,14 @@ function MapPanel({ st, faction, rows, sel, onSel, layers }) {
         ctx.globalAlpha = 1;
         h.push({ x, y, r: 10, title: "Contact (seen by " + f + ")", lines: [String(ct.desc ?? "?"), `age ${age} s`, `at ${gridTxt(ct.pos)}`] });
       }
-      if (layers.orders) for (const o of Array.isArray(e.orders) ? e.orders : []) {
+      // arrows: the sidecar's LLM orders, else the squad's current objective as reported by the game (rule commander, human leader)
+      const arrows = [];
+      for (const s of squads) {
+        const lo = byOrder.get(s.id), ob = s.objective;
+        if (lo) arrows.push(lo);
+        else if (ob && Array.isArray(ob.pos) && ob.command) arrows.push({ squad: s.id, command: ob.command, pos: ob.pos, reason: ob.reason });
+      }
+      if (layers.orders) for (const o of arrows) {
         const s = byId.get(o.squad);
         if (!s || !Array.isArray(o.pos) || !num(o.pos[0]) || !num(o.pos[1])) continue;
         const x0 = sx(s.pos[0]), y0 = sy(s.pos[2]), x1 = sx(o.pos[0]), y1 = sy(o.pos[1]);
@@ -196,6 +310,13 @@ function MapPanel({ st, faction, rows, sel, onSel, layers }) {
           ctx.beginPath(); ctx.arc(x, y, 9 + ph * 14, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
         }
         if (sel === key) { ctx.strokeStyle = "#ffe36e"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, 14, 0, Math.PI * 2); ctx.stroke(); }
+        if (num(s.heading) && num(s.speed) && s.speed > 0.3) { // movement vector: compass heading (0 = north), length grows with speed
+          const hr = s.heading * Math.PI / 180, len = 14 + Math.min(s.speed, 6) * 5, ex = x + Math.sin(hr) * len, ey = y - Math.cos(hr) * len;
+          ctx.strokeStyle = "#fff"; ctx.fillStyle = "#fff"; ctx.lineWidth = 2; ctx.globalAlpha = .9;
+          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ex - 7 * Math.sin(hr - .45), ey + 7 * Math.cos(hr - .45)); ctx.lineTo(ex - 7 * Math.sin(hr + .45), ey + 7 * Math.cos(hr + .45)); ctx.closePath(); ctx.fill();
+          ctx.globalAlpha = 1;
+        }
         ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 10;
         ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
         if (s.humanLed) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke(); }
@@ -264,7 +385,7 @@ function MapPanel({ st, faction, rows, sel, onSel, layers }) {
   };
 
   return html`<section class="panel">
-    <h2>Map <span class="sub">${WORLD} x ${WORLD} m, x east / z north</span></h2>
+    <h2>Map <span class="sub">${Math.round(ext.x1 - ext.x0)} x ${Math.round(ext.z1 - ext.z0)} m, x east / z north${world.map?.status === "resolving" ? ", loading map image..." : ""}</span></h2>
     <div class="mapbox" ref=${box}>
       <canvas ref=${cv} onMouseDown=${onDown} onMouseMove=${onMove} onMouseUp=${onUp}
         onMouseLeave=${() => { setTip(null); drag.current = null; cv.current.classList.remove("grabbing"); }}
@@ -330,12 +451,16 @@ function Sitrep({ st, faction }) {
 const J = (o) => JSON.stringify(o, null, 2);
 function Log({ st, faction }) {
   const ex = (st.exchanges ?? []).filter((x) => faction === "all" || x.faction === faction);
-  return html`<section class="panel log"><h2>Orders / log <span class="sub">newest first, last ${st.exchanges?.length ?? 0}</span></h2><div class="scroll">
+  const noLlm = st.paused || (st.config?.engine && st.config.engine !== "llm");
+  return html`<section class="panel log"><h2>Orders / log <span class="sub">newest first, last ${st.exchanges?.length ?? 0}</span>
+    ${noLlm && html`<span class="badge warn">HQ engine: ${st.config?.engine && st.config.engine !== "llm" ? st.config.engine : "llm"}${st.paused ? " (paused)" : ""}, no LLM calls</span>`}</h2><div class="scroll">
     ${ex.map((x) => html`<details class="ex" key=${x.ts + x.faction}><summary>
       <span class="mono muted">${new Date(x.ts).toLocaleTimeString()}</span><b class=${facClass(x.faction)}>${x.faction}</b>
       <span class="muted">${x.provider}${x.model ? " / " + x.model : ""}</span>
       ${x.ok && String(x.reason ?? "").startsWith("skipped") ? html`<span class="badge info">${x.reason}</span>` : x.ok ? html`<span class=${"badge " + (x.orders.length ? "ok" : "warn")}>${x.orders.length ? "ok" : "ok, no orders"}</span>` : html`<span class="badge bad">fallback: ${x.reason}</span>`}
       ${x.dropped?.length ? html`<span class="badge warn">${x.dropped.length} dropped</span>` : ""}
+      ${x.wake && html`<span class=${"badge " + (x.wake.reason === "trigger" ? "warn" : "info")} title=${x.wake.triggers?.join("\n") ?? ""}>wake: ${x.wake.reason}${x.wake.triggers?.length ? ": " + x.wake.triggers.slice(0, 2).join("; ") + (x.wake.triggers.length > 2 ? ` +${x.wake.triggers.length - 2}` : "") : ""}</span>`}
+      ${x.nextCheck && html`<span class="muted" title=${x.nextCheck.reason}>next ${x.nextCheck.sec} s${x.nextCheck.reason ? ": " + x.nextCheck.reason : ""}</span>`}
       <span>${x.orders.length} orders</span><span class="muted">${x.latencyMs} ms${x.usage ? ` , ${x.usage.input}/${x.usage.output} tok` : ""}${num(x.usage?.cost) ? ` , $${x.usage.cost.toFixed(4)}` : ""}</span></summary>
       <div class="body"><h3>Orders</h3><pre>${J(x.orders)}</pre>
       ${x.dropped?.length ? html`<h3>Dropped (with reason)</h3><pre>${J(x.dropped)}</pre>` : ""}
@@ -344,11 +469,56 @@ function Log({ st, faction }) {
     ${!ex.length && html`<div class="empty">No exchanges yet.</div>`}</div></section>`;
 }
 
+// ---------- world: extent, map image status, roads, places (from the sidecar; the game posts them) ----------
+const PLACE_RANK = (t) => (/city/.test(t) ? [0, 0] : /town|airport|port|base/.test(t) ? [1, 0.03] : /village/.test(t) ? [2, 0.08] : [3, 0.15]);
+function prepVector(vec) {
+  const groups = new Map();
+  for (const r of Array.isArray(vec.roads) ? vec.roads : []) {
+    if (!r || !Array.isArray(r.p) || r.p.length < 4) continue;
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (let i = 0; i < r.p.length; i += 2) { x0 = Math.min(x0, r.p[i]); x1 = Math.max(x1, r.p[i]); z0 = Math.min(z0, r.p[i + 1]); z1 = Math.max(z1, r.p[i + 1]); }
+    const w = Math.max(2, Math.round(r.w || 0));
+    if (!groups.has(w)) groups.set(w, { w, list: [] });
+    groups.get(w).list.push({ p: r.p, x0, x1, z0, z1 });
+  }
+  const places = (Array.isArray(vec.locations) ? vec.locations : []).filter((l) => l && Array.isArray(l.pos)).map((l) => {
+    const [rank, minZoom] = PLACE_RANK(String(l.type ?? ""));
+    return { name: String(l.name), pos: l.pos, rank, minZoom };
+  }).sort((a, b) => a.rank - b.rank);
+  return { roadGroups: [...groups.values()].sort((a, b) => a.w - b.w), places };
+}
+function useWorld() {
+  const [w, setW] = useState({ extent: null, map: { status: "none" }, roadGroups: [], places: [] });
+  useEffect(() => {
+    let alive = true, vkey = "";
+    const load = async () => {
+      try {
+        const j = await (await fetch("/api/world", { cache: "no-store" })).json();
+        let vec = null;
+        const key = `${j.worldKey}/${j.vector?.roads}/${j.vector?.locations}`;
+        if (key !== vkey) { vec = prepVector(await (await fetch("/api/vector", { cache: "no-store" })).json()); vkey = key; }
+        if (alive) setW((p) => ({ ...p, extent: j.extent, map: j.map, ...(vec ?? {}) }));
+      } catch { /* sidecar offline: keep the last known world */ }
+    };
+    load();
+    const t = setInterval(load, 5000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+  return w;
+}
+
 // ---------- HQ view ----------
+const LAYER_KEY = "clw.mapLayers";
+const LAYER_DEFAULTS = { image: true, roads: true, places: true, grid: true, squads: true, contacts: true, orders: true, labels: true, flip: false, dim: 0.8 };
+function loadLayers() {
+  try { return { ...LAYER_DEFAULTS, ...JSON.parse(localStorage.getItem(LAYER_KEY) ?? "{}") }; } catch { return { ...LAYER_DEFAULTS }; }
+}
 function HQ({ st }) {
   const [faction, setFaction] = useState("all");
   const [sel, setSel] = useState(null);
-  const [layers, setLayers] = useState({ grid: true, squads: true, contacts: true, orders: true, labels: true });
+  const [layers, setLayers] = useState(loadLayers);
+  const world = useWorld();
+  useEffect(() => { try { localStorage.setItem(LAYER_KEY, JSON.stringify(layers)); } catch { /* storage unavailable */ } }, [layers]);
   const names = Object.keys(st.factions ?? {}).sort();
   const rows = useMemo(() => buildRows(st, faction), [st, faction]);
   const tog = (k) => html`<label><input type="checkbox" checked=${layers[k]} onChange=${() => setLayers((l) => ({ ...l, [k]: !l[k] }))} /> ${k}</label>`;
@@ -356,9 +526,13 @@ function HQ({ st }) {
     <div class="toolbar">
       <div class="seg">${["all", ...names].map((n) => html`<button class=${faction === n ? "on" : ""} onClick=${() => setFaction(n)}>${n}</button>`)}</div>
       <div class="toggles">${["grid", "squads", "contacts", "orders", "labels"].map(tog)}</div>
+      <div class="toggles" title="Map background: toggles, image opacity; flip = image y axis inverted (calibration)">
+        ${["image", "roads", "places", "flip"].map(tog)}
+        <label>dim <input type="range" min="0.1" max="1" step="0.05" value=${layers.dim} onInput=${(e) => setLayers((l) => ({ ...l, dim: Number(e.target.value) }))} style=${{ width: "80px", verticalAlign: "middle" }} /></label>
+      </div>
     </div>
     <div class="grid">
-      <div class="col"><${MapPanel} st=${st} faction=${faction} rows=${rows} sel=${sel} onSel=${setSel} layers=${layers} /><${SquadsTable} rows=${rows} sel=${sel} onSel=${setSel} /></div>
+      <div class="col"><${MapPanel} st=${st} faction=${faction} rows=${rows} sel=${sel} onSel=${setSel} layers=${layers} world=${world} /><${SquadsTable} rows=${rows} sel=${sel} onSel=${setSel} /></div>
       <div class="col"><${Sitrep} st=${st} faction=${faction} /><${Log} st=${st} faction=${faction} /></div>
     </div></main>`;
 }
@@ -369,6 +543,39 @@ async function postJson(url, body) {
   let j = {}; try { j = await r.json(); } catch { /* ignore */ }
   return { ok: r.ok, j };
 }
+// Map image / vector data status and game dir (sidecar config keys gameDir, mapMaxSize).
+function MapCard({ toast }) {
+  const [w, setW] = useState(null);
+  const [gameDir, setGameDir] = useState(null);
+  const [maxSize, setMaxSize] = useState(2048);
+  const load = useCallback(async () => {
+    try { setW(await (await fetch("/api/world", { cache: "no-store" })).json()); } catch { /* offline */ }
+  }, []);
+  useEffect(() => {
+    load(); const t = setInterval(load, 3000);
+    fetch("/api/config", { cache: "no-store" }).then((r) => r.json()).then((c) => { setGameDir(c.gameDir ?? ""); setMaxSize(c.mapMaxSize ?? 2048); }).catch(() => {});
+    return () => clearInterval(t);
+  }, [load]);
+  const act = async (url, body, okMsg) => {
+    try { const { ok, j } = await postJson(url, body); toast(ok ? okMsg : "Failed: " + (j.error ?? "request failed"), ok ? "ok" : "err"); load(); }
+    catch (err) { toast("Error: " + err.message, "err"); }
+  };
+  const m = w?.map ?? {}, v = w?.vector ?? {};
+  return html`<section class="panel" style=${{ marginTop: "12px" }}><h2>Map <span class="sub">background image and roads / places for the HQ map</span></h2>
+    <div class="cfgbody">
+      <div class="muted">World <b>${w?.worldKey || "(game has not reported yet)"}</b>${w?.info?.mapPrefab ? " / " + w.info.mapPrefab : ""}</div>
+      <div>Image: <b>${m.status ?? "none"}</b>${m.source ? html` <span class="muted">${m.source}, ${m.width}x${m.height}</span>` : ""}${m.error ? html` <span class="muted">${m.error}</span>` : ""}</div>
+      <div>Roads: <b>${v.roads ?? "not received"}</b>, places: <b>${v.locations ?? "not received"}</b></div>
+      <div class="muted">Detected game dir: ${w?.detectedGameDir || "none"}</div>
+      <label class="field"><span>Game dir (empty = auto-detect)</span><input type="text" value=${gameDir ?? ""} placeholder="e.g. E:/Games/steam/steamapps/common/Arma Reforger" onInput=${(e) => setGameDir(e.target.value)} /></label>
+      <label class="field"><span>Max image size (px)</span><input type="number" min="256" max="8192" value=${maxSize} onInput=${(e) => setMaxSize(e.target.value)} /></label>
+      <div class="btns">
+        <button class="btn" type="button" onClick=${() => act("/api/config", { gameDir: gameDir ?? "", mapMaxSize: Number(maxSize) }, "Map settings saved")}><${Icon} n="save" /> Save</button>
+        <button class="btn ghost" type="button" onClick=${() => act("/api/map/reload", {}, "Re-resolving the map image")}><${Icon} n="reset" /> Re-resolve image</button>
+        <button class="btn ghost" type="button" onClick=${() => act("/api/vector/reset", {}, "Vector data cleared; the game resends within 60 s")}><${Icon} n="reset" /> Resend roads</button></div>
+      <small class="muted">The image is read at runtime from your own game install and is never committed. Modded terrains: put dev/tools/maps/NAME.png and NAME.json next to the sidecar.</small>
+    </div></section>`;
+}
 function Config({ st, toast, refresh }) {
   const [f, setF] = useState(null);
   const [keyMeta, setKeyMeta] = useState({ set: false, last4: "" });
@@ -377,15 +584,20 @@ function Config({ st, toast, refresh }) {
   const load = useCallback(async () => {
     try {
       const c = await (await fetch("/api/config", { cache: "no-store" })).json();
-      setF({ provider: c.provider, model: c.model, baseUrl: c.baseUrl, apiKey: "", timeoutSec: c.timeoutSec, maxTokens: c.maxTokens, enabled: !!c.enabled, minIntervalSec: c.minIntervalSec ?? 0, skipUnchanged: c.skipUnchanged !== false, stopAtLimit: c.stopAtLimit !== false });
+      setF({ provider: c.provider, model: c.model, baseUrl: c.baseUrl, apiKey: "", timeoutSec: c.timeoutSec, maxTokens: c.maxTokens, enabled: !!c.enabled, engine: c.engine ?? "llm", minIntervalSec: c.minIntervalSec ?? 0, skipUnchanged: c.skipUnchanged !== false, stopAtLimit: c.stopAtLimit !== false, wakeup: { ...c.wakeup }, triggers: { ...c.triggers } });
       setKeyMeta({ set: c.apiKeySet, last4: c.apiKeyLast4 });
     } catch (e) { toast("Could not load config: " + e.message, "err"); }
   }, []);
   useEffect(() => { load(); }, [load]);
   if (!f) return html`<main><div class="empty">Loading...</div></main>`;
   const set = (k, v) => setF((o) => ({ ...o, [k]: v }));
+  const setG = (g, k, v) => setF((o) => ({ ...o, [g]: { ...o[g], [k]: v } }));
+  const numG = (g) => Object.fromEntries(Object.entries(f[g]).map(([k, v]) => [k, typeof v === "boolean" ? v : Number(v)]));
+  // number input / toggle bound to a group setting
+  const gnum = (g, k, label, min, max) => html`<label class="field"><span>${label}</span><input type="number" min=${min} max=${max} value=${f[g][k]} onInput=${(e) => setG(g, k, e.target.value)} /></label>`;
+  const gsw = (g, k, label) => html`<label class="switch"><input type="checkbox" checked=${f[g][k]} onChange=${(e) => setG(g, k, e.target.checked)} /><span>${label}</span></label>`;
   const body = () => {
-    const b = { provider: f.provider, model: f.model, baseUrl: f.baseUrl, timeoutSec: Number(f.timeoutSec), maxTokens: Number(f.maxTokens), enabled: f.enabled, minIntervalSec: Number(f.minIntervalSec), skipUnchanged: f.skipUnchanged, stopAtLimit: f.stopAtLimit };
+    const b = { provider: f.provider, model: f.model, baseUrl: f.baseUrl, timeoutSec: Number(f.timeoutSec), maxTokens: Number(f.maxTokens), enabled: f.enabled, engine: f.engine, minIntervalSec: Number(f.minIntervalSec), skipUnchanged: f.skipUnchanged, stopAtLimit: f.stopAtLimit, wakeup: numG("wakeup"), triggers: numG("triggers") };
     if (f.apiKey) b.apiKey = f.apiKey;
     return b;
   };
@@ -414,6 +626,11 @@ function Config({ st, toast, refresh }) {
         <option value="anthropic">anthropic</option>
         <option value="openai-compatible">openai-compatible (Ollama, LM Studio, ...)</option>
         <option value="openrouter">openrouter (with usage / budget monitoring)</option></select></label>
+      <label class="field"><span>HQ engine</span><select value=${f.engine} onChange=${(e) => set("engine", e.target.value)}>
+        <option value="llm">llm (LLM provider decides)</option>
+        <option value="rules">rules (game rule commander, no LLM calls)</option>
+        <option value="model" disabled>model (soon)</option></select>
+        <small>Main switch. rules: the sidecar answers with no orders so the game's own rule commander drives; the HQ scheduler is idle. model: a future trained decision model.</small></label>
       <label class="field"><span>Model</span><input type="text" value=${f.model} onInput=${(e) => set("model", e.target.value)} /></label>
       <label class="field"><span>Base URL</span><input type="text" value=${f.baseUrl} placeholder=${f.provider === "openrouter" ? "optional, default https://openrouter.ai/api/v1" : "e.g. http://127.0.0.1:11434/v1  (openai-compatible; /chat/completions is appended)"} onInput=${(e) => set("baseUrl", e.target.value)} /></label>
       <label class="field"><span>API key</span><input type="password" autocomplete="new-password" value=${f.apiKey} placeholder=${keyMeta.set ? `stored key ending ...${keyMeta.last4} (leave empty to keep)` : "not set"} onInput=${(e) => set("apiKey", e.target.value)} />
@@ -424,15 +641,28 @@ function Config({ st, toast, refresh }) {
       <div class="pair">
         <label class="field"><span>Min interval per faction (s, 0 = every request)</span><input type="number" min="0" max="600" value=${f.minIntervalSec} onInput=${(e) => set("minIntervalSec", e.target.value)} /></label>
         <label class="switch"><input type="checkbox" checked=${f.skipUnchanged} onChange=${(e) => set("skipUnchanged", e.target.checked)} /><span>Skip unchanged situations</span></label></div>
-      <small class="muted">Batch APIs (24 h latency) don't fit a live war, so we cut call frequency instead. Skipped requests answer "keep current orders"; applies to real providers only (not fake).</small>
+      <small class="muted">Batch APIs (24 h latency) don't fit a live war, so we cut call frequency instead. Skipped requests answer "keep current orders". The min interval is the hard floor between any two LLM calls (also for wakeups and triggers); unchanged situations are skipped at scheduled wakeups.</small>
+      <h3 class="cfgh">Wakeup</h3>
+      ${gsw("wakeup", "dynamic", "Let the LLM choose its next wakeup (next_check_sec)")}
+      <div class="pair">${gnum("wakeup", "defaultSec", "Default interval (s)", 5, 3600)}${gnum("wakeup", "minSec", "Shortest interval (s)", 5, 3600)}</div>
+      <div class="pair">${gnum("wakeup", "maxSec", "Longest interval (s)", 5, 7200)}${gsw("wakeup", "budgetStretch", "Stretch intervals when the budget pace overshoots")}</div>
+      <small class="muted">The game polls every 10 s; the HQ is only consulted at the scheduled time or when a trigger fires. With dynamic off the interval is always the default. Budget stretch multiplies the interval by projected/limit (max x3) when the OpenRouter pace estimate projects overshooting the key limit.</small>
+      <h3 class="cfgh">Triggers</h3>
+      ${gsw("triggers", "enabled", "Wake the HQ early on events")}
+      <div class="pair">${gsw("triggers", "newContact", "New contact (more than 150 m from every known one)")}${gsw("triggers", "squadLost", "Squad lost (0 alive or gone)")}</div>
+      <div class="pair">${gsw("triggers", "objectiveReached", "Objective reached (within 50 m, or squad idle)")}${gsw("triggers", "squadChange", "Squad appeared / player-led changed")}</div>
+      <div class="pair">${gnum("triggers", "contactNearSquadM", "Contact near a squad (m, 0 = off)", 0, 5000)}${gnum("triggers", "casualties", "Casualties since last call (agents, 0 = off)", 0, 1000)}</div>
+      <div class="pair">${gnum("triggers", "strengthDropPct", "Squad strength drop (% of start, 0 = off)", 0, 100)}${gnum("triggers", "cooldownSec", "Cooldown between trigger calls (s)", 0, 600)}</div>
+      <small class="muted">Compared with the situation at the last LLM call. Triggered calls also respect the min interval above. Use "wake now" in the status strip to force a call.</small>
       ${f.provider === "openrouter" && html`<label class="switch"><input type="checkbox" checked=${f.stopAtLimit} onChange=${(e) => set("stopAtLimit", e.target.checked)} />
         <span>Stop provider calls at the key's spending limit <span class="muted">(the game then runs on its rule commander; LLM resumes automatically when budget is available again)</span></span></label>`}
       <label class="switch"><input type="checkbox" checked=${f.enabled} onChange=${(e) => set("enabled", e.target.checked)} />
-        <span>Enabled <span class="muted">(off: no LLM calls, the game runs on its rule commander)</span></span></label>
+        <span>Enabled <span class="muted">(off: no LLM calls, the game runs on its rule commander; the HQ engine selector above is the main switch)</span></span></label>
       <div class="btns"><button class="btn" type="submit" disabled=${busy}><${Icon} n="save" /> Save</button>
         <button class="btn ghost" type="button" disabled=${busy} onClick=${doTest}><${Icon} n="plug" /> Test connection</button></div>
       ${test && html`<pre>${test.pending ? "testing with the form values (nothing is saved)..." : J(test)}</pre>`}
     </form></section>
+    <${MapCard} toast=${toast} />
     ${st.config?.provider === "openrouter" && f.provider === "openrouter" && html`<${UsageCard} u=${st.usage} now=${st.now} toast=${toast} refresh=${refresh} />`}
     </div></main>`;
 }
@@ -510,7 +740,7 @@ function App() {
     <header class="topbar">
       <div class="brand"><span class="logo"><${Icon} n="logo" /></span>Clausewitz HQ</div>
       <nav><a href="#hq" class=${cfg ? "" : "active"}>HQ</a><a href="#config" class=${cfg ? "active" : ""}>Configuration</a></nav>
-      <${Strip} st=${st} />
+      <${Strip} st=${st} toast=${toast} refresh=${refresh} />
     </header>
     ${cfg ? html`<${Config} st=${st} toast=${toast} refresh=${refresh} />` : html`<${HQ} st=${st} />`}
     <div class="toasts">${toasts.map((t) => html`<div class=${"toast " + t.kind} key=${t.id}>${t.text}</div>`)}</div>

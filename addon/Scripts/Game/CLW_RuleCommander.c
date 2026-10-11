@@ -217,7 +217,8 @@ class CLW_RuleCommander
 			contactCount++;
 		}
 
-		json = string.Format("{\"faction\":\"%1\",\"time\":%2,\"squads\":[%3],\"contacts\":[%4]}", JsonEscape(m_sFaction), Math.Round(now), squadsJson, contactsJson);
+		// concatenate: string.Format truncates its result at ~8 KB
+		json = "{\"faction\":\"" + JsonEscape(m_sFaction) + "\",\"time\":" + Math.Round(now) + ",\"squads\":[" + squadsJson + "],\"contacts\":[" + contactsJson + "]}";
 		return squadCount;
 	}
 

@@ -44,9 +44,10 @@ class CLW_GameMode : SCR_BaseGameMode
 			m_CommanderUS.SetPatrolPoints(patrolUS);
 			m_CommanderUSSR.SetPatrolPoints(patrolUSSR);
 
+			GetGame().GetCallqueue().CallLater(CLW_WorldInfo.Start, 5000);
 			GetGame().GetCallqueue().CallLater(SayBuild, 8000);
 			GetGame().GetCallqueue().CallLater(PollContacts, 20000, true);
-			GetGame().GetCallqueue().CallLater(ThinkCommanders, 25000, true);
+			GetGame().GetCallqueue().CallLater(ThinkCommanders, 10000, true);
 		}
 	}
 

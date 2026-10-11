@@ -12,9 +12,15 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 - Web panel at http://127.0.0.1:8788/ : HQ view (map, squads table, SITREP, exchange log) and configuration view.
 - More squad data in the situation (type, wounded, health, speed, heading, state, objective).
 - Sidecar cost control: `minIntervalSec` and `skipUnchanged` settings; skipped cycles keep current orders. 20 s provider cooldown after HTTP 429/5xx.
+- Adaptive HQ wakeup: the game polls every 10 s, the sidecar calls the LLM only when due (model-chosen `next_check_sec`), on triggers (new contact, casualties, squad lost, objective reached, ...) or via "wake now" in the dashboard; configurable under Wakeup/Triggers.
+- Dashboard: pause button (no LLM calls, game keeps current orders) and HQ engine selector (`llm` / `rules`; `model` prepared for a future decision-model tier) next to "wake now"; new `engine` setting.
 - Player squads now follow the vanilla model (real group ID, controller join, slave group for the AI): radial-menu orders move the AI, with voice and map marker.
+- Dashboard map: real map background read from your own game install (never redistributed; override `dev/tools/maps/<World>.png` + `.json` for modded terrains), plus road and place-name overlay sent by the game (`CLW_WorldInfo`), with layer toggles and image opacity.
+
+- Dashboard map: heading/speed arrow per moving squad; objective arrows also for rule-commander and human-led squads (not only LLM orders).
 
 ### Fixed
+- Situation JSON and world uploads are built by concatenation (`string.Format` cut them at 8 KB).
 - Squads whose leader died no longer count as alive (corpse agents showed as 1/6 strength).
 - Squads you lead always get an objective: if the LLM ignores a human-led squad, the rule commander issues its first mission.
 - Commander voice and move marker work again: the player squad no longer gets a group ID assigned (a real ID made the controller/group IDs disagree). Missions are vanilla tasks assigned to the leading player (faction-owned), visible in the J menu and on the map.

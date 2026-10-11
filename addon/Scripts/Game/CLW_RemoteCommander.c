@@ -51,6 +51,7 @@ class CLW_RemoteCommander
 	static const int TIMEOUT_SECONDS = 15;
 	static const float STUCK_SECONDS = 45;		// a request in flight longer than this is considered lost
 	static const float LOG_INTERVAL = 60;		// s: repeat the same fallback reason at most this often
+	static const float RULES_INTERVAL = 25;		// s: the rule-commander fallback runs at most this often (we are polled every 10 s)
 
 	protected ref CLW_RuleCommander m_Rules = new CLW_RuleCommander();
 	protected ref CLW_RemoteCallback m_Callback;	// must stay referenced until the reply arrives
@@ -60,6 +61,7 @@ class CLW_RemoteCommander
 	protected string m_sLastReason;
 	protected float m_fLastReasonAt = -1000;
 	protected float m_fLastKeepAt = -1000;
+	protected float m_fLastRulesAt = -1000;
 
 	void Init(string factionKey, CLW_ContactBook book, notnull array<string> squadNames)
 	{
@@ -79,7 +81,7 @@ class CLW_RemoteCommander
 
 		if (!ENABLED)
 		{
-			m_Rules.Think();
+			ThinkRules();
 			return;
 		}
 
@@ -97,7 +99,7 @@ class CLW_RemoteCommander
 		int squads = m_Rules.BuildSituation(body);
 		if (squads <= 0)
 		{
-			m_Rules.Think();
+			ThinkRules();
 			return;
 		}
 
@@ -198,6 +200,16 @@ class CLW_RemoteCommander
 		CLW_Debug.Say(string.Format("%1 HQ (LLM): %2 order(s): %3", m_sFaction, applied, summary));
 	}
 
+	// Rule-commander fallback, throttled to RULES_INTERVAL (the first run is immediate).
+	protected void ThinkRules()
+	{
+		float now = GetGame().GetWorld().GetWorldTime() * 0.001;
+		if (now - m_fLastRulesAt < RULES_INTERVAL)
+			return;
+		m_fLastRulesAt = now;
+		m_Rules.Think();
+	}
+
 	// Empty string = valid. Squad membership itself is checked by ApplyOrder.
 	protected string Validate(CLW_OrderDto order, notnull array<string> done)
 	{
@@ -228,6 +240,6 @@ class CLW_RemoteCommander
 			Print(string.Format("CLW: RemoteCommander %1: fallback to rule commander: %2", m_sFaction, reason), LogLevel.WARNING);
 		}
 
-		m_Rules.Think();
+		ThinkRules();
 	}
 }
