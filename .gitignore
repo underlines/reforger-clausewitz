@@ -20,3 +20,9 @@ publish/
 
 # MCP handler scripts, copied in by wb_launch and removed by wb_cleanup
 addon/Scripts/WorkbenchGame/
+
+# Sidecar settings (may contain an API key)
+dev/tools/sidecar-config.json
+
+# Local secrets / sidecar settings
+dev/.env
