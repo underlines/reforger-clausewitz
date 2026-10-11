@@ -114,19 +114,16 @@ class CLW_RuleCommander
 	}
 
 	// Replace all waypoints of the group by exactly one of the given mode.
-	// True only if one of the squad's players is its leader (GetFirstPlayerLeaderID proved unreliable).
+	// True only if the squad's leader soldier is actually controlled by a player. The group flags
+	// (IsPlayerLeader, GetLeaderID, GetFirstPlayerLeaderID) say a joined player "leads" while an AI
+	// soldier still holds the leader entity (verified 2026-10-11: "commanding only for group leaders").
 	static bool HasHumanLeader(notnull SCR_AIGroup group)
 	{
-		array<int> playerIds = group.GetPlayerIDs();
-		if (!playerIds)
+		IEntity leader = group.GetLeaderEntity();
+		if (!leader)
 			return false;
 
-		foreach (int playerId : playerIds)
-		{
-			if (group.IsPlayerLeader(playerId))
-				return true;
-		}
-		return false;
+		return GetGame().GetPlayerManager().GetPlayerIdFromControlledEntity(leader) > 0;
 	}
 
 	protected bool Issue(int i, SCR_AIGroup group, int mode, vector target, string reason)

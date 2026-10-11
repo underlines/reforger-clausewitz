@@ -1,6 +1,8 @@
 CLW_GameMode : "{0F307326459A1395}Prefabs/MP/Modes/GameMode_Base.et" {
  ID "8DF9BFA7CEDEFB4E"
  components {
+  SCR_CommandingManagerComponent "{5D24CC701B322136}" {
+  }
   SCR_NametagConfigComponent "{571AA9E54FC9210D}" {
    m_sConfigPath "{09F7AAA14A642683}Configs/NameTags/NametagFriendlies.conf"
   }
