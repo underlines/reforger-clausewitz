@@ -1,3 +1,9 @@
+SCR_AIWorld CLW_AIWorld : "{26EE495A35AA70DC}Prefabs/AI/CLW_AIWorld_Arland.et" {
+ coords 2048 0 2078
+}
+PerceptionManager CLW_PerceptionManager : "{028DAEAD63E056BE}Prefabs/World/Game/PerceptionManager.et" {
+ coords 2048 0 2088
+}
 SCR_FactionManager CLW_FactionManager : "{589540B35EBA8CDC}Prefabs/MP/Managers/Factions/FactionManager_USxUSSR.et" {
  coords 2048 0 2058
 }
