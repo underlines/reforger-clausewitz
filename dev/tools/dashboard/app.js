@@ -628,6 +628,7 @@ function MapCard({ toast }) {
       <div class="muted">World <b>${w?.worldKey || "(game has not reported yet)"}</b>${w?.info?.mapPrefab ? " / " + w.info.mapPrefab : ""}</div>
       <div>Image: <b>${m.status ?? "none"}</b>${m.source ? html` <span class="muted">${m.source}, ${m.width}x${m.height}</span>` : ""}${m.error ? html` <span class="muted">${m.error}</span>` : ""}</div>
       <div>Roads: <b>${v.roads ?? "not received"}</b>, places: <b>${v.locations ?? "not received"}</b>, buildings: <b>${v.buildings ?? "not received"}</b></div>
+      ${v.roads == null || v.locations == null || v.buildings == null ? html`<div class="dim">Waiting for the game: it resends within about 60 s (the game must be running).</div>` : null}
       <div class="muted">Detected game dir: ${w?.detectedGameDir || "none"}</div>
       <label class="field"><span>Game dir (empty = auto-detect)</span><input type="text" value=${gameDir ?? ""} placeholder="e.g. E:/Games/steam/steamapps/common/Arma Reforger" onInput=${(e) => setGameDir(e.target.value)} /></label>
       <label class="field"><span>Max image size (px)</span><input type="number" min="256" max="8192" value=${maxSize} onInput=${(e) => setMaxSize(e.target.value)} /></label>
