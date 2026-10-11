@@ -1,0 +1,16 @@
+CLW_GameMode : "{0F307326459A1395}Prefabs/MP/Modes/GameMode_Base.et" {
+ ID "8DF9BFA7CEDEFB4E"
+ components {
+  SCR_NametagConfigComponent "{571AA9E54FC9210D}" {
+   m_sConfigPath "{09F7AAA14A642683}Configs/NameTags/NametagFriendlies.conf"
+  }
+  SCR_RespawnTimerComponent "{56B2F0110FB59E75}" {
+   m_fRespawnTime 10
+  }
+  SCR_RespawnSystemComponent "{56B2B4793051E7C9}" {
+   m_SpawnLogic SCR_AutoSpawnLogic "{5D38D0BF007E0C17}" {
+   }
+  }
+ }
+ m_bUseSpawnPreload 0
+}
