@@ -22,6 +22,9 @@ class CLW_RuleCommander
 	protected ref array<int> m_aMode = {};
 	protected ref array<int> m_aPatrolIndex = {};
 	protected ref array<vector> m_aTarget = {};		// target of the last issued order
+	protected ref array<string> m_aReason = {};		// reason of the last issued order
+	protected ref array<vector> m_aLastPos = {};	// leader position at the previous BuildSituation (speed/heading)
+	protected ref array<float> m_aLastTime = {};	// world time (s) of that sample, -1 = none
 	protected ref array<vector> m_aPatrolPoints = {};
 	static const ResourceName TASK_PREFAB = "{1D0F815858EE24AD}Prefabs/Tasks/BaseTask.et";	// vanilla generic SCR_Task
 	protected static int s_iMissionCounter;	// unique task IDs (a deleted task's ID may linger in the task system for a moment)
@@ -39,6 +42,9 @@ class CLW_RuleCommander
 			m_aMode.Insert(MODE_NONE);
 			m_aPatrolIndex.Insert(0);
 			m_aTarget.Insert(vector.Zero);
+			m_aReason.Insert("");
+			m_aLastPos.Insert(vector.Zero);
+			m_aLastTime.Insert(-1);
 		}
 	}
 
@@ -94,6 +100,8 @@ class CLW_RuleCommander
 			return 0;
 
 		float now = GetGame().GetWorld().GetWorldTime() * 0.001;
+		array<CLW_Contact> contacts = {};
+		m_Book.GetContacts(contacts);
 		string squadsJson = "";
 		int squadCount = 0;
 		for (int i = 0; i < m_aSquads.Count(); i++)
@@ -103,7 +111,7 @@ class CLW_RuleCommander
 				continue;
 
 			IEntity leader = group.GetLeaderEntity();
-			int agents = group.GetAgentsCount();
+			int agents = CLW_SquadInfo.AliveCount(group);
 			if (!leader || agents <= 0)
 				continue;
 
@@ -115,15 +123,69 @@ class CLW_RuleCommander
 			if (HasHumanLeader(group))
 				humanText = "true";
 
+			// optional extras: speed/heading from the position delta since the previous report
+			float speed = 0;
+			float heading = leader.GetYawPitchRoll()[0];
+			if (m_aLastTime[i] >= 0 && now > m_aLastTime[i])
+			{
+				vector delta = pos - m_aLastPos[i];
+				float planar = Math.Sqrt(delta[0] * delta[0] + delta[2] * delta[2]);
+				speed = planar / (now - m_aLastTime[i]);
+				if (planar > 2)
+					heading = Math.Atan2(delta[0], delta[2]) * Math.RAD2DEG;
+			}
+			m_aLastPos[i] = pos;
+			m_aLastTime[i] = now;
+			int headingDeg = Math.Round(heading);
+			headingDeg = headingDeg % 360;
+			if (headingDeg < 0)
+				headingDeg += 360;
+
+			int wounded;
+			float avgHealth;
+			CLW_SquadInfo.Health(group, wounded, avgHealth);
+
+			bool engaged = false;
+			foreach (CLW_Contact seen : contacts)
+			{
+				if (vector.DistanceXZ(pos, seen.m_vPos) < DEFEND_TRIGGER)
+				{
+					engaged = true;
+					break;
+				}
+			}
+			string stateText = "idle";
+			if (engaged)
+				stateText = "engaged";
+			else if (m_aMode[i] == MODE_SEARCH)
+				stateText = "moving";
+			else if (m_aMode[i] == MODE_ATTACK)
+				stateText = "attacking";
+			else if (m_aMode[i] == MODE_DEFEND)
+				stateText = "defending";
+
+			string objectiveJson = "";
+			if (m_aMode[i] != MODE_NONE)
+			{
+				string cmd = "MOVE";
+				if (m_aMode[i] == MODE_ATTACK)
+					cmd = "ATTACK";
+				else if (m_aMode[i] == MODE_DEFEND)
+					cmd = "DEFEND";
+				objectiveJson = string.Format(",\"objective\":{\"command\":\"%1\",\"pos\":[%2,%3],\"reason\":\"%4\"}",
+					cmd, Math.Round(m_aTarget[i][0]), Math.Round(m_aTarget[i][2]), JsonEscape(m_aReason[i]));
+			}
+
 			if (squadCount > 0)
 				squadsJson += ",";
-			squadsJson += string.Format("{\"id\":\"%1\",\"pos\":[%2,%3,%4],\"agents\":%5,\"startAgents\":%6,\"mode\":\"%7\",\"humanLed\":%8}",
+			squadsJson += string.Format("{\"id\":\"%1\",\"pos\":[%2,%3,%4],\"agents\":%5,\"startAgents\":%6,\"mode\":\"%7\",\"humanLed\":%8",
 				JsonEscape(m_aSquads[i]), Math.Round(pos[0]), Math.Round(pos[1]), Math.Round(pos[2]), agents, m_aStartCount[i], ModeName(m_aMode[i]), humanText);
+			squadsJson += string.Format(",\"type\":\"%1\",\"wounded\":%2,\"health\":%3,\"speed\":%4,\"heading\":%5,\"state\":\"%6\"",
+				JsonEscape(CLW_SquadInfo.TypeName(group)), wounded, avgHealth.ToString(-1, 2), speed.ToString(-1, 1), headingDeg, stateText);
+			squadsJson += objectiveJson + "}";
 			squadCount++;
 		}
 
-		array<CLW_Contact> contacts = {};
-		m_Book.GetContacts(contacts);
 		string contactsJson = "";
 		int contactCount = 0;
 		foreach (CLW_Contact contact : contacts)
@@ -158,11 +220,11 @@ class CLW_RuleCommander
 			return false;
 
 		SCR_AIGroup group = SCR_AIGroup.Cast(GetGame().GetWorld().FindEntityByName(squadName));
-		if (!group || !group.GetLeaderEntity() || group.GetAgentsCount() <= 0)
+		if (!group || !group.GetLeaderEntity() || CLW_SquadInfo.AliveCount(group) <= 0)
 			return false;
 
-		if (m_aStartCount[i] < group.GetAgentsCount())
-			m_aStartCount[i] = group.GetAgentsCount();
+		if (m_aStartCount[i] < CLW_SquadInfo.AliveCount(group))
+			m_aStartCount[i] = CLW_SquadInfo.AliveCount(group);
 
 		bool human = HasHumanLeader(group);
 		if (!human && m_MissionTask && m_iMissionSquad == i)
@@ -191,7 +253,7 @@ class CLW_RuleCommander
 		}
 
 		IEntity leader = group.GetLeaderEntity();
-		int agents = group.GetAgentsCount();
+		int agents = CLW_SquadInfo.AliveCount(group);
 		if (!leader || agents <= 0)
 			return;	// dead, dormant or not spawned yet
 
@@ -335,6 +397,7 @@ class CLW_RuleCommander
 		target[1] = GetGame().GetWorld().GetSurfaceY(target[0], target[2]);
 		m_aMode[i] = mode;
 		m_aTarget[i] = target;
+		m_aReason[i] = reason;
 
 		ShowMissionTask(i, group, label, target, reason);
 
@@ -375,6 +438,7 @@ class CLW_RuleCommander
 		group.AddWaypoint(waypoint);
 		m_aMode[i] = mode;
 		m_aTarget[i] = target;
+		m_aReason[i] = reason;
 		Print(string.Format("CLW: RuleCommander %1: %2 %3 -> %4 (%5)", m_sFaction, label, m_aSquads[i], target.ToString(), reason), LogLevel.NORMAL);
 		CLW_Debug.Say(string.Format("%1: %2 %3 -> %4 (%5)", m_sFaction, label, m_aSquads[i], target.ToString(), reason));
 		return true;

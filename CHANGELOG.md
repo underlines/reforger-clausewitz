@@ -10,6 +10,10 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 - Sidecar providers: fake, Anthropic, OpenAI-compatible.
 - Web panel at http://127.0.0.1:8788/ : HQ view (map, squads table, SITREP, exchange log) and configuration view.
 - More squad data in the situation (type, wounded, health, speed, heading, state, objective).
+- Sidecar cost control: `minIntervalSec` and `skipUnchanged` settings; skipped cycles keep current orders. 20 s provider cooldown after HTTP 429/5xx.
+
+### Fixed
+- Squads whose leader died no longer count as alive (corpse agents showed as 1/6 strength).
 
 ## [0.1.0] - 2026-10-11
 

@@ -13,6 +13,7 @@ class CLW_OrderDto
 class CLW_OrdersReply
 {
 	ref array<ref CLW_OrderDto> orders = {};
+	bool keep;	// optional: true with empty orders = "nothing changed, keep the current orders"
 }
 
 class CLW_RemoteCallback : RestCallback
@@ -58,6 +59,7 @@ class CLW_RemoteCommander
 	protected float m_fSentAt;
 	protected string m_sLastReason;
 	protected float m_fLastReasonAt = -1000;
+	protected float m_fLastKeepAt = -1000;
 
 	void Init(string factionKey, CLW_ContactBook book, notnull array<string> squadNames)
 	{
@@ -134,6 +136,17 @@ class CLW_RemoteCommander
 		if (!loader.ImportFromString(data) || !loader.ReadValue("", reply))
 		{
 			Fallback("reply is not valid JSON: " + data.Substring(0, Math.Min(data.Length(), 200)));
+			return;
+		}
+
+		if (reply.keep && (!reply.orders || reply.orders.IsEmpty()))
+		{
+			float keepNow = GetGame().GetWorld().GetWorldTime() * 0.001;
+			if (keepNow - m_fLastKeepAt > LOG_INTERVAL)
+			{
+				m_fLastKeepAt = keepNow;
+				Print(string.Format("CLW: RemoteCommander %1: keeping current orders", m_sFaction), LogLevel.NORMAL);
+			}
 			return;
 		}
 

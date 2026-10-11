@@ -76,7 +76,14 @@ class CLW_GameMode : SCR_BaseGameMode
 			vector leaderPos;
 			if (group.GetLeaderEntity())
 				leaderPos = group.GetLeaderEntity().GetOrigin();
+			array<IEntity> members = CLW_SquadInfo.Members(group);
+			float maxDist;
+			foreach (IEntity member : members)
+			{
+				maxDist = Math.Max(maxDist, vector.Distance(leaderPos, member.GetOrigin()));
+			}
 			Print(string.Format("CLW: squad %1 leader=%2 players=%3 firstPlayerLeader=%4 humanLeader=%5 leaderId=%6 waypoint=%7", name, leaderPos, group.GetPlayerCount(), group.GetFirstPlayerLeaderID(), CLW_RuleCommander.HasHumanLeader(group), group.GetLeaderID(), group.GetCurrentWaypoint() != null), LogLevel.NORMAL);
+			PrintFormat("CLW: squad %1 agents=%2 alive=%3 aiMembers=%4 maxDist=%5", name, group.GetAgentsCount(), CLW_SquadInfo.AliveCount(group), members.Count(), Math.Round(maxDist), level: LogLevel.NORMAL);
 		}
 
 		array<int> removed = {};
