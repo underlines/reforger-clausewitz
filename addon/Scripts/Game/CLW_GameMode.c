@@ -17,8 +17,8 @@ class CLW_GameMode : SCR_BaseGameMode
 	protected ref CLW_ContactBook m_BookUSSR = new CLW_ContactBook();
 	protected ref CLW_ContactMarkers m_MarkersUS = new CLW_ContactMarkers();
 	protected ref CLW_ContactMarkers m_MarkersUSSR = new CLW_ContactMarkers();
-	protected ref CLW_RuleCommander m_CommanderUS = new CLW_RuleCommander();
-	protected ref CLW_RuleCommander m_CommanderUSSR = new CLW_RuleCommander();
+	protected ref CLW_RemoteCommander m_CommanderUS = new CLW_RemoteCommander();
+	protected ref CLW_RemoteCommander m_CommanderUSSR = new CLW_RemoteCommander();
 	protected static const ResourceName WAYPOINT_MOVE = "{750A8D1695BD6998}Prefabs/AI/Waypoints/AIWaypoint_Move.et";
 
 	protected override void OnGameStart()

@@ -61,6 +61,120 @@ class CLW_RuleCommander
 		}
 	}
 
+	// ---- Remote (LLM) commander interface -------------------------------------------------------
+
+	static string ModeName(int mode)
+	{
+		if (mode == MODE_SEARCH)
+			return "SEARCH";
+		if (mode == MODE_ATTACK)
+			return "ATTACK";
+		if (mode == MODE_DEFEND)
+			return "DEFEND";
+		return "NONE";
+	}
+
+	// Escape a string for use inside a JSON string literal.
+	static string JsonEscape(string text)
+	{
+		string r = text;
+		r.Replace("\\", "\\\\");
+		r.Replace("\"", "\\\"");
+		r.Replace("\n", " ");
+		r.Replace("\r", " ");
+		r.Replace("\t", " ");
+		return r;
+	}
+
+	// Serialise this faction's situation as the sidecar's POST /orders body. Returns the number of live squads in it.
+	int BuildSituation(out string json)
+	{
+		json = "";
+		if (!m_Book)
+			return 0;
+
+		float now = GetGame().GetWorld().GetWorldTime() * 0.001;
+		string squadsJson = "";
+		int squadCount = 0;
+		for (int i = 0; i < m_aSquads.Count(); i++)
+		{
+			SCR_AIGroup group = SCR_AIGroup.Cast(GetGame().GetWorld().FindEntityByName(m_aSquads[i]));
+			if (!group)
+				continue;
+
+			IEntity leader = group.GetLeaderEntity();
+			int agents = group.GetAgentsCount();
+			if (!leader || agents <= 0)
+				continue;
+
+			if (m_aStartCount[i] < agents)
+				m_aStartCount[i] = agents;
+
+			vector pos = leader.GetOrigin();
+			string humanText = "false";
+			if (HasHumanLeader(group))
+				humanText = "true";
+
+			if (squadCount > 0)
+				squadsJson += ",";
+			squadsJson += string.Format("{\"id\":\"%1\",\"pos\":[%2,%3,%4],\"agents\":%5,\"startAgents\":%6,\"mode\":\"%7\",\"humanLed\":%8}",
+				JsonEscape(m_aSquads[i]), Math.Round(pos[0]), Math.Round(pos[1]), Math.Round(pos[2]), agents, m_aStartCount[i], ModeName(m_aMode[i]), humanText);
+			squadCount++;
+		}
+
+		array<CLW_Contact> contacts = {};
+		m_Book.GetContacts(contacts);
+		string contactsJson = "";
+		int contactCount = 0;
+		foreach (CLW_Contact contact : contacts)
+		{
+			if (contactCount > 0)
+				contactsJson += ",";
+			string desc = string.Format("%1x %2", contact.m_iCount, contact.m_sEnemyFaction);
+			contactsJson += string.Format("{\"pos\":[%1,%2,%3],\"desc\":\"%4\",\"ageSec\":%5}",
+				Math.Round(contact.m_vPos[0]), Math.Round(contact.m_vPos[1]), Math.Round(contact.m_vPos[2]), JsonEscape(desc), Math.Round(Math.Max(0, now - contact.m_fLastSeen)));
+			contactCount++;
+		}
+
+		json = string.Format("{\"faction\":\"%1\",\"time\":%2,\"squads\":[%3],\"contacts\":[%4]}", JsonEscape(m_sFaction), Math.Round(now), squadsJson, contactsJson);
+		return squadCount;
+	}
+
+	// Execute one external order. command: MOVE | ATTACK | DEFEND. False for unknown squad, dead group or bad command.
+	bool ApplyOrder(string squadName, string command, vector target, string reason)
+	{
+		int mode = MODE_NONE;
+		if (command == "MOVE")
+			mode = MODE_SEARCH;
+		else if (command == "ATTACK")
+			mode = MODE_ATTACK;
+		else if (command == "DEFEND")
+			mode = MODE_DEFEND;
+		else
+			return false;
+
+		int i = m_aSquads.Find(squadName);
+		if (i < 0)
+			return false;
+
+		SCR_AIGroup group = SCR_AIGroup.Cast(GetGame().GetWorld().FindEntityByName(squadName));
+		if (!group || !group.GetLeaderEntity() || group.GetAgentsCount() <= 0)
+			return false;
+
+		if (m_aStartCount[i] < group.GetAgentsCount())
+			m_aStartCount[i] = group.GetAgentsCount();
+
+		bool human = HasHumanLeader(group);
+		if (!human && m_MissionTask && m_iMissionSquad == i)
+		{
+			ClearMissionTask();
+			m_iMissionSquad = -1;
+		}
+
+		Deliver(human, i, group, mode, target, reason);
+		return true;
+	}
+
 	protected void ThinkSquad(int i, notnull array<CLW_Contact> contacts)
 	{
 		SCR_AIGroup group = SCR_AIGroup.Cast(GetGame().GetWorld().FindEntityByName(m_aSquads[i]));
