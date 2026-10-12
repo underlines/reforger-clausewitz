@@ -370,10 +370,10 @@ Own game mode `CLW_GameMode` (see `notes/decision-game-mode.md`). Live status: `
 | **M0 - Skeleton** | Game mode + minimal world, player can join a side and spawn as a soldier in an AI squad, one AI squad per side, per-faction contacts, RuleCommander issues MOVE/ATTACK/DEFEND waypoints, logs. Spikes: perception tap, order loop | Perception + waypoint APIs, core loop, playable without LLM |
 | **M1 - LLM bridge** | REST spike (POST/headers/polling), sidecar, RemoteCommander, schema validation, fallback to Rules | LLM loop |
 | **M1.5 - Dashboard** | Read-only web dashboard served by the sidecar (section 12a basic); editing/commands later | Observability |
-| **M2 - Real war** | Player squad leaders receive HQ orders as missions (choose from offered assignments, accept/refuse/complete), more commands, SITREPs, win conditions, spawn budget, resource ledger, bases, supply convoys | AI vs AI with economy |
-| **M3 - Mechanized & intel** | Player requests via chat, approach to be chosen (section 5a, option A or B); Vehicle groups, embark/dismount, convoys; map markers, expiry, player reports, setup screen | Vehicle AI, humans in the loop |
+| **M2 - Real war + mechanized** (design: `notes/m2-design.md`) | Control points, tickets + bleed, win conditions, supplies ledger + income, bases/respawn, force purchases, mechanized/motorized units (mount, dismount, overwatch, stuck watchdog), objective-driven rule commander, protocol v2 for the LLM, mission offers for player squad leaders; all content as data (scenario + faction profiles, auto-discovery) so mod packs work | AI vs AI with economy and vehicles |
+| **M3 - Logistics & intel** | Player requests via chat, approach to be chosen (section 5a, option A or B); supply convoys, FOBs; player reports, setup screen | Logistics, humans in the loop |
 | **M4 - Scale & realism** | Chain-of-command echelons with delayed reports, population manager (cleanup, collapse/expand), FOBs | Size of war |
-| **M5 - Content compat** | RHS / WCS profiles, role classifier | Custom factions |
+| **M5 - Content compat** | RHS / WCS profiles + compat addons, classifier tuning (the data model and auto-discovery land in M2) | Custom factions |
 | **Later** | Story mode (section 3a), Squad-leader LLM agents (section 4a), Voice/radio, virtual battlefield (experimental), Conflict adapter | - |
 
 ## 14. Open questions / risks
