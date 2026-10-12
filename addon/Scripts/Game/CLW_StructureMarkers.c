@@ -216,7 +216,7 @@ class CLW_StructureMarkers
 		marker.SetCustomText(info.m_sLabel);
 		manager.InsertStaticMarker(marker, false, true);
 		info.m_Marker = marker;
-		Print(string.Format("CLW: markers %1 %2 '%3' at %4 (grid %5)", info.m_sSide, info.m_sBase, info.m_sLabel, info.m_vPos, CLW_Places.Grid(info.m_vPos)), LogLevel.NORMAL);
+		Print(string.Format("CLW: markers %1 %2 '%3' at %4 (grid %5) %6", info.m_sSide, info.m_sBase, info.m_sLabel, info.m_vPos, CLW_Places.Grid(info.m_vPos), CLW_MarkerLog.Describe(marker)), LogLevel.NORMAL);
 		return true;
 	}
 

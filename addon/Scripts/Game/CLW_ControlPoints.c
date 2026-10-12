@@ -752,6 +752,7 @@ class CLW_ControlPoints
 		marker.SetMarkerFactionFlags(factionFlags);
 		marker.SetCustomText(text);
 		manager.InsertStaticMarker(marker, false, true);
+		Print("CLW: points marker '" + text + "' " + CLW_MarkerLog.Describe(marker), LogLevel.NORMAL);
 		return marker;
 	}
 

@@ -52,6 +52,7 @@ class CLW_ContactMarkers
 			marker.SetMarkerFactionFlags(factionFlags);
 			marker.SetCustomText(text);
 			manager.InsertStaticMarker(marker, false, true);
+			Print("CLW: markers contact " + contact.m_iId.ToString() + " '" + text + "' " + CLW_MarkerLog.Describe(marker), LogLevel.NORMAL);
 			m_mMarkers.Insert(contact.m_iId, marker);
 				m_mKinds.Set(contact.m_iId, contact.m_sKind);
 		}
