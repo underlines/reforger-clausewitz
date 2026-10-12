@@ -2,1403 +2,1411 @@ GenericEntity : "{C3F1807561FEFCFC}Prefabs/Props/Military/Compositions/FIA/Vehic
  ID "41D0CAFCF6D5CEAC"
  components {
   ActionsManagerComponent "{5CB6952C9693C41C}" {
+   ActionContexts {
+    UserActionContext "{04C60109848DE394}" {
+     ContextName "clwdepot"
+     Position PointInfo "{6FE643838125D2CE}" {
+      Offset 0 1.2 0.25
+     }
+    }
+   }
    additionalActions {
     SCR_CatalogSpawnerUserAction "{EB16DED62D25FFBD}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{B4FDA96035AD2F94}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{853499F23D93BBE0}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{B54F3527B23578DB}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{74C9F9CA4DC382DD}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{F8AF6EC64F3459F6}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{9E74D77A1E5C213C}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{C8F8904895E3F3C5}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{01AE248EF19E333B}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{C17BFA30346D111C}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{BB6A16AABB9FD993}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{68FF94B48BC42DA1}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{C029F96CDC074AEE}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{F95A07F829A75CDE}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{93987143ACA69F9E}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{51EB5C021ACAE9E5}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{A47A09A373F64EB5}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{F29005918207BB6C}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{D6712325CADADFCB}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{A7B97FEC1543C107}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{F1DCFC50FBBB8038}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{8FD65B20A7D1DE3A}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{607C0BFE9D815B66}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{19A1B54BEA590EE7}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{462BE0D28F7552C2}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{6390ECDC9039B995}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{982DBAB8BA0EF43F}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{2CA172A08139C008}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{61D8A820258668FE}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{BA9B7AE615D486F7}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{51A6AFD517874AD8}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{AF1BA63B7EFA5E50}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{C1761204CD29EC76}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{6FBAC3FDC874FD66}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{586AF8D1698D1FBD}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{1B92381E6BA6CDC1}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{B7877C8A75DE342F}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{6E9EF6E03D5C6467}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{7EDD5798826DB344}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{5B51686BCCCC4A02}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{40FD1E4303A01AAE}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{9E06F3D308384F15}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{F4DEE7A80942852A}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{3C8272125111E67A}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{793E1C8B4E1A1D47}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{2E2D7C12A3A4B888}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{40387F57A9ED3E34}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{D42D4E18F2F1202F}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{95EC2E8AC3DCD017}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{99B5410D6F2D6914}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{36003962238D485B}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{8219AC5F21BF2D4E}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{7AE05B805BE7E124}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{57F328A63B10580F}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{8AD76BFF5EC5ECBF}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{F358DE8B3C9A07D7}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{E0DD7143E8A19B55}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{4C72C2F5E66CD890}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{FF9A450BB2CEC56D}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{7D932CCFBDCA95FE}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{0451DA90CB931441}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{8A47DD21252506D9}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{7470AE32F1A719C4}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{9AD313AB06EC91E2}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{65CEF31D69E913F0}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{09CEC634009FA423}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{E07E2CC5732E21A6}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{48A43CBDC9B64B07}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{B8F07531CE4D77CC}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{D56F57FEAE26CEF1}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{CDDBE6734F458139}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{C75CD04EA024468D}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{30138C1C62FC6660}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{F2BCDA01FDE73A00}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{2C1D144C36E8DD41}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{C11A5F5EE9578DBE}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{D09F47016FE19AB9}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{F5600E516D21673C}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{8FCDC478DE2CF300}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{9CB526BAA1248FEA}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{26CDBC40C02457AB}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{6EAD1FE864951B11}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{F063631226B1D6A1}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{876593FE43DCE692}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{40E9643D9CC7DA7D}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{523FAD2E3E8E00D6}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{40A1EAF357360005}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{96A92D7253E5D6D2}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{1C8F70BEB0EC3191}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{B0C0557484B6F590}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{95384E0758DF2F82}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{A6C1447DC245C7A3}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{238A18F5D30DA649}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{0E001A7D3E89396E}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{3C7065E514610039}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{F42DF5A4BD1F2996}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{429D1F3AE09AE2D1}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{3A35D38FA46F020B}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{92615BED95B18B3C}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{C2F59CC21A329A63}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{5D2769E274CE4799}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{3D4459E4CE9795B3}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{EF59E95BE36BD7BC}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{D38A47B7E2B90F64}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{1D085B44DDE1523F}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{7CB22617AC1FB226}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{7EF4EEFF28B0FF45}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{4254E71020D36058}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{70A7A2B9815F2659}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{EFA10D67E9218342}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{005068F2219432F7}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{E90C232FE62AC019}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{9B59AB003112AA03}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{A118747EFC7D3C71}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{77717070E3665620}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{6AD28D05E2DB8676}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{D14CCFF64BE23AE7}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{E0CD6B86F869528F}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{B45FDA2E38EBE23C}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{308B0F336CE4A01E}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{6B882D5F02A1E95F}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{7E1935E03BA32AF6}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{D23B2CB761DC64A6}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{4C2F786312A9755C}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{95AD9C4B03E302E1}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{A685E84B7C4BC3EA}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{6A2E1628225A7643}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{AF771F6574C93A45}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{218A0D71115ED8EE}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{34C72D69570DF9F0}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{F78FD794C66D7BB7}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{18A7342DC07F3DDB}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{BB9F933D018F7F07}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{872E2B8B904BE5DC}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{0149C739977FB0EE}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{0B8166728347A9DF}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{8EDDAD4D2FF852FE}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{9613DE5C8837A194}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{306C738150D672B2}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{DC17C3F6D5334CFC}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{FE7DE6CD339B3925}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{160B487A1A36D874}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{DF7DC389B6C5B649}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{3626685C178552B1}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{4F6FEFC243B6B83C}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{AEF4821F7CC5EA52}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{7B59BF0B3AFE1644}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{A1151204C08BEFE7}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{94922BCFCB49D014}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{4F52B501A6DD09D4}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{9E4CD1B425A708FD}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{D52C37C0D216A06F}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{AF64D87CDA83F882}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{B6F8802C1FF07E82}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{220E061E7E1339E4}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{52916C7B8E5E0FFA}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{77F76EC187E6D652}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{E1B39ED931423B00}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{DC804B55DE2DAB86}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{658DCD6E15FA2133}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{9CA7E9552CA1E89B}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{A124AAE549B63750}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{F01D49C7E794C4C6}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{ED8C88C4A6180D45}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{50ED1C1B51DDD4C8}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{D030A8EEEC05D249}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{D6D3FF01847FCAE3}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{6FA748DCA0C3451A}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{BD579DBDDB8CE466}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{D82CED185C5F75C2}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{6735AD8147126501}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{2E5EE1687A7137FD}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{C0295F98168BF40E}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{53C397447D3071B9}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{4671BA2EB027D2D6}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{8A4FB079E15AD533}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{8711AA2DDAC6D287}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{7E57762FDFE3C843}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{C487FE9479A3ECE3}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{4D715001D83EE926}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{3229E486023954D3}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{9F998D46C5ABAA08}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{77F9AEE77E85906C}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{F7A6E3A6AAAE6914}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{C4A8A625691FF975}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{69B2ACA60BA8418E}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{22FB58D286FE3DC8}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{26348DB252CD51C1}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{60FE34A3F3393592}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{7C58C754F1FBDE74}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{2D8910A97FD6FF34}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{DCD59B0F3E958D6B}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{E9FD364BFB6C0665}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{F9165AA763B8D996}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{E4BA2F005AE11326}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{159F2CDBA939CD92}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{5B7A47F81C3FAD76}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{0E7F8372136D43A9}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{6CC411BBEDE79CBE}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
     }
     SCR_CatalogSpawnerUserAction "{8A0B57D1D4B99E9D}" {
      ParentContextList {
-      "SCR_CatalogSpawnerUserAction"
+      "clwdepot"
      }
      VisibilityRange 10
      Duration 1
