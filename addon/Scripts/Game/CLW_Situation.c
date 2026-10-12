@@ -7,6 +7,8 @@ class CLW_Situation
 	static const int MAX_CONTACTS = 40;
 	static const int MAX_CONTACTS_TRIMMED = 12;
 	static const float ENGAGED_DISTANCE = 150;	// m: a contact this close makes a unit "engaged"
+	static const float AXIS_CENTRE_MIN_M = 150;	// flank nudge: an objective this close to the HQ-HQ axis is "centre"
+	static const float AXIS_CENTRE_FRACTION = 0.12;	// ... or this fraction of the HQ-HQ distance, whichever is larger
 
 	protected string m_sFaction;
 	protected CLW_Orders m_Orders;		// weak: owned by the rule commander
@@ -236,10 +238,52 @@ class CLW_Situation
 			if (!text.IsEmpty())
 				text += ",";
 			text += "{\"id\":\"" + Escape(point.m_sId) + "\",\"name\":\"" + Escape(point.m_sName) + "\",\"pos\":[" + Math.Round(point.m_vPos[0]) + "," + Math.Round(point.m_vPos[2]) + "],\"grid\":\"" + CLW_Places.Grid(point.m_vPos) + "\",\"radius\":" + Math.Round(point.m_fRadius);
-			text += ",\"value\":" + point.m_iValue + ",\"owner\":\"" + Escape(owner) + "\",\"contested\":" + BoolText(point.m_bContested) + ",\"progress\":" + Math.Round(points.ProgressFor(point, m_sFaction)) + "}";
+			text += ",\"value\":" + point.m_iValue + ",\"owner\":\"" + Escape(owner) + "\",\"contested\":" + BoolText(point.m_bContested) + ",\"progress\":" + Math.Round(points.ProgressFor(point, m_sFaction));
+			text += AxisSideJson(point.m_vPos) + "}";
 		}
 
 		return text;
+	}
+
+	// Flank nudge (WP5, owner P13): ,"side":"left|centre|right" = which side of the line own HQ -> enemy HQ a position lies on, seen from this
+	// faction (standing at its own HQ, facing the enemy HQ). Empty when a base position is unknown (field omitted).
+	protected string AxisSideJson(vector pos)
+	{
+		string side = AxisSide(pos);
+		if (side.IsEmpty())
+			return "";
+
+		return ",\"side\":\"" + side + "\"";
+	}
+
+	protected string AxisSide(vector pos)
+	{
+		CLW_WarState war = CLW_GameMode.GetWarState();
+		CLW_Bases bases = CLW_GameMode.GetBases();
+		if (!war || !bases)
+			return "";
+
+		vector ownPos = bases.GetBasePos(m_sFaction);
+		vector enemyPos = bases.GetBasePos(war.GetEnemyKey(m_sFaction));
+		if (ownPos == vector.Zero || enemyPos == vector.Zero)
+			return "";
+
+		float dx = enemyPos[0] - ownPos[0];
+		float dz = enemyPos[2] - ownPos[2];
+		float length = Math.Sqrt(dx * dx + dz * dz);
+		if (length < 50)
+			return "";
+
+		// facing (dx, dz) with x east and z north, the left-hand normal is (-dz, dx)
+		float lateral = (-dz * (pos[0] - ownPos[0]) + dx * (pos[2] - ownPos[2])) / length;
+		float band = Math.Max(AXIS_CENTRE_MIN_M, length * AXIS_CENTRE_FRACTION);
+		if (lateral > band)
+			return "left";
+
+		if (lateral < -band)
+			return "right";
+
+		return "centre";
 	}
 
 	protected string BuildBases(CLW_WarState war)
