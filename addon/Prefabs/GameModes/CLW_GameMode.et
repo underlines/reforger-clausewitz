@@ -3,6 +3,10 @@ CLW_GameMode : "{0F307326459A1395}Prefabs/MP/Modes/GameMode_Base.et" {
  components {
   SCR_CommandingManagerComponent "{5D24CC701B322136}" {
   }
+  SCR_RespawnBriefingComponent "{7D3A91C45F10B001}" {
+   m_sJournalConfigPath "{7D3A91C45F10A001}Configs/CLW/Journal/SitrepJournal.conf"
+   m_bShowJournalOnStart 1
+  }
   SCR_NametagConfigComponent "{571AA9E54FC9210D}" {
    m_sConfigPath "{09F7AAA14A642683}Configs/NameTags/NametagFriendlies.conf"
   }

@@ -39,6 +39,7 @@ class CLW_OrdersReply
 	ref array<ref CLW_BuyDto> buy = {};
 	ref array<ref CLW_MissionDto> missions = {};
 	bool keep;	// true with nothing else = "nothing changed, keep the current orders"
+	ref CLW_SitrepDto sitrep = new CLW_SitrepDto();	// optional faction SITREP written by the model (empty = absent), see CLW_Sitrep.c
 }
 
 class CLW_RemoteCallback : RestCallback
@@ -90,6 +91,7 @@ class CLW_RemoteCommander
 	protected float m_fLastReasonAt = -1000;
 	protected float m_fLastKeepAt = -1000;
 	protected float m_fLastRulesAt = -1000;
+	protected bool m_bSitrepRunning;	// war phase seen by the last SITREP refresh (a phase change forces a rebuild)
 
 	void Init(string factionKey, CLW_ContactBook book, CLW_SquadRegistry registry)
 	{
@@ -112,6 +114,8 @@ class CLW_RemoteCommander
 		if (!Replication.IsServer())
 			return;
 
+		UpdateSitrep();
+
 		if (!ENABLED)
 		{
 			ThinkRules();
@@ -132,6 +136,11 @@ class CLW_RemoteCommander
 		int squads = m_Rules.BuildSituation(body);
 		if (body.IsEmpty())
 			return;
+
+		// the rules SITREP rides along (the sidecar shows it on the dashboard when no LLM SITREP is current)
+		string sitrepJson = CLW_SitrepStore.GetRulesJson(m_sFaction);
+		if (!sitrepJson.IsEmpty() && body.Length() > 2 && body.Length() + sitrepJson.Length() < 58000)
+			body = body.Substring(0, body.Length() - 1) + ",\"sitrep\":" + sitrepJson + "}";
 
 		if (squads <= 0)
 			ThinkRules();	// still POST the situation below: the sidecar/dashboard must learn the faction has no squads left (it may still buy)
@@ -176,6 +185,14 @@ class CLW_RemoteCommander
 		{
 			Fallback("reply is not valid JSON: " + data.Substring(0, Math.Min(data.Length(), 200)));
 			return;
+		}
+
+		// optional SITREP written by the model: independent of the orders (a "keep" reply may carry one)
+		if (reply.sitrep)
+		{
+			CLW_Sitrep llmSitrep = reply.sitrep.ToSitrep(m_sFaction, war.GetElapsedSec());
+			if (llmSitrep)
+				CLW_SitrepStore.SetLlm(m_sFaction, llmSitrep);
 		}
 
 		bool hasOrders = reply.orders && !reply.orders.IsEmpty();
@@ -444,6 +461,22 @@ class CLW_RemoteCommander
 
 		Print(string.Format("CLW: RemoteCommander %1: offer rejected (no valid target / pos, target='%2')", m_sFaction, dto.target), LogLevel.WARNING);
 		return null;
+	}
+
+	// ---- SITREP ----
+
+	// Rules SITREP of this faction (throttled by the store, forced when the war phase changed) and delivery to its players.
+	protected void UpdateSitrep()
+	{
+		CLW_WarState war = CLW_GameMode.GetWarState();
+		if (!war)
+			return;
+
+		bool running = war.IsRunning();
+		bool force = running != m_bSitrepRunning;
+		m_bSitrepRunning = running;
+		CLW_SitrepStore.UpdateRules(m_sFaction, m_Rules.GetBook(), CLW_GameMode.GetRegistry(), m_Rules.GetOrders(), force);
+		CLW_SitrepStore.SyncPlayers();
 	}
 
 	// ---- fallback ----

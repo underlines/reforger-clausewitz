@@ -37,6 +37,15 @@
 //     catalog type, integer count 1..3, max 3 entries, running cost <= war.supplies; missions: only humanLed squads without an accepted
 //     mission, max 3 offers per squad, target = objective id or pos. A model reply with "keep":true and nothing else = keep orders.
 //
+//   Faction SITREP (design: dev/notes/sitrep-design.md). The game POST may carry "sitrep": the rules SITREP the game built from the
+//     same fog-limited picture {scope,unit,source:"rules",warTimeSec,headline,situation,enemy,mission,execution,logistics}; the sidecar
+//     removes it before the model call. When the config "sitrep" group is enabled the model is asked, inside the SAME commander call
+//     (no extra round trip), for a "sitrep" object with the same keys when none was produced for sitrep.intervalSec, on the first call,
+//     or when an objective/ticket/loss trigger woke it. The reply then carries "sitrep" (also on keep replies); the game shows it to
+//     that faction's players only. GET /api/state: factions[<name>].sitrep =
+//     {text, headline, sections:[{id,title,body}], scope:"faction", unit, source:"llm"|"rules", generatedAt (epoch ms), warTimeSec}
+//     (the LLM one while it is at most 360 s of war time old, else the game's rules one, else a sidecar-built rules one; null before any).
+//
 //   Any LLM/validation failure, or the panel's "enabled" switch off -> 200 {"orders":[]} (v2: plus empty buy/missions)
 //   (game falls back to its rule commander). Unparsable request body -> 400.
 //   Cost control (real providers only, not "fake"): settings minIntervalSec (at most one provider call per
@@ -140,10 +149,26 @@ You are woken early anyway when something important happens (new contact, casual
 long intervals in quiet phases and short ones during fights or while an assault is developing.`;
 }
 
-// System prompt incl. the wakeup paragraph. v2 = protocol v2 situation.
-function systemPrompt(c, v2 = false) {
-  const base = v2 ? SYSTEM_V2 : SYSTEM;
-  return c.wakeup?.dynamic ? base + wakeupText(c.wakeup) : base;
+// Faction SITREP template (real formats: US/NATO SITREP, SMEAC five-paragraph order, SALUTE enemy report; short, player-useful).
+const SITREP_KEYS = ["situation", "enemy", "mission", "execution", "logistics"];
+const SITREP_TITLES = { situation: "Situation", enemy: "Enemy", mission: "Mission", execution: "Execution", logistics: "Logistics" };
+const SITREP_CAP = 420, SITREP_HEADLINE_CAP = 140, SITREP_FRESH_SEC = 360;
+const SITREP_PROMPT = `
+SITREP: this reply MUST also contain a "sitrep" object: a short situation report of YOUR faction for the soldiers under your command. Only what your faction knows (fog of war). Plain text, \\n for line breaks, no markup. Keys (all strings):
+"headline" (max 120 chars: faction, tickets, objectives held),
+"situation" (max 300: which objectives we hold / contest / lost, ticket trend, how the war goes),
+"enemy" (max 360: SALUTE style per known enemy group: size, kind, activity, location by objective name or grid, age; "none reported" if empty),
+"mission" (max 250: your intent and main effort in plain words),
+"execution" (max 360: what your units do now and in the next ten minutes, one short line each for the main groups; how a player can help),
+"logistics" (max 250: supplies and income, reinforcements, weak units).
+Be concrete and terse, like a real SITREP read aloud. Put "sitrep" last in the JSON object.`;
+
+// System prompt incl. the wakeup paragraph. v2 = protocol v2 situation. sitrep = ask for the SITREP object too.
+function systemPrompt(c, v2 = false, sitrep = false) {
+  let base = v2 ? SYSTEM_V2 : SYSTEM;
+  if (c.wakeup?.dynamic) base += wakeupText(c.wakeup);
+  if (v2 && sitrep) base += SITREP_PROMPT;
+  return base;
 }
 
 // ---------- config ----------
@@ -166,10 +191,13 @@ const cfg = {
   // events that wake the HQ before its scheduled time (each tunable; 0 / false = off)
   triggers: { enabled: true, newContact: true, contactNearSquadM: 300, casualties: 2, squadLost: true, strengthDropPct: 25, objectiveReached: true, squadChange: true, cooldownSec: 15,
     objectiveChanged: true, ticketsDropPct: 10, unitSpawned: true, missionEvent: true },
+  // faction SITREP written by the model inside the commander reply: asked on the first call, every intervalSec at most, and on big events
+  sitrep: { enabled: true, intervalSec: 120 },
 };
 
 // Group settings: "bool" or [min, max] number range per key. Partial objects are merged onto the current group.
 const GROUP_SPECS = {
+  sitrep: { enabled: "bool", intervalSec: [30, 3600] },
   wakeup: { dynamic: "bool", defaultSec: [5, 3600], minSec: [5, 3600], maxSec: [5, 7200], budgetStretch: "bool" },
   triggers: { enabled: "bool", newContact: "bool", contactNearSquadM: [0, 5000], casualties: [0, 1000], squadLost: "bool", strengthDropPct: [0, 100], objectiveReached: "bool", squadChange: "bool", cooldownSec: [0, 600],
     objectiveChanged: "bool", ticketsDropPct: [0, 100], unitSpawned: "bool", missionEvent: "bool" },
@@ -239,6 +267,7 @@ function validateConfig(inp) {
         if (!Number.isInteger(v) || v < 256 || v > 8192) return { error: "mapMaxSize must be an integer 256..8192" };
         out.mapMaxSize = v; break;
       case "wakeup":
+      case "sitrep":
       case "triggers": {
         const g = validateGroup(k, v);
         if (g.error) return g;
@@ -379,6 +408,71 @@ function usageView() {
 }
 const budgetStopped = (c) => c.provider === "openrouter" && c.stopAtLimit && budget()?.level === "reached";
 
+// ---------- faction SITREP ----------
+const clipText = (v, cap) => (typeof v === "string" ? v.replace(/\r/g, "").replace(/\t/g, " ").replace(/\\n/g, "\n").trim().slice(0, cap) : "");
+// Normalises a SITREP object from the model or the game: {headline, situation, enemy, mission, execution, logistics} or null.
+function normSitrep(x) {
+  if (!x || typeof x !== "object" || Array.isArray(x)) return null;
+  const out = { headline: clipText(x.headline, SITREP_HEADLINE_CAP) };
+  let any = !!out.headline;
+  for (const k of SITREP_KEYS) { out[k] = clipText(x[k], SITREP_CAP); if (out[k]) any = true; }
+  return any ? out : null;
+}
+// The dashboard / API shape: {text, headline, sections:[{id,title,body}], scope, unit, source, generatedAt, warTimeSec}.
+function sitrepContract(n, unit, source, generatedAt, warTimeSec) {
+  const sections = SITREP_KEYS.filter((k) => n[k]).map((k) => ({ id: k, title: SITREP_TITLES[k], body: n[k] }));
+  const text = [n.headline, ...sections.map((x) => x.title + ": " + x.body)].filter(Boolean).join("\n");
+  return { text, headline: n.headline, sections, scope: "faction", unit, source, generatedAt, warTimeSec: isNum(warTimeSec) ? warTimeSec : null };
+}
+const clock = (sec) => { const t = Math.max(0, Math.round(sec)); return Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); };
+// Template-based SITREP from a protocol v2 situation (fog-limited by construction). Used by the fake provider and as the rules
+// fallback when the game sent none. Mirrors CLW_SitrepBuilder.c in the game, shorter.
+function fakeSitrep(sit, plan = null) {
+  const me = sit.faction, war = sit.war ?? {};
+  const objs = (Array.isArray(sit.objectives) ? sit.objectives : []).filter((o) => o && typeof o.id === "string");
+  const squads = (Array.isArray(sit.squads) ? sit.squads : []).filter((q) => q && typeof q.id === "string");
+  const contacts = (Array.isArray(sit.contacts) ? sit.contacts : []).filter((c) => c && okPos(c.pos));
+  const label = (o) => o.id + " " + (o.name ?? "");
+  const held = objs.filter((o) => o.owner === me), enemyHeld = objs.filter((o) => o.owner && o.owner !== "none" && o.owner !== me), open = objs.filter((o) => !o.owner || o.owner === "none");
+  const near = (pos) => {
+    let best = null, bd = Infinity;
+    for (const o of objs) if (okPos(o.pos)) { const d = dist2(xz(pos), xz(o.pos)); if (d < bd) { bd = d; best = o; } }
+    return best ? (bd < 60 ? "at " : Math.round(bd / 10) * 10 + " m from ") + label(best) : "grid " + Math.floor(pos[0] / 100) + " " + Math.floor((pos[2] ?? pos[1]) / 100);
+  };
+  const n = {};
+  n.headline = `${me} SITREP T+${clock(sit.time ?? 0)} | tickets ${war.tickets ?? "?"} vs ${war.enemyTickets ?? "?"} | points ${held.length}/${objs.length} | ${squads.length} units, ${contacts.length} contacts`;
+  n.situation = `Holding ${held.map(label).join(", ") || "no objective"}.` + (enemyHeld.length ? ` Enemy holds ${enemyHeld.map(label).join(", ")}.` : "") + (open.length ? ` Open: ${open.map(label).join(", ")}.` : "")
+    + (isNum(war.tickets) && war.tickets >= 0 ? `\nTickets ${war.tickets} (enemy ${war.enemyTickets ?? "?"}).` : "");
+  n.enemy = contacts.length ? contacts.slice().sort((a, b) => (a.ageSec ?? 0) - (b.ageSec ?? 0)).slice(0, 4).map((c) => `${c.desc ?? "unknown"}, ${near(c.pos)}, ${(c.ageSec ?? 0) < 15 ? "now" : Math.round(c.ageSec) + " s ago"}`).join("\n") : "No enemy contact reported.";
+  // tasks: the orders just decided (plan) override the units' current objectives
+  const tasked = (plan?.orders?.length ? plan.orders.map((o) => ({ id: o.squad, objective: { command: o.command, target: o.target, pos: o.pos } })) : squads.filter((q) => q.objective && q.objective.status === "active"));
+  const tally = new Map();
+  for (const q of tasked) { const t = q.objective.target ?? (okPos(q.objective.pos) ? near([q.objective.pos[0], 0, q.objective.pos[1]]) : "?"); tally.set(t, (tally.get(t) ?? 0) + 1); }
+  const main = [...tally.entries()].sort((a, b) => b[1] - a[1])[0];
+  n.mission = main ? `Main effort: ${main[0]} (${main[1]} units). Take and hold the objectives, preserve tickets.` : "Consolidate, scout and take or hold the objectives; preserve tickets.";
+  n.execution = tasked.slice(0, 5).map((q) => `${q.id} ${q.objective.command} ${q.objective.target ?? ""}`.trim()).join("\n") || "No units tasked yet.";
+  const weak = squads.filter((q) => isNum(q.agents) && isNum(q.startAgents) && q.startAgents > 0 && q.agents < q.startAgents * 0.5);
+  n.logistics = `Supplies ${war.supplies ?? "?"}${isNum(war.income) ? ` (+${war.income}/min)` : ""}. AI ${war.liveAI ?? "?"}/${war.aiCap ?? "?"}, vehicles ${war.vehicles ?? "?"}/${war.vehicleCap ?? "?"}.` + (weak.length ? " Weak: " + weak.slice(0, 4).map((q) => `${q.id} ${q.agents}/${q.startAgents}`).join(", ") + "." : "");
+  return n;
+}
+// Per faction: the last model SITREP, the rules cache (generatedAt only moves when the content changes), and when the model last wrote one.
+const sitrepState = {}; // faction -> {lastAt, llm:{value,generatedAt,warTimeSec}|null, rules:{sig,value,generatedAt}|null}
+const srFor = (f) => (sitrepState[f] ??= { lastAt: 0, llm: null, rules: null });
+function composeSitrep(faction, sit, gameSitrep) {
+  if (!isV2(sit)) return null;
+  const st = srFor(faction), nowMs = Date.now();
+  const g = normSitrep(gameSitrep) ?? normSitrep(fakeSitrep(sit));
+  if (g) {
+    const sig = JSON.stringify(SITREP_KEYS.map((k) => g[k]));
+    if (!st.rules || st.rules.sig !== sig) st.rules = { sig, value: g, generatedAt: nowMs, warTimeSec: sit.time };
+    else { st.rules.value = g; st.rules.warTimeSec = sit.time; }
+  }
+  const age = st.llm && isNum(sit.time) ? sit.time - st.llm.warTimeSec : Infinity;
+  if (st.llm && age >= -5 && age <= SITREP_FRESH_SEC) return sitrepContract(st.llm.value, faction, "llm", st.llm.generatedAt, st.llm.warTimeSec);
+  if (st.rules) return sitrepContract(st.rules.value, faction, "rules", st.rules.generatedAt, st.rules.warTimeSec);
+  return null;
+}
+
 // ---------- providers ----------
 function fakeOrders(sit) {
   const orders = [];
@@ -471,13 +565,14 @@ function extractOrders(text, v2 = false) {
   const obj = JSON.parse(text.slice(a, b + 1));
   if (!obj || typeof obj !== "object" || Array.isArray(obj)) throw new Error("reply is not a JSON object");
   if (v2) {
-    if (!["orders", "buy", "missions"].some((k) => Array.isArray(obj[k])) && obj.keep !== true) throw new Error("reply has no orders/buy/missions array");
+    if (!["orders", "buy", "missions"].some((k) => Array.isArray(obj[k])) && obj.keep !== true && !(obj.sitrep && typeof obj.sitrep === "object")) throw new Error("reply has no orders/buy/missions array");
   } else if (!Array.isArray(obj.orders)) throw new Error("reply has no orders array");
   return obj;
 }
 
+const SITREP_EXTRA_TOKENS = 450; // room for the SITREP object on top of the configured maxTokens
 // Returns {raw, usage:{input,output}}. Throws Error on transport/HTTP failure.
-async function callProvider(c, sit) {
+async function callProvider(c, sit, opts = {}) {
   const userMsg = "Current situation:\n" + JSON.stringify(sit);
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), c.timeoutSec * 1000);
@@ -487,14 +582,14 @@ async function callProvider(c, sit) {
       if (!c.apiKey) throw new Error("API key not set");
       url = (c.baseUrl || "https://api.anthropic.com") + "/v1/messages";
       headers = { "x-api-key": c.apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" };
-      body = { model: c.model, max_tokens: c.maxTokens, system: systemPrompt(c, isV2(sit)), messages: [{ role: "user", content: userMsg }] };
+      body = { model: c.model, max_tokens: c.maxTokens + (opts.sitrep ? SITREP_EXTRA_TOKENS : 0), system: systemPrompt(c, isV2(sit), opts.sitrep), messages: [{ role: "user", content: userMsg }] };
     } else {
       const base = c.provider === "openrouter" ? (c.baseUrl || OR_BASE) : c.baseUrl;
       if (!base) throw new Error("baseUrl not set");
       url = base + "/chat/completions";
       headers = { "content-type": "application/json" };
       if (c.apiKey) headers.authorization = "Bearer " + c.apiKey;
-      body = { model: c.model, max_tokens: c.maxTokens, messages: [{ role: "system", content: systemPrompt(c, isV2(sit)) },{ role: "user", content: userMsg }] };
+      body = { model: c.model, max_tokens: c.maxTokens + (opts.sitrep ? SITREP_EXTRA_TOKENS : 0), messages: [{ role: "system", content: systemPrompt(c, isV2(sit), opts.sitrep) },{ role: "user", content: userMsg }] };
       if (c.provider === "openrouter") body.usage = { include: true };
     }
     const r = await fetch(url, { method: "POST", signal: ac.signal, headers, body: JSON.stringify(body) });
@@ -617,7 +712,7 @@ const RATE_COOLDOWN_MS = 20000;
 let cooldownUntil = 0;
 
 // Runs one situation through the given config. Never throws.
-async function computeOrders(c, sit, isTest = false) {
+async function computeOrders(c, sit, isTest = false, opts = {}) {
   const r = { orders: [], buy: [], missions: [], keep: false, dropped: [], rawReply: null, usage: null, ok: true, reason: null };
   try {
     if (!isTest && c.provider !== "fake" && Date.now() < cooldownUntil) throw new Error(`provider cooling down after rate limit/server error (${Math.ceil((cooldownUntil - Date.now()) / 1000)}s left)`);
@@ -626,17 +721,21 @@ async function computeOrders(c, sit, isTest = false) {
     let raw;
     if (v2) {
       let obj;
-      if (c.provider === "fake") obj = fakeV2(sit);
+      if (c.provider === "fake") { obj = fakeV2(sit); if (opts.sitrep) obj.sitrep = fakeSitrep(sit, obj); }
       else {
         session.requests++;
-        const p = await callProvider(c, sit);
+        const p = await callProvider(c, sit, opts);
         if (c.provider === "openrouter") recordUsage(c.model, typeof sit.faction === "string" ? sit.faction : "?", p.usage);
         r.rawReply = p.raw; r.usage = p.usage;
         obj = extractOrders(p.raw, true);
         if (isNum(obj.next_check_sec)) r.nextCheck = { sec: Math.round(obj.next_check_sec), reason: typeof obj.next_check_reason === "string" ? obj.next_check_reason.slice(0, 120) : "" };
       }
       Object.assign(r, validateV2(obj, sit, r.dropped));
-      r.keep = obj.keep === true && !r.orders.length && !r.buy.length && !r.missions.length;
+      r.keep = (obj.keep === true || (!r.orders.length && !r.buy.length && !r.missions.length && !!obj.sitrep && !Array.isArray(obj.orders) && !Array.isArray(obj.buy) && !Array.isArray(obj.missions))) && !r.orders.length && !r.buy.length && !r.missions.length;
+      if (obj.sitrep !== undefined) {
+        r.sitrep = normSitrep(obj.sitrep);
+        if (!r.sitrep) { console.log("  dropped sitrep: not a usable object"); r.dropped.push({ sitrep: obj.sitrep, reason: "not a usable sitrep object" }); }
+      }
       return r;
     }
     if (c.provider === "fake") raw = fakeOrders(sit);
@@ -878,6 +977,8 @@ function readBody(req, limit = 2_000_000) {
 async function handleOrders(req, res) {
   let sit;
   try { sit = JSON.parse(await readBody(req)); } catch { return send(res, 400, { error: "invalid JSON" }); }
+  let gameSitrep = null; // the game's rules SITREP rides along; it never goes to the model
+  if (sit && typeof sit === "object" && "sitrep" in sit) { gameSitrep = sit.sitrep; delete sit.sitrep; }
   const t0 = Date.now();
   const snapshot = { ...cfg };
   const faction = typeof sit?.faction === "string" ? sit.faction : "?";
@@ -925,7 +1026,14 @@ async function handleOrders(req, res) {
       if (valid) { sc.manual = false; sc.baseline = sit; sc.lastLlmAt = now; sc.lastWakeReason = wake.reason; sc.lastWakeTriggers = wake.triggers; }
       const callSit = !valid ? sit : v2 ? { ...sit, events: sc.pendingEvents.slice(-15), wake } : { ...sit, wake };
       if (valid) sc.pendingEvents = [];
-      r = await computeOrders(snapshot, callSit);
+      const srCfg = snapshot.sitrep, srSt = srFor(faction);
+      const wantSitrep = v2 && !!srCfg?.enabled && (!srSt.lastAt || Date.now() - srSt.lastAt >= srCfg.intervalSec * 1000 || dec.reason === "manual" || dec.triggers.some((t) => /objective|tickets|lost/i.test(t)));
+      r = await computeOrders(snapshot, callSit, false, { sitrep: wantSitrep });
+      if (r.sitrep) {
+        srSt.lastAt = Date.now();
+        srSt.llm = { value: r.sitrep, generatedAt: srSt.lastAt, warTimeSec: isNum(sit.time) ? sit.time : 0 };
+        console.log(`sitrep faction=${faction} source=${snapshot.provider} headline="${r.sitrep.headline}"`);
+      } else if (wantSitrep && r.ok) console.log(`sitrep faction=${faction}: requested but the reply had none`);
       if (valid) {
         sc.failed = !r.ok;
         if (r.ok) scheduleNext(snapshot, sc, r.nextCheck?.sec, r.nextCheck?.reason ?? "", Date.now());
@@ -961,13 +1069,13 @@ async function handleOrders(req, res) {
     // war epoch (read-only bookkeeping for activeFactions): a faction whose game time went backwards starts a new epoch, unless it
     // is catching up with an epoch another faction already started.
     if (old && (old.epoch ?? 0) === (state.epoch ?? 0) && isNum(old.situation?.time) && isNum(sit.time) && sit.time < old.situation.time - 5) state.epoch = (state.epoch ?? 0) + 1;
-    state.factions[faction] = { ts: state.lastRequestTs, epoch: state.epoch ?? 0, situation: sit, side: isNum(sit.side) ? sit.side : null, identity: typeof sit.identity === "string" ? sit.identity : null, orders: keepOld ? (old?.orders ?? []) : r.orders,
+    state.factions[faction] = { ts: state.lastRequestTs, epoch: state.epoch ?? 0, situation: sit, side: isNum(sit.side) ? sit.side : null, identity: typeof sit.identity === "string" ? sit.identity : null, sitrep: composeSitrep(faction, sit, gameSitrep), orders: keepOld ? (old?.orders ?? []) : r.orders,
       buy: keepOld ? (old?.buy ?? []) : (r.buy ?? []), missions: keepOld ? (old?.missions ?? []) : (r.missions ?? []), eventLog, prevPos, orderTs };
   }
   if (!r.gated) state.exchanges.unshift({
     ts: state.lastRequestTs, faction, provider: snapshot.enabled ? snapshot.provider : "disabled",
     model: snapshot.provider === "fake" ? null : snapshot.model,
-    request: sit, rawReply: r.rawReply, orders: r.orders, buy: r.buy ?? [], missions: r.missions ?? [], keep: !!r.keep, dropped: r.dropped,
+    request: sit, rawReply: r.rawReply, orders: r.orders, buy: r.buy ?? [], missions: r.missions ?? [], keep: !!r.keep, sitrep: r.sitrep ?? null, dropped: r.dropped,
     latencyMs, ok: r.ok, reason: r.reason, usage: r.usage,
     wake, nextCheck: r.nextCheck ?? null, intervalSec: interval,
   });
@@ -975,8 +1083,8 @@ async function handleOrders(req, res) {
 
   const nContacts = Array.isArray(sit?.contacts) ? sit.contacts.length : 0;
   if (!r.gated) console.log(`orders faction=${faction} squads=${sit?.squads?.length ?? 0} contacts=${nContacts} orders=${r.orders.length}${v2 ? ` buy=${r.buy?.length ?? 0} missions=${r.missions?.length ?? 0}` : ""} ${latencyMs}ms${r.skipped ? " (" + r.reason + ")" : ""}${wake ? " wake=" + wake.reason + (wake.triggers.length ? " [" + wake.triggers.join("; ") + "]" : "") : ""}${r.nextCheck ? " next=" + r.nextCheck.sec + "s" : ""}`);
-  send(res, 200, r.rules ? { orders: [] } : r.paused || r.phaseGate ? { orders: [], keep: true } : r.gated && sc.failed ? { orders: [] } : r.skipped || r.keep ? { orders: [], keep: true }
-    : v2 ? { orders: r.orders, buy: r.buy ?? [], missions: r.missions ?? [] } : { orders: r.orders });
+  send(res, 200, r.rules ? { orders: [] } : r.paused || r.phaseGate ? { orders: [], keep: true } : r.gated && sc.failed ? { orders: [] } : r.skipped || r.keep ? { orders: [], keep: true, ...(r.sitrep ? { sitrep: r.sitrep } : {}) }
+    : v2 ? { orders: r.orders, buy: r.buy ?? [], missions: r.missions ?? [], ...(r.sitrep ? { sitrep: r.sitrep } : {}) } : { orders: r.orders });
 }
 
 // ---------- world info, map image, vector overlay (roads, locations) ----------
