@@ -483,22 +483,12 @@ class CLW_AutoScenario
 			rank = 0;
 		}
 
-		// start owners: of the objectives every battle size has, the one nearest each HQ
-		int ownA = -1;
-		int ownB = -1;
-		foreach (int i, CLW_AutoObjective candidate : picks)
-		{
-			if (MinBattleSize(cfg.m_aObjectiveCounts, ranks[i]) != 0)
-				continue;
-
-			if (ownA < 0 || candidate.m_fAlong < picks[ownA].m_fAlong)
-				ownA = i;
-			if (ownB < 0 || candidate.m_fAlong > picks[ownB].m_fAlong)
-				ownB = i;
-		}
-
-		if (ownA == ownB)
-			ownB = -1;
+		// start owners are not picked here: the battle layout is not known yet. The scenario resolves them at war start from the
+		// final HQ positions (CLW_ControlPoints.ResolveStartOwners, mode "nearest")
+		if (scenario.m_sStartOwnership != "none")
+			scenario.m_sStartOwnership = "nearest";
+		if (scenario.m_iStartOwnedPerSide < 0)
+			scenario.m_iStartOwnedPerSide = 1;
 
 		scenario.m_aObjectives = new array<ref CLW_ObjectiveSetup>();
 		foreach (int n, CLW_AutoObjective obj : picks)
@@ -518,13 +508,9 @@ class CLW_AutoScenario
 			}
 
 			setup.m_iMinBattleSize = MinBattleSize(cfg.m_aObjectiveCounts, ranks[n]);
-			if (n == ownA)
-				setup.m_sStartOwner = scenario.m_aFactions[0].m_sKey;
-			else if (n == ownB)
-				setup.m_sStartOwner = scenario.m_aFactions[1].m_sKey;
 			scenario.m_aObjectives.Insert(setup);
 			Print(string.Format("CLW: auto objective %1 '%2' at %3 grid %4 (%5, along %6, side %7 m)", setup.m_sId, setup.m_sName, setup.m_vPos, CLW_Places.Grid(setup.m_vPos), obj.m_sSource, Math.Round(obj.m_fAlong * 100) / 100, Math.Round(obj.m_fLateral)), LogLevel.NORMAL);
-			Print(string.Format("CLW: auto objective %1 radius %2 value %3 minBattleSize %4 owner '%5' centrality rank %6", setup.m_sId, Math.Round(setup.m_fRadius), setup.m_iValue, setup.m_iMinBattleSize, setup.m_sStartOwner, ranks[n]), LogLevel.NORMAL);
+			Print(string.Format("CLW: auto objective %1 radius %2 value %3 minBattleSize %4 centrality rank %5", setup.m_sId, Math.Round(setup.m_fRadius), setup.m_iValue, setup.m_iMinBattleSize, ranks[n]), LogLevel.NORMAL);
 		}
 
 		Print(string.Format("CLW: auto objectives ready: %1 of %2 slots (%3 from places, %4 from the HQ line)", picks.Count(), slots, picks.Count() - fromLine, fromLine), LogLevel.NORMAL);

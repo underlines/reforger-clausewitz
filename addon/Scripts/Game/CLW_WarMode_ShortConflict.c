@@ -32,6 +32,8 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 		if (startDefault.IsEmpty())
 			startDefault = "fixed";
 		m_aParams.Insert(CLW_ModeParam.CreateChoice("startPositions", "Start positions", "fixed: the scenario's HQs. random: both HQs and the front at random places (checked for ground, water, room and roads), within the battle size distance.", startModes, startDefault));
+		array<string> ownerModes = {"scenario", "none", "1", "2", "3"};
+		m_aParams.Insert(CLW_ModeParam.CreateChoice("startObjectives", "Start objectives", "scenario: the scenario's setting. none: every objective starts neutral. 1 / 2 / 3: each side starts with that many objectives nearest its HQ (one objective always stays neutral).", ownerModes, "scenario"));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("randomSeed", "Random seed", "Random start positions: the same seed gives the same layout. 0 = a new one each war (logged).", CLW_ModeParam.TYPE_INT, 0, 9999999, 1, config.m_iRandomSeed));
 		m_aParams.Insert(CLW_ModeParam.CreateBool("ticketBleed", "Ticket bleed", "The side holding fewer points loses tickets over time.", config.m_bTicketBleed));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("holdAllWinMin", "Hold-all win (min)", "Holding every point this long wins. 0 = off.", CLW_ModeParam.TYPE_INT, 0, 15, 1, config.m_iHoldAllWinMin));
