@@ -142,3 +142,36 @@ their final positions and the final HQs.
   with vehicles, and logs `CLW: services depot <side> faction <key> catalog vehicles=<n> (source ...) supplies: consumption=.. consumer sees ..`.
   Supplies: the linked containers of `CLW_SupplyLink` are the ones in range, so the depot spends the base stock like the arsenal (compact layout keeps them in range).
 - Arsenal log lines now carry `service=<kind> prefab=<path>`.
+
+## FOB timing and spawn-on-assignment (owner playtest 2026-10-12, RHS, Everon)
+Findings: FOBs were placed at war start; 10-20 AI idled at the bases for minutes until HQ gave them a job.
+
+**FOB timing**
+- Mode params: `fobEarliestMin` (default 6, 0 = old behaviour). `CLW_FobManager.IsReady(side)`: war time >= earliest AND front knowledge
+  (a known enemy contact, a contested objective, or an own objective that changed hands after the first 20 s). Gate lives in
+  `CanEstablish`, so the registry validator, the LLM, the rule doctrine and the HQ menu all get the same refusal ("too early for a FOB: ...").
+- Situation `fobRules` gains `earliestSec`, `elapsedSec`, `ready`, `readyReason`; each fobSite gains `front` / `toFront`.
+- Site choice: `CLW_FobSites.PickSites` ranks by `FrontScore` = distance to the front objective (nearest enemy-held / contested objective to
+  the own HQ, else nearest unheld) + 0.5 * sideways offset from the HQ->front line, + the HQ->front distance when the site is behind the
+  HQ (progress < 15 %). Top pick logged once per change.
+- Rule doctrine: same gate, plus the front objective must be >= 500 m (scaled) from the HQ, else no FOB is needed yet.
+- Sidecar: prompt text, validator drops ESTABLISH_FOB while `fobRules.ready` is false, fake provider respects it.
+- Logs: `CLW: fob gate <side>: opening|nofront|ready (...)`, `CLW: fob gate: <side> lost objective <id>`, `CLW: fob site pick ...`,
+  `CLW: fob doctrine <side>: ...` (once per change).
+
+**Spawn on assignment** (`CLW_BaseWatch.c`, `CLW_PendingOrders.c`)
+- Garrison: `garrisonSquads` (default 1) infantry squads per side, picked from the first free squads at the HQ, standing DEFEND on the base,
+  never idle, never ordered by rules, refused LLM orders; situation squad flag `garrison:true`.
+- Purchases carry their order: rule commander buys only for unmet tasks (priority >= 200) after the units on hand were assigned
+  (Plan before Spend) and queues the order under the purchase tag (`BuyTagged`); LLM `buy` entries need `command` (MOVE|ATTACK|DEFEND|RECON)
+  + `target` or `pos` (validator + `CLW_Action_Buy`). The order is applied when the spawner reports the unit ready (retried until the
+  registry adopted it). Pending orders count as task coverage.
+- Idle net: `idleDespawnMin` (default 6, 0 = off). A non-garrison squad without an active order at the base (<= 200 m of the HQ), no human,
+  not FOB/convoy reserved, not a supply truck, is deleted and its charged cost refunded (start forces: 0). Situation: squad `idleSec`,
+  block `baseRules` {garrisonSquads, garrison, idleDespawnMin, recentlyDespawned, lastDespawn}. The rule commander does not buy the same
+  kind within 120 s of a despawn. The sidecar ignores stood-down squads as losses and wakes the HQ when a squad is idle >= `triggers.idleSec`
+  (90 s, `triggers.idleUnits`).
+- Start forces: FALLBACK (spawn as before, staggered; first commander turn is immediate; the unitSpawned/idle triggers wake the HQ). A
+  full "reserve" (virtual units materialised by an order) was not built: it needs a new reply channel in the manifest, sidecar and situation.
+- Logs: `CLW: garrison <side>: <id> assigned ...`, `CLW: idle squad <id> despawned after <n> min at base, refund <x>`,
+  `CLW: pending order <tag> applied|dropped|refused ...`, `CLW: RuleCommander <f>: BUY ... for <CMD> <target>`.

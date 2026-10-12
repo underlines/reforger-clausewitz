@@ -967,6 +967,11 @@ class CLW_ForceSpawner
 		if (war)
 			war.PushEvent(job.m_sFaction, job.m_sUnitId + " arrived: " + entry.m_sName);
 
+		int charged;
+		if (job.m_bCharged)
+			charged = entry.m_iCost;
+		CLW_BaseWatch.OnUnitReady(job.m_sUnitId, job.m_sFaction, charged);	// purchase ledger of the idle watch (refund when stood down)
+
 		if (!job.m_sTag.IsEmpty() && m_OnTagged)
 			m_OnTagged.Invoke(job.m_sTag, job.m_sUnitId);
 

@@ -189,6 +189,9 @@ class CLW_FobManager
 	static const int DEFAULT_MAX = 2;
 	static const int DEFAULT_COST = 300;
 	static const int DEFAULT_BUILD_SEC = 90;
+	static const int DEFAULT_EARLIEST_MIN = 6;			// FOB timing (owner playtest 2026-10-12): no FOB before this many minutes of war time (0 = old behaviour)
+	static const float FRONT_MIN_M = 500;				// rule doctrine: the front objective is at least this far (authored, scaled) from the HQ
+	static const int OWNER_CHANGE_GRACE_SEC = 20;		// objective owner changes during the layout / start owner resolution are not "lost objectives"
 	// ---- M4 WP5: builder robustness (own constants; CLW_WarConfig.FOB_STALL_* still define the stall detection) ----
 	static const int STALL_MAX = 4;						// stalls (per builder) before the FOB fails (CLW_WarConfig.FOB_MAX_STALLS was 3)
 	static const int SWAP_AT_STALL = 3;					// from this stall on a stalled builder is swapped for another unit
@@ -217,6 +220,8 @@ class CLW_FobManager
 	protected static ref ScriptInvoker s_OnBuilt;
 	protected static ref ScriptInvoker s_OnLost;
 	protected static int s_iNext;
+	protected static ref map<string, bool> s_mLostPoint = new map<string, bool>();		// side -> one of its objectives was taken by the enemy
+	protected static ref map<string, string> s_mGateState = new map<string, string>();	// side -> last logged FOB gate state key (log once per change)
 	protected static bool s_bTicking;
 	protected static float s_fLastTick;
 
@@ -228,6 +233,8 @@ class CLW_FobManager
 		GetGame().GetCallqueue().Remove(Tick);
 		s_bTicking = false;
 		s_aFobs.Clear();
+		s_mLostPoint.Clear();
+		s_mGateState.Clear();
 		s_iNext = 0;
 		s_fLastTick = 0;
 		CLW_FobSites.Reset();
@@ -247,6 +254,13 @@ class CLW_FobManager
 		}
 
 		CLW_FobSites.Build();
+		CLW_ControlPoints gatePoints = CLW_GameMode.GetControlPoints();
+		if (gatePoints)
+		{
+			gatePoints.GetOnOwnerChanged().Remove(OnPointOwner);
+			gatePoints.GetOnOwnerChanged().Insert(OnPointOwner);
+		}
+
 		GetOnLost().Remove(CLW_RequestTerminals.OnFobLost);	// M3 phase L fix B: a lost FOB loses its request terminals
 		GetOnLost().Insert(CLW_RequestTerminals.OnFobLost);
 		CLW_ForceSpawner spawner = CLW_GameMode.GetForceSpawner();
@@ -259,7 +273,109 @@ class CLW_FobManager
 		s_fLastTick = CLW_Orders.Now();
 		s_bTicking = true;
 		GetGame().GetCallqueue().CallLater(Tick, TICK_MS, true);
-		Print(string.Format("CLW: fob ready: max %1 per side, build %2, cost %3, build time %4 s, %5 sites, logistics=%6", GetMax(), BuildModeName(), GetCost(), GetBuildSec(), CLW_FobSites.Count(), CLW_Capabilities.Has("logistics")), LogLevel.NORMAL);
+		Print(string.Format("CLW: fob ready: max %1 per side, build %2, cost %3, build time %4 s, %5 sites, logistics=%6, earliest %7 s", GetMax(), BuildModeName(), GetCost(), GetBuildSec(), CLW_FobSites.Count(), CLW_Capabilities.Has("logistics"), GetEarliestSec()), LogLevel.NORMAL);
+	}
+
+	// ---- timing gate (owner playtest 2026-10-12): FOBs follow the dynamics of the battle, not the war start ----
+
+	// Minimum war time (s) before ESTABLISH_FOB is accepted. 0 = no gate (old behaviour).
+	static int GetEarliestSec()
+	{
+		CLW_WarMode mode = ActiveMode();
+		if (!mode)
+			return 0;
+
+		return Math.Max(0, mode.GetIntParam("fobEarliestMin", DEFAULT_EARLIEST_MIN)) * 60;
+	}
+
+	// One of the side's objectives changed hands (ControlPoints invoker): remembered as "front knowledge" of the old owner.
+	static void OnPointOwner(string id, string oldOwner, string newOwner)
+	{
+		CLW_WarState war = CLW_GameMode.GetWarState();
+		if (!war || !war.IsRunning() || war.GetElapsedSec() < OWNER_CHANGE_GRACE_SEC)
+			return;
+
+		if (oldOwner.IsEmpty() || oldOwner == newOwner)
+			return;
+
+		s_mLostPoint.Set(oldOwner, true);
+		Print(string.Format("CLW: fob gate: %1 lost objective %2 (front knowledge)", oldOwner, id), LogLevel.NORMAL);
+	}
+
+	// What tells the side where the front is: a known enemy contact (any engagement of an own unit ends up in the contact book),
+	// a contested objective, or an objective it lost. "" = nothing yet.
+	protected static string FrontKnowledge(string side)
+	{
+		CLW_RemoteCommander commander = CLW_GameMode.GetCommander(side);
+		if (commander && commander.GetRules() && commander.GetRules().GetBook())
+		{
+			array<CLW_Contact> contacts = {};
+			commander.GetRules().GetBook().GetContacts(contacts);
+			if (!contacts.IsEmpty())
+				return string.Format("%1 known enemy contact(s)", contacts.Count());
+		}
+
+		CLW_ControlPoints points = CLW_GameMode.GetControlPoints();
+		if (points)
+		{
+			for (int i = 0; i < points.Count(); i++)
+			{
+				CLW_ControlPoint point = points.Get(i);
+				if (point && point.m_bContested)
+					return "objective " + point.m_sId + " is contested";
+			}
+		}
+
+		if (s_mLostPoint.Contains(side))
+			return "an own objective was lost";
+
+		return "";
+	}
+
+	// True when the side may establish a FOB now: fobEarliestMin of war time passed AND the side has front knowledge. why = the reason
+	// when not (on true: the front knowledge). Logs once per state change per side ("CLW: fob gate ...").
+	static bool IsReady(string side, out string why)
+	{
+		int earliest = GetEarliestSec();
+		if (earliest <= 0)
+		{
+			why = "no timing gate (fobEarliestMin 0)";
+			return true;
+		}
+
+		CLW_WarState war = CLW_GameMode.GetWarState();
+		int elapsed;
+		if (war)
+			elapsed = war.GetElapsedSec();
+
+		if (elapsed < earliest)
+		{
+			why = string.Format("opening phase: %1 of %2 s of war time elapsed", elapsed, earliest);
+			LogGate(side, "opening", why);
+			return false;
+		}
+
+		string front = FrontKnowledge(side);
+		if (front.IsEmpty())
+		{
+			why = "no front knowledge yet (no known enemy contact, no contested or lost objective)";
+			LogGate(side, "nofront", why);
+			return false;
+		}
+
+		why = front;
+		LogGate(side, "ready", "FOB allowed: " + front);
+		return true;
+	}
+
+	protected static void LogGate(string side, string key, string text)
+	{
+		string last;
+		if (s_mGateState.Find(side, last) && last == key)
+			return;
+
+		s_mGateState.Set(side, key);
+		Print(string.Format("CLW: fob gate %1: %2 (%3)", side, key, text), LogLevel.NORMAL);
 	}
 
 	// ---- mode parameters ----
@@ -540,6 +656,13 @@ class CLW_FobManager
 		if (CountInProgress(side) > 0)
 		{
 			why = "another FOB is still being established";
+			return false;
+		}
+
+		string gateWhy;
+		if (!IsReady(side, gateWhy))
+		{
+			why = "too early for a FOB: " + gateWhy;
 			return false;
 		}
 
@@ -1800,13 +1923,17 @@ class CLW_FobManager
 		vector hq;
 		if (bases)
 			hq = bases.GetBasePos(side);
+		CLW_ControlPoint front = CLW_FobSites.FrontObjective(side);
 
 		foreach (CLW_FobSite site : sites)
 		{
 			if (!text.IsEmpty())
 				text += ",";
 			text += "{\"id\":\"" + CLW_Situation.Escape(site.m_sId) + "\",\"name\":\"" + CLW_Situation.Escape(site.m_sName) + "\",\"pos\":[" + Math.Round(site.m_vPos[0]) + "," + Math.Round(site.m_vPos[2]) + "],\"grid\":\"" + CLW_Places.Grid(site.m_vPos) + "\"";
-			text += ",\"place\":\"" + CLW_Situation.Escape(CLW_Places.PlaceLabel(site.m_vPos, points)) + "\",\"distFromHq\":" + Math.Round(vector.DistanceXZ(site.m_vPos, hq)) + "}";
+			text += ",\"place\":\"" + CLW_Situation.Escape(CLW_Places.PlaceLabel(site.m_vPos, points)) + "\",\"distFromHq\":" + Math.Round(vector.DistanceXZ(site.m_vPos, hq));
+			if (front)
+				text += ",\"front\":\"" + CLW_Situation.Escape(front.m_sId) + "\",\"toFront\":" + Math.Round(vector.DistanceXZ(site.m_vPos, front.m_vPos));
+			text += "}";
 		}
 
 		return text;
@@ -1815,7 +1942,14 @@ class CLW_FobManager
 	static string RulesJson(string side)
 	{
 		string text = "{\"max\":" + GetMax() + ",\"live\":" + CountLive(side) + ",\"inProgress\":" + CountInProgress(side) + ",\"cost\":" + GetCost() + ",\"upgradeCost\":" + GetUpgradeCost();
-		text += ",\"build\":\"" + BuildModeName() + "\",\"buildSec\":" + GetBuildSec() + ",\"logistics\":" + CLW_Situation.BoolText(CLW_Capabilities.Has("logistics")) + "}";
+		text += ",\"build\":\"" + BuildModeName() + "\",\"buildSec\":" + GetBuildSec() + ",\"logistics\":" + CLW_Situation.BoolText(CLW_Capabilities.Has("logistics"));
+		string readyWhy;
+		bool ready = IsReady(side, readyWhy);
+		int elapsedSec;
+		CLW_WarState war = CLW_GameMode.GetWarState();
+		if (war)
+			elapsedSec = war.GetElapsedSec();
+		text += ",\"earliestSec\":" + GetEarliestSec() + ",\"elapsedSec\":" + elapsedSec + ",\"ready\":" + CLW_Situation.BoolText(ready) + ",\"readyReason\":\"" + CLW_Situation.Escape(readyWhy) + "\"}";
 		return text;
 	}
 }
