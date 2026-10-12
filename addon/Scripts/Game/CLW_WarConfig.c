@@ -54,6 +54,7 @@ class CLW_WarConfig
 	static const int DISCOVER_MOTORIZED_MIN_CARGO = 4;
 	static const int DISCOVER_LARGE_CARGO_GUESS = 8;	// cargo seats assumed when the probe saw few but the label says "large passenger capacity"
 	static const int DISCOVER_MIN_GROUP_MEMBERS = 2;
+	static const int DISCOVER_AT_TEAM_MAX_MEMBERS = 4;	// fallback anti-armour detection (armour-piercing group trait) only for groups this small
 	static const float DISCOVER_NONCOMBAT_SHARE = 0.5;	// groups with this share of medic/sapper/radio members are not buyable infantry
 	static const float DISCOVER_RECON_SHARE = 0.5;		// share of scout/sharpshooter members that makes a recon group
 

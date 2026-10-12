@@ -76,6 +76,9 @@ class CLW_ForceEntry
 	[Attribute("1", UIWidgets.CheckBox, "Entry can be bought")]
 	bool m_bEnabled = true;
 
+	[Attribute("0", UIWidgets.CheckBox, "Anti-armour team: the rule commander buys it first when enemy vehicles are known")]
+	bool m_bAntiArmor;
+
 	// ---- runtime facts filled by CLW_ForceCatalog (not data) ----
 	string m_sSource;			// "profile" or "discovered"
 	int m_iCargoSeats = -1;		// real cargo seats of the vehicle (probe), -1 unknown
@@ -148,6 +151,7 @@ class CLW_ForceEntry
 		copy.m_CargoGroupPrefab = m_CargoGroupPrefab;
 		copy.m_iWeight = m_iWeight;
 		copy.m_bEnabled = m_bEnabled;
+		copy.m_bAntiArmor = m_bAntiArmor;
 		copy.m_sSource = m_sSource;
 		copy.m_iCargoSeats = m_iCargoSeats;
 		copy.m_iCrewSeats = m_iCrewSeats;

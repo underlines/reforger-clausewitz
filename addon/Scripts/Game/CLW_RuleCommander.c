@@ -81,6 +81,11 @@ class CLW_RuleCommander
 		return m_sFaction;
 	}
 
+	CLW_ContactBook GetBook()
+	{
+		return m_Book;
+	}
+
 	CLW_Orders GetOrders()
 	{
 		return m_Orders;
@@ -226,24 +231,6 @@ class CLW_RuleCommander
 			return MIX_LIGHT;
 
 		return MIX_INFANTRY;
-	}
-
-	// Data-name hint: an infantry entry meant against armour (type id or display name mentions AT / anti-tank / launcher).
-	protected bool IsAntiArmor(CLW_ForceEntry entry)
-	{
-		string text = entry.m_sType + " " + entry.m_sName;
-		text.ToLower();
-		text.Replace("_", " ");
-		text.Replace("-", " ");
-		text = " " + text + " ";
-		array<string> hints = {" at ", " lat ", " law ", " rpg ", " antitank ", " anti tank ", " launcher "};
-		foreach (string hint : hints)
-		{
-			if (text.IndexOf(hint) >= 0)
-				return true;
-		}
-
-		return false;
 	}
 
 	protected void Spend(CLW_WarState war, notnull array<CLW_Contact> contacts)
@@ -396,7 +383,7 @@ class CLW_RuleCommander
 			array<CLW_ForceEntry> antiArmor = {};
 			foreach (CLW_ForceEntry candidate : pool)
 			{
-				if (IsAntiArmor(candidate))
+				if (candidate.m_bAntiArmor)
 					antiArmor.Insert(candidate);
 			}
 

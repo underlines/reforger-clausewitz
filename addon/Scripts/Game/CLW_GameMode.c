@@ -90,6 +90,19 @@ class CLW_GameMode : SCR_BaseGameMode
 		return s_Instance.m_Spawner;
 	}
 
+	// The faction's commander (LLM bridge wrapping the rule commander), null for an unknown key.
+	static CLW_RemoteCommander GetCommander(string factionKey)
+	{
+		if (!s_Instance)
+			return null;
+
+		CLW_RemoteCommander commander;
+		if (s_Instance.m_mCommanders.Find(factionKey, commander))
+			return commander;
+
+		return null;
+	}
+
 	static CLW_VehicleManager GetVehicleManager()
 	{
 		if (!s_Instance)
@@ -205,6 +218,8 @@ class CLW_GameMode : SCR_BaseGameMode
 				m_Spawner = new CLW_ForceSpawner();
 				m_Spawner.Init(m_Catalog, m_Registry, m_Vehicles);
 				m_War.GetOnWarStarted().Insert(OnWarStarted);
+				// 6. missions for human squad leaders (replaces the rule commander's legacy forced task)
+				CLW_MissionBoard.Install();
 			}
 			else
 			{

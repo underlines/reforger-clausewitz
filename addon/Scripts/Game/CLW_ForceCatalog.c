@@ -603,10 +603,13 @@ class CLW_ForceCatalog
 			// roles from the member prefabs
 			int scouts;
 			int noncombat;
+			int antiTank;
 			foreach (ResourceName slotPrefab : slots)
 			{
 				array<EEditableEntityLabel> memberLabels = {};
 				GetLabels(slotPrefab, memberLabels);
+				if (memberLabels.Contains(EEditableEntityLabel.ROLE_ANTITANK))
+					antiTank++;
 				if (HasAny(memberLabels, {EEditableEntityLabel.ROLE_SCOUT, EEditableEntityLabel.ROLE_SHARPSHOOTER}))
 					scouts++;
 				if (HasAny(memberLabels, {EEditableEntityLabel.ROLE_MEDIC, EEditableEntityLabel.ROLE_SAPPER, EEditableEntityLabel.ROLE_RADIOOPERATOR}))
@@ -636,6 +639,10 @@ class CLW_ForceCatalog
 			fresh.m_sSource = "discovered";
 			fresh.m_iGroupMembers = members;
 			fresh.m_bChecked = true;
+			// anti-armour: members carry ROLE_ANTITANK; member prefabs unreadable -> small group with the armour-piercing trait
+			fresh.m_bAntiArmor = antiTank > 0;
+			if (slots.IsEmpty() && members <= CLW_WarConfig.DISCOVER_AT_TEAM_MAX_MEMBERS && labels.Contains(EEditableEntityLabel.TRAIT_ARMORPIERCING))
+				fresh.m_bAntiArmor = true;
 			string sig = Signature(fresh) + "|" + cost;
 			if (signatures.Contains(sig))
 				continue;
