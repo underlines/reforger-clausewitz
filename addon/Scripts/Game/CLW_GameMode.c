@@ -25,6 +25,7 @@ class CLW_GameMode : SCR_BaseGameMode
 	protected ref CLW_ForceCatalog m_Catalog;
 	protected ref CLW_VehicleManager m_Vehicles;
 	protected ref CLW_ForceSpawner m_Spawner;
+	protected ref CLW_Activity m_Activity = new CLW_Activity();
 
 	// Which AI groups HQ commands (scene-placed and added at runtime, e.g. from Game Master); the commanders and markers query it.
 	protected ref CLW_SquadRegistry m_Registry = new CLW_SquadRegistry();
@@ -240,6 +241,7 @@ class CLW_GameMode : SCR_BaseGameMode
 			if (scenario)
 			{
 				GetGame().GetCallqueue().CallLater(PollContacts, 20000, true);
+				m_Activity.Start();
 				GetGame().GetCallqueue().CallLater(ThinkCommanders, 10000, true);
 			}
 		}

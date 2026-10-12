@@ -267,6 +267,130 @@ class CLW_Placement
 		return true;
 	}
 
+	// ---- humans ----
+
+	// Distance (m, XZ) from pos to the nearest player-controlled entity (a player aboard a vehicle counts); 1e9 when there is none.
+	static float NearestPlayerDistance(vector pos)
+	{
+		float best = 1000000000;
+		PlayerManager players = GetGame().GetPlayerManager();
+		if (!players)
+			return best;
+
+		array<int> ids = {};
+		players.GetPlayers(ids);
+		foreach (int playerId : ids)
+		{
+			IEntity entity = players.GetPlayerControlledEntity(playerId);
+			if (!entity)
+				continue;
+
+			float d = vector.DistanceXZ(pos, entity.GetOrigin());
+			if (d < best)
+				best = d;
+		}
+
+		return best;
+	}
+
+	// ---- unstuck spots ----
+
+	// A free, dry spot for a stuck vehicle within [minDist, maxDist] of 'from' that lies TOWARD 'toward' (closer to it than 'from' by
+	// at least minDist / 2). Roads first (best = closest to the target, yaw along the road pointing at the target), else free
+	// navmesh ground in a cone toward the target. yaw = Enforce heading. False when nothing suitable exists.
+	static bool FindSpotToward(vector from, vector toward, float minDist, float maxDist, float cylRadius, float cylHeight, out vector spot, out float yaw, out string via)
+	{
+		float baseDist = vector.DistanceXZ(from, toward);
+		float dirX = toward[0] - from[0];
+		float dirZ = toward[2] - from[2];
+		float clear = Math.Max(CLW_WarConfig.PLACE_SLOT_CLEAR_M, cylRadius * 2);
+		RoadNetworkManager mgr = GetRoadManager();
+		bool found;
+		float bestToTarget = 1000000000;
+		if (mgr)
+		{
+			array<BaseRoad> roads = {};
+			mgr.GetRoadsInAABB(Vector(from[0] - maxDist, -10000, from[2] - maxDist), Vector(from[0] + maxDist, 10000, from[2] + maxDist), roads);
+			foreach (BaseRoad road : roads)
+			{
+				if (!road || road.GetWidth() < CLW_WarConfig.PLACE_ROAD_MIN_WIDTH_M)
+					continue;
+
+				array<vector> pts = {};
+				road.GetPoints(pts);
+				for (int i = 0; i < pts.Count() - 1; i++)
+				{
+					float dx = pts[i + 1][0] - pts[i][0];
+					float dz = pts[i + 1][2] - pts[i][2];
+					float len = Math.Sqrt(dx * dx + dz * dz);
+					if (len < 0.5)
+						continue;
+
+					for (float d = 0; d < len; d += CLW_WarConfig.PLACE_ROAD_STEP_M)
+					{
+						vector p = Vector(pts[i][0] + dx * d / len, 0, pts[i][2] + dz * d / len);
+						float away = vector.DistanceXZ(p, from);
+						if (away < minDist || away > maxDist)
+							continue;
+
+						float toTarget = vector.DistanceXZ(p, toward);
+						if (toTarget > baseDist - minDist * 0.5 || toTarget >= bestToTarget)
+							continue;
+
+						SurfaceAt(p);
+						if (IsWater(p) || !SlopeOk(p) || !IsFree(p, cylRadius, cylHeight, clear, clear))
+							continue;
+
+						float hx = dx;
+						float hz = dz;
+						if (hx * (toward[0] - p[0]) + hz * (toward[2] - p[2]) < 0)
+						{
+							hx = -hx;
+							hz = -hz;
+						}
+
+						bestToTarget = toTarget;
+						spot = p;
+						yaw = YawFromDir(hx, hz);
+						found = true;
+					}
+				}
+			}
+		}
+
+		if (found)
+		{
+			via = "road";
+			return true;
+		}
+
+		// open ground in a cone toward the target
+		float angle0 = Math.Atan2(dirX, dirZ);
+		for (int attempt = 0; attempt < CLW_WarConfig.PLACE_GROUND_ATTEMPTS; attempt++)
+		{
+			float angle = angle0 + Math.RandomFloat(-0.7, 0.7);
+			float dist = Math.RandomFloat(minDist, maxDist);
+			vector candidate = from + Vector(Math.Sin(angle) * dist, 0, Math.Cos(angle) * dist);
+			SurfaceAt(candidate);
+			if (IsWater(candidate) || !SlopeOk(candidate) || !IsFree(candidate, cylRadius, cylHeight, clear, clear))
+				continue;
+
+			if (vector.DistanceXZ(candidate, toward) > baseDist - minDist * 0.5)
+				continue;
+
+			vector snapped;
+			if (NavmeshCheck(candidate, CLW_WarConfig.PLACE_NAVMESH_TOL_M, snapped) == 0)
+				continue;
+
+			spot = candidate;
+			yaw = YawFromDir(toward[0] - candidate[0], toward[2] - candidate[2]);
+			via = "ground";
+			return true;
+		}
+
+		return false;
+	}
+
 	// ---- ground ----
 
 	// A free, dry, not-too-steep spot on the navmesh within 'radius' of 'center' (minRadius = inner ring, 0 = anywhere).

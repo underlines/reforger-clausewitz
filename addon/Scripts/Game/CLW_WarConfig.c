@@ -70,7 +70,7 @@ class CLW_WarConfig
 	static const int DISCOVER_SOLDIER_COST = 11;
 	static const int DISCOVER_ARMED_BONUS = 15;			// armed vehicle of a kind whose base assumes no weapon (motorized)
 	static const int DISCOVER_WEIGHT = 5;				// buy-mix weight of discovered entries
-	static const int DISCOVER_MECH_MIN_CARGO = 5;
+	static const int DISCOVER_MECH_MIN_CARGO = 3;		// mech needs an APC / armour label AND at least this many cargo seats
 	static const int DISCOVER_LIGHT_MAX_CARGO = 2;		// armed + armoured/APC label with at most this many cargo seats = armored_recon
 	static const int DISCOVER_MOTORIZED_MIN_CARGO = 4;
 	static const int DISCOVER_LARGE_CARGO_GUESS = 8;	// cargo seats assumed when the probe saw few but the label says "large passenger capacity"
@@ -126,4 +126,33 @@ class CLW_WarConfig
 	static const int TRUCK_REFUND = 30;					// supplies refunded when an empty truck returns to base
 	static const float RTB_DELETE_RADIUS_M = 45;
 	static const float RTB_TIMEOUT_SEC = 600;
+
+	// ---- Vehicle unstuck escalation (watchdog: 40 s re-issue, then teleport, then despawn / dismount) ----
+	static const float STUCK_TELEPORT_SEC = 80;			// total time without progress before the vehicle is moved to a free road spot
+	static const float STUCK_TELEPORT_MAX_M = 150;		// the new spot lies within this distance of the vehicle ...
+	static const float STUCK_TELEPORT_MIN_M = 25;		// ... and at least this far from it
+	static const float STUCK_TELEPORT_HUMAN_M = 400;	// no teleport when a human is closer than this
+	static const int STUCK_TELEPORT_MAX = 2;			// teleports per unit before it goes straight to the last step
+	static const float STUCK_TELEPORT_MIN_HEALTH = 0.25;	// no teleport below this vehicle health
+	static const float STUCK_REMOVE_SEC = 160;			// still stuck: despawn (no human near) or dismount everybody (human near)
+	static const float STUCK_REMOVE_HUMAN_M = 500;		// despawn only when no human is closer than this
+	static const float STUCK_REMOVE_REFUND = 0.5;		// share of the vehicle's cost refunded when it is despawned
+	static const float ABANDON_DELETE_HUMAN_M = 50;		// an emptied stuck vehicle is deleted once no human is this close ...
+	static const float ABANDON_CHECK_SEC = 5;
+	static const float ABANDON_GIVE_UP_SEC = 300;		// ... and left alone after this long
+
+	// ---- AI activity management (CLW_Activity): relevant units are kept out of the maximum AI LOD ----
+	static const int ACTIVITY_TICK_MS = 10000;
+	static const float ACTIVITY_ENEMY_RANGE_M = 800;	// a real enemy this close makes a unit relevant
+	static const float ACTIVITY_HOLD_SEC = 60;			// a unit stays relevant this long after its last relevant moment (hysteresis)
+	static const float ACTIVITY_CONTESTED_MARGIN_M = 100;	// units within objective radius + this of a contested point are relevant
+	static const float ACTIVITY_PREVENT_SEC = 25;		// PreventMaxLOD(time), renewed every tick, so it lapses by itself
+	static const int ACTIVITY_DEFAULT_CAP = 70;			// prevented agents per side when the war mode gives no caps
+	static const int ACTIVITY_LOG_SEC = 60;
+	static const int ACTIVITY_SCORE_HUMAN = 100;
+	static const int ACTIVITY_SCORE_ENEMY_MAX = 80;		// scaled by closeness
+	static const int ACTIVITY_SCORE_VEHICLE = 60;
+	static const int ACTIVITY_SCORE_CONTESTED = 50;
+	static const int ACTIVITY_SCORE_ORDER = 40;
+	static const int ACTIVITY_SCORE_HELD = 10;
 }

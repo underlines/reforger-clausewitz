@@ -21,11 +21,17 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 - LLM sidecar protocol v2 (`"v":2`): objectives, bases, war economy (tickets, supplies, caps), buy catalog and unit kinds in the situation; validated replies with `orders` (objective `target` or `pos`, commands MOVE/ATTACK/DEFEND/RECON/FALL_BACK), `buy` and mission `missions` offers for human-led squads. Protocol v1 keeps working.
 - Sidecar wake triggers `objectiveChanged`, `ticketsDropPct`, `unitSpawned`, `missionEvent` (Configuration view); an objective owner change or a material war-number change is never "unchanged".
 - Dashboard: objectives on the map (radius circle, owner colour, contested hatch/blink, progress ring), bases, per-faction war strip, unit kind / vehicle / mounted state, objectives and recent-events panels, purchases and mission offers in the exchange log.
+- Activity management (`CLW_Activity`): AI far from players no longer goes dormant. Every 10 s each commanded unit is scored for relevance (enemy within 800 m, active order / moving vehicle unit, contested objective, human-led) and the best ones within a per-side budget (`m_aActiveAgentCaps` of the war mode, 40/70/110 on Arland) get `PreventMaxLOD`; idle units are released after 60 s. Switch `m_bActivityManagement` in the scenario; a 60 s log line per faction shows relevant units, prevented agents and agents at max LOD.
+- Vehicle unstuck escalation: re-issue (40 s), teleport toward the target onto a free road spot when no human is within 400 m (80 s), then despawn with 50 % vehicle refund (no human within 500 m) or dismount everybody and delete the empty vehicle later (160 s). Thresholds in `CLW_WarConfig`.
+- Server overrides file `$profile:Clausewitz/overrides.json` (example written on first start) and scenario `m_aOverrides` to fix catalog kind / cost / weight / name / enabled / anti-armour without editing packed configs (`dev/notes/overrides.md`).
+- Player loadouts: `CLW_LoadoutManager` now lists the vanilla US and USSR role loadouts (rifleman, AR, MG, GL, AT, sniper / sharpshooter).
 
 ### Changed
 - Sidecar system prompt rewritten for protocol v2 (war doctrine, combined arms, field reference, reply schema); fake provider has a simple v2 doctrine (buy, attack nearest foreign objective, defend threatened, offers for human squads).
 - Dashboard faction colours are derived from the faction keys instead of fixed US/USSR names.
 - Dashboard split into views (Overview, Map, Forces, HQ / LLM, Missions, Usage & Config; selected tab remembered, deep link via `#tab`); factions of a previous war or setup phase are hidden (`activeFactions` in `/api/state`, toggle "show inactive factions").
+- Catalog classifier: an armed `VEHICLE_CAR` (even armoured, e.g. M1025 M2) is `light`; `mech` needs an APC / armour label and at least 3 cargo seats; an APC whose UI info reports 0 passengers is re-counted with a spawn probe.
+- Empty or dead groups get their waypoints cleared (avoids the vanilla `SCR_AIProcessFailedMovementResult` exception on a null leader).
 
 ## [0.2.0] - 2026-10-12
 

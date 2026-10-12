@@ -363,6 +363,14 @@ class CLW_WarState
 		return m_Mode.GetAICap(factionKey);
 	}
 
+	int GetActiveAgentCap(string factionKey)
+	{
+		if (m_Mode && m_Mode.GetActiveAgentCap(factionKey) > 0)
+			return m_Mode.GetActiveAgentCap(factionKey);
+
+		return CLW_WarConfig.ACTIVITY_DEFAULT_CAP;
+	}
+
 	int GetVehicleCap(string factionKey)
 	{
 		if (!m_Mode)

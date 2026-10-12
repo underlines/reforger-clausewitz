@@ -51,6 +51,8 @@ class CLW_VehicleUnit
 	protected vector m_vPendTarget;
 	protected string m_sPendReason;
 	protected float m_fHealthAtLink;
+	protected int m_iTeleports;
+	protected float m_fSinceTeleportTry = 100;
 
 	void CLW_VehicleUnit(CLW_VehicleManager manager, string id, string factionKey, CLW_ForceEntry entry, IEntity vehicle, SCR_AIGroup crew, SCR_AIGroup cargo, string cargoId)
 	{
@@ -207,6 +209,12 @@ class CLW_VehicleUnit
 		}
 
 		return true;
+	}
+
+	// Driving, dismounting or remounting: the unit is going somewhere / doing something (activity management).
+	bool IsActiveState()
+	{
+		return m_eState == CLW_EVehicleState.DRIVING || m_eState == CLW_EVehicleState.DISMOUNTING || m_eState == CLW_EVehicleState.REMOUNTING;
 	}
 
 	string GetStateName()
@@ -649,10 +657,18 @@ class CLW_VehicleUnit
 			m_fNoProgress += CLW_WarConfig.STUCK_SAMPLE_SEC;
 
 		Print(string.Format("CLW: vehicle %1 STUCK: %2 m in %3 s (total %4 s without progress) at %5", m_sId, Math.Round(progress), (CLW_WarConfig.STUCK_SAMPLES - 1) * CLW_WarConfig.STUCK_SAMPLE_SEC, Math.Round(m_fNoProgress), GetPosition()), LogLevel.WARNING);
-		if (m_fNoProgress >= CLW_WarConfig.STUCK_GIVE_UP_SEC)
+		// escalation: (a) re-issue at 40 s, (b) teleport toward the target at 80 s, (c) despawn / dismount at 160 s
+		if (m_fNoProgress >= CLW_WarConfig.STUCK_REMOVE_SEC)
 		{
-			GiveUp();
+			RemoveStuck();
 			return;
+		}
+
+		if (m_fNoProgress >= CLW_WarConfig.STUCK_TELEPORT_SEC && m_iTeleports < CLW_WarConfig.STUCK_TELEPORT_MAX && m_fSinceTeleportTry >= 30)
+		{
+			m_fSinceTeleportTry = 0;
+			if (TryTeleport())
+				return;
 		}
 
 		if (first || m_fSinceReissue >= CLW_WarConfig.STUCK_REISSUE_SEC)
@@ -666,6 +682,139 @@ class CLW_VehicleUnit
 				CLW_Waypoints.AddMove(m_Crew, m_vDriveTarget, CLW_WarConfig.ARRIVE_RADIUS_M / 2);
 			m_fSinceIssue = 0;
 		}
+	}
+
+	// (b) Stuck for STUCK_TELEPORT_SEC: with no human nearby, move the vehicle (crew and cargo ride along) to a free road / ground spot
+	// within STUCK_TELEPORT_MAX_M that lies toward its target, then drive on. False when not done.
+	protected bool TryTeleport()
+	{
+		vector pos = GetPosition();
+		float human = CLW_Placement.NearestPlayerDistance(pos);
+		if (human < CLW_WarConfig.STUCK_TELEPORT_HUMAN_M)
+		{
+			Print(string.Format("CLW: vehicle %1 stuck, teleport skipped: a human is %2 m away", m_sId, Math.Round(human)), LogLevel.NORMAL);
+			return false;
+		}
+
+		float health = GetVehicleHealth();
+		if (m_fHealthAtLink > 0.5 && health < CLW_WarConfig.STUCK_TELEPORT_MIN_HEALTH)
+		{
+			Print(string.Format("CLW: vehicle %1 stuck, teleport skipped: too damaged (health %2)", m_sId, health), LogLevel.NORMAL);
+			return false;
+		}
+
+		vector spot;
+		float yaw;
+		string via;
+		if (!CLW_Placement.FindSpotToward(pos, m_vDriveTarget, CLW_WarConfig.STUCK_TELEPORT_MIN_M, CLW_WarConfig.STUCK_TELEPORT_MAX_M, CLW_WarConfig.SPAWN_VEHICLE_CYLINDER_R, CLW_WarConfig.SPAWN_VEHICLE_CYLINDER_H, spot, yaw, via))
+		{
+			Print(string.Format("CLW: vehicle %1 stuck at %2, no free spot toward %3 within %4 m", m_sId, pos, m_vDriveTarget, CLW_WarConfig.STUCK_TELEPORT_MAX_M), LogLevel.WARNING);
+			return false;
+		}
+
+		vector mat[4];
+		Math3D.AnglesToMatrix(Vector(yaw, 0, 0), mat);	// [verify] angle order yaw, pitch, roll
+		mat[3] = spot + Vector(0, 0.6, 0);
+		m_Vehicle.SetTransform(mat);
+		m_Vehicle.Update();
+		Physics physics = m_Vehicle.GetPhysics();
+		if (physics)
+		{
+			physics.SetVelocity(vector.Zero);
+			physics.SetAngularVelocity(vector.Zero);
+		}
+
+		m_iTeleports++;
+		Print(string.Format("CLW: vehicle %1 TELEPORTED #%2 from %3 to %4 (%5, yaw %6, %7 m toward %8), human %9 m away", m_sId, m_iTeleports, pos, spot, via, Math.Round(yaw), Math.Round(vector.DistanceXZ(pos, spot)), m_vDriveTarget, Math.Round(Math.Min(human, 99999))), LogLevel.WARNING);
+		CLW_WarState war = CLW_GameMode.GetWarState();
+		if (war)
+			war.PushEvent(m_sFaction, m_sId + " was stuck and has been repositioned toward its target");
+
+		IssueDrive(m_vDriveTarget, m_bDriveForced);
+		return true;
+	}
+
+	// Vehicle share of the purchase price (what a despawn refunds half of).
+	protected int VehicleShare()
+	{
+		if (m_Entry.m_iVehicleCost > 0)
+			return Math.Min(m_Entry.m_iVehicleCost, m_Entry.m_iCost);
+
+		int share = m_Entry.m_iCost - m_Entry.m_iCargoMembers * CLW_WarConfig.DISCOVER_SOLDIER_COST;
+		return Math.Max(share, Math.Round(m_Entry.m_iCost * 0.4));
+	}
+
+	// (c) Still stuck after STUCK_REMOVE_SEC. No human near: despawn the vehicle with the crew (and cargo still inside) and refund
+	// half of the vehicle's price. Humans near: everybody gets out, the infantry continues on foot with the order, and the empty
+	// vehicle is deleted later once nobody is close to it.
+	protected void RemoveStuck()
+	{
+		vector pos = GetPosition();
+		float human = CLW_Placement.NearestPlayerDistance(pos);
+		CLW_WarState war = CLW_GameMode.GetWarState();
+		CLW_SquadRegistry registry = m_Mgr.GetRegistry();
+		if (human > CLW_WarConfig.STUCK_REMOVE_HUMAN_M)
+		{
+			int refund = Math.Round(VehicleShare() * CLW_WarConfig.STUCK_REMOVE_REFUND);
+			Print(string.Format("CLW: vehicle %1 STUCK for %2 s, no human within %3 m: despawn with crew, refund %4", m_sId, Math.Round(m_fNoProgress), CLW_WarConfig.STUCK_REMOVE_HUMAN_M, refund), LogLevel.WARNING);
+			m_bDissolved = true;
+			// cargo still inside goes with the vehicle; cargo that already walks on stays alive and is released to the commander
+			if (m_Cargo)
+			{
+				array<IEntity> cargoMembers = CLW_SquadInfo.Members(m_Cargo);
+				foreach (IEntity member : cargoMembers)
+				{
+					if (member && IsInVehicle(member, m_Vehicle))
+						SCR_EntityHelper.DeleteEntityAndChildren(member);
+				}
+
+				if (CLW_SquadInfo.AliveCount(m_Cargo) > 0)
+				{
+					if (registry && !m_sCargoId.IsEmpty())
+						registry.SetHidden(m_sCargoId, false);
+					CLW_Waypoints.Clear(m_Cargo);
+				}
+				else
+				{
+					CLW_Waypoints.Clear(m_Cargo);
+					CLW_ForceSpawner.DeleteGroupAndMembers(m_Cargo);
+				}
+			}
+
+			CLW_Waypoints.Clear(m_Crew);
+			CLW_ForceSpawner.DeleteGroupAndMembers(m_Crew);
+			SCR_EntityHelper.DeleteEntityAndChildren(m_Vehicle);
+			if (war)
+			{
+				war.AddSupplies(m_sFaction, refund);
+				war.PushEvent(m_sFaction, m_sId + " stuck for good and removed (+" + refund + " supplies)");
+			}
+
+			return;
+		}
+
+		Print(string.Format("CLW: vehicle %1 STUCK for %2 s, human %3 m away: everybody dismounts, vehicle will be removed when unobserved", m_sId, Math.Round(m_fNoProgress), Math.Round(human)), LogLevel.WARNING);
+		EjectAll(m_Crew);
+		EjectAll(m_Cargo);
+		if (m_bHasOrder)
+		{
+			// cargo continues on foot; the crew becomes a small infantry group with the same order
+			if (HasCargoAlive())
+				DeployInfantry();
+			if (CLW_SquadInfo.AliveCount(m_Crew) > 0)
+			{
+				CLW_Waypoints.Clear(m_Crew);
+				CLW_Waypoints.AddForCommand(m_Crew, m_eCommand, m_vTarget);
+			}
+		}
+		else
+		{
+			CLW_Waypoints.Clear(m_Crew);
+		}
+
+		IEntity vehicle = m_Vehicle;
+		Dissolve("stuck for " + Math.Round(m_fNoProgress) + " s, abandoned (humans near)", false);
+		m_Mgr.StartAbandon(m_sId, vehicle);
 	}
 
 	protected void GiveUp()
@@ -691,6 +840,7 @@ class CLW_VehicleUnit
 
 		m_fStateTime += dt;
 		m_fSinceIssue += dt;
+		m_fSinceTeleportTry += dt;
 		m_fSinceReissue += dt;
 
 		// unlink rules (spec section 5)
@@ -718,6 +868,7 @@ class CLW_VehicleUnit
 
 		if (!m_Crew || CLW_SquadInfo.AliveCount(m_Crew) <= 0)
 		{
+			CLW_Waypoints.Clear(m_Crew);	// an empty group with a move waypoint makes vanilla SCR_AIProcessFailedMovementResult throw on its null leader
 			Dissolve("crew lost, vehicle abandoned", false);
 			return;
 		}
@@ -725,6 +876,7 @@ class CLW_VehicleUnit
 		if (m_Cargo && CLW_SquadInfo.AliveCount(m_Cargo) <= 0)
 		{
 			Print(string.Format("CLW: vehicle %1 cargo group %2 wiped out, vehicle continues alone", m_sId, m_sCargoId), LogLevel.WARNING);
+			CLW_Waypoints.Clear(m_Cargo);
 			m_Cargo = null;
 			m_sCargoId = "";
 			m_bPending = false;
@@ -917,11 +1069,22 @@ class CLW_ReturnJob
 	bool m_bDone;
 }
 
+// An empty stuck vehicle waiting to be deleted once no human is close to it.
+class CLW_AbandonJob
+{
+	string m_sId;
+	IEntity m_Vehicle;
+	float m_fAge;
+	float m_fSinceCheck;
+	bool m_bDone;
+}
+
 // All vehicle units of the war. Ticked every CLW_WarConfig.VEHICLE_TICK_MS.
 class CLW_VehicleManager
 {
 	protected ref array<ref CLW_VehicleUnit> m_aUnits = {};
 	protected ref array<ref CLW_ReturnJob> m_aReturns = {};
+	protected ref array<ref CLW_AbandonJob> m_aAbandoned = {};
 	protected CLW_SquadRegistry m_Registry;	// weak: owned by the game mode
 
 	void Init(CLW_SquadRegistry registry)
@@ -1034,6 +1197,73 @@ class CLW_VehicleManager
 			if (m_aReturns[j].m_bDone)
 				m_aReturns.Remove(j);
 		}
+
+		for (int k = m_aAbandoned.Count() - 1; k >= 0; k--)
+		{
+			TickAbandoned(m_aAbandoned[k], dt);
+			if (m_aAbandoned[k].m_bDone)
+				m_aAbandoned.Remove(k);
+		}
+	}
+
+	// ---- abandoned (stuck, emptied) vehicles ----
+
+	void StartAbandon(string id, IEntity vehicle)
+	{
+		if (!vehicle)
+			return;
+
+		CLW_AbandonJob job = new CLW_AbandonJob();
+		job.m_sId = id;
+		job.m_Vehicle = vehicle;
+		m_aAbandoned.Insert(job);
+		Print(string.Format("CLW: vehicle %1 abandoned at %2, deleted once no human is within %3 m (gives up after %4 s)", id, vehicle.GetOrigin(), CLW_WarConfig.ABANDON_DELETE_HUMAN_M, CLW_WarConfig.ABANDON_GIVE_UP_SEC), LogLevel.NORMAL);
+	}
+
+	protected bool HasOccupant(IEntity vehicle)
+	{
+		BaseCompartmentManagerComponent compartments = BaseCompartmentManagerComponent.Cast(vehicle.FindComponent(BaseCompartmentManagerComponent));
+		if (!compartments)
+			return false;
+
+		array<IEntity> occupants = {};
+		compartments.GetOccupants(occupants);	// [verify] signature GetOccupants(out notnull array<IEntity>)
+		foreach (IEntity occupant : occupants)
+		{
+			if (occupant && CLW_VehicleUnit.IsAlive(occupant))
+				return true;
+		}
+
+		return false;
+	}
+
+	protected void TickAbandoned(CLW_AbandonJob job, float dt)
+	{
+		job.m_fAge += dt;
+		job.m_fSinceCheck += dt;
+		if (!job.m_Vehicle)
+		{
+			job.m_bDone = true;
+			return;
+		}
+
+		if (job.m_fSinceCheck < CLW_WarConfig.ABANDON_CHECK_SEC)
+			return;
+
+		job.m_fSinceCheck = 0;
+		if (job.m_fAge >= CLW_WarConfig.ABANDON_GIVE_UP_SEC)
+		{
+			Print(string.Format("CLW: vehicle %1 abandoned vehicle left in place after %2 s (observed)", job.m_sId, Math.Round(job.m_fAge)), LogLevel.NORMAL);
+			job.m_bDone = true;
+			return;
+		}
+
+		if (CLW_Placement.NearestPlayerDistance(job.m_Vehicle.GetOrigin()) <= CLW_WarConfig.ABANDON_DELETE_HUMAN_M || HasOccupant(job.m_Vehicle))
+			return;
+
+		Print(string.Format("CLW: vehicle %1 abandoned vehicle deleted (unobserved, empty)", job.m_sId), LogLevel.NORMAL);
+		SCR_EntityHelper.DeleteEntityAndChildren(job.m_Vehicle);
+		job.m_bDone = true;
 	}
 
 	// ---- returning transports ----
@@ -1069,6 +1299,8 @@ class CLW_VehicleManager
 		job.m_fSinceIssue += dt;
 		if (!job.m_Vehicle || !job.m_Crew || CLW_SquadInfo.AliveCount(job.m_Crew) <= 0)
 		{
+			if (job.m_Crew)
+				CLW_Waypoints.Clear(job.m_Crew);
 			Print(string.Format("CLW: vehicle %1 RTB aborted (vehicle or crew lost)", job.m_sId), LogLevel.NORMAL);
 			job.m_bDone = true;
 			return;

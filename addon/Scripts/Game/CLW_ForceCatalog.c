@@ -6,6 +6,7 @@ class CLW_VehicleProbe
 	int m_iPilot;
 	int m_iTurret;
 	int m_iCrew;		// pilot + turret seats that have a default occupant
+	bool m_bSpawned;	// counted on a real spawned vehicle (not from the UI info)
 }
 
 // Per faction force catalog (what can be bought). Built from the faction profile (CLW_FactionProfile) and, when the
@@ -211,6 +212,7 @@ class CLW_ForceCatalog
 		if (!profile || profile.m_bIncludeDiscovered)
 			discovered = Discover(factionKey, entries, signatures);
 
+		CLW_CatalogOverrides.Apply(factionKey, entries);
 		m_mEntries.Set(factionKey, entries);
 		Print(string.Format("CLW: catalog %1 built: %2 entries (%3 from profile, %4 discovered)", factionKey, entries.Count(), fromProfile, discovered), LogLevel.NORMAL);
 		foreach (CLW_ForceEntry entry : entries)
@@ -367,18 +369,18 @@ class CLW_ForceCatalog
 	// ---- probing ----
 
 	// Seats of a vehicle prefab: spawn, read the compartment manager, delete. Cached per prefab.
-	protected CLW_VehicleProbe ProbeVehicle(string factionKey, ResourceName prefab)
+	protected CLW_VehicleProbe ProbeVehicle(string factionKey, ResourceName prefab, bool forceSpawn = false)
 	{
 		string cacheKey = PathOf(prefab);
 		CLW_VehicleProbe cached;
-		if (m_mProbes.Find(cacheKey, cached))
+		if (m_mProbes.Find(cacheKey, cached) && (!forceSpawn || cached.m_bSpawned || !cached.m_bOk))
 			return cached;
 
 		CLW_VehicleProbe probe = new CLW_VehicleProbe();
 		m_mProbes.Set(cacheKey, probe);
 
-		// no spawn needed when the editable-entity UI info carries the default crew / passenger counts
-		if (ReadSeatsFromInfo(prefab, probe))
+		// no spawn needed when the editable-entity UI info carries the default crew / passenger counts (unless the caller distrusts it)
+		if (!forceSpawn && ReadSeatsFromInfo(prefab, probe))
 		{
 			Print(string.Format("CLW: catalog probe %1: from UI info (no spawn) pilot+turret crew=%2 cargo=%3 armed=%4", prefab, probe.m_iCrew, probe.m_iCargo, probe.m_iTurret > 0), LogLevel.NORMAL);
 			return probe;
@@ -440,6 +442,7 @@ class CLW_ForceCatalog
 			}
 
 			probe.m_bOk = true;
+			probe.m_bSpawned = true;
 		}
 		else
 		{
@@ -787,6 +790,15 @@ class CLW_ForceCatalog
 
 			// seats: real probe, else a label-based estimate
 			CLW_VehicleProbe probe = ProbeVehicle(factionKey, prefab);
+			if (probe && probe.m_bOk && !probe.m_bSpawned && probe.m_iCargo <= 0 && labels.Contains(EEditableEntityLabel.VEHICLE_APC))
+			{
+				// the UI info says "no passengers" for an APC (seen on a pack's K-17): do not trust it, count the real seats
+				CLW_VehicleProbe real = ProbeVehicle(factionKey, prefab, true);
+				Print(string.Format("CLW: catalog discovery %1: %2 is an APC with UI-info cargo 0, spawn probe says cargo=%3 ok=%4", factionKey, prefab, real.m_iCargo, real.m_bOk), LogLevel.NORMAL);
+				if (real.m_bOk)
+					probe = real;
+			}
+
 			int cargo;
 			int turrets;
 			int crew = -1;
@@ -824,20 +836,25 @@ class CLW_ForceCatalog
 					kind = CLW_ForceKind.MOTORIZED;
 					rule = "armed truck / unarmoured with large cargo";
 				}
+				else if (car && !apc)
+				{
+					kind = CLW_ForceKind.LIGHT;
+					rule = "armed car (even armoured, e.g. a gun jeep)";
+				}
 				else if (traitArmor && !apc && !car)
 				{
 					kind = CLW_ForceKind.ARMOR;
 					rule = "armour, no APC/CAR label";
 				}
-				else if (armored && cargo <= CLW_WarConfig.DISCOVER_LIGHT_MAX_CARGO)
+				else if (armored && capacity >= CLW_WarConfig.DISCOVER_MECH_MIN_CARGO)
 				{
-					kind = CLW_ForceKind.ARMORED_RECON;
-					rule = "armoured APC/CAR, small cargo";
+					kind = CLW_ForceKind.MECH;
+					rule = "APC / armour with cargo";
 				}
 				else if (armored)
 				{
-					kind = CLW_ForceKind.MECH;
-					rule = "armoured with cargo";
+					kind = CLW_ForceKind.ARMORED_RECON;
+					rule = "APC / armour, small cargo";
 				}
 				else
 				{
@@ -877,6 +894,7 @@ class CLW_ForceCatalog
 
 			int vehicleCost = CLW_WarConfig.DiscoveredVehicleCost(kind, armed);
 			fresh.m_iCost = vehicleCost;
+			fresh.m_iVehicleCost = vehicleCost;
 
 			string sig = Signature(fresh);
 			if (signatures.Contains(sig))

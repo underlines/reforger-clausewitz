@@ -40,6 +40,9 @@ class CLW_WarModeConfig_Short : CLW_WarModeConfig
 	ref array<int> m_aVehicleCaps;		// per battle size
 
 	[Attribute()]
+	ref array<int> m_aActiveAgentCaps;	// per battle size: AI agents per side kept out of the max LOD (activity management)
+
+	[Attribute()]
 	ref array<float> m_aIncomeScales;	// per battle size: bigger battles need more income to fill the bigger caps
 
 	[Attribute("1", UIWidgets.CheckBox, "Ticket bleed for the side holding fewer points")]

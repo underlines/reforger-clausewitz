@@ -142,6 +142,12 @@ class CLW_WarMode
 		return 0;
 	}
 
+	// Prevented-agent budget of the activity management per side (0 = the mode gives none, CLW_WarConfig.ACTIVITY_DEFAULT_CAP applies).
+	int GetActiveAgentCap(string factionKey)
+	{
+		return 0;
+	}
+
 	int GetVehicleCap(string factionKey)
 	{
 		return 0;

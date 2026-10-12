@@ -362,6 +362,8 @@ class CLW_SquadRegistry
 			}
 
 			record.m_iEmptySweeps++;
+			if (record.m_iEmptySweeps == 1)
+				CLW_Waypoints.Clear(record.m_Group);	// empty group + leftover move = vanilla SCR_AIProcessFailedMovementResult exception (null leader)
 			if (record.m_iEmptySweeps >= EMPTY_SWEEPS_TO_RELEASE)
 			{
 				Release(i, "no living members");

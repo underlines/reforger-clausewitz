@@ -159,6 +159,12 @@ class CLW_ScenarioConfig
 	[Attribute("0", UIWidgets.EditBox, "Side (0 = A, 1 = B) players are put on by default (spawn logic forced faction)")]
 	int m_iDefaultPlayerSide;
 
+	[Attribute("1", UIWidgets.CheckBox, "Activity management: relevant AI units (enemy near, active order, contested point, player-led) are kept out of the maximum AI LOD within a per-side budget; off = plain engine behaviour (far AI goes dormant)")]
+	bool m_bActivityManagement;
+
+	[Attribute(desc: "Catalog overrides shipped with the scenario (compat addons); applied after profile and discovery, before the server file $profile:Clausewitz/overrides.json")]
+	ref array<ref CLW_CatalogOverride> m_aOverrides;
+
 	protected static ref CLW_ScenarioConfig s_Active;
 	protected bool m_bValid;
 	protected ref ScriptInvoker m_OnSidesChanged;

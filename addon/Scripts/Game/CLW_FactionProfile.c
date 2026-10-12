@@ -89,6 +89,7 @@ class CLW_ForceEntry
 	int m_iGroupMembers;		// infantry group size (own group)
 	int m_iCargoMembers;		// embarked group size
 	bool m_bChecked;			// prefabs probed
+	int m_iVehicleCost;			// vehicle share of m_iCost (discovered entries), 0 = derive from cost minus embarked soldiers
 
 	bool HasVehicle()
 	{
@@ -161,6 +162,7 @@ class CLW_ForceEntry
 		copy.m_iGroupMembers = m_iGroupMembers;
 		copy.m_iCargoMembers = m_iCargoMembers;
 		copy.m_bChecked = m_bChecked;
+		copy.m_iVehicleCost = m_iVehicleCost;
 		return copy;
 	}
 }

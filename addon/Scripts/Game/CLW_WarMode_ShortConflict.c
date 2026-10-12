@@ -170,6 +170,11 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 		return CapFor(m_Config.m_aAiCaps);
 	}
 
+	override int GetActiveAgentCap(string factionKey)
+	{
+		return CapFor(m_Config.m_aActiveAgentCaps);
+	}
+
 	override int GetVehicleCap(string factionKey)
 	{
 		return CapFor(m_Config.m_aVehicleCaps);
