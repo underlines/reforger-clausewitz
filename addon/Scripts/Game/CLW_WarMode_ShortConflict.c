@@ -27,6 +27,12 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("startSupplies", "Start supplies", "Purchasing power of each side at the start.", CLW_ModeParam.TYPE_INT, 0, 2000, 50, config.m_iStartSupplies));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("incomeMultiplier", "Income multiplier", "Scales the supplies income.", CLW_ModeParam.TYPE_FLOAT, 0.25, 3, 0.25, config.m_fIncomeMultiplier));
 		m_aParams.Insert(CLW_ModeParam.CreateChoice("battleSize", "Battle size", "Caps for live AI and vehicles per side; bigger battles also get more income.", sizes, config.m_sBattleSize));
+		array<string> startModes = {"fixed", "random"};
+		string startDefault = config.m_sStartPositions;
+		if (startDefault.IsEmpty())
+			startDefault = "fixed";
+		m_aParams.Insert(CLW_ModeParam.CreateChoice("startPositions", "Start positions", "fixed: the scenario's HQs. random: both HQs and the front at random places (checked for ground, water, room and roads), within the battle size distance.", startModes, startDefault));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("randomSeed", "Random seed", "Random start positions: the same seed gives the same layout. 0 = a new one each war (logged).", CLW_ModeParam.TYPE_INT, 0, 9999999, 1, config.m_iRandomSeed));
 		m_aParams.Insert(CLW_ModeParam.CreateBool("ticketBleed", "Ticket bleed", "The side holding fewer points loses tickets over time.", config.m_bTicketBleed));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("holdAllWinMin", "Hold-all win (min)", "Holding every point this long wins. 0 = off.", CLW_ModeParam.TYPE_INT, 0, 15, 1, config.m_iHoldAllWinMin));
 		// capability switches (CLW_Capabilities.Has): declared in GetCapabilities, "cap_<name>" turns one off in the setup menu
