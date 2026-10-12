@@ -231,7 +231,9 @@ Commands are first-class objects with an ID, state (pending, active, done, faile
 
 ## 5a. Freeform agent tools (open decision: A vs B)
 
-> **Status: OPEN DECISION.** Two candidate approaches, not yet chosen: **(A)** extend the fixed vocabulary (section 5) with a handful of player-request commands (`FORM_SQUAD <composition>`, `REQUEST_RESUPPLY`, `REQUEST_RECON`, ...) that HQ grants or refuses under the same ledger, authority and validation rules; **(B)** the tool registry described below (optionally with the raw-command escape hatch). Evaluate both before committing: compare player experience, implementation cost, safety and token cost, ideally with a small prototype of (A) after M2 and a look at what Game Master functions are scriptable. Until decided, design the validator/executor so either can plug in.
+> **Status: DECIDED 2026-10-12 (owner approved):** both, layered: one action registry as the mechanism, a small intent vocabulary for the strategic tick, primitives only in a capped LLM agent turn (Vercel AI SDK in the sidecar), fixed requests as the player fast path. See `notes/decision-command-tools.md`. Original framing below.
+>
+> Two candidate approaches, not yet chosen: **(A)** extend the fixed vocabulary (section 5) with a handful of player-request commands (`FORM_SQUAD <composition>`, `REQUEST_RESUPPLY`, `REQUEST_RECON`, ...) that HQ grants or refuses under the same ledger, authority and validation rules; **(B)** the tool registry described below (optionally with the raw-command escape hatch). Evaluate both before committing: compare player experience, implementation cost, safety and token cost, ideally with a small prototype of (A) after M2 and a look at what Game Master functions are scriptable. Until decided, design the validator/executor so either can plug in.
 
 Section 5 is the **predictable core**: a small fixed set of commands the Rules commander and the LLM both use for the war itself. Humans asking HQ things in natural language (chat now, voice later) need more: *"Can I get a jeep and 3 infantry for a recon?"* HQ must be able to reason, decide, and act with a broad set of game functions, as an agent (reason -> act -> observe -> reply). Example: grant the request by spawning or reassigning a jeep and three infantry, forming a new squad, handing it to the player as leader, and answering by chat.
 
@@ -437,8 +439,8 @@ Own game mode `CLW_GameMode` (see `notes/decision-game-mode.md`). Live status: `
 | **M1 - LLM bridge** | REST spike (POST/headers/polling), sidecar, RemoteCommander, schema validation, fallback to Rules | LLM loop |
 | **M1.5 - Dashboard** | Read-only web dashboard served by the sidecar (section 12a basic); editing/commands later | Observability |
 | **M2 - Real war + mechanized** (design: `notes/m2-design.md`) | Control points, tickets + bleed, win conditions, supplies ledger + income, bases/respawn, force purchases, mechanized/motorized units (mount, dismount, overwatch, stuck watchdog), objective-driven rule commander, protocol v2 for the LLM, mission offers for player squad leaders; all content as data (scenario + faction profiles, auto-discovery) so mod packs work | AI vs AI with economy and vehicles |
-| **M3 - Logistics & intel** | Player requests via chat, approach to be chosen (section 5a, option A or B); supply convoys, FOBs; player reports, setup screen | Logistics, humans in the loop |
-| **M4 - Scale & realism** | Chain-of-command echelons with delayed reports, population manager (cleanup, collapse/expand), FOBs | Size of war |
+| **M3 - Logistics, bases & requests** (draft: `notes/m3-design.md`) | Action registry (section 5a), base services (command post, vehicle depot, arsenal, medical/repair), FOBs and supply convoys gated by war-mode capabilities, player requests (fast path + LLM agent turn), player reports, arsenals/loadouts with RHS/WCS/GRS | Logistics, humans in the loop |
+| **M4 - Scale & realism** | Chain-of-command echelons with delayed reports, population manager (cleanup, collapse/expand) | Size of war |
 | **M5 - Content compat** | RHS / WCS profiles + compat addons, classifier tuning (the data model and auto-discovery land in M2) | Custom factions |
 | **Later** | Story mode (section 3a), Squad-leader LLM agents (section 4a), Voice/radio, virtual battlefield (experimental), Conflict adapter | - |
 
