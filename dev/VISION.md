@@ -284,6 +284,10 @@ Open questions: which Game Master functions are scriptable from a mod; how to de
 - **Building**: Reforger's campaign building system is script-drivable server-side (community-confirmed). Preferred: real engineer behaviour (an AI moves to a site and "builds"). Acceptable fallback: **fake it** - a timed progress bar and a script that spawns the composition (still consuming the supplies, still requiring the engineer/trucks on site). Both modes should hide behind one interface (`IBuildExecutor`).
 - **Fortifications**: sandbags, bunkers, trenches, AT positions, vehicle hull-down spots from compositions; AI units garrison / use them as defend positions `[verify AI actually uses placed fortifications well]`.
 - Depot supply, vehicle repair/refuel/rearm: stretch goals; at minimum track them abstractly.
+- **Decision (owner 2026-10-12): per-base stock.** Every base and FOB keeps its own supply stock; a FOB arsenal spends FOB-local stock, convoys carry stock
+  between bases (abstract load on the truck now; physical crates on trucks later). The HQ keeps a reserve floor that AI spending and convoys never touch.
+- **War loop (owner 2026-10-12): rematch in place.** After WAR OVER the results stay up about a minute, then the same session goes back to the setup phase
+  (war entities removed, state reset); no engine game end or world reload, so connected players stay. The HQ journal (1c) resets at war start.
 
 ### 6a. Own base structures instead of vanilla Conflict compositions (owner feedback 2026-10-12, backlog)
 The vanilla Conflict compositions are mostly dead weight outside Conflict: the HQ whiteboard "start building" needs the Campaign building
