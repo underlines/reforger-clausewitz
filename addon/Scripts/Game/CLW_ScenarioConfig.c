@@ -174,6 +174,12 @@ class CLW_ScenarioConfig
 	[Attribute("0", UIWidgets.EditBox, "Side (0 = A, 1 = B) players are put on by default (spawn logic forced faction)")]
 	int m_iDefaultPlayerSide;
 
+	[Attribute("authored", UIWidgets.EditBox, "Who owns which objective at war start. authored: the objectives' start owners as written. nearest: resolved at war start from the final HQ positions, each side gets the objectives nearest its HQ (m_iStartOwnedPerSide), the rest stay neutral. none: all neutral. The setup parameter startObjectives can override this")]
+	string m_sStartOwnership;
+
+	[Attribute("1", UIWidgets.EditBox, "Objectives each side starts with in the nearest mode (at least one objective always stays neutral when there are 3 or more)")]
+	int m_iStartOwnedPerSide;
+
 	[Attribute("1", UIWidgets.CheckBox, "Activity management: relevant AI units (enemy near, active order, contested point, player-led) are kept out of the maximum AI LOD within a per-side budget; off = plain engine behaviour (far AI goes dormant)")]
 	bool m_bActivityManagement;
 
@@ -588,6 +594,16 @@ class CLW_ScenarioConfig
 			}
 		}
 
+		if (m_sStartOwnership.IsEmpty())
+			m_sStartOwnership = "authored";
+
+		if (m_sStartOwnership != "authored" && m_sStartOwnership != "nearest" && m_sStartOwnership != "none")
+		{
+			Print("CLW: scenario start ownership unknown: '" + m_sStartOwnership + "' (authored / nearest / none), using authored", LogLevel.WARNING);
+			m_sStartOwnership = "authored";
+		}
+
+		// objective start owners may be empty: nearest / none resolve them at war start (CLW_ControlPoints.ResolveStartOwners)
 		if (m_aObjectives.IsEmpty())
 			Print("CLW: scenario has no objectives (war ends only by tickets/time)", LogLevel.WARNING);
 
@@ -606,6 +622,7 @@ class CLW_ScenarioConfig
 		{
 			Print(string.Format("CLW: scenario objective %1 '%2' pos=%3 r=%4 value=%5 owner='%6'", obj.m_sId, obj.m_sName, obj.m_vPos, obj.m_fRadius, obj.m_iValue, obj.m_sStartOwner), LogLevel.NORMAL);
 		}
+		Print(string.Format("CLW: scenario start ownership=%1 perSide=%2", m_sStartOwnership, m_iStartOwnedPerSide), LogLevel.NORMAL);
 		Print(string.Format("CLW: scenario economy income=%1+%2/value per %3s bleed=%4/value per %5s costs ai=%6 player=%7 heavy=%8 light=%9", m_Economy.m_iIncomeBase, m_Economy.m_iIncomePerValue, m_Economy.m_iIncomeIntervalSec, m_Economy.m_iBleedPerValue, m_Economy.m_iBleedIntervalSec, m_Economy.m_iCostAiKilled, m_Economy.m_iCostPlayerKilled, m_Economy.m_iCostVehicleHeavy, m_Economy.m_iCostVehicleLight), LogLevel.NORMAL);
 		Print(string.Format("CLW: scenario modes=%1 default=%2 autoStartSec=%3", m_aModes.Count(), m_sDefaultMode, m_iAutoStartSec), LogLevel.NORMAL);
 	}

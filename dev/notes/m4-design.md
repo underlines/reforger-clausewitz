@@ -110,3 +110,18 @@ test plan for the DS.
 ## Coordinator (not a subagent)
 Merge order 3 -> 1 -> 5 -> 4 -> 2 (compile after each on the DS), CHANGELOG + PROGRESS, build stamp, one e2e run per map on the DS
 (Arland fixed + random, Everon auto, Kolguyev auto; packs RHS/WCS/GRS) with the setup preset for unattended starts.
+
+## Start ownership
+Start owners are resolved ONCE at war start, after the battle layout (`CLW_WarMode.ApplyBattleLayout`: Rekey ran earlier in `CLW_Sides.Apply`;
+`bases.ApplyLayout` / `ApplyRandomLayout`, then `points.ApplyLayout`, then `points.ResolveStartOwners`), so they use the kept objectives at
+their final positions and the final HQs.
+- Scenario attributes: `m_sStartOwnership` = `authored` (default: the objectives' `m_sStartOwner` as written) | `nearest` | `none`, and
+  `m_iStartOwnedPerSide` (nearest, default 1). `_Auto.conf` is `nearest`/1 and the auto scenario no longer picks owners.
+- Mode param `startObjectives` (short conflict): `scenario` (default) | `none` | `1` | `2` | `3` (= nearest with that count). Effective values:
+  `CLW_WarMode.GetStartOwnership`. Authored scenario + random start positions: `nearest` with count = max authored owned objectives of one side
+  among the kept ones (the authored owners belong to the authored HQ line).
+- `nearest`: r = dA / (dA + dB) (XZ distance to HQ A = slot 0 / HQ B = slot 1). Side A takes up to N objectives with r < 0.5 (ascending r), side B
+  with r > 0.5 (descending r), N capped at floor((count - 1) / 2) so one objective stays neutral with 3+ points (2 points: 0 each).
+- The result is written to the runtime point (owner, progress +100 / -100 / 0, contested reset, marker rebuilt) and back to the scenario's
+  `m_sStartOwner` as the slot's default key (the form `Rekey` maps with `MapDefaultKey`). Logs: `CLW: points start owner ...`,
+  `CLW: points start ownership mode=... perSide=... -> A .., B .., neutral ..`.
