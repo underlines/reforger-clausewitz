@@ -40,8 +40,15 @@ Implemented P1-P6 + S, then e2e-tested in Workbench (vanilla, RHS test project, 
 - [ ] Not yet seen in play: end of war (tickets 0 / hold all / time limit + end screen), mission accept/complete/reward popups, stuck watchdog dismount path, unstuck helper, DEFEND switch at 50 % strength, marker expiry.
 - Test packs: junctions in `Documents\My Games\ArmaReforgerWorkbench\addons` (RHS 3, WCS 12, Clausewitz); see `dev/testpacks/README.md`.
 
+### After the first e2e (2026-10-12, builds #28-#31), merged into main as v0.3.0 (local tag, not published)
+- [x] Activity management (relevance-based AI LOD; agents must be lifted with SetLOD(max-1) before PreventMaxLOD): far units act without a human near.
+- [x] Squad join: HQ squads registered as vanilla groups; deploy menu, respawn menu and groups menu verified; one join service (Establish/Release).
+- [x] Vehicle unstuck escalation, server overrides file `$profile:Clausewitz/overrides.json`, classifier fixes, vanilla role loadouts, ticket HUD, dashboard side order + identity colours.
+- [x] LLM/rules flip-flop fixed (health scale in the prompt; rules don't override fresh LLM orders).
+- [ ] Open: end of war + end screen and mission completion/reward not yet watched; RHS open-top UAZ seating; harmless vanilla UI exception when the deploy menu closes during a squad list update; dedicated-server checks (group mirror RPC, remote commanding, SetIsPlayable replication).
+
 ## Next up
-Fix the known issues above, play one long war to the end (end screen, missions), then merge `feature/m2-real-war` into `main` and release v0.3.0 (skill `reforger-release`).
+M3 (logistics & intel, base buildings incl. the command post entry point from `notes/squad-join-design.md`); before that, one long war to the end and a dedicated-server smoke test.
 
 ## Log
 - 2026-10-11: Vision and research committed; game-mode decision made; roadmap condensed to M0-M5; branch naming unified on `main`.
