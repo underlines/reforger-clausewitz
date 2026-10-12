@@ -182,6 +182,11 @@ class CLW_WarMode
 		return 0;
 	}
 
+	float GetObjectiveGapM()
+	{
+		return 0;
+	}
+
 	// Moves the HQs (scaled separation), re-spaces / filters the objectives. Call from OnWarStart BEFORE anything is spawned
 	// at the bases (start forces spawn on GetOnWarStarted, which fires after OnWarStart).
 	protected void ApplyBattleLayout()
@@ -208,7 +213,7 @@ class CLW_WarMode
 				hqs.Insert(bases.GetBasePos(key));
 			}
 
-			points.ApplyLayout(scenario, GetBattleSizeIndex(), GetBattleSizeName(), mid, factor, hqs, GetHqObjectiveClearM());
+			points.ApplyLayout(scenario, GetBattleSizeIndex(), GetBattleSizeName(), mid, factor, hqs, GetHqObjectiveClearM(), GetObjectiveGapM());
 		}
 	}
 

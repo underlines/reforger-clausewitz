@@ -304,6 +304,22 @@ class CLW_Placement
 	// Logs nothing; returns false (site = target on the surface) when no candidate was acceptable.
 	static bool FindSite(vector target, float searchRadius, array<vector> avoid, float avoidDist, out vector site, out float roadDist, out float score)
 	{
+		array<float> dists = {};
+		if (avoid)
+		{
+			for (int k = 0; k < avoid.Count(); k++)
+			{
+				dists.Insert(avoidDist);
+			}
+		}
+
+		return FindSiteEx(target, searchRadius, avoid, dists, site, roadDist, score);
+	}
+
+	// Same as FindSite with one avoid distance per avoid position (avoidDists[i] belongs to avoid[i]; a missing entry = 0). The
+	// avoid test is a HARD constraint: when no candidate satisfies it, returns false and 'site' is just the target (NOT valid).
+	static bool FindSiteEx(vector target, float searchRadius, array<vector> avoid, array<float> avoidDists, out vector site, out float roadDist, out float score)
+	{
 		BaseWorld world = GetGame().GetWorld();
 		vector mins, maxs;
 		world.GetBoundBox(mins, maxs);
@@ -335,9 +351,12 @@ class CLW_Placement
 				bool tooClose = false;
 				if (avoid)
 				{
-					foreach (vector other : avoid)
+					for (int ai = 0; ai < avoid.Count(); ai++)
 					{
-						if (vector.DistanceXZ(candidate, other) < avoidDist)
+						float need = 0;
+						if (avoidDists && ai < avoidDists.Count())
+							need = avoidDists[ai];
+						if (vector.DistanceXZ(candidate, avoid[ai]) < need)
 						{
 							tooClose = true;
 							break;

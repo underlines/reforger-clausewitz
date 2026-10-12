@@ -54,6 +54,9 @@ class CLW_WarModeConfig_Short : CLW_WarModeConfig
 	[Attribute("250", UIWidgets.EditBox, "Objectives are kept at least this far (m) from both HQs (spawn safety)")]
 	float m_fHqObjectiveClearM;
 
+	[Attribute("120", UIWidgets.EditBox, "Scaled objectives keep this much free ground (m) between their capture circles (centre distance >= both radii + this)")]
+	float m_fObjectiveGapM;
+
 	[Attribute("1", UIWidgets.CheckBox, "Ticket bleed for the side holding fewer points")]
 	bool m_bTicketBleed;
 

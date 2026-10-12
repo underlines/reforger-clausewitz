@@ -118,7 +118,7 @@ class CLW_ControlPoints
 	// (CLW_ObjectiveSetup.m_iMinBattleSize), and when the HQs were moved (factor != 1) scales the remaining objectives about the
 	// authored HQ midpoint by the same factor, then snaps each to a usable site that keeps hqClear metres from both HQs.
 	// Objectives keep their id, name, value, radius and start owner. Scenario and runtime points stay consistent.
-	void ApplyLayout(notnull CLW_ScenarioConfig scenario, int sizeIndex, string sizeName, vector mid, float factor, array<vector> hqs, float hqClear)
+	void ApplyLayout(notnull CLW_ScenarioConfig scenario, int sizeIndex, string sizeName, vector mid, float factor, array<vector> hqs, float hqClear, float objGap)
 	{
 		if (!Replication.IsServer())
 			return;
@@ -155,38 +155,80 @@ class CLW_ControlPoints
 			Print(string.Format("CLW: points layout battleSize=%1: objective %2 dropped (needs a bigger battle)", sizeName, dropId), LogLevel.NORMAL);
 		}
 
-		// 2. scale + snap the rest
-		float minGap = 1000000000;
+		// 2. scale + snap the rest. Hard constraints for every placed objective: HQ clearance (hqClear + radius from EVERY HQ) and
+		// spacing (centre distance >= both radii + objGap from every objective placed before it). Search order: radius R, 3R, 6R
+		// with both constraints; then HQ clearance only (spacing relaxed, logged); then the authored position (logged, and flagged
+		// when even that violates the clearance). A site that breaks the HQ clearance is never accepted.
 		if (Math.AbsFloat(factor - 1) >= 0.0001)
 		{
 			array<vector> placed = {};
+			array<float> placedRadius = {};
 			foreach (CLW_ControlPoint point : m_aPoints)
 			{
+				vector authored = point.m_vPos;
 				vector wish = mid + (point.m_vPos - mid) * factor;
-				float hqDist = 0;
+				float searchRadius = Math.Max(OBJECTIVE_SITE_RADIUS_MIN_M, point.m_fRadius * 2);
+				float hqNeed = hqClear + point.m_fRadius;
+
+				array<vector> avoid = {};
+				array<float> avoidDist = {};
+				array<vector> avoidHq = {};
+				array<float> avoidHqDist = {};
 				foreach (vector hq : hqs)
 				{
-					float d = vector.DistanceXZ(wish, hq);
-					if (hqDist == 0 || d < hqDist)
-						hqDist = d;
+					avoid.Insert(hq);
+					avoidDist.Insert(hqNeed);
+					avoidHq.Insert(hq);
+					avoidHqDist.Insert(hqNeed);
 				}
 
-				float searchRadius = Math.Max(OBJECTIVE_SITE_RADIUS_MIN_M, point.m_fRadius * 2);
-				array<vector> avoid = {};
-				avoid.Copy(hqs);
+				for (int pi = 0; pi < placed.Count(); pi++)
+				{
+					avoid.Insert(placed[pi]);
+					avoidDist.Insert(placedRadius[pi] + point.m_fRadius + objGap);
+				}
+
 				vector site;
 				float roadDist;
 				float score;
-				bool ok = CLW_Placement.FindSite(wish, searchRadius, avoid, hqClear + point.m_fRadius, site, roadDist, score);
+				string how = "";
+				bool ok = CLW_Placement.FindSiteEx(wish, searchRadius, avoid, avoidDist, site, roadDist, score);
+				if (ok)
+					how = "site search";
 				if (!ok)
 				{
-					// nothing acceptable in reach: widen once, and keep the clearance
-					ok = CLW_Placement.FindSite(wish, searchRadius * 3, avoid, hqClear + point.m_fRadius, site, roadDist, score);
-					if (!ok)
-						Print(string.Format("CLW: points WARNING objective %1 has no good site near %2: raw scaled position", point.m_sId, wish), LogLevel.WARNING);
+					ok = CLW_Placement.FindSiteEx(wish, searchRadius * 3, avoid, avoidDist, site, roadDist, score);
+					if (ok)
+						how = "widened x3";
 				}
 
-				Print(string.Format("CLW: points layout %1 %2 -> %3 (scaled %4, moved %5 m, nearest HQ %6 m, nearestRoad=%7 m)", point.m_sId, point.m_vPos, site, wish, Math.Round(vector.DistanceXZ(site, wish)), Math.Round(hqDist), roadDist), LogLevel.NORMAL);
+				if (!ok)
+				{
+					ok = CLW_Placement.FindSiteEx(wish, searchRadius * 6, avoid, avoidDist, site, roadDist, score);
+					if (ok)
+						how = "widened x6";
+				}
+
+				if (!ok)
+				{
+					ok = CLW_Placement.FindSiteEx(wish, searchRadius * 3, avoidHq, avoidHqDist, site, roadDist, score);
+					if (ok)
+					{
+						how = "SPACING RELAXED (HQ clearance kept)";
+						Print(string.Format("CLW: points WARNING objective %1: no site with spacing %2 m near %3, kept the HQ clearance only", point.m_sId, objGap, wish), LogLevel.WARNING);
+					}
+				}
+
+				if (!ok)
+				{
+					site = authored;
+					CLW_Placement.SurfaceAt(site);
+					roadDist = -1;
+					how = "AUTHORED position (no site satisfied the HQ clearance)";
+					Print(string.Format("CLW: points WARNING objective %1: no site keeps %2 m from the HQs within %3 m of %4, fell back to the unscaled authored position %5", point.m_sId, Math.Round(hqNeed), Math.Round(searchRadius * 3), wish, authored), LogLevel.WARNING);
+				}
+
+				Print(string.Format("CLW: points layout %1 %2 -> %3 via %4 (scaled wish %5, moved %6 m, nearestRoad=%7 m)", point.m_sId, authored, site, how, wish, Math.Round(vector.DistanceXZ(site, wish)), roadDist), LogLevel.NORMAL);
 				point.m_vPos = site;
 				CLW_ObjectiveSetup setup2 = scenario.FindObjective(point.m_sId);
 				if (setup2)
@@ -199,14 +241,49 @@ class CLW_ControlPoints
 					point.m_Marker = null;
 				}
 
-				foreach (vector other : placed)
-				{
-					float gap = vector.DistanceXZ(site, other);
-					if (gap < minGap)
-						minGap = gap;
-				}
-
 				placed.Insert(site);
+				placedRadius.Insert(point.m_fRadius);
+			}
+		}
+
+		// verification (final positions, whatever path placed them): clearance to each HQ and the closest objective pair
+		float minGap = 1000000000;
+		string minGapPair = "-";
+		int violations;
+		foreach (CLW_ControlPoint check : m_aPoints)
+		{
+			string hqLine = "";
+			float need = hqClear + check.m_fRadius;
+			bool clearOk = true;
+			for (int hi = 0; hi < hqs.Count(); hi++)
+			{
+				float hqD = vector.DistanceXZ(check.m_vPos, hqs[hi]);
+				hqLine += string.Format(" HQ%1=%2 m", hi, Math.Round(hqD));
+				if (hqD < need)
+					clearOk = false;
+			}
+
+			string verdict = "ok";
+			if (!clearOk)
+			{
+				verdict = "VIOLATES";
+				violations++;
+			}
+
+			Print(string.Format("CLW: points layout check %1 at %2:%3 (need >= %4 m) %5", check.m_sId, check.m_vPos, hqLine, Math.Round(need), verdict), LogLevel.NORMAL);
+		}
+
+		for (int ci = 0; ci < m_aPoints.Count(); ci++)
+		{
+			for (int cj = ci + 1; cj < m_aPoints.Count(); cj++)
+			{
+				float pairD = vector.DistanceXZ(m_aPoints[ci].m_vPos, m_aPoints[cj].m_vPos);
+				float pairNeed = m_aPoints[ci].m_fRadius + m_aPoints[cj].m_fRadius + objGap;
+				if (pairD < minGap)
+				{
+					minGap = pairD;
+					minGapPair = m_aPoints[ci].m_sId + "-" + m_aPoints[cj].m_sId + " (spacing wanted " + Math.Round(pairNeed).ToString() + " m)";
+				}
 			}
 		}
 
@@ -228,7 +305,7 @@ class CLW_ControlPoints
 			total += kept.m_iValue;
 		}
 
-		Print(string.Format("CLW: points layout battleSize=%1: %2 objectives (total value %3), scale=%4, closest pair %5 m, HQ clearance %6 m", sizeName, m_aPoints.Count(), total, factor, Math.Round(minGap), Math.Round(hqClear)), LogLevel.NORMAL);
+		Print(string.Format("CLW: points layout battleSize=%1: %2 objectives (total value %3), scale=%4, closest pair %5 m %6, HQ clearance %7 m, objective gap %8 m, HQ clearance violations %9", sizeName, m_aPoints.Count(), total, factor, Math.Round(minGap), minGapPair, Math.Round(hqClear), Math.Round(objGap), violations), LogLevel.NORMAL);
 	}
 
 	void Stop()

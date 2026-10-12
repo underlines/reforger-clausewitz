@@ -78,6 +78,11 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 		return m_Config.m_fHqObjectiveClearM;
 	}
 
+	override float GetObjectiveGapM()
+	{
+		return m_Config.m_fObjectiveGapM;
+	}
+
 	override void OnWarStart(CLW_WarState war)
 	{
 		ApplyBattleLayout();
