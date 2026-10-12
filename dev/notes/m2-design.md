@@ -275,5 +275,6 @@ Difficulty knobs (consts): think interval, reserve size, max units per target.
 | **P3 Commander v1 + protocol v2** | `CLW_Orders.c` (executor), `CLW_RuleCommander.c`, `CLW_RemoteCommander.c`, `CLW_Contact.c` (kind) | P1, P2 |
 | **P4 Missions** | `CLW_MissionBoard.c`, `CLW_MissionPopup` (RPC on `SCR_PlayerController`, new file) | P3 |
 | **P5 Setup menu** | setup menu UI (layout + script), RPCs on `SCR_PlayerController` (new file), waiting hint for other players | P1 |
+| **P6 Faction choice + mod packs** | setup "Battle" group (faction A/B from the world's FactionManager), sides become dynamic (scenario defines side slots: base, identity, default faction), profile lookup by key or discovery (profiles merge discovered extras, e.g. WCS tanks in vanilla catalogs), player loadouts for any faction, never-shipped test project (`dev/testpacks/`) that loads Clausewitz + RHS/WCS without a hard dependency. Research: `research/modpacks-factions-testing.md` | P2, P5 |
 | **S Sidecar + dashboard** | `dev/tools/llm_sidecar.mjs`, `dev/tools/dashboard/*` | this spec only (parallel) |
 | **E2E** | one Workbench run of everything, fixes, PROGRESS/skills update | all |
