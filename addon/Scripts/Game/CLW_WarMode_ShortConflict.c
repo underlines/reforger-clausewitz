@@ -46,8 +46,41 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 		return "Tickets drain with losses and from holding fewer points; win by tickets, by holding all points, or by tickets at the time limit.";
 	}
 
+	override float GetDistanceScale()
+	{
+		array<float> scales = m_Config.m_aDistanceScales;
+		if (!scales || scales.IsEmpty())
+			return 1;
+
+		int index = Param("battleSize").GetInt();
+		if (index < 0 || index >= scales.Count())
+			index = scales.Count() - 1;
+		return scales[index];
+	}
+
+	override int GetBattleSizeIndex()
+	{
+		return Param("battleSize").GetInt();
+	}
+
+	override string GetBattleSizeName()
+	{
+		return Param("battleSize").GetChoice();
+	}
+
+	override float GetMinHqDistanceM()
+	{
+		return m_Config.m_fMinHqDistanceM;
+	}
+
+	override float GetHqObjectiveClearM()
+	{
+		return m_Config.m_fHqObjectiveClearM;
+	}
+
 	override void OnWarStart(CLW_WarState war)
 	{
+		ApplyBattleLayout();
 		m_fElapsed = 0;
 		m_fBleedAcc = 0;
 		m_fIncomeAcc = 0;

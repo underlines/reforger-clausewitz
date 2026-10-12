@@ -41,6 +41,7 @@ class CLW_Placement
 	protected static AIAgent s_PathAgent;					// weak, the agent s_Pathfinding belongs to
 	protected static bool s_bNavmeshCalibrated;				// the query answered "yes" for the agent's own position at least once
 	protected static bool s_bUncalibratedLogged;
+	static const float SITE_GOOD_ENOUGH = 40;				// FindSite: a site scoring below this is taken without searching further
 
 	static void SurfaceAt(inout vector pos)
 	{
@@ -291,6 +292,119 @@ class CLW_Placement
 		}
 
 		return best;
+	}
+
+	// ---- strategic sites (HQ / FOB / objective relocation) ----
+
+	// Best dry, flat, navmesh-friendly, road-adjacent site near 'target' (battle layout: the HQ separation scales with the battle
+	// size, so the scaled position is only a wish). Candidates: the target, then rings out to searchRadius. A candidate is rejected
+	// when it is water (also 25 m around: no shore bases), too steep, outside the world bounds, or closer than avoidDist to any
+	// 'avoid' position. Score (lower = better) = road distance (400 without a road) + 0.3 * distance from the target
+	// + 300 when the navmesh says it is not walkable. A candidate scoring below SITE_GOOD_ENOUGH ends the search at once.
+	// Logs nothing; returns false (site = target on the surface) when no candidate was acceptable.
+	static bool FindSite(vector target, float searchRadius, array<vector> avoid, float avoidDist, out vector site, out float roadDist, out float score)
+	{
+		BaseWorld world = GetGame().GetWorld();
+		vector mins, maxs;
+		world.GetBoundBox(mins, maxs);
+		float margin = 150;
+		float step = Math.Max(30, searchRadius / 6);
+		bool found;
+		float bestScore = 1000000000;
+		vector bestPos;
+		float bestRoad = -1;
+		int ringCount = Math.Ceil(searchRadius / step);
+		for (int ring = 0; ring <= ringCount; ring++)
+		{
+			float r = ring * step;
+			int count = 1;
+			if (ring > 0)
+				count = Math.Clamp(Math.Ceil(Math.PI2 * r / step), 6, 24);
+
+			for (int a = 0; a < count; a++)
+			{
+				float angle = Math.PI2 * a / count + ring * 0.37;
+				vector candidate = target + Vector(Math.Cos(angle) * r, 0, Math.Sin(angle) * r);
+				if (candidate[0] < mins[0] + margin || candidate[0] > maxs[0] - margin || candidate[2] < mins[2] + margin || candidate[2] > maxs[2] - margin)
+					continue;
+
+				SurfaceAt(candidate);
+				if (IsWater(candidate) || !SlopeOk(candidate) || NearWater(candidate, 25))
+					continue;
+
+				bool tooClose = false;
+				if (avoid)
+				{
+					foreach (vector other : avoid)
+					{
+						if (vector.DistanceXZ(candidate, other) < avoidDist)
+						{
+							tooClose = true;
+							break;
+						}
+					}
+				}
+
+				if (tooClose)
+					continue;
+
+				float road = NearestRoadDistance(candidate);
+				float candScore = r * 0.3;
+				if (road < 0)
+					candScore += 400;
+				else
+					candScore += road;
+
+				vector snapped;
+				if (NavmeshCheck(candidate, CLW_WarConfig.PLACE_BASE_NAVMESH_TOL_M, snapped) == 0)
+					candScore += 300;
+
+				if (candScore < bestScore)
+				{
+					bestScore = candScore;
+					bestPos = candidate;
+					bestRoad = road;
+					found = true;
+					if (candScore < SITE_GOOD_ENOUGH)
+					{
+						site = bestPos;
+						roadDist = bestRoad;
+						score = bestScore;
+						return true;
+					}
+				}
+			}
+		}
+
+		if (found)
+		{
+			site = bestPos;
+			roadDist = bestRoad;
+			score = bestScore;
+			return true;
+		}
+
+		site = target;
+		SurfaceAt(site);
+		roadDist = -1;
+		score = -1;
+		return false;
+	}
+
+	// Water within 'radius' of pos (four compass samples).
+	static bool NearWater(vector pos, float radius)
+	{
+		BaseWorld world = GetGame().GetWorld();
+		for (int i = 0; i < 4; i++)
+		{
+			float angle = i * Math.PI * 0.5;
+			float x = pos[0] + Math.Cos(angle) * radius;
+			float z = pos[2] + Math.Sin(angle) * radius;
+			if (world.GetSurfaceY(x, z) <= world.GetOceanHeight(x, z) + CLW_WarConfig.WATER_MARGIN_M)
+				return true;
+		}
+
+		return false;
 	}
 
 	// ---- unstuck spots ----

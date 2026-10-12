@@ -153,6 +153,65 @@ class CLW_WarMode
 		return 0;
 	}
 
+	// ---- battle layout (HQ / FOB separation, objective set) ----
+
+	// Scale of the authored HQ separation for the chosen battle size (1 = as authored). FOB distances use the same scale.
+	float GetDistanceScale()
+	{
+		return 1;
+	}
+
+	// Index of the chosen battle size in the mode's size list (-1 = the mode has no battle size), and its name.
+	int GetBattleSizeIndex()
+	{
+		return -1;
+	}
+
+	string GetBattleSizeName()
+	{
+		return "";
+	}
+
+	float GetMinHqDistanceM()
+	{
+		return 0;
+	}
+
+	float GetHqObjectiveClearM()
+	{
+		return 0;
+	}
+
+	// Moves the HQs (scaled separation), re-spaces / filters the objectives. Call from OnWarStart BEFORE anything is spawned
+	// at the bases (start forces spawn on GetOnWarStarted, which fires after OnWarStart).
+	protected void ApplyBattleLayout()
+	{
+		CLW_ScenarioConfig scenario = CLW_ScenarioConfig.Get();
+		CLW_Bases bases = CLW_GameMode.GetBases();
+		CLW_ControlPoints points = CLW_GameMode.GetControlPoints();
+		if (!scenario || !bases)
+		{
+			Print("CLW: bases layout skipped: no scenario / bases object", LogLevel.WARNING);
+			return;
+		}
+
+		vector mid;
+		float factor = 1;
+		bases.ApplyLayout(scenario, GetBattleSizeName(), GetDistanceScale(), GetMinHqDistanceM(), mid, factor);
+		if (points)
+		{
+			array<vector> hqs = {};
+			array<string> keys = {};
+			scenario.GetFactionKeys(keys);
+			foreach (string key : keys)
+			{
+				hqs.Insert(bases.GetBasePos(key));
+			}
+
+			points.ApplyLayout(scenario, GetBattleSizeIndex(), GetBattleSizeName(), mid, factor, hqs, GetHqObjectiveClearM());
+		}
+	}
+
 	// Seconds left (-1 = no time limit).
 	float GetTimeLeftSec()
 	{

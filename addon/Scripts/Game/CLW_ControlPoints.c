@@ -24,6 +24,7 @@ class CLW_ControlPoints
 	protected ref array<string> m_aBaseMarkerKeys = {};
 	protected ref ScriptInvoker m_OnOwnerChanged = new ScriptInvoker();	// (string id, string oldOwner, string newOwner)
 	protected ref ScriptInvoker m_OnContested = new ScriptInvoker();	// (string id)
+	static const float OBJECTIVE_SITE_RADIUS_MIN_M = 150;	// layout: search radius around a scaled objective position
 	protected string m_sFirst;
 	protected string m_sSecond;
 	protected bool m_bRunning;
@@ -111,6 +112,123 @@ class CLW_ControlPoints
 		m_aBaseMarkers.Clear();
 		m_aBaseMarkerKeys.Clear();
 		Print(string.Format("CLW: points re-keyed: %1 vs %2", m_sFirst, m_sSecond), LogLevel.NORMAL);
+	}
+
+	// Battle layout (called once when the war starts, after Rekey): drops the objectives the chosen battle size does not use
+	// (CLW_ObjectiveSetup.m_iMinBattleSize), and when the HQs were moved (factor != 1) scales the remaining objectives about the
+	// authored HQ midpoint by the same factor, then snaps each to a usable site that keeps hqClear metres from both HQs.
+	// Objectives keep their id, name, value, radius and start owner. Scenario and runtime points stay consistent.
+	void ApplyLayout(notnull CLW_ScenarioConfig scenario, int sizeIndex, string sizeName, vector mid, float factor, array<vector> hqs, float hqClear)
+	{
+		if (!Replication.IsServer())
+			return;
+
+		SCR_MapMarkerManagerComponent manager = SCR_MapMarkerManagerComponent.GetInstance();
+
+		// 1. which objectives does this battle size use? (never drop all of them)
+		array<string> drop = {};
+		if (sizeIndex >= 0)
+		{
+			foreach (CLW_ObjectiveSetup setup : scenario.m_aObjectives)
+			{
+				if (setup.m_iMinBattleSize > sizeIndex)
+					drop.Insert(setup.m_sId);
+			}
+		}
+
+		if (drop.Count() >= m_aPoints.Count())
+			drop.Clear();
+
+		foreach (string dropId : drop)
+		{
+			CLW_ControlPoint gone = Find(dropId);
+			if (gone)
+			{
+				if (gone.m_Marker && manager)
+					manager.RemoveStaticMarker(gone.m_Marker);
+				m_aPoints.RemoveItem(gone);
+			}
+
+			CLW_ObjectiveSetup goneSetup = scenario.FindObjective(dropId);
+			if (goneSetup)
+				scenario.m_aObjectives.RemoveItem(goneSetup);
+			Print(string.Format("CLW: points layout battleSize=%1: objective %2 dropped (needs a bigger battle)", sizeName, dropId), LogLevel.NORMAL);
+		}
+
+		// 2. scale + snap the rest
+		float minGap = 1000000000;
+		if (Math.AbsFloat(factor - 1) >= 0.0001)
+		{
+			array<vector> placed = {};
+			foreach (CLW_ControlPoint point : m_aPoints)
+			{
+				vector wish = mid + (point.m_vPos - mid) * factor;
+				float hqDist = 0;
+				foreach (vector hq : hqs)
+				{
+					float d = vector.DistanceXZ(wish, hq);
+					if (hqDist == 0 || d < hqDist)
+						hqDist = d;
+				}
+
+				float searchRadius = Math.Max(OBJECTIVE_SITE_RADIUS_MIN_M, point.m_fRadius * 2);
+				array<vector> avoid = {};
+				avoid.Copy(hqs);
+				vector site;
+				float roadDist;
+				float score;
+				bool ok = CLW_Placement.FindSite(wish, searchRadius, avoid, hqClear + point.m_fRadius, site, roadDist, score);
+				if (!ok)
+				{
+					// nothing acceptable in reach: widen once, and keep the clearance
+					ok = CLW_Placement.FindSite(wish, searchRadius * 3, avoid, hqClear + point.m_fRadius, site, roadDist, score);
+					if (!ok)
+						Print(string.Format("CLW: points WARNING objective %1 has no good site near %2: raw scaled position", point.m_sId, wish), LogLevel.WARNING);
+				}
+
+				Print(string.Format("CLW: points layout %1 %2 -> %3 (scaled %4, moved %5 m, nearest HQ %6 m, nearestRoad=%7 m)", point.m_sId, point.m_vPos, site, wish, Math.Round(vector.DistanceXZ(site, wish)), Math.Round(hqDist), roadDist), LogLevel.NORMAL);
+				point.m_vPos = site;
+				CLW_ObjectiveSetup setup2 = scenario.FindObjective(point.m_sId);
+				if (setup2)
+					setup2.m_vPos = site;
+
+				point.m_sMarkerOwner = "?";
+				if (point.m_Marker && manager)
+				{
+					manager.RemoveStaticMarker(point.m_Marker);
+					point.m_Marker = null;
+				}
+
+				foreach (vector other : placed)
+				{
+					float gap = vector.DistanceXZ(site, other);
+					if (gap < minGap)
+						minGap = gap;
+				}
+
+				placed.Insert(site);
+			}
+		}
+
+		// 3. HQ markers follow the HQs (rebuilt by the next tick)
+		if (manager)
+		{
+			foreach (SCR_MapMarkerBase baseMarker : m_aBaseMarkers)
+			{
+				manager.RemoveStaticMarker(baseMarker);
+			}
+		}
+
+		m_aBaseMarkers.Clear();
+		m_aBaseMarkerKeys.Clear();
+
+		int total;
+		foreach (CLW_ControlPoint kept : m_aPoints)
+		{
+			total += kept.m_iValue;
+		}
+
+		Print(string.Format("CLW: points layout battleSize=%1: %2 objectives (total value %3), scale=%4, closest pair %5 m, HQ clearance %6 m", sizeName, m_aPoints.Count(), total, factor, Math.Round(minGap), Math.Round(hqClear)), LogLevel.NORMAL);
 	}
 
 	void Stop()
