@@ -1,7 +1,8 @@
 // Build executor (M3 phase F, design section 4): turns a FOB in state BUILDING into a standing FOB.
 //   instant   the FOB stands the moment the builder is on site
 //   timed     progress 0..100 % over the mode parameter fobBuildSec while the builder is within CLW_FobManager.ARRIVE_M of the site;
-//             paused (and logged) while it is away; a log line every 25 %
+//             paused (and logged) while it is away; a log line every 25 %. M4 WP5: a stalled builder close to the site may build from
+//             there (CLW_Fob.m_fPresentM, decided by CLW_FobManager); a builder away for AWAY_RETURN_SEC is sent back (MOVING)
 // "Standing" = named spawn point of the side (respawn at ticket cost like the base) + the FOB kit (arsenal box, supply box, sandbags: CLW_FactionProfile.m_aFobKit,
 // CLW_Services.SpawnFobKit; sides without a kit get the tier-1 services). Tier 2 (vehicle depot, medical) is Upgrade(). Remove() undoes
 // all of it when the FOB is lost. The prefabs come from the faction data through CLW_PropResolver (kin fallback), the spawn
@@ -31,7 +32,12 @@ class CLW_BuildExecutor
 			if (now - fob.m_fLastPauseLogAt >= CLW_FobManager.PAUSE_LOG_SEC)
 			{
 				fob.m_fLastPauseLogAt = now;
-				Print(string.Format("CLW: fob %1 build paused at %2 pct: the builder is away from the site", fob.m_sId, Math.Round(fob.m_fBuild)), LogLevel.NORMAL);
+				float awaySec;
+				if (fob.m_fAwayAt > 0)
+					awaySec = now - fob.m_fAwayAt;
+
+				// CLW_FobManager sends the builder back after AWAY_RETURN_SEC off the site (presence radius = ARRIVE_M, or fob.m_fPresentM)
+				Print(string.Format("CLW: fob %1 build paused at %2 pct: the builder %3 is away from the site (%4 m, %5 s; back to MOVING after %6 s)", fob.m_sId, Math.Round(fob.m_fBuild), fob.m_sBuilderId, Math.Round(fob.m_fBuilderDist), Math.Round(awaySec), Math.Round(CLW_FobManager.AWAY_RETURN_SEC)), LogLevel.NORMAL);
 			}
 
 			return;
