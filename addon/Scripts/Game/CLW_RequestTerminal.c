@@ -178,13 +178,20 @@ class CLW_RequestTerminals
 		RemoveBase(sideKey, fobId);
 	}
 
-	// A service of kind command_post or vehicle_depot was placed at servicePos (footprint radius): put a terminal beside it.
+	// A service of kind command_post was placed at servicePos (footprint radius): put a terminal beside it (the vehicle depot gets none).
 	static void OnServicePlaced(string sideKey, string baseId, string kind, vector servicePos, float radius)
 	{
 		if (!Replication.IsServer())
 			return;
 
-		if (kind != CLW_ServiceKind.COMMAND_POST && kind != CLW_ServiceKind.VEHICLE_DEPOT)
+		if (kind == CLW_ServiceKind.VEHICLE_DEPOT)
+		{
+			// owner 2026-10-13: only the command post gets a terminal (the depot is reached through it, CLW_RequestService.FindDepot)
+			Print(string.Format("CLW: terminals skipped at %1 (only the command post gets one) side=%2 base=%3", kind, sideKey, baseId), LogLevel.NORMAL);
+			return;
+		}
+
+		if (kind != CLW_ServiceKind.COMMAND_POST)
 			return;
 
 		if (!CLW_Capabilities.Has("requests"))
