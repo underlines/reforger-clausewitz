@@ -56,9 +56,16 @@ class CLW_BuildExecutor
 		fob.m_fBuild = 100;
 		fob.m_iLoggedStep = 100;
 
+		// the respawn point goes on clear ground at the site (not inside a fence / wall); the services are placed around the site by
+		// CLW_Services.SpawnServices (CLW_FreeSpot, collision-aware)
+		vector pointPos = fob.m_vPos;
+		float pointYaw;
+		if (!CLW_FreeSpot.FindSmall("fob " + fob.m_sId + " spawn point", fob.m_vPos, 0, 10, 1.5, 2, pointPos, pointYaw))
+			pointPos = fob.m_vPos;
+
 		CLW_Bases bases = CLW_GameMode.GetBases();
 		if (bases)
-			fob.m_SpawnPoint = bases.SpawnFobPoint(fob.m_sSide, fob.m_vPos);
+			fob.m_SpawnPoint = bases.SpawnFobPoint(fob.m_sSide, pointPos);
 
 		if (!fob.m_SpawnPoint)
 			Print(string.Format("CLW: fob %1 WARNING no spawn point (the side has no spawn point prefab?): players cannot respawn here", fob.m_sId), LogLevel.WARNING);

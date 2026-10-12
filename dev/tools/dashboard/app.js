@@ -475,6 +475,22 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall, act = "a
         h.push({ x, y, r: 12, title: `${fk} FOB ${f.id}${f.name ? " " + f.name : ""}`, lines: [...(num(f.stock) ? [`stock ${Math.round(f.stock)} supplies`] : []), `state ${f.state}${f.state === "building" ? " " + Math.round(f.build ?? 0) + "%" : ""}, tier ${dash(f.tier)}${f.underAttack ? " (UNDER ATTACK)" : ""}`, `services: ${Array.isArray(f.services) && f.services.length ? f.services.join(", ") : "-"}`, `at ${Math.round(f.pos[0])}, ${Math.round(f.pos[1])}`] });
       }
     }
+    if (layers.structures) { // base / FOB structures (arsenal, depot, ...): situation.structures[] of each faction, a small lettered square
+      const GLYPH = { command_post: "C", arsenal: "A", vehicle_depot: "V", supply: "S", medical: "+", repair: "R" };
+      for (const [fk, fe] of Object.entries(st.factions ?? {})) {
+        if (faction !== "all" && fk !== faction) continue;
+        for (const s of Array.isArray(fe.situation?.structures) ? fe.situation.structures : []) {
+          if (!s || !Array.isArray(s.pos) || !num(s.pos[0]) || !num(s.pos[1])) continue;
+          const x = sx(s.pos[0]), y = sy(s.pos[1]), col = colorOf(fk);
+          if (x < -50 || x > r.width + 50 || y < -50 || y > r.height + 50) continue;
+          ctx.fillStyle = "rgba(8,11,16,.85)"; ctx.strokeStyle = col; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.rect(x - 6, y - 6, 12, 12); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = col; ctx.font = "bold 9px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillText(GLYPH[s.kind] ?? "?", x, y + 3); ctx.textAlign = "start";
+          if (layers.labels && v.s > 0.1) { const txt = String(s.label ?? s.kind); ctx.font = "10px system-ui, sans-serif"; ctx.lineWidth = 3; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(8,11,16,.9)"; ctx.strokeText(txt, x + 9, y + 3); ctx.fillStyle = col; ctx.fillText(txt, x + 9, y + 3); ctx.lineJoin = "miter"; ctx.font = "11px system-ui, sans-serif"; }
+          h.push({ x, y, r: 9, title: `${fk} ${s.label ?? s.kind}`, lines: [`${dash(s.kind)} at ${dash(s.base)}`, `grid ${dash(s.grid)}`, `at ${Math.round(s.pos[0])}, ${Math.round(s.pos[1])}`] });
+        }
+      }
+    }
     const shown =Object.keys(st.factions ?? {}).filter((f) => faction === "all" || f === faction);
     for (const f of shown) {
       const e = st.factions[f], sit = e.situation ?? {};
@@ -897,7 +913,7 @@ function useWorld() {
 
 // ---------- views ----------
 const LAYER_KEY = "clw.mapLayers";
-const LAYER_DEFAULTS = { image: true, roads: true, buildings: true, objects: true, places: true, grid: true, objectives: true, squads: true, contacts: true, orders: true, labels: true, flip: false, dim: 0.8 };
+const LAYER_DEFAULTS = { image: true, structures: true, roads: true, buildings: true, objects: true, places: true, grid: true, objectives: true, squads: true, contacts: true, orders: true, labels: true, flip: false, dim: 0.8 };
 function loadLayers() {
   try { return { ...LAYER_DEFAULTS, ...JSON.parse(localStorage.getItem(LAYER_KEY) ?? "{}") }; } catch { return { ...LAYER_DEFAULTS }; }
 }
@@ -958,7 +974,7 @@ function MapView({ st, faction, rows, sel, onSel, layers, setLayers, world, act,
   return html`<main class="view">
     <div class="toolbar">
       <${ActFilter} act=${act} setAct=${setAct} rows=${rows} /><${ActLegend} names=${names} rows=${rows} />
-      <div class="toggles nomargin">${["grid", "objectives", "squads", "contacts", "orders", "labels"].map(tog)}</div>
+      <div class="toggles nomargin">${["grid", "objectives", "structures", "squads", "contacts", "orders", "labels"].map(tog)}</div>
       <div class="toggles" title="Map background: toggles, image opacity; flip = image y axis inverted (calibration)">
         ${["image", "roads", "buildings", "objects", "places", "flip"].map(tog)}
         <span class="muted" title="Objects key: diamond = base, triangle over a bar = airport, ring = port. Buildings: grey = house, large = bigger than 250 m2, orange = military / industrial">◆ base ▲ airport ◎ port</span>

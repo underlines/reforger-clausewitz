@@ -224,6 +224,9 @@ class CLW_ServiceEntry
 	[Attribute("0", UIWidgets.EditBox, "Footprint radius (m) for the free-spot search. 0 = default of the kind")]
 	float m_fRadius;
 
+	[Attribute("0 0 0", UIWidgets.EditBox, "Footprint for the collision-free placement: half width X, height Y, half depth Z (m). 0 0 0 = derived from the prefab's child objects (no spawn needed), else a square from the radius")]
+	vector m_vFootprint;
+
 	[Attribute("1", UIWidgets.CheckBox, "Service is spawned")]
 	bool m_bEnabled;
 }

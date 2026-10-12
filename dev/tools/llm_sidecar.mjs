@@ -49,6 +49,7 @@
 //     M3 phase Q: the situation carries "requests":[{"id","player","role":"leader|soldier","kind":"vehicle|squad|resupply|reinforce|recon","args",
 //     "status":"granted|refused","reason","ageSec"}] (recent player requests the game's rules decided; fast path, no LLM). Passed through
 //     unchanged: GET /api/state factions[<name>].situation.requests (dashboard Requests tab). Protocol stays v3.
+//     Base structures: the situation carries "structures":[{"base","kind","label","pos":[x,z],"grid"}] (own side, one per placed service, same set as the in-game map markers). Dashboard map layer only (GET /api/state factions[<name>].situation.structures); stripped from the LLM prompt.
 //     Reply channels: orders / buy / missions (same command JSON as v2) + "fobs" (M3 phase F: [{"command":"ESTABLISH_FOB","site":"<fobSites id>"} or {"command":"UPGRADE_FOB","fob":"<fobs id>"}], max 1; phase L adds {"command":"RESUPPLY","fob":"<fobs id>"} and {"command":"CONVOY","origin":"<base id>","dest":"<base id>"}, max 3 per reply in total, only with the logistics capability + blocks convoys[] / logisticsRules; situation blocks fobs[] / fobSites[] / fobRules). New channels need game + sidecar support.
 //
 //   Faction SITREP (design: dev/notes/sitrep-design.md). The game POST may carry "sitrep": the rules SITREP the game built from the
@@ -739,7 +740,8 @@ function extractOrders(text, v2 = false) {
 const SITREP_EXTRA_TOKENS = 450; // room for the SITREP object on top of the configured maxTokens
 // Returns {raw, usage:{input,output}}. Throws Error on transport/HTTP failure.
 async function callProvider(c, sit, opts = {}) {
-  const userMsg = "Current situation:\n" + JSON.stringify(sit);
+  const { structures: _structures, ...llmSit } = sit ?? {}; // situation.structures[] (base markers, dashboard map only) is not sent to the model
+  const userMsg = "Current situation:\n" + JSON.stringify(llmSit);
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), c.timeoutSec * 1000);
   try {

@@ -51,6 +51,7 @@ class CLW_Services
 		CLW_SupplyLink.Reset();
 		CLW_ArsenalPool.Reset();
 		CLW_RequestTerminals.Reset();
+		CLW_StructureMarkers.Reset();
 	}
 
 	// War SETUP -> RUNNING (CLW_GameMode.OnWarStarted, before the start forces are fielded, after the battle layout moved the HQs).
@@ -85,7 +86,7 @@ class CLW_Services
 
 			array<string> all = {};
 			int placed = SpawnServices(key, BASE_HQ, anchor, all);
-			Print(string.Format("CLW: services side %1 base %2: %3 services spawned around %4", key, BASE_HQ, placed, anchor), LogLevel.NORMAL);
+			Print(string.Format("CLW: services side %1 base %2: %3 services spawned around %4 grid %5", key, BASE_HQ, placed, anchor, CLW_Places.Grid(anchor)), LogLevel.NORMAL);
 		}
 
 		if (!s_bPolling)
@@ -114,6 +115,7 @@ class CLW_Services
 		}
 
 		CLW_RequestTerminals.RemoveAll();
+		CLW_StructureMarkers.RemoveAll();
 		Print(string.Format("CLW: services war over: %1 services removed", removed), LogLevel.NORMAL);
 		s_aInst.Clear();
 		CLW_SupplyLink.Reset();
@@ -190,6 +192,7 @@ class CLW_Services
 			return 0;
 
 		CLW_SupplyLink.Remove(sideKey, baseId);
+		CLW_StructureMarkers.RemoveBase(sideKey, baseId);
 		int removed;
 		for (int i = s_aInst.Count() - 1; i >= 0; i--)
 		{
@@ -293,22 +296,29 @@ class CLW_Services
 		if (radius <= 0)
 			radius = CLW_ServiceKind.DefaultRadius(entry.m_sKind);
 
+		// footprint: data override, else the extent of the prefab's child objects, else a square from the radius (no test spawn)
+		float height = CLW_SpotConfig.COMPOSITION_HEIGHT_M;
+		if (entry.m_sKind == CLW_ServiceKind.ARSENAL)
+			height = 2.5;
+		CLW_Footprint foot = CLW_FreeSpot.FootprintOf(entry.m_Prefab, entry.m_vFootprint, radius, height);
+		radius = Math.Max(radius, foot.Radius());
+		Print(string.Format("CLW: place %1 %2 %3 footprint half %4 x %5 (offset %6 %7) height %8 from %9", sideKey, baseId, entry.m_sKind, Math.Round(foot.m_fHalfX * 10) / 10, Math.Round(foot.m_fHalfZ * 10) / 10, Math.Round(foot.m_fOffsetX), Math.Round(foot.m_fOffsetZ), foot.m_fHeight, foot.m_sSource), LogLevel.NORMAL);
+
 		vector spot;
 		string via;
+		float yaw = entry.m_fYaw;
 		if (entry.m_vOffset[0] != 0 || entry.m_vOffset[2] != 0)
 		{
 			spot = Vector(anchor[0] + entry.m_vOffset[0], 0, anchor[2] + entry.m_vOffset[2]);
 			CLW_Placement.SurfaceAt(spot);
 			via = "offset";
+			if (yaw < 0)
+				yaw = CLW_Placement.YawFromDir(anchor[0] - spot[0], anchor[2] - spot[2]);
 		}
 		else
 		{
-			via = FindSpot(anchor, keepClear + radius, radius, placedPos, placedRad, spot);
+			via = FindSpot(sideKey + " " + baseId + " " + entry.m_sKind, anchor, keepClear, foot, entry.m_fYaw, placedPos, placedRad, spot, yaw);
 		}
-
-		float yaw = entry.m_fYaw;
-		if (yaw < 0)
-			yaw = CLW_Placement.YawFromDir(anchor[0] - spot[0], anchor[2] - spot[2]);
 
 		EntitySpawnParams params = new EntitySpawnParams();
 		params.TransformMode = ETransformMode.WORLD;
@@ -338,43 +348,70 @@ class CLW_Services
 		CollectHierarchy(entity, tree);
 		int reaffiliated = AdoptFaction(tree, source, sideKey);
 		int spawnPoints = DisableSpawnPoints(tree);
+		CLW_StructureMarkers.Add(sideKey, baseId, entry.m_sKind, spot);	// map marker (own side) + dashboard structures
 		CLW_RequestTerminals.OnServicePlaced(sideKey, baseId, entry.m_sKind, spot, radius);	// M3 phase Q: request terminal next to the command post / depot
-		Print(string.Format("CLW: services placed %1 %2 %3 at %4 yaw=%5 r=%6 via=%7", sideKey, baseId, entry.m_sKind, spot, Math.Round(yaw), radius, via), LogLevel.NORMAL);
+		Print(string.Format("CLW: services placed %1 %2 %3 at %4 yaw=%5 r=%6 via=%7 grid=%8", sideKey, baseId, entry.m_sKind, spot, Math.Round(yaw), radius, via, CLW_Places.Grid(spot)), LogLevel.NORMAL);
 		Print(string.Format("CLW: services   %1 %2 entities=%3 reaffiliated=%4 spawnPointsOff=%5 prefab=%6", sideKey, entry.m_sKind, tree.Count(), reaffiliated, spawnPoints, entry.m_Prefab.GetPath()), LogLevel.NORMAL);
 		return true;
 	}
 
-	// Free spot on rings around the anchor: outside minDist, no overlap with the placed services (+ gap), dry, flat, nothing solid in a
-	// cylinder. Rings widen; the last resort ignores the solid check, then forces a spot. Returns how the spot was found.
-	protected static string FindSpot(vector anchor, float minDist, float radius, notnull array<vector> placedPos, notnull array<float> placedRad, out vector spot)
+	// Max terrain grade over a service footprint per placement pass (strict, relaxed, lenient).
+	protected static float PlaceGrade(int pass)
 	{
-		float cylRadius = Math.Min(radius * 0.5, 4);
-		for (int pass = 0; pass < 2; pass++)
+		if (pass <= 0)
+			return 0.08;
+		if (pass == 1)
+			return 0.14;
+
+		return 0.25;
+	}
+
+	// Free spot around the anchor for a footprint: outside the keep-clear zone, clear of the placed services (+ gap), dry, flat and with
+	// nothing solid under the footprint (CLW_FreeSpot). Passes: strict (8 % grade over the footprint), relaxed (wider ring, trees ignored,
+	// 14 %), lenient (25 %, objects still block; DS e2e 2026-10-12: a fixed 1.2-3.7 m height range rejected 95 % of Arland). The last resort
+	// is a forced spot on the minimum ring (logged as FORCED). Returns how the spot was found.
+	protected static string FindSpot(string label, vector anchor, float keepClear, CLW_Footprint foot, float fixedYaw, notnull array<vector> placedPos, notnull array<float> placedRad, out vector spot, out float yaw)
+	{
+		float footRadius = foot.Radius();
+		float minDist = keepClear + footRadius;
+		for (int pass = 0; pass < 3; pass++)
 		{
-			for (int ring = 0; ring < PLACE_BATCHES; ring++)
+			CLW_SpotParams p = new CLW_SpotParams();
+			p.m_sLabel = label;
+			if (pass == 1)
+				p.m_sLabel = label + " (relaxed)";
+			else if (pass == 2)
+				p.m_sLabel = label + " (lenient)";
+
+			p.m_vCenter = anchor;
+			p.SetFootprint(foot);
+			p.m_fMinRadius = minDist;
+			p.m_fMaxRadius = minDist + PLACE_RING_M + (PLACE_BATCHES - 1) * PLACE_RING_GROW_M;
+			p.m_fMaxHeightRange = Math.Max(1.2, 2 * footRadius * PlaceGrade(pass));	// height range over the footprint diameter
+			p.m_fFixedYaw = fixedYaw;
+			if (pass >= 1)
 			{
-				float maxDist = minDist + PLACE_RING_M + ring * PLACE_RING_GROW_M;
-				for (int attempt = 0; attempt < PLACE_ATTEMPTS; attempt++)
-				{
-					float angle = Math.RandomFloat(0, Math.PI2);
-					float dist = Math.RandomFloat(minDist, maxDist);
-					vector cand = anchor + Vector(Math.Cos(angle) * dist, 0, Math.Sin(angle) * dist);
-					CLW_Placement.SurfaceAt(cand);
-					if (CLW_Placement.IsWater(cand) || !CLW_Placement.SlopeOk(cand))
-						continue;
+				p.m_fMaxRadius = p.m_fMaxRadius * 1.6;
+				p.m_bBlockTrees = false;
+				p.m_fMargin = 0.3;
+			}
 
-					if (Overlaps(cand, radius, placedPos, placedRad))
-						continue;
+			foreach (int i, vector other : placedPos)
+			{
+				p.AddAvoid(other, footRadius + placedRad[i] + PLACE_GAP_M);
+			}
 
-					if (pass == 0 && !CLW_Placement.IsFree(cand, cylRadius, 2.5, 0, 0))
-						continue;
+			CLW_SpotResult res = new CLW_SpotResult();
+			if (CLW_FreeSpot.FindFreeSpot(p, res))
+			{
+				spot = res.m_vPos;
+				yaw = res.m_fYaw;
+				if (pass == 0)
+					return "free";
+				if (pass == 1)
+					return "relaxed";
 
-					spot = cand;
-					if (pass == 0)
-						return "free";
-
-					return "no-solid-check";
-				}
+				return "lenient";
 			}
 		}
 
@@ -382,6 +419,11 @@ class CLW_Services
 		float forcedAngle = placedPos.Count() * 1.1;
 		spot = anchor + Vector(Math.Cos(forcedAngle) * (minDist + placedPos.Count() * 6), 0, Math.Sin(forcedAngle) * (minDist + placedPos.Count() * 6));
 		CLW_Placement.SurfaceAt(spot);
+		yaw = fixedYaw;
+		if (yaw < 0)
+			yaw = CLW_Placement.YawFromDir(anchor[0] - spot[0], anchor[2] - spot[2]);
+
+		Print(string.Format("CLW: place %1 FORCED at %2 (no clear ground found: the composition may overlap objects)", label, spot), LogLevel.WARNING);
 		return "forced";
 	}
 

@@ -133,6 +133,7 @@ class CLW_WorldInfo
 	}
 
 	protected GenericTerrainEntity m_FoundTerrain;
+	protected bool m_bTerrainSizeLogged;
 
 	// Terrain bounds in world coordinates (the terrain entity is looked up once among the loaded entities).
 	protected bool FindTerrainBounds(out vector tMin, out vector tMax)
@@ -216,7 +217,9 @@ class CLW_WorldInfo
 			{
 				mapOffset = "[" + Num(tMin[0]) + "," + Num(tMin[2]) + "]";
 				mapSize = "[" + Num(tMax[0] - tMin[0]) + "," + Num(tMax[2] - tMin[2]) + "]";
-				Print(string.Format("CLW: world map size from the terrain: offset %1 size %2", mapOffset, mapSize), LogLevel.NORMAL);
+				if (!m_bTerrainSizeLogged)
+					Print(string.Format("CLW: world map size from the terrain: offset %1 size %2", mapOffset, mapSize), LogLevel.NORMAL);
+				m_bTerrainSizeLogged = true;
 			}
 		}
 

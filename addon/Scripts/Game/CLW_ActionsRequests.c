@@ -130,7 +130,9 @@ class CLW_Action_RequestVehicle : CLW_Action_RequestBase
 		float yaw;
 		string via;
 		string where;
-		if (!CLW_RequestService.FindVehicleSpot(faction, spot, yaw, via, where, call.GetString("base")))
+		vector requesterPos;
+		CLW_RequestService.PlayerPos(call.m_iPlayerId, requesterPos);
+		if (!CLW_RequestService.FindVehicleSpot(faction, spot, yaw, via, where, call.GetString("base"), requesterPos))
 		{
 			CLW_SupplyStore.Refund(faction, call.GetString("base"), cost);
 			result = "no free parking spot at the " + where;
@@ -208,8 +210,26 @@ class CLW_Action_RequestSquad : CLW_Action_RequestBase
 		}
 
 		// the spawner checks supplies, the AI cap and the engine AI headroom and charges the ledger (refunded if the spawn fails)
+		// the team forms beside the vehicle depot: of the terminal's base, else the depot nearest to the requester (none = HQ spawn zone)
+		IEntity depot;
+		string terminalBase = call.GetString("base");
+		if (!terminalBase.IsEmpty())
+			depot = CLW_Services.FindAt(call.m_sFaction, terminalBase, CLW_ServiceKind.VEHICLE_DEPOT);
+		if (!depot)
+		{
+			vector requesterPos;
+			string depotBase;
+			float depotDist;
+			if (CLW_RequestService.PlayerPos(call.m_iPlayerId, requesterPos))
+				CLW_RequestService.NearestDepot(call.m_sFaction, requesterPos, depot, depotBase, depotDist);
+		}
+
+		vector depotAnchor;
+		if (depot)
+			depotAnchor = depot.GetOrigin();
+
 		string error;
-		if (!spawner.BuyFor(call.m_sFaction, entry.m_sType, "player request " + CLW_RequestService.PlayerName(call.m_iPlayerId), call.m_iPlayerId, error))
+		if (!spawner.BuyFor(call.m_sFaction, entry.m_sType, "player request " + CLW_RequestService.PlayerName(call.m_iPlayerId), call.m_iPlayerId, error, depotAnchor))
 		{
 			result = error;
 			return false;
@@ -317,7 +337,10 @@ class CLW_Action_RequestResupply : CLW_Action_RequestBase
 
 		vector spot;
 		string via;
-		CLW_Placement.FindGround(center, 2, 9, 0.8, 1.2, CLW_WarConfig.PLACE_CHAR_CLEAR_M, spot, via);
+		float boxYaw;
+		via = "free";
+		if (!CLW_FreeSpot.FindSmall("resupply box " + faction, center, 2, 12, 0.9, 1.2, spot, boxYaw))
+			CLW_Placement.FindGround(center, 2, 9, 0.8, 1.2, CLW_WarConfig.PLACE_CHAR_CLEAR_M, spot, via);
 		Resource resource = Resource.Load(prefab);
 		IEntity box;
 		if (resource && resource.IsValid())

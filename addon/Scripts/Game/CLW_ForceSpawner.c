@@ -53,6 +53,7 @@ class CLW_ForceSpawner
 	protected string m_sNextTag;				// tag handed to the job Start() creates (BuyTagged)
 	protected ref ScriptInvoker m_OnTagged;		// (string tag, string unitId): a tagged purchase finished (unitId = registry id) or failed (unitId empty)
 	protected int m_iNextRequester = -1;		// set by BuyFor for the job Start creates
+	protected vector m_vNextAnchor;				// set by BuyFor: infantry forms near this position (a depot) instead of the HQ spawn zone
 
 	void Init(CLW_ForceCatalog catalog, CLW_SquadRegistry registry, CLW_VehicleManager vehicles)
 	{
@@ -77,11 +78,13 @@ class CLW_ForceSpawner
 
 	// Purchase for a player request (CLW_RequestService): like Buy, and when the infantry group is complete it is handed to
 	// CLW_RequestService.OnSquadReady (the AI join the requester's squad). Infantry types only.
-	bool BuyFor(string factionKey, string typeId, string reason, int requesterId, out string error)
+	bool BuyFor(string factionKey, string typeId, string reason, int requesterId, out string error, vector anchor = vector.Zero)
 	{
 		m_iNextRequester = requesterId;
+		m_vNextAnchor = anchor;
 		bool started = Start(factionKey, typeId, reason, false, error);
 		m_iNextRequester = -1;
+		m_vNextAnchor = vector.Zero;
 		return started;
 	}
 
@@ -340,7 +343,18 @@ class CLW_ForceSpawner
 				placed = bases.FindVehicleSpot(factionKey, CLW_WarConfig.SPAWN_RADIUS_M, CLW_WarConfig.SPAWN_VEHICLE_CYLINDER_R, CLW_WarConfig.SPAWN_VEHICLE_CYLINDER_H, spot, spotYaw, via);
 			}
 			else
-				placed = bases.FindInfantrySpot(factionKey, CLW_WarConfig.SPAWN_RADIUS_M, spot, via);
+			{
+				// player squad request: form beside the vehicle depot (clear ground, CLW_FreeSpot), else the HQ spawn zone
+				if (m_vNextAnchor != vector.Zero)
+				{
+					placed = CLW_FreeSpot.FindSmall("squad " + factionKey, m_vNextAnchor, 6, 35, 4, 2.2, spot, spotYaw);
+					if (placed)
+						via = "depot";
+				}
+
+				if (!placed)
+					placed = bases.FindInfantrySpot(factionKey, CLW_WarConfig.SPAWN_RADIUS_M, spot, via);
+			}
 		}
 		if (!placed)
 		{

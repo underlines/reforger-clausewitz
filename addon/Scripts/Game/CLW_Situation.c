@@ -89,7 +89,21 @@ class CLW_Situation
 		AppendFobBlocks(json);
 		AppendLogistics(json);
 		AppendRequests(json);
+		AppendStructures(json);
 		return squadCount;
+	}
+
+	// Own base/FOB structures (structures[]: base, kind, label, pos [x,z], grid) for the dashboard map. Appended after the trim.
+	protected void AppendStructures(inout string json)
+	{
+		if (json.Length() < 2)
+			return;
+
+		string structures = CLW_StructureMarkers.StructuresJson(m_sFaction);
+		if (structures.IsEmpty())
+			return;
+
+		json = CLW_Str.DropLast(json) + ",\"structures\":[" + structures + "]}";
 	}
 
 	// M3 phase Q: recent player requests of this faction (requests[], needs the `requests` capability). Appended after the trim.

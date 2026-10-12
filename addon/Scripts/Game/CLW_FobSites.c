@@ -319,7 +319,11 @@ class CLW_FobSites
 
 		float roadDist;
 		float score;
-		return CLW_Placement.FindSiteEx(around, searchRadius, avoid, avoidDist, site, roadDist, score);
+		if (!CLW_Placement.FindSiteEx(around, searchRadius, avoid, avoidDist, site, roadDist, score))
+			return false;
+
+		// room for the FOB cluster: clear of buildings, fences, props and trees (CLW_FreeSpot), shifting the site if needed
+		return CLW_FreeSpot.RefineSite("fob relocation", site, avoid, avoidDist);
 	}
 
 	protected static bool TryAdd(string id, string name, vector wish, int side, string source, float radius, float spacing, notnull array<vector> avoid, notnull array<float> avoidDist, CLW_ControlPoints points)
@@ -340,6 +344,21 @@ class CLW_FobSites
 		{
 			Print(string.Format("CLW: fob site %1 (%2) rejected: no acceptable ground near %3 (search %4 m)", id, source, wish, Math.Round(radius)), LogLevel.NORMAL);
 			return false;
+		}
+
+		// room for the FOB cluster: clear of buildings, fences, props and trees (CLW_FreeSpot), the site shifts to clear ground nearby
+		vector refined = site;
+		if (!CLW_FreeSpot.RefineSite("fob site " + id, refined, avoid, avoidDist))
+		{
+			Print(string.Format("CLW: fob site %1 (%2) rejected at %3: no clear ground for the FOB cluster within %4 m", id, source, site, Math.Round(CLW_SpotConfig.FOB_REFINE_RADIUS_M)), LogLevel.NORMAL);
+			return false;
+		}
+
+		if (vector.DistanceXZ(refined, site) > 1)
+		{
+			Print(string.Format("CLW: fob site %1 (%2) shifted from %3 to %4: obstacles / slope at the first choice", id, source, site, refined), LogLevel.NORMAL);
+			site = refined;
+			roadDist = CLW_Placement.NearestRoadDistance(site);
 		}
 
 		if (roadDist < 0 || roadDist > ROAD_MAX_M)

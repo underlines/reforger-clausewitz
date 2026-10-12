@@ -379,18 +379,75 @@ class CLW_RequestService
 		Print("CLW: request resupply box removed after its lifetime", LogLevel.NORMAL);
 	}
 
-	// Parking spot for a requested vehicle: next to the side's vehicle depot, else at the HQ base. False when none was found.
-	static bool FindVehicleSpot(string factionKey, out vector spot, out float yaw, out string via, out string where, string baseId = "")
+	// Nearest vehicle depot of the side to 'pos' (HQ depot or the depot of an active FOB). False when the side has none.
+	static bool NearestDepot(string factionKey, vector pos, out IEntity depot, out string depotBase, out float dist)
+	{
+		array<CLW_ServiceInstance> list = {};
+		CLW_Services.GetInstances(factionKey, "", list);
+		float best = 1000000000;
+		foreach (CLW_ServiceInstance inst : list)
+		{
+			if (inst.m_sKind != CLW_ServiceKind.VEHICLE_DEPOT || !inst.m_Entity)
+				continue;
+
+			if (inst.m_sBase != CLW_Services.BASE_HQ)
+			{
+				CLW_Fob fob = CLW_FobManager.Find(inst.m_sBase);
+				if (!fob || !fob.IsActive())
+					continue;
+			}
+
+			float d = vector.DistanceXZ(pos, inst.m_Entity.GetOrigin());
+			if (d < best)
+			{
+				best = d;
+				depot = inst.m_Entity;
+				depotBase = inst.m_sBase;
+			}
+		}
+
+		dist = best;
+		return depot != null;
+	}
+
+	// Centre of a base: the HQ position or the FOB position. Zero when unknown.
+	static vector BaseAnchor(string factionKey, string baseId)
+	{
+		if (CLW_SupplyStore.IsHq(baseId))
+		{
+			CLW_Bases bases = CLW_GameMode.GetBases();
+			if (bases)
+				return bases.GetBasePos(factionKey);
+
+			return vector.Zero;
+		}
+
+		CLW_Fob fob = CLW_FobManager.Find(baseId);
+		if (fob)
+			return fob.m_vPos;
+
+		return vector.Zero;
+	}
+
+	// Parking spot for a requested vehicle (collision-free: CLW_FreeSpot). Rules:
+	//   request at a terminal (baseId set)      the depot of that base (FOB without a depot: ground beside the FOB)
+	//   chat request, requester within DEPOT_NEAR_M of a depot (or of the HQ when the side has no depot)   that depot
+	//   chat request further away               near the requester: the nearest road within REQUEST_ROAD_M (road edge, aligned with the
+	//                                           road), else open ground within REQUEST_GROUND_M; if neither exists the nearest depot
+	// False when no clear spot was found. where = text for the answer ("depot", "HQ", "FOB1", "roadside near you", ...).
+	static bool FindVehicleSpot(string factionKey, out vector spot, out float yaw, out string via, out string where, string baseId = "", vector requesterPos = vector.Zero)
 	{
 		CLW_Bases bases = CLW_GameMode.GetBases();
 		vector anchor;
 		if (bases)
 			anchor = bases.GetBasePos(factionKey);
 
-		// M3 phase L: a request made at a FOB terminal parks the vehicle at that FOB (its depot, else beside its position)
 		IEntity depot;
+		string depotBase = baseId;
+		string label = "vehicle " + factionKey;
 		if (!CLW_SupplyStore.IsHq(baseId))
 		{
+			// M3 phase L: a request made at a FOB terminal parks the vehicle at that FOB (its depot, else beside its position)
 			CLW_Fob fob = CLW_FobManager.Find(baseId);
 			if (fob && fob.m_sSide == factionKey && fob.IsActive())
 			{
@@ -399,12 +456,50 @@ class CLW_RequestService
 				if (!depot)
 				{
 					where = baseId;
-					if (CLW_Placement.FindGround(anchor, 12, 50, CLW_WarConfig.SPAWN_VEHICLE_CYLINDER_R, CLW_WarConfig.SPAWN_VEHICLE_CYLINDER_H, CLW_WarConfig.PLACE_CHAR_CLEAR_M, spot, via))
+					CLW_SpotParams fobParams = CLW_FreeSpot.VehicleParams(label + " " + baseId, anchor);
+					fobParams.m_fMinRadius = 12;
+					fobParams.m_fMaxRadius = 60;
+					fobParams.m_fRoadWeight = 0.5;
+					fobParams.m_bRoadYaw = true;
+					CLW_SpotResult fobRes = new CLW_SpotResult();
+					if (CLW_FreeSpot.FindFreeSpot(fobParams, fobRes))
 					{
-						yaw = 0;
+						spot = fobRes.m_vPos;
+						yaw = fobRes.m_fYaw;
+						via = fobRes.m_sVia;
 						return true;
 					}
+
+					return false;
 				}
+			}
+		}
+		else if (baseId.IsEmpty() && requesterPos != vector.Zero)
+		{
+			// chat request: the depot nearest to the requester, used when the requester is close to it
+			float depotDist;
+			bool haveDepot = NearestDepot(factionKey, requesterPos, depot, depotBase, depotDist);
+			bool atBase;
+			if (haveDepot)
+				atBase = depotDist <= CLW_SpotConfig.DEPOT_NEAR_M;
+			else if (anchor != vector.Zero)
+				atBase = vector.DistanceXZ(requesterPos, anchor) <= CLW_SpotConfig.DEPOT_NEAR_M;
+
+			if (haveDepot)
+				anchor = BaseAnchor(factionKey, depotBase);
+
+			if (!atBase)
+			{
+				if (CLW_FreeSpot.FindNearRequester(label, requesterPos, spot, yaw, via))
+				{
+					where = "roadside near you";
+					if (via == "open-ground")
+						where = "open ground near you";
+
+					return true;
+				}
+
+				Print(string.Format("CLW: request vehicle %1: no clear road or ground near the requester at %2, using the base", factionKey, requesterPos), LogLevel.NORMAL);
 			}
 		}
 		else
@@ -416,18 +511,14 @@ class CLW_RequestService
 		{
 			where = "depot";
 			vector depotPos = depot.GetOrigin();
-			if (anchor != vector.Zero && CLW_Placement.FindSpotToward(depotPos, anchor, 8, 45, CLW_WarConfig.SPAWN_VEHICLE_CYLINDER_R, CLW_WarConfig.SPAWN_VEHICLE_CYLINDER_H, spot, yaw, via))
+			if (CLW_FreeSpot.FindDepotSpot(label + " depot", depotPos, 8, 45, anchor, spot, yaw, via))
 				return true;
 
-			if (CLW_Placement.FindGround(depotPos, 8, 45, CLW_WarConfig.SPAWN_VEHICLE_CYLINDER_R, CLW_WarConfig.SPAWN_VEHICLE_CYLINDER_H, CLW_WarConfig.PLACE_CHAR_CLEAR_M, spot, via))
-			{
-				yaw = 0;
-				if (anchor != vector.Zero)
-					yaw = CLW_Placement.YawFromDir(anchor[0] - spot[0], anchor[2] - spot[2]);
+			if (CLW_FreeSpot.FindDepotSpot(label + " depot wide", depotPos, 8, 90, anchor, spot, yaw, via))
 				return true;
-			}
 		}
 
+		// the scenario's hand-placed slots / road spots of the HQ (trusted ground, occupancy checked there)
 		where = "HQ";
 		if (!bases)
 			return false;
@@ -610,7 +701,7 @@ class CLW_RequestService
 		Answer(playerId, "HQ requests (you are a " + role + ", supplies " + war.GetSupplies(faction) + "):", false);
 		string line;
 		CLW_ForceEntry vehicle = PickVehicle(faction, "");
-		line = "/request vehicle [type] - empty vehicle at the depot";
+		line = "/request vehicle [type] - empty vehicle at the depot (near you when you are far from a base)";
 		if (vehicle)
 			line += ", default " + vehicle.GetVehicleName() + " cost " + VehicleCost(vehicle);
 		Answer(playerId, line, false);

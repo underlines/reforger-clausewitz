@@ -172,9 +172,14 @@ class CLW_RequestTerminals
 		}
 
 		vector spot;
-		string via;
-		CLW_Placement.FindGround(servicePos, radius + GAP_M, radius + GAP_M + 8, 0.8, 1.6, CLW_WarConfig.PLACE_CHAR_CLEAR_M, spot, via);
-		float yaw = CLW_Placement.YawFromDir(servicePos[0] - spot[0], servicePos[2] - spot[2]);
+		string via = "free";
+		float yaw;
+		// collision-free spot beside the service (CLW_FreeSpot), the old cylinder search only when nothing clear exists
+		if (!CLW_FreeSpot.FindSmall("terminal " + sideKey + " " + baseId + " " + kind, servicePos, radius + GAP_M, radius + GAP_M + 10, 0.9, 1.8, spot, yaw))
+		{
+			CLW_Placement.FindGround(servicePos, radius + GAP_M, radius + GAP_M + 8, 0.8, 1.6, CLW_WarConfig.PLACE_CHAR_CLEAR_M, spot, via);
+			yaw = CLW_Placement.YawFromDir(servicePos[0] - spot[0], servicePos[2] - spot[2]);
+		}
 		EntitySpawnParams params = new EntitySpawnParams();
 		params.TransformMode = ETransformMode.WORLD;
 		Math3D.AnglesToMatrix(Vector(yaw, 0, 0), params.Transform);
