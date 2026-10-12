@@ -47,6 +47,22 @@ Implemented P1-P6 + S, then e2e-tested in Workbench (vanilla, RHS test project, 
 - [x] LLM/rules flip-flop fixed (health scale in the prompt; rules don't override fresh LLM orders).
 - [ ] Open: end of war + end screen and mission completion/reward not yet watched; RHS open-top UAZ seating; harmless vanilla UI exception when the deploy menu closes during a squad list update; dedicated-server checks (group mirror RPC, remote commanding, SetIsPlayable replication).
 
+### UX + SITREP batch (2026-10-12, branch `feature/ux-sitrep`, code only, NOT yet e2e-tested)
+Implemented by subagents, static checks only. Designs: `notes/sitrep-design.md`, `research/sitrep-and-briefing.md`.
+- [ ] Battle size scales the layout at war start: HQs about 955 m apart for small, 1911 m for medium/large on Arland (`m_aDistanceScales`); objectives D/E dropped for small (`m_iMinBattleSize`); `FindFobSite` hook for FOBs.
+- [ ] Dashboard: faction-vs-faction compare tables (game mode, forces), SITREP card, forces detail row, missions mini-map with click-to-focus, map active/dormant shading + filter; situation JSON `dormant` per squad. Fixture: `dev/tools/fixtures/post_situation.mjs`.
+- [ ] SITREP per faction: rules version in game (20 s), LLM version in the commander reply; map journal (deploy screen + map), hint on spawn (H), `/sitrep`.
+- Plan only: loadouts/arsenals (`notes/loadouts-arsenal-plan.md`).
+
+**One e2e test (Workbench, vanilla, OpenRouter on) must check:**
+1. Compiles; `CLW: build #N` line.
+2. Small battle: `CLW: bases layout ... hqDistance=` ~955 m, both HQs dry/near road, spawn point and setup-phase players moved to the new HQ, start forces at the new HQ, `CLW: points layout` drops D/E, objectives >= 250 m from HQs, map markers moved. Medium: positions unchanged.
+3. Journal "!" on the deploy-screen map and in-game map, text updates (`<br/>` line breaks); rules SITREP within ~10 s, then LLM (`CLW: sitrep new version / deliver / client received`); hint on respawn, H re-shows it, `/sitrep` works; no-sidecar run still delivers the rules SITREP.
+4. Dashboard: SITREP card shows `llm` then `rules` after ~360 s without LLM; `dormant` values plausible (far squads dormant, near/active ones not), map shading/filter, missions click-to-focus, compare tables with live data.
+5. Dedicated server later: enemy client never gets the other side's SITREP; teleport of setup-phase players (client-authoritative movement may undo `SetOrigin`).
+- Known: units take 30-60 s to move at start (first tick 10 s, LLM answer up to 30 s, rules only on error). Proposed fix: one rule-commander pass at war start, LLM overrides it (`LLM_PRIORITY_SEC`).
+- Watch: `dev/tools/sidecar-config.json` selects openrouter and `CLW_LLM=fake` does not override it; local tests must use a temp config.
+
 ## Next up
 M3 (logistics & intel, base buildings incl. the command post entry point from `notes/squad-join-design.md`); before that, one long war to the end and a dedicated-server smoke test.
 
