@@ -6,6 +6,9 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 ## [Unreleased]
 
 ### Added
+- Faction force profiles (`Configs/CLW/Factions/US|USSR|FIA.conf`, class `CLW_FactionProfile`) plus catalog auto-discovery: factions without a profile, or profiles with `m_bIncludeDiscovered`, get buyable forces classified from the faction entity catalogs (mod-pack vehicles such as tanks show up as kind `armor`); the catalog is built at war start per faction key.
+- Force purchases and start forces (`CLW_ForceSpawner`): supplies, AI and vehicle caps, crewed vehicles with embarked infantry, refund on failure; Arland starts both sides with a motorized and a mechanized unit.
+- Mechanized / motorized vehicle units (`CLW_VehicleUnit`): mount, dismount short of the target, overwatch, trucks return to base and are removed (partial refund), remount with timeout and split, stuck watchdog (re-issue, then infantry walks).
 - Control points: own capture logic (progress, contested, neutralise-then-capture), public map markers for points and bases.
 - War state with pluggable war modes: "short conflict" (tickets, bleed for the side holding fewer points, win by tickets / holding all points / time limit). The war waits in a SETUP phase until started (auto start after N s from the scenario).
 - Supplies ledger with income from held points (TrySpend / Refund / AddSupplies API for later phases).

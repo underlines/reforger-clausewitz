@@ -30,6 +30,7 @@ class CLW_WarState
 	protected string m_sWinner;
 	protected string m_sStartedMode;
 	protected string m_sStartedParams;
+	protected ref ScriptInvoker m_OnWarStarted;
 
 	void Init(notnull CLW_ScenarioConfig scenario, CLW_ControlPoints points)
 	{
@@ -129,7 +130,18 @@ class CLW_WarState
 		GetGame().GetCallqueue().CallLater(Tick, CLW_WarConfig.WAR_TICK_MS, true);
 		CLW_Debug.Say(string.Format("WAR STARTED mode=%1 (%2) by player %3 values=%4", mode.GetId(), mode.GetName(), byPlayerId, m_sStartedParams));
 		LogSummary();
+		if (m_OnWarStarted)
+			m_OnWarStarted.Invoke();
 		return true;
+	}
+
+	// Fired once when the war switches SETUP -> RUNNING (ledgers are initialised). No arguments.
+	ScriptInvoker GetOnWarStarted()
+	{
+		if (!m_OnWarStarted)
+			m_OnWarStarted = new ScriptInvoker();
+
+		return m_OnWarStarted;
 	}
 
 	protected void AutoStart()

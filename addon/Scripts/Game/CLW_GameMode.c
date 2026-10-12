@@ -19,6 +19,9 @@ class CLW_GameMode : SCR_BaseGameMode
 	protected ref CLW_Bases m_Bases;
 	protected ref CLW_ControlPoints m_Points;
 	protected ref CLW_WarState m_War;
+	protected ref CLW_ForceCatalog m_Catalog;
+	protected ref CLW_VehicleManager m_Vehicles;
+	protected ref CLW_ForceSpawner m_Spawner;
 	// The two scenario faction keys; the commander/book/marker sets below belong to them in order (First = *US fields, Second = *USSR fields).
 	protected string m_sKeyFirst;
 	protected string m_sKeySecond;
@@ -67,6 +70,48 @@ class CLW_GameMode : SCR_BaseGameMode
 		return s_Instance.m_War;
 	}
 
+	static CLW_SquadRegistry GetRegistry()
+	{
+		if (!s_Instance)
+			return null;
+
+		return s_Instance.m_Registry;
+	}
+
+	static CLW_ForceCatalog GetForceCatalog()
+	{
+		if (!s_Instance)
+			return null;
+
+		return s_Instance.m_Catalog;
+	}
+
+	static CLW_ForceSpawner GetForceSpawner()
+	{
+		if (!s_Instance)
+			return null;
+
+		return s_Instance.m_Spawner;
+	}
+
+	static CLW_VehicleManager GetVehicleManager()
+	{
+		if (!s_Instance)
+			return null;
+
+		return s_Instance.m_Vehicles;
+	}
+
+	// War SETUP -> RUNNING: build the force catalogs (factions may have been chosen in the setup) and field the start forces.
+	protected void OnWarStarted()
+	{
+		Print("CLW: war started: building force catalogs and spawning start forces", LogLevel.NORMAL);
+		if (m_Catalog)
+			m_Catalog.BuildAll();
+		if (m_Spawner)
+			m_Spawner.SpawnStartForces();
+	}
+
 	protected override void OnGameStart()
 	{
 		super.OnGameStart();
@@ -95,6 +140,14 @@ class CLW_GameMode : SCR_BaseGameMode
 				m_Points.Init(scenario);
 				m_War = new CLW_WarState();
 				m_War.Init(scenario, m_Points);
+				// 5. forces: catalog (built at war start), vehicle units, spawner; start forces when the war starts
+				m_Catalog = new CLW_ForceCatalog();
+				m_Registry.SetCatalog(m_Catalog);
+				m_Vehicles = new CLW_VehicleManager();
+				m_Vehicles.Init(m_Registry);
+				m_Spawner = new CLW_ForceSpawner();
+				m_Spawner.Init(m_Catalog, m_Registry, m_Vehicles);
+				m_War.GetOnWarStarted().Insert(OnWarStarted);
 			}
 			else
 			{

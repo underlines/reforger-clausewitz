@@ -1,0 +1,17 @@
+MetaFileClass {
+ Name "{3D7A19E4B0C25F68}Configs/CLW/Factions/US.conf"
+ Configurations {
+  ConfigurationClass PC {
+  }
+  ConfigurationClass XBOX_ONE : PC {
+  }
+  ConfigurationClass XBOX_SERIES : PC {
+  }
+  ConfigurationClass PS4 : PC {
+  }
+  ConfigurationClass PS5 : PC {
+  }
+  ConfigurationClass HEADLESS : PC {
+  }
+ }
+}

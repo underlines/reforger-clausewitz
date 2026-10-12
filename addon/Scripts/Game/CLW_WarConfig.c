@@ -25,4 +25,56 @@ class CLW_WarConfig
 
 	// Engine-level waypoint prefab defaults (not faction content): one place for later phases.
 	static const ResourceName WAYPOINT_MOVE = "{750A8D1695BD6998}Prefabs/AI/Waypoints/AIWaypoint_Move.et";
+	static const ResourceName WAYPOINT_FORCED_MOVE = "{06E1B6EBD480C6E0}Prefabs/AI/Waypoints/AIWaypoint_ForcedMove.et";
+	static const ResourceName WAYPOINT_ATTACK = "{B3E7B8DC2BAB8ACC}Prefabs/AI/Waypoints/AIWaypoint_SearchAndDestroy.et";
+	static const ResourceName WAYPOINT_DEFEND = "{93291E72AC23930F}Prefabs/AI/Waypoints/AIWaypoint_Defend.et";
+	static const ResourceName WAYPOINT_GET_IN = "{712F4795CF8B91C7}Prefabs/AI/Waypoints/AIWaypoint_GetIn.et";
+	static const ResourceName WAYPOINT_GET_OUT = "{C40316EE26846CAB}Prefabs/AI/Waypoints/AIWaypoint_GetOut.et";
+
+	// ---- Force spawning (P2) ----
+	static const int SPAWNER_TICK_MS = 1000;
+	static const float SPAWN_RADIUS_M = 60;			// free spot search radius around the base
+	static const float SPAWN_VEHICLE_CYLINDER_R = 3;	// free-spot cylinder for vehicles
+	static const float SPAWN_VEHICLE_CYLINDER_H = 3;
+	static const float SPAWN_CARGO_OFFSET_M = 8;		// embarked infantry group is spawned this far beside the vehicle
+	static const int SPAWN_STAGGER_SEC = 3;				// start forces are spawned this many seconds apart
+	static const float SPAWN_CREW_TIMEOUT_SEC = 30;
+	static const float SPAWN_MEMBERS_TIMEOUT_SEC = 20;	// wait for the members of a spawned group
+	static const float SPAWN_JOB_TIMEOUT_SEC = 120;		// whole purchase
+
+	// ---- Catalog auto-discovery (P2) ----
+	static const float DISCOVER_COST_SCALE = 0.15;		// catalog supply cost -> our economy
+	static const int DISCOVER_MIN_COST_VEHICLE = 60;
+	static const int DISCOVER_MIN_COST_GROUP = 30;
+	static const int DISCOVER_COST_PER_MEMBER = 12;		// group cost when the catalog gives none (or a placeholder below the group floor)
+	static const int DISCOVER_COST_VEHICLE_FALLBACK = 100;
+	static const int DISCOVER_WEIGHT = 5;				// buy-mix weight of discovered entries
+	static const int DISCOVER_MECH_MIN_CARGO = 5;
+	static const int DISCOVER_LIGHT_MAX_CARGO = 2;		// armed + armoured/APC label with at most this many cargo seats = armored_recon
+	static const int DISCOVER_MOTORIZED_MIN_CARGO = 4;
+	static const int DISCOVER_LARGE_CARGO_GUESS = 8;	// cargo seats assumed when the probe saw few but the label says "large passenger capacity"
+	static const int DISCOVER_MIN_GROUP_MEMBERS = 2;
+	static const float DISCOVER_NONCOMBAT_SHARE = 0.5;	// groups with this share of medic/sapper/radio members are not buyable infantry
+	static const float DISCOVER_RECON_SHARE = 0.5;		// share of scout/sharpshooter members that makes a recon group
+
+	// ---- Vehicle units (P2, spec section 5) ----
+	static const int VEHICLE_TICK_MS = 2000;
+	static const float DISMOUNT_DIST_M = 250;			// ATTACK: dismount this far short of the target
+	static const float DISMOUNT_DIST_TRUCK_M = 400;		// ... for unarmed transports (kind motorized)
+	static const float OVERWATCH_DIST_M = 150;			// armed vehicle overwatch point, short of the target on the approach line
+	static const float DEFEND_BEHIND_M = 50;			// DEFEND: vehicle holds this far short of the target
+	static const float ARRIVE_RADIUS_M = 35;
+	static const float ORDER_GRACE_SEC = 6;				// ignore "waypoint finished" this long after issuing one
+	static const float DISMOUNT_FORCE_SEC = 20;			// teleport-dismount stragglers after this
+	static const float REMOUNT_MIN_DIST_M = 600;		// an order farther than this while dismounted = remount first
+	static const float REMOUNT_TIMEOUT_SEC = 90;
+	static const float STUCK_SAMPLE_SEC = 10;
+	static const int STUCK_SAMPLES = 5;					// 4 intervals = 40 s window
+	static const float STUCK_MIN_PROGRESS_M = 15;
+	static const float STUCK_GIVE_UP_SEC = 90;			// total time without progress before the infantry dismounts and walks
+	static const float STUCK_REISSUE_SEC = 40;
+	static const float VEHICLE_IMMOBILE_HEALTH = 0.1;	// vehicle health at or below = unusable
+	static const int TRUCK_REFUND = 30;					// supplies refunded when an empty truck returns to base
+	static const float RTB_DELETE_RADIUS_M = 45;
+	static const float RTB_TIMEOUT_SEC = 600;
 }

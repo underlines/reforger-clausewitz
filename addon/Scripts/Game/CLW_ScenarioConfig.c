@@ -31,6 +31,9 @@ class CLW_FactionSetup
 	[Attribute("", UIWidgets.EditBox, "Entity name of the scene-placed squad a joining player should lead (empty = first free squad)")]
 	string m_sPreferredSquad;
 
+	[Attribute()]
+	ref array<string> m_aStartForces;	// force type ids (from the profile) spawned free at the base when the war starts
+
 	EMilitarySymbolIdentity GetIdentity()
 	{
 		if (m_sIdentity == "BLUFOR")
@@ -114,6 +117,9 @@ class CLW_ScenarioConfig
 
 	[Attribute()]
 	ref CLW_EconomySetup m_Economy;
+
+	[Attribute("", UIWidgets.ResourceNamePicker, "Faction profiles (CLW_FactionProfile) available in this scenario, looked up by the profile's faction key. A faction without one uses catalog auto-discovery", "conf")]
+	ref array<ResourceName> m_aProfileConfigs;
 
 	[Attribute("short", UIWidgets.EditBox, "Id of the war mode started by default / by auto start")]
 	string m_sDefaultMode;

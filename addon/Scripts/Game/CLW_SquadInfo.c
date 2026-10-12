@@ -3,8 +3,27 @@ class CLW_SquadInfo
 {
 	static const float HEALTHY_THRESHOLD = 0.99;
 
-	// Human-readable squad type from the group prefab name, e.g. "Group_USSR_RifleSquad.et" -> "USSR RifleSquad". Falls back to "Squad".
+	// Human-readable squad type. From data first (the registry knows the force entry's display name, or a generic
+	// "Infantry group (n)"); only a group the registry does not know falls back to parsing the prefab name.
 	static string TypeName(notnull SCR_AIGroup group)
+	{
+		CLW_SquadRegistry registry = CLW_GameMode.GetRegistry();
+		if (registry)
+		{
+			string id = registry.GetId(group);
+			if (!id.IsEmpty())
+			{
+				string display = registry.GetDisplayType(id);
+				if (!display.IsEmpty())
+					return display;
+			}
+		}
+
+		return PrefabTypeName(group);
+	}
+
+	// Last-resort fallback: type from the group prefab name, e.g. "Group_USSR_RifleSquad.et" -> "USSR RifleSquad".
+	protected static string PrefabTypeName(notnull SCR_AIGroup group)
 	{
 		EntityPrefabData data = group.GetPrefabData();
 		if (!data)

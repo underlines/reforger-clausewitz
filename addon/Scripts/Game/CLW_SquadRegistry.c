@@ -7,6 +7,20 @@ class CLW_SquadRecord
 	int m_iSerial;			// unique per adoption (a released and re-adopted group gets a new serial)
 	int m_iStartStrength;	// living AI at adoption
 	int m_iEmptySweeps;		// consecutive sweeps without a living member
+	string m_sKind;			// generic unit kind (CLW_ForceKind), "" = not resolved yet
+	string m_sDisplayType;	// human-readable type from data
+	string m_sTypeId;		// force type id from the faction profile, "" when unknown
+	bool m_bHidden;			// linked cargo group of a vehicle unit: adopted and polled, but not commandable
+	bool m_bTagged;			// kind/type were set explicitly (spawner), never overwritten by the lazy resolve
+}
+
+// Kind / type set by the force spawner for a group it created, keyed by the group's entity name. Applied at adoption.
+class CLW_SquadTag
+{
+	string m_sKind;
+	string m_sDisplayType;
+	string m_sTypeId;
+	bool m_bHidden;
 }
 
 // CLW_SquadRegistry: the single source of truth for "which AI groups does HQ command per faction". Server only,
@@ -31,6 +45,9 @@ class CLW_SquadRegistry
 	protected int m_iVersion;	// bumped on every adoption/release: commanders resync when it changed
 	protected int m_iSerial;
 	protected int m_iSweeps;
+	protected ref map<string, ref CLW_SquadTag> m_mTags = new map<string, ref CLW_SquadTag>();	// by entity name
+	protected ref map<string, int> m_mGenericCount = new map<string, int>();	// "Infantry group (n)" counter per faction
+	protected CLW_ForceCatalog m_Catalog;	// weak: owned by the game mode; resolves display types of scene-placed groups
 
 	static bool IsClwFaction(string factionKey)
 	{
@@ -46,6 +63,158 @@ class CLW_SquadRegistry
 
 		Sweep();
 		GetGame().GetCallqueue().CallLater(Sweep, SWEEP_MS, true);
+	}
+
+	void SetCatalog(CLW_ForceCatalog catalog)
+	{
+		m_Catalog = catalog;
+	}
+
+	// The spawner announces what a group it created is, BEFORE the registry can adopt it (key = entity name = future id).
+	// Applied at adoption; if the group is already adopted, the record is updated.
+	void Tag(string entityName, string kind, string displayType, string typeId, bool hidden = false)
+	{
+		if (entityName.IsEmpty())
+			return;
+
+		CLW_SquadTag tag = new CLW_SquadTag();
+		tag.m_sKind = kind;
+		tag.m_sDisplayType = displayType;
+		tag.m_sTypeId = typeId;
+		tag.m_bHidden = hidden;
+		m_mTags.Set(entityName, tag);
+		CLW_SquadRecord record = FindRecord(entityName);
+		if (record)
+		{
+			ApplyTag(record, tag);
+			m_iVersion++;
+		}
+
+		Print(string.Format("CLW: registry tag %1 kind=%2 type='%3' typeId=%4 hidden=%5", entityName, kind, displayType, typeId, hidden), LogLevel.NORMAL);
+	}
+
+	// Hide / show a squad for HQ (linked cargo groups are hidden while their vehicle unit exists).
+	void SetHidden(string id, bool hidden)
+	{
+		CLW_SquadTag tag;
+		if (m_mTags.Find(id, tag) && tag)
+			tag.m_bHidden = hidden;
+
+		CLW_SquadRecord record = FindRecord(id);
+		if (record && record.m_bHidden != hidden)
+		{
+			record.m_bHidden = hidden;
+			m_iVersion++;
+			Print(string.Format("CLW: registry %1 hidden=%2", id, hidden), LogLevel.NORMAL);
+		}
+	}
+
+	// Change kind / display type of an adopted squad (a vehicle unit that dissolved: its crew is infantry now).
+	void SetKind(string id, string kind, string displayType)
+	{
+		CLW_SquadRecord record = FindRecord(id);
+		if (!record)
+			return;
+
+		record.m_sKind = kind;
+		record.m_sDisplayType = displayType;
+		record.m_bTagged = true;
+		m_iVersion++;
+		Print(string.Format("CLW: registry %1 kind=%2 type='%3'", id, kind, displayType), LogLevel.NORMAL);
+	}
+
+	string GetKind(string id)
+	{
+		CLW_SquadRecord record = FindRecord(id);
+		if (!record)
+			return "";
+
+		Resolve(record);
+		return record.m_sKind;
+	}
+
+	string GetDisplayType(string id)
+	{
+		CLW_SquadRecord record = FindRecord(id);
+		if (!record)
+			return "";
+
+		Resolve(record);
+		return record.m_sDisplayType;
+	}
+
+	string GetTypeId(string id)
+	{
+		CLW_SquadRecord record = FindRecord(id);
+		if (!record)
+			return "";
+
+		Resolve(record);
+		return record.m_sTypeId;
+	}
+
+	bool IsHidden(string id)
+	{
+		CLW_SquadRecord record = FindRecord(id);
+		return record && record.m_bHidden;
+	}
+
+	// Squads HQ may order: GetIds() without the hidden (linked cargo) groups.
+	void GetCommandableIds(string factionKey, notnull array<string> ids)
+	{
+		foreach (CLW_SquadRecord record : m_aRecords)
+		{
+			if (record.m_sFaction == factionKey && !record.m_bHidden)
+				ids.Insert(record.m_sId);
+		}
+	}
+
+	protected void ApplyTag(CLW_SquadRecord record, CLW_SquadTag tag)
+	{
+		record.m_sKind = tag.m_sKind;
+		record.m_sDisplayType = tag.m_sDisplayType;
+		record.m_sTypeId = tag.m_sTypeId;
+		record.m_bHidden = tag.m_bHidden;
+		record.m_bTagged = true;
+	}
+
+	// Scene-placed / runtime groups nobody tagged: kind "infantry"; display type from the catalog entry with the same group
+	// prefab if the catalog knows it, else "Infantry group (n)". Retried on every query until the catalog can answer.
+	protected void Resolve(CLW_SquadRecord record)
+	{
+		if (record.m_bTagged)
+			return;
+
+		if (record.m_sKind.IsEmpty())
+			record.m_sKind = CLW_ForceKind.INFANTRY;
+
+		if (!record.m_sDisplayType.IsEmpty() && record.m_sDisplayType.IndexOf("Infantry group") != 0)
+			return;
+
+		if (m_Catalog && record.m_Group)
+		{
+			EntityPrefabData data = record.m_Group.GetPrefabData();
+			if (data)
+			{
+				CLW_ForceEntry entry = m_Catalog.FindByGroupPrefab(record.m_sFaction, data.GetPrefabName());
+				if (entry)
+				{
+					record.m_sKind = entry.m_sKind;
+					record.m_sDisplayType = entry.m_sName;
+					record.m_sTypeId = entry.m_sType;
+					return;
+				}
+			}
+		}
+
+		if (record.m_sDisplayType.IsEmpty())
+		{
+			int n;
+			m_mGenericCount.Find(record.m_sFaction, n);
+			n++;
+			m_mGenericCount.Set(record.m_sFaction, n);
+			record.m_sDisplayType = "Infantry group (" + n + ")";
+		}
 	}
 
 	// Changes whenever a squad was adopted or released.
@@ -239,12 +408,15 @@ class CLW_SquadRegistry
 		record.m_Group = group;
 		record.m_iSerial = m_iSerial;
 		record.m_iStartStrength = alive;
+		CLW_SquadTag tag;
+		if (m_mTags.Find(id, tag) && tag)
+			ApplyTag(record, tag);
 		m_aRecords.Insert(record);
 
 		string source = "runtime";
 		if (!entityName.IsEmpty())
 			source = "scene";
-		Print(string.Format("CLW: registry adopted %1 faction=%2 alive=%3 source=%4", id, factionKey, alive, source), LogLevel.NORMAL);
+		Print(string.Format("CLW: registry adopted %1 faction=%2 alive=%3 source=%4 hidden=%5", id, factionKey, alive, source, record.m_bHidden), LogLevel.NORMAL);
 		return true;
 	}
 
@@ -252,6 +424,7 @@ class CLW_SquadRegistry
 	{
 		CLW_SquadRecord record = m_aRecords[index];
 		Print(string.Format("CLW: registry released %1 reason=%2", record.m_sId, reason), LogLevel.NORMAL);
+		m_mTags.Remove(record.m_sId);
 		m_aRecords.Remove(index);
 	}
 
