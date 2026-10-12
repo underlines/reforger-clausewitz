@@ -22,6 +22,8 @@ class CLW_Places
 
 	protected static ref array<ref CLW_Place> s_aPlaces;
 	protected static bool s_bBuilt;
+	protected static int s_iEmptyBuilds;	// builds that found no map item (the map entity may not have its items yet, e.g. at game start)
+	static const int EMPTY_RETRIES = 3;
 
 	// Build the place list once (idempotent). Safe to call from every report.
 	static void Ensure()
@@ -31,6 +33,7 @@ class CLW_Places
 
 		s_bBuilt = true;
 		s_aPlaces = {};
+		bool typed;
 		MapEntity mapEnt = SCR_MapEntity.GetMapInstance();
 		if (mapEnt)
 		{
@@ -55,8 +58,16 @@ class CLW_Places
 						continue;
 
 					AddPlace(name, item.GetPos(), typeKey);
+					typed = true;
 				}
 			}
+		}
+
+		if (!typed && s_iEmptyBuilds < EMPTY_RETRIES)
+		{
+			// no typed place yet: do not cache this result for good, the next caller builds again (a few times)
+			s_iEmptyBuilds++;
+			s_bBuilt = false;
 		}
 
 		if (s_aPlaces.IsEmpty())
@@ -98,6 +109,16 @@ class CLW_Places
 	{
 		s_bBuilt = false;
 		s_aPlaces = null;
+	}
+
+	// All cached places (builds the list on first use). Auto scenario / random layout read them for wishes and objectives.
+	static void GetAll(notnull array<ref CLW_Place> outPlaces)
+	{
+		Ensure();
+		foreach (CLW_Place place : s_aPlaces)
+		{
+			outPlaces.Insert(place);
+		}
 	}
 
 	// True when at least one place came from a map item (has a descriptor type).

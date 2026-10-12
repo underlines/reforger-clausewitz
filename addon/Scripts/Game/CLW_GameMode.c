@@ -13,7 +13,7 @@ class CLW_GameMode : SCR_BaseGameMode
 	protected static const int SQUAD_RETRY_MAX = 24;		// 2 min, then a free infantry squad is spawned
 	protected static const int SQUAD_RETRY_EXTRA = 12;		// further tries for that squad to appear
 
-	[Attribute("", UIWidgets.ResourceNamePicker, "Scenario config: factions, bases, objectives, economy (spec 0a). Empty = CLW_WarConfig.DEFAULT_SCENARIO", "conf")]
+	[Attribute("", UIWidgets.ResourceNamePicker, "Scenario config: factions, bases, objectives, economy (spec 0a). Empty = Configs/CLW/Scenarios/<world file name>.conf, a scenario listing the world, else the auto scenario (CLW_AutoScenario)", "conf")]
 	protected ResourceName m_ScenarioConfig;
 
 	protected static CLW_GameMode s_Instance;
@@ -285,24 +285,51 @@ class CLW_GameMode : SCR_BaseGameMode
 		CLW_WarHud.Update(wire);
 	}
 
-	// Scenario from the prefab attribute, else the default path (logged).
+	// Scenario of this world (the choice is logged as "CLW: scenario <name> (source ...)"):
+	//   1. attribute  the m_ScenarioConfig of the game mode prefab / world (Arland)
+	//   2. by-world   Configs/CLW/Scenarios/<world file name without extension>.conf (e.g. CLW_Eden.conf)
+	//   3. by-listing a scenario whose m_aWorlds lists the world
+	//   4. auto       _Auto.conf, its HQs / objectives filled for this map right now (CLW_AutoScenario)
 	protected CLW_ScenarioConfig LoadScenario()
 	{
+		string worldName = CLW_AutoScenario.WorldName();
+		Print(string.Format("CLW: scenario selection: world file '%1' (name '%2'), attribute '%3'", GetGame().GetWorldFile(), worldName, m_ScenarioConfig), LogLevel.NORMAL);
 		CLW_ScenarioConfig scenario;
 		if (!m_ScenarioConfig.IsEmpty())
 		{
 			scenario = CLW_ScenarioConfig.Load(m_ScenarioConfig);
 			if (scenario)
+			{
+				Print(string.Format("CLW: scenario %1 (source attribute)", scenario.m_sName), LogLevel.NORMAL);
 				return scenario;
+			}
 
-			Print("CLW: scenario attribute failed, trying the default path", LogLevel.WARNING);
+			Print("CLW: scenario attribute failed, looking for a scenario of this world", LogLevel.WARNING);
 		}
-		else
+
+		string source;
+		ResourceName found = CLW_AutoScenario.FindForWorld(worldName, source);
+		if (!found.IsEmpty())
 		{
-			Print("CLW: no scenario attribute on the game mode prefab, using the default path", LogLevel.WARNING);
+			scenario = CLW_ScenarioConfig.Load(found);
+			if (scenario)
+			{
+				Print(string.Format("CLW: scenario %1 (source %2: %3)", scenario.m_sName, source, found), LogLevel.NORMAL);
+				return scenario;
+			}
+
+			Print("CLW: scenario " + found + " failed to load, using the auto scenario", LogLevel.WARNING);
 		}
 
-		return CLW_ScenarioConfig.Load(CLW_WarConfig.DEFAULT_SCENARIO);
+		scenario = CLW_AutoScenario.Create(worldName);
+		if (scenario)
+		{
+			Print(string.Format("CLW: scenario %1 (source auto)", scenario.m_sName), LogLevel.NORMAL);
+			return scenario;
+		}
+
+		Print("CLW: scenario: no scenario for world '" + worldName + "' and the auto scenario failed", LogLevel.ERROR);
+		return null;
 	}
 
 	// Respawn gate: a faction without tickets (or a finished war) cannot spawn players.

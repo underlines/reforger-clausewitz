@@ -132,6 +132,12 @@ class CLW_ScenarioConfig
 	[Attribute("", UIWidgets.EditBox, "Scenario name (log and dashboard)")]
 	string m_sName;
 
+	[Attribute(desc: "World file names (without extension, e.g. CLW_Eden) this scenario is used for when the game mode prefab names no scenario (CLW_AutoScenario.FindForWorld). Optional")]
+	ref array<string> m_aWorlds;
+
+	[Attribute(desc: "Auto scenario block (CLW_AutoScenario): present only in _Auto.conf; HQs, objectives and vehicle spots are filled at game start for any map")]
+	ref CLW_AutoSetup m_Auto;
+
 	[Attribute()]
 	ref array<ref CLW_FactionSetup> m_aFactions;
 
@@ -182,6 +188,34 @@ class CLW_ScenarioConfig
 	static CLW_ScenarioConfig Get()
 	{
 		return s_Active;
+	}
+
+	// Load a scenario config WITHOUT validating or activating it (to read its world list). Null when it does not load.
+	static CLW_ScenarioConfig Peek(ResourceName path)
+	{
+		if (path.IsEmpty())
+			return null;
+
+		return SCR_ConfigHelperT<CLW_ScenarioConfig>.GetConfigObject(path);
+	}
+
+	// True when m_aWorlds lists the world file name (case-insensitive).
+	bool ListsWorld(string worldName)
+	{
+		if (!m_aWorlds || worldName.IsEmpty())
+			return false;
+
+		string wanted = worldName;
+		wanted.ToLower();
+		foreach (string listed : m_aWorlds)
+		{
+			string lower = listed;
+			lower.ToLower();
+			if (lower == wanted)
+				return true;
+		}
+
+		return false;
 	}
 
 	// Load, validate and activate. Returns null (and leaves the previous one) on failure. Logs a summary.
@@ -561,7 +595,7 @@ class CLW_ScenarioConfig
 		return ok;
 	}
 
-	protected void LogSummary(string path)
+	void LogSummary(string path)
 	{
 		Print(string.Format("CLW: scenario '%1' loaded from %2: %3 factions, %4 objectives", m_sName, path, m_aFactions.Count(), m_aObjectives.Count()), LogLevel.NORMAL);
 		foreach (CLW_FactionSetup setup : m_aFactions)

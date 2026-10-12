@@ -55,6 +55,7 @@ class CLW_FobSites
 	static const float SEARCH_RADIUS_FRAC = 0.04;	// of the HQ distance
 	static const float LATERAL_FRAC = 0.05;			// computed sites: offset from the HQ line, fraction of the HQ distance
 	static const int MAX_COMPUTED = 6;
+	static const int MIN_SITES_WARN = 4;	// fewer pool sites than this is logged as a warning
 
 	protected static ref array<ref CLW_FobSite> s_aSites = {};
 	protected static int s_iComputed;
@@ -200,19 +201,17 @@ class CLW_FobSites
 			}
 		}
 
-		// 2. computed along the HQ line: fractions of the way, alternating sides of the line, first half = first side
-		array<float> fractions = {0.22, 0.35, 0.65, 0.78, 0.45, 0.55};
+		// 2. computed along the HQ line: fractions of the way, first half = first side. A map without data sites (auto scenario) lives on
+		// these alone: every fraction tries the lateral offsets in turn (alternating sides, then twice as far out) until a site is accepted,
+		// so a fraction whose first spot has no road or is forest does not cost a site.
+		array<float> fractions = {0.22, 0.35, 0.65, 0.78, 0.45, 0.55, 0.15, 0.85};
+		array<float> laterals = {1, -1, 2.5, -2.5, 0};
 		int fromComputed;
 		foreach (int fi, float fraction : fractions)
 		{
 			if (fromComputed >= MAX_COMPUTED)
 				break;
 
-			float offset = hqDist * LATERAL_FRAC;
-			if (fi % 2 == 1)
-				offset = -offset;
-
-			vector computedWish = Vector(hqFirst[0] + dirX * hqDist * fraction + leftX * offset, 0, hqFirst[2] + dirZ * hqDist * fraction + leftZ * offset);
 			int side = 0;
 			if (fraction > 0.5)
 				side = 1;
@@ -222,13 +221,33 @@ class CLW_FobSites
 			vector hqNear = hqFirst;
 			if (side == 1)
 				hqNear = hqSecond;
-			if (!ShiftClear(computedWish, objPos, objNeed, hqNear))
-				continue;
 
-			s_iComputed++;
-			if (TryAdd("FSC" + s_iComputed, "", computedWish, side, "computed", radius, spacing, avoid, avoidDist, points))
-				fromComputed++;
+			float firstSign = 1;
+			if (fi % 2 == 1)
+				firstSign = -1;
+
+			bool added;
+			foreach (float lateralFactor : laterals)
+			{
+				if (added)
+					break;
+
+				float offset = hqDist * LATERAL_FRAC * lateralFactor * firstSign;
+				vector computedWish = Vector(hqFirst[0] + dirX * hqDist * fraction + leftX * offset, 0, hqFirst[2] + dirZ * hqDist * fraction + leftZ * offset);
+				if (!ShiftClear(computedWish, objPos, objNeed, hqNear))
+					continue;
+
+				s_iComputed++;
+				if (TryAdd("FSC" + s_iComputed, "", computedWish, side, "computed", radius, spacing, avoid, avoidDist, points))
+				{
+					fromComputed++;
+					added = true;
+				}
+			}
 		}
+
+		if (s_aSites.Count() < MIN_SITES_WARN)
+			Print(string.Format("CLW: fob site WARNING only %1 sites on this map (roads / clear ground too sparse near the HQ line): FOB builds will be limited", s_aSites.Count()), LogLevel.WARNING);
 
 		Print(string.Format("CLW: fob site pool ready: %1 sites (%2 from data, %3 computed), hq distance %4 m, base clear %5 m, spacing %6 m", s_aSites.Count(), fromData, fromComputed, Math.Round(hqDist), Math.Round(baseClear), Math.Round(spacing)), LogLevel.NORMAL);
 	}
