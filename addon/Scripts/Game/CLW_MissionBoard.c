@@ -173,7 +173,7 @@ class CLW_MissionBoard : CLW_MissionHook
 	protected string TargetText(CLW_MissionOffer offer)
 	{
 		if (offer.m_bHasPos)
-			return Math.Round(offer.m_vPos[0]) + "/" + Math.Round(offer.m_vPos[2]);
+			return string.Format("%1/%2", Math.Round(offer.m_vPos[0]), Math.Round(offer.m_vPos[2]));
 
 		return offer.m_sTarget;
 	}
@@ -472,7 +472,8 @@ class CLW_MissionBoard : CLW_MissionHook
 		array<ref CLW_MissionOffer> fresh = {};
 		if (havePending)
 		{
-			fresh.InsertAll(pending.m_aOffers);
+			foreach (CLW_MissionOffer one : pending.m_aOffers)
+				fresh.Insert(one);
 			m_mPending.Remove(rec.m_sKey);
 		}
 		else

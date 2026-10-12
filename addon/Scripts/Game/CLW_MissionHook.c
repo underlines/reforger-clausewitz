@@ -50,7 +50,7 @@ class CLW_MissionHook
 			stored.Insert(offer);
 			string target = offer.m_sTarget;
 			if (offer.m_bHasPos)
-				target = Math.Round(offer.m_vPos[0]) + "/" + Math.Round(offer.m_vPos[2]);
+				target = string.Format("%1/%2", Math.Round(offer.m_vPos[0]), Math.Round(offer.m_vPos[2]));
 			Print(string.Format("CLW: missions %1 offer for %2: %3 %4 (%5) '%6'", factionKey, squadId, offer.m_sKind, target, offer.m_sSource, offer.m_sBrief), LogLevel.NORMAL);
 		}
 
@@ -62,7 +62,10 @@ class CLW_MissionHook
 	{
 		array<ref CLW_MissionOffer> stored;
 		if (m_mOffers.Find(factionKey + "/" + squadId, stored) && stored)
-			outOffers.InsertAll(stored);
+		{
+			foreach (CLW_MissionOffer one : stored)
+				outOffers.Insert(one);
+		}
 	}
 
 	// JSON object for the squad's "mission" field in the situation: {"state":"offered|accepted|none","kind":"CAPTURE","target":"C"}.

@@ -23,7 +23,8 @@ class CLW_WarMode
 	// Live parameter list (definitions + current values).
 	void GetParams(notnull array<ref CLW_ModeParam> outParams)
 	{
-		outParams.InsertAll(m_aParams);
+		foreach (CLW_ModeParam one : m_aParams)
+			outParams.Insert(one);
 	}
 
 	// Validates ALL values first; applies them only if every one is valid. Unknown ids are rejected.
@@ -32,7 +33,7 @@ class CLW_WarMode
 		array<ref CLW_ModeParam> staged = {};
 		foreach (CLW_ModeParam param : m_aParams)
 		{
-			staged.Insert(param.Clone());
+			staged.Insert(param.Copy());
 		}
 
 		foreach (CLW_ModeParam value : values)
@@ -78,7 +79,7 @@ class CLW_WarMode
 				return false;
 			}
 
-			CLW_ModeParam candidate = own.Clone();
+			CLW_ModeParam candidate = own.Copy();
 			if (!candidate.SetFromText(text, error))
 				return false;
 			values.Insert(candidate);

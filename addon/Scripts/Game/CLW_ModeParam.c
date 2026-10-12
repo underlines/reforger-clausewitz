@@ -144,7 +144,7 @@ class CLW_ModeParam
 		return true;
 	}
 
-	CLW_ModeParam Clone()
+	CLW_ModeParam Copy()
 	{
 		CLW_ModeParam copy = new CLW_ModeParam();
 		copy.m_sId = m_sId;

@@ -216,7 +216,7 @@ class CLW_Situation
 
 			if (written > 0)
 				text += ",";
-			string desc = seen.m_iCount + "x " + seen.m_sEnemyFaction + " " + seen.m_sKind;
+			string desc = seen.m_iCount.ToString() + "x " + seen.m_sEnemyFaction + " " + seen.m_sKind;
 			text += "{\"pos\":[" + Math.Round(seen.m_vPos[0]) + "," + Math.Round(seen.m_vPos[1]) + "," + Math.Round(seen.m_vPos[2]) + "],\"desc\":\"" + Escape(desc) + "\",\"kind\":\"" + Escape(seen.m_sKind) + "\",\"ageSec\":" + Math.Round(Math.Max(0, now - seen.m_fLastSeen)) + "}";
 			written++;
 		}

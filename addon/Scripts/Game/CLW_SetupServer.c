@@ -566,7 +566,11 @@ class CLW_SetupServer
 			choices += Clean(choice);
 		}
 
-		return "P\t" + group + "\t" + Clean(param.m_sId) + "\t" + Clean(param.m_sLabel) + "\t" + Clean(param.m_sDescription) + "\t" + param.m_eType + "\t" + param.m_fMin.ToString() + "\t" + param.m_fMax.ToString() + "\t" + param.m_fStep.ToString() + "\t" + Clean(param.ValueText()) + "\t" + choices + "\n";
+		string line = "P\t" + group + "\t" + Clean(param.m_sId) + "\t" + Clean(param.m_sLabel);
+		line += "\t" + Clean(param.m_sDescription) + "\t" + param.m_eType.ToString();
+		line += "\t" + param.m_fMin.ToString() + "\t" + param.m_fMax.ToString() + "\t" + param.m_fStep.ToString();
+		line += "\t" + Clean(param.ValueText()) + "\t" + choices + "\n";
+		return line;
 	}
 
 	// Line based menu payload (fields separated by TAB, lines by LF), parsed by CLW_SetupClient:
