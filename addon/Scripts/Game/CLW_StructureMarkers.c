@@ -1,6 +1,7 @@
-// Base / FOB structure markers (owner request 2026-10-12: "players cannot find the arsenal"). One static military map marker per placed
-// service (command post, arsenal, vehicle depot, supply cache, medical, repair), visible only to its own side (faction flags, same approach
-// as CLW_ContactMarkers). Also the registry behind the `structures` block of the situation JSON (dashboard) and the SITREP hint line.
+// Base / FOB structure markers (owner request 2026-10-12: "players cannot find the arsenal"). One static military map marker per IMPORTANT
+// placed service (command post, arsenal, vehicle depot, supply cache; medical, repair stay off the map: CLW_ServiceEntry.ShowsMapMarker),
+// visible only to its own side (faction flags, same approach as CLW_ContactMarkers), plus the own-side FOB location marker (AddFobLocation).
+// Also the registry behind the `structures` block of the situation JSON (dashboard, ALL services, no locations) and the SITREP hint line.
 // Hooks: CLW_Services.SpawnOne (Add), CLW_Services.RemoveBase (RemoveBase: lost FOB), CLW_Services.OnWarEnded (RemoveAll), CLW_Services.Reset.
 // Server only. Log prefix: "CLW: markers".
 class CLW_StructureInfo
@@ -10,6 +11,8 @@ class CLW_StructureInfo
 	string m_sKind;
 	string m_sLabel;
 	vector m_vPos;
+	bool m_bMap = true;			// false: dashboard only (field hospital, repair bay)
+	bool m_bLocation;			// a base location marker (FOB), not a structure: never in the dashboard structures block
 	ref SCR_MapMarkerBase m_Marker;
 }
 
@@ -17,6 +20,7 @@ class CLW_StructureMarkers
 {
 	static const int RETRY_MS = 2000;
 	static const int RETRIES = 8;
+	static const string LOCATION_KIND = "location";
 
 	protected static ref array<ref CLW_StructureInfo> s_aInfos = {};
 	protected static bool s_bRetrying;
@@ -32,7 +36,8 @@ class CLW_StructureMarkers
 	}
 
 	// A service was placed: remember it and put its marker on the map of its side.
-	static void Add(string sideKey, string baseId, string kind, vector pos)
+	// mapMarker false: only remembered for the dashboard structures block, no marker on the map.
+	static void Add(string sideKey, string baseId, string kind, vector pos, bool mapMarker = true)
 	{
 		if (!Replication.IsServer())
 			return;
@@ -43,7 +48,41 @@ class CLW_StructureMarkers
 		info.m_sKind = kind;
 		info.m_sLabel = LabelFor(baseId, kind);
 		info.m_vPos = pos;
+		info.m_bMap = mapMarker;
+		Track(info);
+	}
+
+	// An active FOB: its location marker ("FOB1") on the map of its own side only. Removed with RemoveBase when the FOB is lost.
+	static void AddFobLocation(string sideKey, string fobId, vector pos)
+	{
+		if (!Replication.IsServer())
+			return;
+
+		foreach (CLW_StructureInfo existing : s_aInfos)
+		{
+			if (existing.m_bLocation && existing.m_sSide == sideKey && existing.m_sBase == fobId)
+				return;
+		}
+
+		CLW_StructureInfo info = new CLW_StructureInfo();
+		info.m_sSide = sideKey;
+		info.m_sBase = fobId;
+		info.m_sKind = LOCATION_KIND;
+		info.m_sLabel = fobId;
+		info.m_vPos = pos;
+		info.m_bLocation = true;
+		Track(info);
+	}
+
+	protected static void Track(CLW_StructureInfo info)
+	{
 		s_aInfos.Insert(info);
+		if (!info.m_bMap)
+		{
+			Print(string.Format("CLW: markers %1 %2 '%3' at %4: no map marker (dashboard only)", info.m_sSide, info.m_sBase, info.m_sLabel, info.m_vPos), LogLevel.NORMAL);
+			return;
+		}
+
 		if (!Place(info) && !s_bRetrying)
 		{
 			s_bRetrying = true;
@@ -74,7 +113,7 @@ class CLW_StructureMarkers
 		}
 
 		if (removed > 0)
-			Print(string.Format("CLW: markers %1 %2: %3 structure markers removed", sideKey, baseId, removed), LogLevel.NORMAL);
+			Print(string.Format("CLW: markers %1 %2: %3 structure/location entries removed", sideKey, baseId, removed), LogLevel.NORMAL);
 
 		return removed;
 	}
@@ -107,7 +146,7 @@ class CLW_StructureMarkers
 		string text = "";
 		foreach (CLW_StructureInfo info : s_aInfos)
 		{
-			if (info.m_sSide != sideKey)
+			if (info.m_sSide != sideKey || info.m_bLocation)
 				continue;
 
 			if (!text.IsEmpty())
@@ -139,7 +178,7 @@ class CLW_StructureMarkers
 		bool pending;
 		foreach (CLW_StructureInfo info : s_aInfos)
 		{
-			if (!info.m_Marker && !Place(info))
+			if (info.m_bMap && !info.m_Marker && !Place(info))
 				pending = true;
 		}
 
@@ -183,6 +222,8 @@ class CLW_StructureMarkers
 
 	protected static EMilitarySymbolIcon IconFor(string kind)
 	{
+		if (kind == LOCATION_KIND)
+			return EMilitarySymbolIcon.RELAY;	// FOB location (same icon family as the base marker of the control points)
 		if (kind == CLW_ServiceKind.COMMAND_POST)
 			return EMilitarySymbolIcon.MOBILEHQ;
 		if (kind == CLW_ServiceKind.SUPPLY)

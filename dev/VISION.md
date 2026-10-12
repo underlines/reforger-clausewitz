@@ -274,6 +274,25 @@ Open questions: which Game Master functions are scriptable from a mod; how to de
 - **Fortifications**: sandbags, bunkers, trenches, AT positions, vehicle hull-down spots from compositions; AI units garrison / use them as defend positions `[verify AI actually uses placed fortifications well]`.
 - Depot supply, vehicle repair/refuel/rearm: stretch goals; at minimum track them abstractly.
 
+### 6a. Own base structures instead of vanilla Conflict compositions (owner feedback 2026-10-12, backlog)
+The vanilla Conflict compositions are mostly dead weight outside Conflict: the HQ whiteboard "start building" needs the Campaign building
+manager, the field hospital only offers a few first-aid items, the depot menu needs Campaign supply links. Keep only what matters and give
+it our own interaction:
+- **Structures:** HQ (command post), arsenal, vehicle request point, supply container (stock of that base/FOB). Optional later: repair/rearm
+  pad, medical station with real function (heal / respawn bonus). Small own prefabs (vanilla props as visuals + our `ActionsManagerComponent`
+  + our actions), placed by `CLW_FreeSpot`; no hidden Conflict systems, so nothing half-works.
+- **HQ menu (F at the command post):** one larger custom menu (own layout, not a list of 10 user actions): tabs Request (vehicle / squad /
+  resupply / reinforce / recon with costs, cooldowns and the reason when refused), Squad (join/leave HQ squads, SITREP), Base (stock, FOB
+  list, convoys in flight), Report (contact report with map pick). Every button calls the same registry entries as `/request`, so rules,
+  costs and logging stay in one place.
+- **Natural language stays:** `/hq <text>` goes to the agent turn with the same registry tools; the menu is the fast path, chat the flexible
+  one. Requirement: the reply always reaches the player in game (HQ hint + chat line + radio sound), and the dashboard HQ chat tab shows it.
+- **Agent coverage check:** a small eval set of typical player requests ("armour at my position", "medevac", "ammo to grid 024-027",
+  "recon the ridge") with expected registry calls, run per OpenRouter model, so new menu functions are also reachable by `/hq`.
+- **Supply container:** shows the base/FOB stock (vanilla supply UI or our own), loads/unloads supply trucks (convoys, player logistics).
+- **Vehicle delivery near the player:** `/request vehicle` far from a depot already parks on the nearest road / open ground; add a radio
+  "vehicle delivered, grid ..." and a temporary map marker for the requester.
+
 ---
 
 ## 7. Autonomous behaviour (no orders for a long time)

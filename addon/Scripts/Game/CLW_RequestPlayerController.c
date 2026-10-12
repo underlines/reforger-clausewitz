@@ -162,7 +162,7 @@ class CLW_RequestClient
 	{
 		CLW_Debug.Show(text);
 		if (hint)
-			SCR_HintManagerComponent.ShowCustomHint(text, "HQ", 8);
+			SCR_HintManagerComponent.ShowCustomHint(text, "HQ", 15);
 	}
 
 	// "vehicle=60;squad=120;resupply=20;" from the server (the force catalog only exists there).

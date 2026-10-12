@@ -49,6 +49,7 @@ class CLW_HqMessage
 	string m_sSquad;
 	vector m_vPos;
 	string m_sText;
+	string m_sReply;	// the radio reply, shown together with the action result in one hint
 	float m_fTime;		// world time (s)
 }
 
@@ -246,7 +247,11 @@ class CLW_HqChat
 					line = line.Substring(0, 300);
 
 				Print(string.Format("CLW: hq #%1 %2 reply: '%3'", msg.m_iId, msg.m_sName, line), LogLevel.NORMAL);
-				CLW_RequestService.Answer(msg.m_iPlayer, "HQ: " + line, false);
+				// one hint with reply + action result (a second hint would replace the first at once; the reply alone was a
+				// short chat line the owner did not see, DS e2e 2026-10-12)
+				msg.m_sReply = line;
+				if (!HasActionsFor(msg, actions))
+					CLW_RequestService.Answer(msg.m_iPlayer, "HQ: " + line, true);
 				RunActions(msg, actions);
 			}
 		}
@@ -374,7 +379,24 @@ class CLW_HqChat
 			Print(string.Format("CLW: hq #%1 %2 action %3 %4 -> %5: %6", msg.m_iId, msg.m_sName, dto.id, dto.action, granted, result), LogLevel.NORMAL);
 		}
 
+		if (!msg.m_sReply.IsEmpty())
+			answer = "HQ: " + msg.m_sReply + "\n" + answer;
+
 		CLW_RequestService.Answer(msg.m_iPlayer, answer, true);
+	}
+
+	protected static bool HasActionsFor(CLW_HqMessage msg, array<ref CLW_HqActionDto> actions)
+	{
+		if (!actions)
+			return false;
+
+		foreach (CLW_HqActionDto dto : actions)
+		{
+			if (dto && dto.msgId == msg.m_iId)
+				return true;
+		}
+
+		return false;
 	}
 
 	protected static void SetArg(CLW_ActionCall call, CLW_ActionEntry entry, CLW_HqArgDto arg)

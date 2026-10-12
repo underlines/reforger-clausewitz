@@ -43,6 +43,10 @@ class CLW_SpotConfig
 	static const int ROAD_MAX_POINTS = 400;
 	static const int ROAD_MAX_EVAL = 40;			// road points tried (nearest first)
 	static const float ROAD_MIN_WIDTH_M = 3;
+	static const float ROAD_CLEARANCE_M = 4;		// default gap from a footprint edge to the nearest road EDGE (compositions, terminals, boxes, FOB clusters)
+	static const float ROAD_CLEAR_MIN_WIDTH_M = 2;	// roads narrower than this (footpaths) do not count for the clearance
+	static const float ROAD_MAX_HALF_WIDTH_M = 15;	// upper bound used to size the cell lookup
+	static const float ROAD_CELL_M = 24;			// road cache grid cell
 	static const float DEPOT_NEAR_M = 300;			// requester this close to a depot: the vehicle comes from the depot
 	static const float REQUEST_ROAD_M = 50;			// roadside search radius around the requester
 	static const float REQUEST_GROUND_M = 30;		// open ground search radius around the requester
@@ -104,6 +108,13 @@ class CLW_SpotParams
 	ref array<vector> m_aAvoidPos = {};
 	ref array<float> m_aAvoidDist = {};	// required distance from the CENTRE of the pose to the avoid position
 	ref array<IEntity> m_aIgnore = {};	// entities (and their children) that do not block
+	float m_fRoadClearance;				// metres from the rotated footprint edge to the road edge (0 = roads allowed); default CLW_SpotConfig.ROAD_CLEARANCE_M, SetVehicle() sets 0
+	ref CLW_RoadCache m_RoadCache;		// built by FindFreeSpot when m_fRoadClearance > 0
+
+	void CLW_SpotParams()
+	{
+		m_fRoadClearance = CLW_SpotConfig.ROAD_CLEARANCE_M;
+	}
 
 	void SetFootprint(CLW_Footprint foot)
 	{
@@ -124,6 +135,7 @@ class CLW_SpotParams
 		m_fMargin = CLW_SpotConfig.VEHICLE_MARGIN_M;
 		m_fMaxHeightRange = CLW_SpotConfig.VEHICLE_MAX_RANGE_M;
 		m_bBlockCharacters = true;
+		m_fRoadClearance = 0;	// vehicles park on / beside roads on purpose
 	}
 
 	void AddAvoid(vector pos, float dist)
@@ -148,6 +160,7 @@ class CLW_SpotResult
 	int m_iTries;
 	int m_iCandidates;
 	int m_iValid;
+	int m_iRoadSegs = -1;		// cached road segments of the search area (-1 = road clearance off)
 	string m_sVia;
 	ref map<string, int> m_mRejects = new map<string, int>();
 
@@ -172,6 +185,215 @@ class CLW_SpotResult
 			return "none";
 
 		return text;
+	}
+}
+
+// Road segments of the search area, cached once per FindFreeSpot call (one RoadNetworkManager.GetRoadsInAABB, never per pose), in a
+// coarse XZ grid. TooClose tests a rotated footprint rectangle against the segments: the road EDGE (centreline minus half the road width)
+// must stay at least 'clearance' metres away from the rectangle edge. Distance rectangle - segment is exact (0 when they intersect,
+// else the minimum of endpoint-to-rectangle and rectangle-corner-to-segment distances).
+class CLW_RoadCache
+{
+	protected ref array<float> m_aSeg = {};		// stride 5: ax, az, bx, bz, half width
+	protected ref map<int, ref array<int>> m_mCells = new map<int, ref array<int>>();
+	protected ref array<int> m_aStamp = {};
+	protected int m_iStamp;
+	protected float m_fMinX;
+	protected float m_fMinZ;
+	protected int m_iRoads;
+
+	int Segments()
+	{
+		return m_aSeg.Count() / 5;
+	}
+
+	int Roads()
+	{
+		return m_iRoads;
+	}
+
+	protected int CellIndex(float v, float origin)
+	{
+		int idx = Math.Floor((v - origin) / CLW_SpotConfig.ROAD_CELL_M);
+		return Math.Clamp(idx, 0, 1023);
+	}
+
+	// Collects the road segments inside the square around 'center' (half side 'extent').
+	void Build(vector center, float extent)
+	{
+		m_fMinX = center[0] - extent;
+		m_fMinZ = center[2] - extent;
+		float maxX = center[0] + extent;
+		float maxZ = center[2] + extent;
+		RoadNetworkManager mgr = CLW_Placement.GetRoadManager();
+		if (!mgr)
+			return;
+
+		array<BaseRoad> roads = {};
+		mgr.GetRoadsInAABB(Vector(m_fMinX, -10000, m_fMinZ), Vector(maxX, 10000, maxZ), roads);
+		foreach (BaseRoad road : roads)
+		{
+			if (!road || road.GetWidth() < CLW_SpotConfig.ROAD_CLEAR_MIN_WIDTH_M)
+				continue;
+
+			float halfWidth = road.GetWidth() * 0.5;
+			array<vector> pts = {};
+			road.GetPoints(pts);
+			bool used;
+			for (int i = 0; i < pts.Count() - 1; i++)
+			{
+				float ax = pts[i][0];
+				float az = pts[i][2];
+				float bx = pts[i + 1][0];
+				float bz = pts[i + 1][2];
+				float loX = Math.Min(ax, bx) - halfWidth;
+				float hiX = Math.Max(ax, bx) + halfWidth;
+				float loZ = Math.Min(az, bz) - halfWidth;
+				float hiZ = Math.Max(az, bz) + halfWidth;
+				if (hiX < m_fMinX || loX > maxX || hiZ < m_fMinZ || loZ > maxZ)
+					continue;
+
+				int index = m_aSeg.Count() / 5;
+				m_aSeg.Insert(ax);
+				m_aSeg.Insert(az);
+				m_aSeg.Insert(bx);
+				m_aSeg.Insert(bz);
+				m_aSeg.Insert(halfWidth);
+				m_aStamp.Insert(0);
+				used = true;
+				int cx0 = CellIndex(loX, m_fMinX);
+				int cx1 = CellIndex(hiX, m_fMinX);
+				int cz0 = CellIndex(loZ, m_fMinZ);
+				int cz1 = CellIndex(hiZ, m_fMinZ);
+				for (int cz = cz0; cz <= cz1; cz++)
+				{
+					for (int cx = cx0; cx <= cx1; cx++)
+					{
+						int key = cx + cz * 1024;
+						array<int> cell;
+						if (!m_mCells.Find(key, cell) || !cell)
+						{
+							cell = new array<int>();
+							m_mCells.Set(key, cell);
+						}
+
+						cell.Insert(index);
+					}
+				}
+			}
+
+			if (used)
+				m_iRoads++;
+		}
+	}
+
+	// true when any cached road edge is closer than 'clearance' to the footprint rectangle: centre (cx, cz), local X axis (ux, uz),
+	// local Z axis (wx, wz), half extents (hx, hz).
+	bool TooClose(float cx, float cz, float ux, float uz, float wx, float wz, float hx, float hz, float clearance)
+	{
+		if (m_aSeg.IsEmpty())
+			return false;
+
+		float reach = Math.Sqrt(hx * hx + hz * hz) + clearance + CLW_SpotConfig.ROAD_MAX_HALF_WIDTH_M;
+		int cellX0 = CellIndex(cx - reach, m_fMinX);
+		int cellX1 = CellIndex(cx + reach, m_fMinX);
+		int cellZ0 = CellIndex(cz - reach, m_fMinZ);
+		int cellZ1 = CellIndex(cz + reach, m_fMinZ);
+		m_iStamp++;
+		for (int gz = cellZ0; gz <= cellZ1; gz++)
+		{
+			for (int gx = cellX0; gx <= cellX1; gx++)
+			{
+				array<int> cell;
+				if (!m_mCells.Find(gx + gz * 1024, cell) || !cell)
+					continue;
+
+				foreach (int index : cell)
+				{
+					if (m_aStamp[index] == m_iStamp)
+						continue;
+
+					m_aStamp[index] = m_iStamp;
+					int o = index * 5;
+					float rax = m_aSeg[o] - cx;
+					float raz = m_aSeg[o + 1] - cz;
+					float rbx = m_aSeg[o + 2] - cx;
+					float rbz = m_aSeg[o + 3] - cz;
+					float dist = SegBoxDist(rax * ux + raz * uz, rax * wx + raz * wz, rbx * ux + rbz * uz, rbx * wx + rbz * wz, hx, hz);
+					if (dist - m_aSeg[o + 4] < clearance)
+						return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	protected static float PointBoxSq(float px, float pz, float hx, float hz)
+	{
+		float ex = Math.Max(Math.AbsFloat(px) - hx, 0);
+		float ez = Math.Max(Math.AbsFloat(pz) - hz, 0);
+		return ex * ex + ez * ez;
+	}
+
+	// Distance from the segment a-b to the axis-aligned box [-hx, hx] x [-hz, hz] (all in the box frame). 0 when they intersect.
+	static float SegBoxDist(float ax, float az, float bx, float bz, float hx, float hz)
+	{
+		float sx = bx - ax;
+		float sz = bz - az;
+		float t0 = 0;
+		float t1 = 1;
+		bool overlap = true;
+		if (Math.AbsFloat(sx) < 0.0001)
+		{
+			if (Math.AbsFloat(ax) > hx)
+				overlap = false;
+		}
+		else
+		{
+			float xa = (-hx - ax) / sx;
+			float xb = (hx - ax) / sx;
+			float xTmp = xa;
+			if (xa > xb)
+			{
+				xa = xb;
+				xb = xTmp;
+			}
+
+			t0 = Math.Max(t0, xa);
+			t1 = Math.Min(t1, xb);
+		}
+
+		if (Math.AbsFloat(sz) < 0.0001)
+		{
+			if (Math.AbsFloat(az) > hz)
+				overlap = false;
+		}
+		else
+		{
+			float za = (-hz - az) / sz;
+			float zb = (hz - az) / sz;
+			float zTmp = za;
+			if (za > zb)
+			{
+				za = zb;
+				zb = zTmp;
+			}
+
+			t0 = Math.Max(t0, za);
+			t1 = Math.Min(t1, zb);
+		}
+
+		if (overlap && t0 <= t1)
+			return 0;
+
+		float best = Math.Min(PointBoxSq(ax, az, hx, hz), PointBoxSq(bx, bz, hx, hz));
+		float tc;
+		best = Math.Min(best, CLW_Placement.SegmentDistSq(-hx, -hz, ax, az, bx, bz, tc));
+		best = Math.Min(best, CLW_Placement.SegmentDistSq(hx, -hz, ax, az, bx, bz, tc));
+		best = Math.Min(best, CLW_Placement.SegmentDistSq(-hx, hz, ax, az, bx, bz, tc));
+		best = Math.Min(best, CLW_Placement.SegmentDistSq(hx, hz, ax, az, bx, bz, tc));
+		return Math.Sqrt(best);
 	}
 }
 
@@ -475,6 +697,15 @@ class CLW_FreeSpot
 		if (range > p.m_fMaxHeightRange)
 			return "slope";
 
+		// road clearance: the rotated footprint rectangle must keep m_fRoadClearance from every road edge (cached segments, no engine query)
+		if (p.m_fRoadClearance > 0 && p.m_RoadCache)
+		{
+			float rcx = pos[0] + mat[0][0] * p.m_fOffsetX + mat[2][0] * p.m_fOffsetZ;
+			float rcz = pos[2] + mat[0][2] * p.m_fOffsetX + mat[2][2] * p.m_fOffsetZ;
+			if (p.m_RoadCache.TooClose(rcx, rcz, mat[0][0], mat[0][2], mat[2][0], mat[2][2], p.m_fHalfX, p.m_fHalfZ, p.m_fRoadClearance))
+				return "road";
+		}
+
 		// inland water (lakes, rivers): the water surface at the centre lies above the terrain
 		vector waterPoint;
 		EWaterSurfaceType waterType;
@@ -589,6 +820,14 @@ class CLW_FreeSpot
 		float step = Math.Clamp(Math.Min(p.m_fHalfX, p.m_fHalfZ) + 1, 3, 12);
 		float baseAngle = Math.RandomFloat(0, Math.PI2);
 		float maxRadius = Math.Max(p.m_fMaxRadius, p.m_fMinRadius);
+		if (p.m_fRoadClearance > 0)
+		{
+			float roadExtent = maxRadius + p.Radius() + Math.Sqrt(p.m_fOffsetX * p.m_fOffsetX + p.m_fOffsetZ * p.m_fOffsetZ) + p.m_fRoadClearance + CLW_SpotConfig.ROAD_MAX_HALF_WIDTH_M;
+			p.m_RoadCache = new CLW_RoadCache();
+			p.m_RoadCache.Build(p.m_vCenter, roadExtent);
+			res.m_iRoadSegs = p.m_RoadCache.Segments();
+		}
+
 		array<float> yaws = {};
 		array<float> pens = {};
 		float bestScore = 1000000000;
@@ -877,11 +1116,11 @@ class CLW_FreeSpot
 	{
 		if (ok)
 		{
-			Print(string.Format("CLW: place %1 at %2 grid %3 yaw=%4 via=%5 score=%6 range=%7 tries=%8 cand=%9", p.m_sLabel, res.m_vPos, CLW_Places.Grid(res.m_vPos), Math.Round(res.m_fYaw), res.m_sVia, Math.Round(res.m_fScore), Math.Round(res.m_fRange * 10) / 10, res.m_iTries, res.m_iCandidates) + " valid=" + res.m_iValid + " rejected: " + res.Summary(), LogLevel.NORMAL);
+			Print(string.Format("CLW: place %1 at %2 grid %3 yaw=%4 via=%5 score=%6 range=%7 tries=%8 cand=%9", p.m_sLabel, res.m_vPos, CLW_Places.Grid(res.m_vPos), Math.Round(res.m_fYaw), res.m_sVia, Math.Round(res.m_fScore), Math.Round(res.m_fRange * 10) / 10, res.m_iTries, res.m_iCandidates) + " valid=" + res.m_iValid + " roadSegs=" + res.m_iRoadSegs + " rejected: " + res.Summary(), LogLevel.NORMAL);
 			return;
 		}
 
-		Print(string.Format("CLW: place %1 FAILED around %2 (r %3..%4 m, foot %5x%6) tries=%7 cand=%8", p.m_sLabel, p.m_vCenter, Math.Round(p.m_fMinRadius), Math.Round(p.m_fMaxRadius), Math.Round(p.m_fHalfX * 2), Math.Round(p.m_fHalfZ * 2), res.m_iTries, res.m_iCandidates) + " rejected: " + res.Summary(), LogLevel.WARNING);
+		Print(string.Format("CLW: place %1 FAILED around %2 (r %3..%4 m, foot %5x%6) tries=%7 cand=%8", p.m_sLabel, p.m_vCenter, Math.Round(p.m_fMinRadius), Math.Round(p.m_fMaxRadius), Math.Round(p.m_fHalfX * 2), Math.Round(p.m_fHalfZ * 2), res.m_iTries, res.m_iCandidates) + " roadSegs=" + res.m_iRoadSegs + " rejected: " + res.Summary(), LogLevel.WARNING);
 	}
 
 	// ---- ready-made searches ----

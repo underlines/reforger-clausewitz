@@ -189,6 +189,13 @@ class CLW_ServiceKind
 		return kind == COMMAND_POST || kind == VEHICLE_DEPOT || kind == ARSENAL || kind == MEDICAL || kind == REPAIR || kind == SUPPLY;
 	}
 
+	// The important structures of a base that get a map marker by default (command post, arsenal, vehicle depot / requests, supply cache).
+	// Field hospital and repair bay stay off the map unless the service entry says m_iMapMarker = 1.
+	static bool DefaultMapMarker(string kind)
+	{
+		return kind == COMMAND_POST || kind == ARSENAL || kind == VEHICLE_DEPOT || kind == SUPPLY;
+	}
+
 	// Default footprint radius (m) of the composition, used by the free-spot search when the data gives none.
 	static float DefaultRadius(string kind)
 	{
@@ -229,6 +236,17 @@ class CLW_ServiceEntry
 
 	[Attribute("1", UIWidgets.CheckBox, "Service is spawned")]
 	bool m_bEnabled;
+
+	[Attribute("-1", UIWidgets.EditBox, "Own-side map marker: -1 = by kind (command_post, arsenal, vehicle_depot, supply yes; medical, repair no), 0 = none, 1 = marker")]
+	int m_iMapMarker;
+
+	bool ShowsMapMarker()
+	{
+		if (m_iMapMarker >= 0)
+			return m_iMapMarker > 0;
+
+		return CLW_ServiceKind.DefaultMapMarker(m_sKind);
+	}
 }
 
 [BaseContainerProps(configRoot: true)]

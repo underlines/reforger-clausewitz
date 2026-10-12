@@ -348,7 +348,7 @@ class CLW_Services
 		CollectHierarchy(entity, tree);
 		int reaffiliated = AdoptFaction(tree, source, sideKey);
 		int spawnPoints = DisableSpawnPoints(tree);
-		CLW_StructureMarkers.Add(sideKey, baseId, entry.m_sKind, spot);	// map marker (own side) + dashboard structures
+		CLW_StructureMarkers.Add(sideKey, baseId, entry.m_sKind, spot, entry.ShowsMapMarker());	// map marker (own side, important structures only) + dashboard structures (all)
 		CLW_RequestTerminals.OnServicePlaced(sideKey, baseId, entry.m_sKind, spot, radius);	// M3 phase Q: request terminal next to the command post / depot
 		Print(string.Format("CLW: services placed %1 %2 %3 at %4 yaw=%5 r=%6 via=%7 grid=%8", sideKey, baseId, entry.m_sKind, spot, Math.Round(yaw), radius, via, CLW_Places.Grid(spot)), LogLevel.NORMAL);
 		Print(string.Format("CLW: services   %1 %2 entities=%3 reaffiliated=%4 spawnPointsOff=%5 prefab=%6", sideKey, entry.m_sKind, tree.Count(), reaffiliated, spawnPoints, entry.m_Prefab.GetPath()), LogLevel.NORMAL);
@@ -369,7 +369,9 @@ class CLW_Services
 	// Free spot around the anchor for a footprint: outside the keep-clear zone, clear of the placed services (+ gap), dry, flat and with
 	// nothing solid under the footprint (CLW_FreeSpot). Passes: strict (8 % grade over the footprint), relaxed (wider ring, trees ignored,
 	// 14 %), lenient (25 %, objects still block; DS e2e 2026-10-12: a fixed 1.2-3.7 m height range rejected 95 % of Arland). The last resort
-	// is a forced spot on the minimum ring (logged as FORCED). Returns how the spot was found.
+	// is a best-effort search that ignores only the slope (road + object clearance kept, "slope-ignored"); a blind forced spot on the minimum ring
+	// (logged as FORCED) only when even that fails. Every pass keeps the road clearance (CLW_SpotParams.m_fRoadClearance, roads are never relaxed).
+	// Returns how the spot was found.
 	protected static string FindSpot(string label, vector anchor, float keepClear, CLW_Footprint foot, float fixedYaw, notnull array<vector> placedPos, notnull array<float> placedRad, out vector spot, out float yaw)
 	{
 		float footRadius = foot.Radius();
@@ -413,6 +415,32 @@ class CLW_Services
 
 				return "lenient";
 			}
+		}
+
+		// best effort: only the slope limit is dropped (object + road + water clearance kept), wider ring
+		CLW_SpotParams bp = new CLW_SpotParams();
+		bp.m_sLabel = label + " (slope ignored)";
+		bp.m_vCenter = anchor;
+		bp.SetFootprint(foot);
+		bp.m_fMinRadius = minDist;
+		bp.m_fMaxRadius = (minDist + PLACE_RING_M + (PLACE_BATCHES - 1) * PLACE_RING_GROW_M) * 2.2;
+		bp.m_fMaxHeightRange = 100000;
+		bp.m_fFixedYaw = fixedYaw;
+		bp.m_bBlockTrees = false;
+		bp.m_fMargin = 0.3;
+		bp.m_iMaxTries = 1200;
+		foreach (int bi, vector bother : placedPos)
+		{
+			bp.AddAvoid(bother, footRadius + placedRad[bi] + PLACE_GAP_M);
+		}
+
+		CLW_SpotResult bres = new CLW_SpotResult();
+		if (CLW_FreeSpot.FindFreeSpot(bp, bres))
+		{
+			spot = bres.m_vPos;
+			yaw = bres.m_fYaw;
+			Print(string.Format("CLW: place %1 steep ground accepted at %2 (range %3 m): object and road clearance kept", label, spot, Math.Round(bres.m_fRange * 10) / 10), LogLevel.WARNING);
+			return "slope-ignored";
 		}
 
 		// forced: a spot on the minimum ring that does not overlap, rotated by the number already placed

@@ -83,6 +83,7 @@ class CLW_BuildExecutor
 		fob.m_iTier = 1;
 		fob.m_bHadPost = CLW_Services.FindAt(fob.m_sSide, fob.m_sId, CLW_ServiceKind.COMMAND_POST) != null;
 		CLW_FobManager.SetState(fob, CLW_EFobState.ACTIVE, string.Format("established: spawn point=%1, %2 services (tier 1), command post=%3", fob.m_SpawnPoint != null, placed, fob.m_bHadPost));
+		CLW_StructureMarkers.AddFobLocation(fob.m_sSide, fob.m_sId, fob.m_vPos);	// own-side location marker; removed with the FOB (CLW_Services.RemoveBase)
 		CLW_Debug.Announce(string.Format("%1 established FOB %2 near %3 (grid %4)", fob.m_sSide, fob.m_sId, fob.m_sName, CLW_Places.Grid(fob.m_vPos)));
 		CLW_FobManager.NotifyBuilt(fob);
 	}
