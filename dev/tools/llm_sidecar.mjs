@@ -1171,7 +1171,11 @@ function activeFactions() {
   const es = Object.entries(state.factions);
   if (!es.length) return [];
   const ep = state.epoch ?? 0, newest = Math.max(...es.map(([, e]) => e.ts ?? 0));
-  return es.filter(([, e]) => (e.epoch ?? 0) === ep && (e.ts ?? 0) >= newest - STALE_FACTION_MS).map(([n]) => n).sort();
+  let live = es.filter(([, e]) => (e.epoch ?? 0) === ep && (e.ts ?? 0) >= newest - STALE_FACTION_MS);
+  // once a war runs, factions still reporting the setup phase are the setup defaults the host did not pick
+  const phase = (e) => e.situation?.war?.phase;
+  if (live.some(([, e]) => phase(e) === "running")) live = live.filter(([, e]) => phase(e) !== "setup");
+  return live.map(([n]) => n).sort();
 }
 
 async function handleApi(req, res, url) {
