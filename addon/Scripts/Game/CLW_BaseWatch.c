@@ -434,7 +434,8 @@ class CLW_BaseWatch
 		if (now - lastLog >= IDLE_LOG_SEC)
 		{
 			s_mIdleLogAt.Set(faction, now);
-			Print(string.Format("CLW: idle check %1: candidates %2, oldest %3 s (squads at base %4, excluded: garrison %5, ordered %6, reserved %7, human %8, truck %9; of %10 squads, %11 idle away from base up to %12 m; limit %13 min, radius %14 m)", faction, nCandidates, Math.Round(oldest), nAtBase, nGarrison, nOrdered, nReserved, nHuman, nTruck, total, nFar, Math.Round(farthest), limitMin, Math.Round(BASE_RADIUS_M)), LogLevel.NORMAL);
+			string idleHead = string.Format("CLW: idle check %1: candidates %2, oldest %3 s (squads at base %4, excluded: garrison %5, ordered %6, reserved %7, human %8, truck %9", faction, nCandidates, Math.Round(oldest), nAtBase, nGarrison, nOrdered, nReserved, nHuman, nTruck);
+			Print(idleHead + string.Format("; of %1 squads, %2 idle away from base up to %3 m; limit %4 min, radius %5 m)", total, nFar, Math.Round(farthest), limitMin, Math.Round(BASE_RADIUS_M)), LogLevel.NORMAL);
 		}
 	}
 

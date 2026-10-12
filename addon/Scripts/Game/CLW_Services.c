@@ -510,7 +510,7 @@ class CLW_Services
 		int spawnPoints = DisableSpawnPoints(tree);
 		CLW_StructureMarkers.Add(sideKey, baseId, entry.m_sKind, spot, entry.ShowsMapMarker());	// map marker (own side, important structures only) + dashboard structures (all)
 		CLW_RequestTerminals.OnServicePlaced(sideKey, baseId, entry.m_sKind, spot, radius);	// M3 phase Q: request terminal next to the command post / depot
-		Print(string.Format("CLW: services placed %1 %2 %3 at %4 yaw=%5 r=%6 via=%7 dist=%8 grid=%9 gap=%10 scale=%11", sideKey, baseId, entry.m_sKind, spot, Math.Round(yaw), radius, via, Math.Round(anchorDist), CLW_Places.Grid(spot), tune.m_fGap, tune.m_fOverlap), LogLevel.NORMAL);
+		Print(string.Format("CLW: services placed %1 %2 %3 at %4 yaw=%5 r=%6 via=%7 dist=%8 grid=%9", sideKey, baseId, entry.m_sKind, spot, Math.Round(yaw), radius, via, Math.Round(anchorDist), CLW_Places.Grid(spot)) + string.Format(" gap=%1 scale=%2", tune.m_fGap, tune.m_fOverlap), LogLevel.NORMAL);
 		Print(string.Format("CLW: services   %1 %2 entities=%3 reaffiliated=%4 spawnPointsOff=%5 prefab=%6", sideKey, entry.m_sKind, tree.Count(), reaffiliated, spawnPoints, prefabName.GetPath()), LogLevel.NORMAL);
 		return true;
 	}
