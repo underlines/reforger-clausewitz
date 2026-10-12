@@ -85,6 +85,7 @@ Local DS in `D:\GitHub\ReforgerMods\_dedicated\` (junction to `addon/`, no pack 
 - [ ] Fake LLM provider: units seemed not to move (owner, build #40); check the fake orders path.
 
 ## Current milestone: M4 - Any map, any pack
+**Next: round 3, see `notes/m4-round3-plan.md` (handover: owner test results, WP0-WP8, checklist).**
 Design: `notes/m4-design.md` (2026-10-12). Branch `feature/m4-any-map` (not merged yet: HQ menu needs a client test). Built by six
 subagents (WP1 maps + auto scenario, WP2 wrapper worlds + generator, WP3 side pools + props, WP4 HQ menu, WP5 FOB/convoys, WP6 GM spike).
 Verified on the dedicated server, unattended (builds #67-#71, packs RHS + WCS + GRS + WCS Loadout Editor, setup preset RHS_USAF vs RHS_AFRF):
