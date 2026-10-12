@@ -680,6 +680,7 @@ class CLW_WarRuntime
 	protected void OnWarStarted()
 	{
 		Print("CLW: war started: building force catalogs and spawning start forces", LogLevel.NORMAL);
+		CLW_Rematch.OnWarStart();	// rematch: delete leftovers of the previous round before anything is spawned
 		if (m_Catalog)
 			m_Catalog.BuildAll();
 		CLW_Services.OnWarStart(m_War);	// base services + supply link, before the start forces take their parking spots
