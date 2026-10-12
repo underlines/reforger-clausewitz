@@ -228,10 +228,19 @@ Applies to any game mode entity that is not a `CLW_GameMode`. Off: one line `CLW
 2. the world file name without a leading `GM_` through `CLW_AutoScenario.FindForWorld` (`GM_Arland` -> `Arland.conf`; `GM_Eden` -> none); 3. the normal chain
 (`LoadScenario("")`: by-world with the full name, by-listing, auto scenario). Only public API of `CLW_AutoScenario` / `CLW_ScenarioConfig` is used.
 
-**Spawn logic (option a).** The setup autospawn / forced faction / HQ-squad wait moved from `CLW_SpawnLogic` into a `modded class SCR_MenuSpawnLogic`
-(`CLW_SpawnFlow.c`), gated per instance by `CLW_SpawnFlowActive()`: `CLW_SpawnLogic` is now an empty subclass that returns true (our prefab, behaviour as
-before, no double execution), any other menu logic returns `CLW_WarRuntime.IsTakeover()`. With the flow off every override is a plain `super`.
+**Spawn logic (REVISED after the e2e).** Option (a) (`modded class SCR_MenuSpawnLogic`) FAILED: `WORLD (E): Unknown class 'SCR_MenuSpawnLogic'` in every vanilla
+prefab that uses it, then `SCR_RespawnSystemComponent is missing SCR_SpawnLogic!`. Modding a vanilla `[BaseContainerProps]` class that vanilla prefabs reference breaks those
+prefabs. Now: `CLW_SpawnLogic` is a plain subclass again (the original body, unchanged behaviour for `CLW_GameMode.et`), and the takeover swaps an instance in at runtime:
+`modded class SCR_RespawnSystemComponent` (a component class, `CLW_RespawnSwap.c`) with `CLW_ReplaceSpawnLogic(logic, out previousName, out reason)` assigns the protected
+member `m_SpawnLogic` and calls `logic.OnInit(this)`. Double handling: the respawn system dispatches every `OnPlayer*_S` event through `m_SpawnLogic` only, so the old instance
+gets no more calls; the one thing a logic registers itself (per-player respawn invokers from `OnPlayerRegistered_S`) is removed from the old logic and added for the new one
+for players that already exist (normally none at game start). Not copied: the old logic's prefab attributes (defaults of the new instance: disconnect behaviour NOTHING,
+deploy menu delay 0; the client menu reads its own copy). Log: `CLW: takeover step <n> spawn logic ok replaced <old class> -> CLW_SpawnLogic`, or `FAILED <reason>`
+(then the vanilla deploy menu stays).
 
+**Chat entity.** The chat is reached with `GetGame().GetChat()` (as `SCR_ChatPanelManager` does). The first version searched the game mode's child entities and reported FAILED
+although the GM prefab places one. Now step "chat entity" checks `ScriptedChatEntity.Cast(GetGame().GetChat())` and, when missing, spawns
+`{F69BC912AC8236F9}Prefabs/MP/ScriptedChatEntity.et` (the prefab our wrapper worlds place).
 **GM host check (`CheckHost`, takeover only).** Logs: switch/class/world, faction manager with factions + playable flags, loadout manager, AI world, the
 `ScriptedChatEntity` child, PerceptionManager (spawns `{028DAEAD63E056BE}Prefabs/World/Game/PerceptionManager.et` when `GetPerceptionManager()` is null),
 respawn system and spawn point count, commanding manager, commanding limit. No abort: a missing piece is logged `FAILED` and the bootstrap goes on.
@@ -242,7 +251,7 @@ action registry, scenario (name), bases, control points, war state, forces, miss
 timers; and 12 s later `spawn points after start` (per side), `war state`, `joinable squads`. Scenario choice: `CLW: scenario <name> (source takeover-cli|takeover-by-world|...)`.
 
 **Known gaps / risks.**
-- `modded class SCR_MenuSpawnLogic`: the script-dev skill says a modded `[BaseContainerProps]` class that prefabs reference gave "Unknown class" (seen with
+- (resolved, see above) `modded class SCR_MenuSpawnLogic`: the script-dev skill says a modded `[BaseContainerProps]` class that prefabs reference gave "Unknown class" (seen with
   `SCR_AutoSpawnLogic` named in OUR prefab). The vanilla GM prefab names `SCR_MenuSpawnLogic`. If the prefab loader rejects it, the GM world has no spawn logic.
   Fallback: drop the modded class and drive the takeover spawn from the runtime (player registered -> spawn request), not done here.
 - Persistence: none (the `-server <world>` route has no mission `SystemsConfig`). A mission header route (published mod) would add `SCR_PersistenceSystem`: untested.
