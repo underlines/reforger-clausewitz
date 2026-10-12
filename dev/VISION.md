@@ -172,6 +172,13 @@ An optional mode in the initial scenario setup (section 3), next to the usual se
 - Orders carry: intent, objective, constraints (ROE, route, avoid), priority, and a timeout.
 - Units acknowledge, report progress, and report failure (cannot comply: blocked, no fuel, outgunned).
 
+**Player briefings (SITREP to players):** today one briefing per faction (side A, side B), rules version in game, LLM version in the
+commander reply (`notes/sitrep-design.md`), shown in the map journal, as a hint (H) and via `/sitrep`. Vision: **per-player-squad briefings**:
+the same sections (situation, intel, mission, execution, logistics) tailored to one human-led squad: its own HQ mission as the mission
+paragraph, intel filtered to its sector, execution = its task plus the neighbouring units, logistics = its strength and resupply. The data shape
+already carries `scope:"squad"` + `unit`; missing are a builder per squad, the recipient rule (members of that squad only) and an LLM budget
+rule (squad briefings only on mission change, not every planning tick).
+
 ### 4a. Squad-leader agents (very late feature, not planned soon)
 
 Not only HQ decides: AI **squad leaders can run their own LLM agent loop**, giving a proper hierarchical tree. HQ makes high-level decisions (troop movements, objectives) and hands each squad leader a **goal**, not a step-by-step order. The leader then works toward that goal autonomously over a longer period instead of waiting for HQ on every move.
