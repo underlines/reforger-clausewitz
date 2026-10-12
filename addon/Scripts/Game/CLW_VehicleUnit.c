@@ -502,6 +502,16 @@ class CLW_VehicleUnit
 		Enter(CLW_EVehicleState.DISMOUNTED, "cargo is out, infantry deploys");
 		DeployInfantry();
 		DeployVehicle();
+		// a few seconds later (engine finished the get-out): free cargo still seated or standing on the vehicle
+		GetGame().GetCallqueue().CallLater(UnstuckCargo, 4000, false);
+	}
+
+	protected void UnstuckCargo()
+	{
+		if (!m_Cargo || m_bDissolved || m_eState != CLW_EVehicleState.DISMOUNTED)
+			return;
+
+		CLW_Unstuck.FreeMembers(m_Cargo, "after dismount of " + m_sId, false);
 	}
 
 	protected void DeployInfantry()

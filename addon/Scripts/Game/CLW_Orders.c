@@ -21,6 +21,7 @@ class CLW_UnitOrder
 	bool m_bWaypoints;			// false for missions of human-led squads (no waypoints)
 	vector m_vProgressPos;		// stuck watch (infantry)
 	float m_fProgressAt = -1;
+	bool m_bUnstuck;			// the one unstuck attempt of this order was used
 }
 
 // Per-unit bookkeeping next to the order: start strength and a speed / heading sample for the situation.
@@ -490,6 +491,17 @@ class CLW_Orders
 		Print(string.Format("CLW: orders %1 %2 %3 %4 -> %5: %6 (after %7 s)", m_sFaction, order.m_sSquad, CLW_Command.ToName(order.m_eCommand), order.m_sTarget, status, why, Math.Round(now - order.m_fIssuedAt)), LogLevel.NORMAL);
 	}
 
+	// False for groups that are linked cargo and still mounted in their vehicle unit (not stuck, just riding).
+	protected bool CanUnstuck(string id)
+	{
+		CLW_VehicleManager mgr = CLW_GameMode.GetVehicleManager();
+		if (!mgr || !mgr.IsLinkedCargo(id))
+			return true;
+
+		CLW_VehicleUnit carrier = mgr.FindByCargo(id);
+		return carrier && carrier.GetStateName() == "DISMOUNTED";
+	}
+
 	protected void Evaluate(string id, CLW_UnitTrack track, float now)
 	{
 		CLW_UnitOrder order = track.m_Order;
@@ -604,6 +616,19 @@ class CLW_Orders
 			float moved = vector.DistanceXZ(pos, order.m_vProgressPos);
 			if (moved < STUCK_MIN_PROGRESS_M && !arrived)
 			{
+				// one unstuck attempt per order (members stuck on / in a vehicle), then a fresh waypoint
+				if (!order.m_bUnstuck && CanUnstuck(id))
+				{
+					order.m_bUnstuck = true;
+					int freed = CLW_Unstuck.FreeMembers(group, "order stuck: moved " + Math.Round(moved) + " m in " + Math.Round(now - order.m_fProgressAt) + " s", false);
+					CLW_Waypoints.Clear(group);
+					CLW_Waypoints.AddForCommand(group, order.m_eCommand, order.m_vPos);
+					Print(string.Format("CLW: orders %1 %2 stuck: unstuck freed %3, waypoint re-issued", m_sFaction, order.m_sSquad, freed), LogLevel.NORMAL);
+					order.m_vProgressPos = pos;
+					order.m_fProgressAt = now;
+					return;
+				}
+
 				Finish(order, STATUS_FAILED, "stuck: moved " + Math.Round(moved) + " m in " + Math.Round(now - order.m_fProgressAt) + " s", now);
 				return;
 			}
