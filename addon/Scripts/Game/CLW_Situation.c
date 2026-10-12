@@ -7,6 +7,8 @@ class CLW_Situation
 	static const int MAX_CONTACTS = 40;
 	static const int MAX_CONTACTS_TRIMMED = 12;
 	static const float ENGAGED_DISTANCE = 150;	// m: a contact this close makes a unit "engaged"
+	static const float AXIS_CENTRE_MIN_M = 150;	// flank nudge: an objective this close to the HQ-HQ axis is "centre"
+	static const float AXIS_CENTRE_FRACTION = 0.12;	// ... or this fraction of the HQ-HQ distance, whichever is larger
 
 	protected string m_sFaction;
 	protected CLW_Orders m_Orders;		// weak: owned by the rule commander
@@ -147,6 +149,44 @@ class CLW_Situation
 		string sitesJson = CLW_FobManager.SitesJson(m_sFaction);
 		string extra = ",\"fobs\":[" + fobsJson + "],\"fobSites\":[" + sitesJson + "],\"fobRules\":" + CLW_FobManager.RulesJson(m_sFaction);
 		json = CLW_Str.DropLast(json) + extra + "}";
+		AppendFobTasks(json);	// WP3: builder / escort positions for the dashboard arrows
+	}
+
+	// WP3 (round 3): where the builder and the escort of each FOB in progress are now (fobTasks[]: fob, role, unit, pos [x,z]) so the
+	// dashboard can draw the arrows unit -> site. Appended after the trim, called from AppendFobBlocks.
+	protected void AppendFobTasks(inout string json)
+	{
+		if (json.Length() < 2 || !m_Orders)
+			return;
+
+		array<CLW_Fob> fobs = {};
+		CLW_FobManager.GetFobs(m_sFaction, fobs);
+		string tasks = "";
+		foreach (CLW_Fob fob : fobs)
+		{
+			if (!fob || !fob.IsInProgress())
+				continue;
+
+			tasks = AddFobTask(tasks, fob.m_sId, "builder", fob.m_sBuilderId);
+			tasks = AddFobTask(tasks, fob.m_sId, "escort", fob.m_sEscortId);
+		}
+
+		if (tasks.IsEmpty())
+			return;
+
+		json = CLW_Str.DropLast(json) + ",\"fobTasks\":[" + tasks + "]}";
+	}
+
+	protected string AddFobTask(string tasks, string fobId, string role, string unitId)
+	{
+		vector pos;
+		if (unitId.IsEmpty() || !m_Orders.UnitPos(unitId, pos) || pos == vector.Zero)
+			return tasks;
+
+		if (!tasks.IsEmpty())
+			tasks += ",";
+
+		return tasks + "{\"fob\":\"" + Escape(fobId) + "\",\"role\":\"" + role + "\",\"unit\":\"" + Escape(unitId) + "\",\"pos\":[" + Math.Round(pos[0]) + "," + Math.Round(pos[2]) + "]}";
 	}
 
 	// ---- parts ----
@@ -236,10 +276,52 @@ class CLW_Situation
 			if (!text.IsEmpty())
 				text += ",";
 			text += "{\"id\":\"" + Escape(point.m_sId) + "\",\"name\":\"" + Escape(point.m_sName) + "\",\"pos\":[" + Math.Round(point.m_vPos[0]) + "," + Math.Round(point.m_vPos[2]) + "],\"grid\":\"" + CLW_Places.Grid(point.m_vPos) + "\",\"radius\":" + Math.Round(point.m_fRadius);
-			text += ",\"value\":" + point.m_iValue + ",\"owner\":\"" + Escape(owner) + "\",\"contested\":" + BoolText(point.m_bContested) + ",\"progress\":" + Math.Round(points.ProgressFor(point, m_sFaction)) + "}";
+			text += ",\"value\":" + point.m_iValue + ",\"owner\":\"" + Escape(owner) + "\",\"contested\":" + BoolText(point.m_bContested) + ",\"progress\":" + Math.Round(points.ProgressFor(point, m_sFaction));
+			text += AxisSideJson(point.m_vPos) + "}";
 		}
 
 		return text;
+	}
+
+	// Flank nudge (WP5, owner P13): ,"side":"left|centre|right" = which side of the line own HQ -> enemy HQ a position lies on, seen from this
+	// faction (standing at its own HQ, facing the enemy HQ). Empty when a base position is unknown (field omitted).
+	protected string AxisSideJson(vector pos)
+	{
+		string side = AxisSide(pos);
+		if (side.IsEmpty())
+			return "";
+
+		return ",\"side\":\"" + side + "\"";
+	}
+
+	protected string AxisSide(vector pos)
+	{
+		CLW_WarState war = CLW_GameMode.GetWarState();
+		CLW_Bases bases = CLW_GameMode.GetBases();
+		if (!war || !bases)
+			return "";
+
+		vector ownPos = bases.GetBasePos(m_sFaction);
+		vector enemyPos = bases.GetBasePos(war.GetEnemyKey(m_sFaction));
+		if (ownPos == vector.Zero || enemyPos == vector.Zero)
+			return "";
+
+		float dx = enemyPos[0] - ownPos[0];
+		float dz = enemyPos[2] - ownPos[2];
+		float length = Math.Sqrt(dx * dx + dz * dz);
+		if (length < 50)
+			return "";
+
+		// facing (dx, dz) with x east and z north, the left-hand normal is (-dz, dx)
+		float lateral = (-dz * (pos[0] - ownPos[0]) + dx * (pos[2] - ownPos[2])) / length;
+		float band = Math.Max(AXIS_CENTRE_MIN_M, length * AXIS_CENTRE_FRACTION);
+		if (lateral > band)
+			return "left";
+
+		if (lateral < -band)
+			return "right";
+
+		return "centre";
 	}
 
 	protected string BuildBases(CLW_WarState war)
@@ -449,7 +531,7 @@ class CLW_Situation
 
 			if (squadCount > 0)
 				text += ",";
-			text += "{\"id\":\"" + Escape(id) + "\",\"kind\":\"" + Escape(kind) + "\",\"type\":\"" + Escape(CLW_SquadInfo.TypeName(group)) + "\",\"pos\":[" + Math.Round(pos[0]) + "," + Math.Round(pos[1]) + "," + Math.Round(pos[2]) + "]";
+			text += "{\"id\":\"" + Escape(id) + "\",\"name\":\"" + Escape(registry.GetName(id)) + "\",\"kind\":\"" + Escape(kind) + "\",\"type\":\"" + Escape(CLW_SquadInfo.TypeName(group)) + "\",\"pos\":[" + Math.Round(pos[0]) + "," + Math.Round(pos[1]) + "," + Math.Round(pos[2]) + "]";
 			text += ",\"agents\":" + alive + ",\"startAgents\":" + start + ",\"vehicle\":" + vehicleJson + ",\"humanLed\":" + BoolText(human);
 			text += ",\"wounded\":" + wounded + ",\"health\":" + avgHealth.ToString(-1, 2) + ",\"speed\":" + speed.ToString(-1, 1) + ",\"heading\":" + headingDeg + ",\"state\":\"" + stateText + "\",\"dormant\":" + BoolText(dormant);
 			string reservedFor = CLW_FobManager.ReservedFor(id);

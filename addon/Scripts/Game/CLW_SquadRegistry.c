@@ -12,6 +12,13 @@ class CLW_SquadRecord
 	string m_sTypeId;		// force type id from the faction profile, "" when unknown
 	bool m_bHidden;			// linked cargo group of a vehicle unit: adopted and polled, but not commandable
 	bool m_bTagged;			// kind/type were set explicitly (spawner), never overwritten by the lazy resolve
+	string m_sRole;			// naming role that overrides the kind (CLW_SquadRegistry.ROLE_*), "" = named by kind
+	string m_sName;			// readable display name ("1st Rifle Squad"), "" = not assigned yet
+	string m_sNameKey;		// kind / role the name was built from (a changed key re-names the squad)
+	string m_sNamePattern;	// pattern of the name (ordinals are unique per faction + pattern)
+	int m_iOrdinal;			// ordinal in the name
+	string m_sParentId;		// embarked cargo group of a vehicle unit: id of the unit (crew) group, "" = not a cargo group
+	string m_sAppliedName;	// last name pushed to the vanilla group list (cargo names follow the parent and can change)
 }
 
 // Kind / type set by the force spawner for a group it created, keyed by the group's entity name. Applied at adoption.
@@ -32,6 +39,9 @@ class CLW_SquadTag
 //        and (ADOPT_RUNTIME_GROUPS or it has an entity name).
 // Release: entity gone, or no living member for EMPTY_SWEEPS_TO_RELEASE consecutive sweeps. The commanders drop their
 //          state for ids that are no longer listed; a lost squad is simply absent from the next situation report.
+// Names: every commandable squad gets a readable display name once ("1st Rifle Squad", "Recon Team 1", "HQ Garrison"), see NamePattern
+//        (the single kind -> pattern table). The ordinal is the lowest free one per faction and pattern; a living squad is never
+//        renumbered. The id stays the internal / LLM key. The name feeds the vanilla group lists (CLW_SquadGroups.ApplyName).
 // Enumeration: AIWorld.GetAIAgents (every spawned agent: scene-placed, Game Master and script-spawned) -> parent group.
 class CLW_SquadRegistry
 {
@@ -39,6 +49,9 @@ class CLW_SquadRegistry
 	static const string IGNORE_PREFIX = "CLW_IGNORE_";
 	static const int SWEEP_MS = 5000;
 	static const int EMPTY_SWEEPS_TO_RELEASE = 2;
+	static const string ROLE_GARRISON = "garrison";	// naming roles (override the kind, set by the owner of the role via SetRole)
+	static const string ROLE_FOB_TEAM = "fob_team";
+	static const string CARGO_SUFFIX = "_Inf";	// ForceSpawner names the embarked group of a vehicle unit "<unit id>_Inf"
 
 	protected ref array<ref CLW_SquadRecord> m_aRecords = {};
 	protected ref map<string, int> m_mCounters = new map<string, int>();	// generated id counter per faction
@@ -47,6 +60,7 @@ class CLW_SquadRegistry
 	protected int m_iSweeps;
 	protected ref map<string, ref CLW_SquadTag> m_mTags = new map<string, ref CLW_SquadTag>();	// by entity name
 	protected ref map<string, int> m_mGenericCount = new map<string, int>();	// "Infantry group (n)" counter per faction
+	protected ref map<string, string> m_mJoinableLog = new map<string, string>();	// last logged joinable set per faction
 	protected CLW_ForceCatalog m_Catalog;	// weak: owned by the game mode; resolves display types of scene-placed groups
 
 	static bool IsClwFaction(string factionKey)
@@ -111,6 +125,7 @@ class CLW_SquadRegistry
 		if (record)
 		{
 			ApplyTag(record, tag);
+			EnsureName(record);
 			m_iVersion++;
 		}
 
@@ -128,6 +143,8 @@ class CLW_SquadRegistry
 		if (record && record.m_bHidden != hidden)
 		{
 			record.m_bHidden = hidden;
+			if (!hidden)
+				EnsureName(record);
 			m_iVersion++;
 			Print(string.Format("CLW: registry %1 hidden=%2", id, hidden), LogLevel.NORMAL);
 		}
@@ -143,8 +160,183 @@ class CLW_SquadRegistry
 		record.m_sKind = kind;
 		record.m_sDisplayType = displayType;
 		record.m_bTagged = true;
+		EnsureName(record);
 		m_iVersion++;
 		Print(string.Format("CLW: registry %1 kind=%2 type='%3'", id, kind, displayType), LogLevel.NORMAL);
+	}
+
+	// ---- readable names ----
+
+	// THE kind -> name pattern table (data of the naming, keyed by the CLW kind enum / naming role, never by faction text).
+	// Tokens: {ord} = English ordinal (1st, 2nd, 3rd, 11th, 21st), {n} = number, {n2} = "" for 1 and " <n>" otherwise.
+	static string NamePattern(string key)
+	{
+		if (key == ROLE_GARRISON)
+			return "HQ Garrison{n2}";
+		if (key == ROLE_FOB_TEAM)
+			return "FOB Team {n}";
+		if (key == CLW_ForceKind.INFANTRY)
+			return "{ord} Rifle Squad";
+		if (key == CLW_ForceKind.RECON)
+			return "Recon Team {n}";
+		if (key == CLW_ForceKind.MOTORIZED)
+			return "Motorized Squad {n}";
+		if (key == CLW_ForceKind.LIGHT)
+			return "Light Vehicle {n}";
+		if (key == CLW_ForceKind.MECH)
+			return "Mechanized Squad {n}";
+		if (key == CLW_ForceKind.ARMOR)
+			return "Armor {n}";
+		if (key == CLW_ForceKind.ARMORED_RECON)
+			return "Armored Recon {n}";
+		if (key == CLW_ForceKind.LOGISTICS)
+			return "Supply Truck {n}";
+
+		return "Squad {n}";
+	}
+
+	// English ordinal: 1st 2nd 3rd 4th ... 11th 12th 13th ... 21st.
+	static string Ordinal(int n)
+	{
+		string suffix = "th";
+		int mod100 = n % 100;
+		if (mod100 < 11 || mod100 > 13)
+		{
+			int mod10 = n % 10;
+			if (mod10 == 1)
+				suffix = "st";
+			else if (mod10 == 2)
+				suffix = "nd";
+			else if (mod10 == 3)
+				suffix = "rd";
+		}
+
+		return n.ToString() + suffix;
+	}
+
+	static string FormatName(string pattern, int n)
+	{
+		string name = pattern;
+		string n2 = "";
+		if (n > 1)
+			n2 = " " + n.ToString();
+		name.Replace("{ord}", Ordinal(n));
+		name.Replace("{n2}", n2);
+		name.Replace("{n}", n.ToString());
+		return name;
+	}
+
+	// Readable name of a squad ("" for an unknown id). Linked cargo groups (hidden, unnamed) fall back to their display type.
+	string GetName(string id)
+	{
+		CLW_SquadRecord record = FindRecord(id);
+		if (!record)
+			return "";
+
+		EnsureName(record);
+		if (!record.m_sParentId.IsEmpty())
+			return record.m_sName;
+
+		if (record.m_sName.IsEmpty())
+		{
+			Resolve(record);
+			return record.m_sDisplayType;
+		}
+
+		return record.m_sName;
+	}
+
+	// Give the squad a naming role (garrison, FOB team): it is re-named from the role's pattern with the next free ordinal.
+	// Role "" returns to the kind name. Server only.
+	void SetRole(string id, string role)
+	{
+		CLW_SquadRecord record = FindRecord(id);
+		if (!record || record.m_sRole == role)
+			return;
+
+		record.m_sRole = role;
+		EnsureName(record);
+		m_iVersion++;
+	}
+
+	// Assign (or, when the kind / role changed, re-assign) the display name. Hidden cargo groups stay unnamed.
+	protected void EnsureName(CLW_SquadRecord record)
+	{
+		if (!record.m_sParentId.IsEmpty())
+		{
+			record.m_sName = CargoName(record);	// follows the parent unit, no ordinal of its own
+			return;
+		}
+
+		if (record.m_bHidden)
+			return;
+
+		Resolve(record);
+		string key = record.m_sRole;
+		if (key.IsEmpty())
+			key = record.m_sKind;
+		if (!record.m_sName.IsEmpty() && record.m_sNameKey == key)
+			return;
+
+		string pattern = NamePattern(key);
+		int ordinal = FreeOrdinal(record, pattern);
+		string old = record.m_sName;
+		record.m_sNameKey = key;
+		record.m_sNamePattern = pattern;
+		record.m_iOrdinal = ordinal;
+		record.m_sName = FormatName(pattern, ordinal);
+		Print(string.Format("CLW: squad name %1 -> \"%2\" (side %3, kind %4)", record.m_sId, record.m_sName, record.m_sFaction, key), LogLevel.NORMAL);
+		if (!old.IsEmpty() && old != record.m_sName)
+			Print(string.Format("CLW: squad name %1 renamed from \"%2\" (kind/role changed)", record.m_sId, old), LogLevel.NORMAL);
+
+		if (record.m_Group && CLW_SquadGroups.IsRegistered(record.m_Group))
+			CLW_SquadGroups.ApplyName(record.m_Group);
+	}
+
+	// Name of an embarked cargo group: the parent unit's name ("Motorized Squad 1"); "<name> (dismounts)" when the unit's own
+	// crew group is also in the vanilla lists (so the two stay distinguishable). No parent record: the entry's display type.
+	protected string CargoName(CLW_SquadRecord record)
+	{
+		CLW_SquadRecord parent = FindRecord(record.m_sParentId);
+		if (!parent)
+			return record.m_sDisplayType;
+
+		EnsureName(parent);
+		string name = parent.m_sName;
+		if (name.IsEmpty())
+			name = parent.m_sDisplayType;
+		if (name.IsEmpty())
+			return record.m_sDisplayType;
+
+		if (parent.m_Group && IsJoinableRecord(parent))
+			name += " (dismounts)";
+
+		return name;
+	}
+
+	// Lowest ordinal not used by another living squad of the same faction and pattern.
+	protected int FreeOrdinal(CLW_SquadRecord self, string pattern)
+	{
+		int n = 1;
+		while (n < 1000)
+		{
+			bool used = false;
+			foreach (CLW_SquadRecord other : m_aRecords)
+			{
+				if (other != self && other.m_sFaction == self.m_sFaction && other.m_sNamePattern == pattern && other.m_iOrdinal == n && !other.m_sName.IsEmpty())
+				{
+					used = true;
+					break;
+				}
+			}
+
+			if (!used)
+				return n;
+
+			n++;
+		}
+
+		return n;
 	}
 
 	string GetKind(string id)
@@ -200,6 +392,11 @@ class CLW_SquadRegistry
 		record.m_sTypeId = tag.m_sTypeId;
 		record.m_bHidden = tag.m_bHidden;
 		record.m_bTagged = true;
+		record.m_sParentId = "";
+		int idLen = record.m_sId.Length();
+		int suffixLen = CARGO_SUFFIX.Length();
+		if (tag.m_bHidden && idLen > suffixLen && record.m_sId.Substring(idLen - suffixLen, suffixLen) == CARGO_SUFFIX)
+			record.m_sParentId = record.m_sId.Substring(0, idLen - suffixLen);	// cargo group of the unit "<id>"
 	}
 
 	// Scene-placed / runtime groups nobody tagged: kind "infantry"; display type from the catalog entry with the same group
@@ -419,12 +616,63 @@ class CLW_SquadRegistry
 			bool want = IsJoinableRecord(record);
 			bool have = CLW_SquadGroups.IsRegistered(record.m_Group);
 			if (want && !have)
+			{
+				EnsureName(record);
 				CLW_SquadGroups.Register(record.m_Group);
+				record.m_sAppliedName = record.m_sName;
+			}
 			else if (!want && have && record.m_Group.GetPlayerCount() == 0)
+			{
 				CLW_SquadGroups.Unregister(record.m_Group);
+			}
+			else if (have && !record.m_sParentId.IsEmpty())
+			{
+				EnsureName(record);
+				if (record.m_sName != record.m_sAppliedName)
+				{
+					record.m_sAppliedName = record.m_sName;
+					CLW_SquadGroups.ApplyName(record.m_Group);
+				}
+			}
 		}
 
 		CLW_SquadGroups.PruneVanillaGroups(this);
+		LogJoinable();
+	}
+
+	// "CLW: squad groups joinable <side>: <n> [names]", once per change of a side's set.
+	protected void LogJoinable()
+	{
+		array<string> keys = {};
+		foreach (CLW_SquadRecord record : m_aRecords)
+		{
+			if (!keys.Contains(record.m_sFaction))
+				keys.Insert(record.m_sFaction);
+		}
+
+		foreach (string key : keys)
+		{
+			int count = 0;
+			string names = "";
+			foreach (CLW_SquadRecord member : m_aRecords)
+			{
+				if (member.m_sFaction != key || !member.m_Group || !CLW_SquadGroups.IsRegistered(member.m_Group))
+					continue;
+
+				if (count > 0)
+					names += ", ";
+				names += member.m_sName;
+				count++;
+			}
+
+			string last;
+			string line = count.ToString() + " [" + names + "]";
+			if (m_mJoinableLog.Find(key, last) && last == line)
+				continue;
+
+			m_mJoinableLog.Set(key, line);
+			Print("CLW: squad groups joinable " + key + ": " + line, LogLevel.NORMAL);
+		}
 	}
 
 	protected bool IsJoinableRecord(CLW_SquadRecord record)
@@ -433,18 +681,26 @@ class CLW_SquadRegistry
 		if (!war || !war.IsRunning())
 			return false;
 
-		if (record.m_bHidden || !IsClwFaction(record.m_sFaction))
+		if ((record.m_bHidden && record.m_sParentId.IsEmpty()) || !IsClwFaction(record.m_sFaction))
 			return false;
 
 		Resolve(record);
-		if (record.m_sKind != CLW_ForceKind.INFANTRY)
-			return false;
-
-		if (m_Catalog && !record.m_sTypeId.IsEmpty())
+		if (record.m_sParentId.IsEmpty())
 		{
-			CLW_ForceEntry entry = m_Catalog.Find(record.m_sFaction, record.m_sTypeId);
-			if (entry && entry.HasVehicle())
+			// Not an embarked cargo group: it must not be a vehicle's crew. Dismounted kinds (rifle, recon) are joinable.
+			CLW_ForceEntry entry;
+			if (m_Catalog && !record.m_sTypeId.IsEmpty())
+				entry = m_Catalog.Find(record.m_sFaction, record.m_sTypeId);
+
+			if (entry)
+			{
+				if (entry.HasVehicle())
+					return false;
+			}
+			else if (record.m_sKind != CLW_ForceKind.INFANTRY && record.m_sKind != CLW_ForceKind.RECON)
+			{
 				return false;
+			}
 		}
 
 		return CLW_SquadInfo.AliveCount(record.m_Group) > 0;
@@ -496,6 +752,7 @@ class CLW_SquadRegistry
 		if (m_mTags.Find(id, tag) && tag)
 			ApplyTag(record, tag);
 		m_aRecords.Insert(record);
+		EnsureName(record);
 
 		string source = "runtime";
 		if (!entityName.IsEmpty())
@@ -578,5 +835,34 @@ class CLW_SquadRegistry
 		}
 
 		Print("" + line, LogLevel.NORMAL);	// Print(variable) would log "string line = ..."
+	}
+
+	// Rematch (CLW_Rematch.c): stop the sweep, free the humans and delete every adopted squad (AI members, slave group, group). Returns the squads deleted.
+	int RematchReset()
+	{
+		GetGame().GetCallqueue().Remove(Sweep);
+		int deleted;
+		for (int i = m_aRecords.Count() - 1; i >= 0; i--)
+		{
+			SCR_AIGroup group = m_aRecords[i].m_Group;
+			if (group)
+			{
+				CLW_SquadJoin.OnSquadReleased(group);	// unregisters from the vanilla lists, frees the humans
+				SCR_AIGroup slave = group.GetSlave();
+				CLW_ForceSpawner.DeleteGroupAndMembers(group);
+				if (slave)
+					SCR_EntityHelper.DeleteEntityAndChildren(slave);
+				deleted++;
+			}
+
+			m_aRecords.Remove(i);
+		}
+
+		m_mCounters.Clear();
+		m_mTags.Clear();
+		m_mGenericCount.Clear();
+		m_iVersion++;
+		m_iSweeps = 0;
+		return deleted;
 	}
 }

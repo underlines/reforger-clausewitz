@@ -29,8 +29,10 @@ class CLW_WarHud
 		string nameA, infoA, nameB, infoB;
 		int colorA, colorB;
 		bool lowA, lowB;
-		FillSide(parts[3], 0, phase, nameA, infoA, colorA, lowA);
-		FillSide(parts[4], 1, phase, nameB, infoB, colorB, lowB);
+		int suppliesA, suppliesB;
+		FillSide(parts[3], 0, phase, nameA, infoA, colorA, lowA, suppliesA);
+		FillSide(parts[4], 1, phase, nameB, infoB, colorB, lowB, suppliesB);
+		int supplies = Math.Max(suppliesA, suppliesB);
 		int warn = ARGB(255, 255, 90, 60);
 		int normal = ARGB(255, 235, 235, 235);
 		int infoColorA = normal;
@@ -62,15 +64,37 @@ class CLW_WarHud
 			clock = FormatTime(timeLeft);
 		}
 
+		// Own side's supplies: own centred element below the two side blocks, hidden when unused (-1) or in setup.
+		bool showSupplies = supplies >= 0 && phase != 0;
+		string supplyLabel = "";
+		string supplyValue = "";
+		if (showSupplies)
+		{
+			supplyLabel = "Supplies";
+			supplyValue = supplies.ToString();
+		}
+		SetText("Supply_Label", supplyLabel, normal);
+		SetText("Supply_Value", supplyValue, normal);
+		if (s_wRoot)
+		{
+			Widget wLabel = s_wRoot.FindAnyWidget("Supply_Label");
+			Widget wValue = s_wRoot.FindAnyWidget("Supply_Value");
+			if (wLabel)
+				wLabel.SetVisible(showSupplies);
+			if (wValue)
+				wValue.SetVisible(showSupplies);
+		}
+
 		SetText("Status", status, normal);
 		SetText("Clock", clock, normal);
 		if (s_wRoot)
 			s_wRoot.SetVisible(!s_bMapOpen);
 	}
 
-	// side = key,identity,tickets,maxTickets,heldCount,heldValue
-	protected static void FillSide(string side, int index, int phase, out string name, out string info, out int color, out bool low)
+	// side = key,identity,tickets,maxTickets,heldCount,heldValue,supplies (supplies shown for the local side only)
+	protected static void FillSide(string side, int index, int phase, out string name, out string info, out int color, out bool low, out int supplies)
 	{
+		supplies = -1;
 		array<string> f = {};
 		side.Split(",", f, false);
 		if (f.Count() < 6)
@@ -95,6 +119,17 @@ class CLW_WarHud
 		}
 
 		info = ticketText + "  |  " + f[4] + " (" + f[5] + ")";
+		if (f.Count() >= 7 && IsLocalSide(f[0]))
+		{
+			supplies = f[6].ToInt();
+		}
+	}
+
+	// True when the key is the faction of the local player (the HUD shows supplies of the own side only).
+	protected static bool IsLocalSide(string key)
+	{
+		Faction local = SCR_FactionManager.SGetLocalPlayerFaction();
+		return local && local.GetFactionKey() == key;
 	}
 
 	// Side colours come from the scenario's map identity; unknown identities fall back to side A blue / side B red.

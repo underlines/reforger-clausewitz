@@ -19,6 +19,15 @@ class CLW_HqRequest
 	Managed m_Spin;					// spin box of the row (owned by the widget)
 }
 
+// One vehicle row of the depot menu (wire line W).
+class CLW_HqVehicle
+{
+	string m_sType;
+	string m_sLabel;
+	int m_iCost;
+	string m_sKind;
+}
+
 class CLW_HqSquad
 {
 	string m_sId;
@@ -42,6 +51,15 @@ class CLW_HqMenuData
 	ref array<ref CLW_HqRequest> m_aRequests = {};
 	ref array<ref CLW_HqSquad> m_aSquads = {};
 	ref array<string> m_aLines = {};
+
+	// depot mode (wire line V): a paged vehicle list instead of the vehicle request row
+	bool m_bDepot;
+	string m_sCat = "all";
+	int m_iPage;
+	int m_iPages = 1;
+	int m_iTotal;
+	string m_sVBlocked;
+	ref array<ref CLW_HqVehicle> m_aVehicles = {};
 
 	// Parses the payload. Null when it has no header.
 	static CLW_HqMenuData Parse(string wire)
@@ -98,6 +116,26 @@ class CLW_HqMenuData
 				squad.m_bMine = f[5] == "1";
 				squad.m_bFull = f.Count() >= 7 && f[6] == "1";
 				data.m_aSquads.Insert(squad);
+			}
+			else if (type == "V" && f.Count() >= 5)
+			{
+				data.m_bDepot = true;
+				data.m_sCat = f[1];
+				data.m_iPage = f[2].ToInt();
+				data.m_iPages = Math.Max(f[3].ToInt(), 1);
+				data.m_iTotal = f[4].ToInt();
+				if (f.Count() >= 6)
+					data.m_sVBlocked = f[5];
+			}
+			else if (type == "W" && f.Count() >= 4)
+			{
+				CLW_HqVehicle vehicle = new CLW_HqVehicle();
+				vehicle.m_sType = f[1];
+				vehicle.m_sLabel = f[2];
+				vehicle.m_iCost = f[3].ToInt();
+				if (f.Count() >= 5)
+					vehicle.m_sKind = f[4];
+				data.m_aVehicles.Insert(vehicle);
 			}
 			else if (type == "L" && f.Count() >= 2)
 			{

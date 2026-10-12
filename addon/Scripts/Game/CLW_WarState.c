@@ -6,7 +6,7 @@ enum CLW_EWarPhase
 }
 
 // War state (spec sections 2 and 2a): the MECHANISMS of the war. Ticket and supply ledgers, kill accounting, event queue,
-// EndGameMode, respawn gate, lifecycle (SETUP -> RUNNING -> ENDED). Every RULE decision is delegated to the active
+// EndGameMode (only with rematch "reload", see CLW_Rematch.c), respawn gate, lifecycle (SETUP -> RUNNING -> ENDED -> SETUP again on a rematch). Every RULE decision is delegated to the active
 // CLW_WarMode (income, bleed, ticket costs, end conditions, caps, time limit). Server only.
 class CLW_WarState
 {
@@ -73,9 +73,46 @@ class CLW_WarState
 		if (autoStartSec > 0)
 			GetGame().GetCallqueue().CallLater(AutoStart, autoStartSec * 1000);
 
-		m_Status = new CLW_WarStatus();
-		m_Status.Init(this);
+		bool newStatus = !m_Status;	// a rematch (Restart) keeps the status broadcaster and its timer
+		if (newStatus)
+		{
+			m_Status = new CLW_WarStatus();
+			m_Status.Init(this);
+		}
+
 		CLW_SetupServer.Start(this, scenario);		// setup menu driver (CLW_SetupServer.c)
+	}
+
+	// Rematch (CLW_Rematch.c): back to a fresh SETUP in the same session. The war entities are gone and the managers are reset by the caller;
+	// this forgets the ledgers, the mode objects and the phase, then runs Init again for a new scenario instance (setup preset, auto start,
+	// setup menu driver). The status broadcaster and the OnWarStarted subscribers stay.
+	void Restart(notnull CLW_ScenarioConfig scenario, CLW_ControlPoints points)
+	{
+		if (!Replication.IsServer())
+			return;
+
+		GetGame().GetCallqueue().Remove(Tick);
+		GetGame().GetCallqueue().Remove(AutoStart);
+		m_mTickets.Clear();
+		m_mSupplies.Clear();
+		m_mEvents.Clear();
+		m_aKeys.Clear();
+		m_aCounted.Clear();
+		m_aVehicleOwners.Clear();
+		m_aVehicleFactions.Clear();
+		m_aModes.Clear();
+		m_Mode = null;
+		m_ePhase = CLW_EWarPhase.SETUP;
+		m_iSetupOwner = -1;
+		m_iElapsedSec = 0;
+		m_iSummaryAcc = 0;
+		m_sEndReason = "";
+		m_sWinner = "";
+		m_sStartedMode = "";
+		m_sStartedParams = "";
+		m_Preset = null;
+		Print("CLW: rematch: war state cleared (phase SETUP), initialising the setup phase again", LogLevel.NORMAL);
+		Init(scenario, points);
 	}
 
 	// ---- lifecycle ----
@@ -786,6 +823,10 @@ class CLW_WarState
 			if (winner)
 				winnerIndex = factionManager.GetFactionIndex(winner);
 		}
+
+		// rematch in place (default): no engine game end, the results stay and CLW_Rematch starts the next round; "reload" and "off" are the admin options
+		if (!CLW_Rematch.OnWarOver(this, winnerKey, why))
+			return;
 
 		SCR_BaseGameMode gameMode = SCR_BaseGameMode.Cast(GetGame().GetGameMode());
 		if (!gameMode)

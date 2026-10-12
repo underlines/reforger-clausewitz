@@ -22,7 +22,7 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 			sizes.Insert("large");
 		}
 
-		m_aParams.Insert(CLW_ModeParam.CreateNumber("timeLimitMin", "Time limit (min)", "The war ends after this time; more tickets wins.", CLW_ModeParam.TYPE_INT, 15, 180, 5, config.m_iTimeLimitMin));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("timeLimitMin", "Time limit (min)", "The war ends after this time; more tickets wins.", CLW_ModeParam.TYPE_INT, 5, 180, 5, config.m_iTimeLimitMin));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("startTickets", "Start tickets", "War will of each side; at 0 the side loses.", CLW_ModeParam.TYPE_INT, 100, 2000, 50, config.m_iStartTickets));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("startSupplies", "Start supplies", "Purchasing power of each side at the start.", CLW_ModeParam.TYPE_INT, 0, 2000, 50, config.m_iStartSupplies));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("incomeMultiplier", "Income multiplier", "Scales the supplies income.", CLW_ModeParam.TYPE_FLOAT, 0.25, 3, 0.25, config.m_fIncomeMultiplier));
@@ -52,6 +52,9 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("garrisonSquads", "HQ garrison (squads)", "Infantry squads per side that defend their HQ for the whole war (never counted as idle, not given other orders).", CLW_ModeParam.TYPE_INT, 0, 4, 1, 1));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("idleDespawnMin", "Idle despawn (min)", "A squad idling at its base without an order this long is removed and its purchase cost refunded. 0 = off.", CLW_ModeParam.TYPE_INT, 0, 60, 1, 6));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("convoyMax", "Max convoys per side", "Supply convoys a side may have on the road at once (logistics only).", CLW_ModeParam.TYPE_INT, 1, 4, 1, 2));
+		// economy guard (M4 round 3 WP6): CLW_EconomyGuard.HqReserve() / ConvoyMinLoad() are the getters other code uses
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("hqReserve", "HQ reserve (supplies)", "AI purchases (rule commander, LLM) and convoys never take the HQ stock below this. Player requests still may. 0 = no floor.", CLW_ModeParam.TYPE_INT, 0, 1000, 25, 100));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("convoyMinLoad", "Convoy minimum load", "A convoy only leaves with at least this many supplies (HQ stock minus the reserve).", CLW_ModeParam.TYPE_INT, 10, 400, 10, 60));
 		m_aParams.Insert(CLW_ModeParam.CreateBool("cap_logistics", "Logistics", "Per-base supplies and convoys. Off: one supply pool per side.", true));
 		m_aParams.Insert(CLW_ModeParam.CreateBool("cap_kitCost", "Kit cost", "Arsenal items cost supplies. Off: kits are free.", true));
 	}

@@ -250,6 +250,21 @@ class CLW_RequestService
 		wanted.ToLower();
 		CLW_ForceEntry best;
 		int bestRank = 100;
+		if (!wanted.IsEmpty())
+		{
+			// WP11: the depot menu sends the exact type id; an exact id wins over the loose name matching below
+			foreach (CLW_ForceEntry exact : entries)
+			{
+				if (!exact || !exact.m_bEnabled || !exact.HasVehicle())
+					continue;
+
+				string exactType = exact.m_sType;
+				exactType.ToLower();
+				if (exactType == wanted)
+					return exact;
+			}
+		}
+
 		foreach (CLW_ForceEntry entry : entries)
 		{
 			if (!entry || !entry.m_bEnabled || !entry.HasVehicle())
@@ -580,8 +595,22 @@ class CLW_RequestService
 	}
 
 	// Fix A: a terminal only serves requesters of its own side. The side was bound when the terminal was spawned. True = ok, baseId set.
-	protected static bool CheckTerminal(vector terminalPos, string faction, out string baseId, out string refusal)
+	protected static bool CheckTerminal(int playerId, vector terminalPos, string faction, out string baseId, out string refusal)
 	{
+		// WP11: the position may be a vehicle depot of the requester's side (the depot menu); the requester must stand near it
+		CLW_ServiceInstance depot = CLW_DepotLookup.FindAt(faction, terminalPos);
+		if (depot)
+		{
+			if (!CLW_DepotLookup.PlayerNear(playerId, depot, refusal))
+			{
+				Print(string.Format("CLW: depot request player=%1 refused at %2 %3: %4", playerId, depot.m_sSide, depot.m_sBase, refusal), LogLevel.NORMAL);
+				return false;
+			}
+
+			baseId = depot.m_sBase;
+			return true;
+		}
+
 		CLW_TerminalInfo terminal = CLW_RequestTerminals.FindAt(terminalPos);
 		if (!terminal)
 		{
@@ -628,7 +657,7 @@ class CLW_RequestService
 		{
 			reply = "you are not on a side";
 		}
-		else if (terminalPos != vector.Zero && !CheckTerminal(terminalPos, faction, terminalBase, reply))
+		else if (terminalPos != vector.Zero && !CheckTerminal(playerId, terminalPos, faction, terminalBase, reply))
 		{
 			// fix A: reply holds the refusal (unknown terminal, or it belongs to the other side)
 		}
@@ -877,5 +906,33 @@ class CLW_RequestService
 		}
 
 		return "[" + text + "]";
+	}
+
+	// Rematch (CLW_Rematch.c): delete the vehicles and boxes issued to players, remove the delivery markers, forget history and cooldowns
+	// (OnGameStart also resets reports, /hq chat and deliveries). Returns the entities deleted.
+	static int RematchReset()
+	{
+		int deleted;
+		foreach (IEntity issued : s_aIssuedVehicles)
+		{
+			if (issued)
+			{
+				SCR_EntityHelper.DeleteEntityAndChildren(issued);
+				deleted++;
+			}
+		}
+
+		foreach (IEntity box : s_aBoxes)
+		{
+			if (box)
+			{
+				SCR_EntityHelper.DeleteEntityAndChildren(box);
+				deleted++;
+			}
+		}
+
+		CLW_VehicleDelivery.RematchReset();
+		OnGameStart();
+		return deleted;
 	}
 }

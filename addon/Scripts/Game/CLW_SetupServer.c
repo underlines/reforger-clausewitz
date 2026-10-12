@@ -3,6 +3,7 @@
 // - sends the owner the setup data (wire text, see BuildWire) so the owner's client opens the menu, and the others a "waiting" hint,
 // - validates the submit (sender == owner or admin, phase == SETUP, mode + values + factions) and calls CLW_WarState.StartWar,
 // - announces the started war and closes the menus.
+// A rematch (CLW_Rematch.c) calls Start again for the next round: the owner is picked anew and the menu is re-sent.
 // The client side lives in CLW_SetupClient.c / CLW_SetupDialog.c, the RPC glue in CLW_SetupPlayerController.c.
 class CLW_SetupServer
 {
@@ -25,6 +26,9 @@ class CLW_SetupServer
 	{
 		if (!Replication.IsServer() || !war || !scenario)
 			return;
+
+		if (s_Instance)
+			GetGame().GetCallqueue().Remove(s_Instance.Poll);	// rematch: the driver of the previous round (normally stopped itself already)
 
 		s_Instance = new CLW_SetupServer();
 		s_Instance.m_War = war;

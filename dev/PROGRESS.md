@@ -103,6 +103,23 @@ Second round (2026-10-12 evening, builds #72-#79, same packs + preset), verified
 - [x] generated map wrapper (Takistan, RHS sides): boots, auto scenario, war RUNNING, AI moves (100-150 m in 2 min); bug found + fixed: the generated AIWorld prefab was unregistered (no navmesh), wrappers now reference only registered resources (checked by the generator)
 - [x] RHS prop sets: RHS arsenal boxes at the bases of RHS_USAF / RHS_AFRF; their zero buy multiplier is reset to 1 (`buy multiplier 0 -> 1` in the log)
 
+## Round 3 (branch `feature/m4-round3` from `main`, plan `notes/m4-round3-plan.md`)
+Owner test 2026-10-12 evening (GM Everon takeover, RHS_USAF vs RHS_AFRF, builds #80-#81): HQ menu, `/request vehicle` refusal, `/report`, arsenal prices + WCS
+weapons, own-side markers, start objectives, garrison, tighter base, LLM FOB after the 6 min gate built by a walking builder, convoys to FOBs (FOB arsenal on
+FOB-local stock: kept) all OK. Problems P1-P14 in the plan, section 3.
+Open (work packages, plan section 4):
+- [ ] WP1 readable squad names (`1st Rifle Squad`, `HQ Garrison`, ...) everywhere + own supplies on the HUD (P1, P8)
+- [ ] WP2 base 30 % tighter (depot distance kept), no medical service anywhere, depot lists the side pool, supply check 10 s after spawn, kit purchase log (P2, P3, P4, P7, P11)
+- [ ] WP3 FOB base marker with state + builder/convoy arrows in game and on the dashboard; marker restore only on a real local faction change (P5, P14)
+- [ ] WP4 rematch in place after WAR OVER (no world reload, no `JIP_ERROR`) (P6)
+- [ ] WP5 simple HQ war journal (intent, goals, lessons, code-counted tries; review call; dashboard view + toggle) + flank nudge (P12, P13)
+- [ ] WP6 economy guard: HQ reserve floor, convoy minimum load, no buys at the AI cap, idle stand-down check log (P9, P10)
+- [ ] WP7 merge + DS check; WP8 modern vehicle packs test
+Owner checklist round 3 (client): 1 group names readable, garrison `HQ Garrison`; 2 HUD own supplies; 3 base: spawn tent touches the command post,
+arsenal next to them, no medical tent; 4 depot lists side-pool vehicles; 5 FOB planned/building/done on the in-game map + dashboard with builder and
+convoy arrows; 6 victory -> results -> back to setup, no kick; 7 dashboard journal + memory toggle, HQ keeps its intent, no repeated failed attacks,
+flanks; 8 HQ never drained to 0, convoys still run; 9 (WP8) modern vehicles at the depot and in AI use.
+
 ## Owner checklist (client; everything the DS cannot show): all OK (owner, 2026-10-12); results and feedback in `notes/m4-round3-plan.md` §3
 Answer per item: OK / not OK + what you saw + about when. Start: sidecar, then `_dedicated\start-server.ps1 -Packs packs-e2e.txt` (Arland) unless the item says otherwise, client via `_dedicated\start-client.ps1` (or the command in `notes/dedicated-server.md`). The preset auto-starts the war 60 s after boot (RHS_USAF vs RHS_AFRF, random start): join within a minute to see the setup menu.
 From M4 round 1 (never clicked):

@@ -142,3 +142,79 @@ runs the war inside it; `CLW_GameMode` worlds are unaffected either way. The com
 (`CLW: takeover of <class> in <world> (switch: cli|overrides)`). The scenario of a taken-over world: command line `-clwScenario <name>`
 (`Configs/CLW/Scenarios/<name>.conf`), else the world file name without a leading `GM_` (`GM_Arland` -> `Arland.conf`), else by-world / by-listing / auto.
 Recipe: `dev/notes/maps.md` ("Run a Game Master world with takeover"). Code: `CLW_WarRuntime.TakeoverSwitch`.
+
+## Economy guard params (`hqReserve`, `convoyMinLoad`) - M4 round 3 WP6
+War-mode params (setup menu, preset, `CLW_WarMode_ShortConflict`; no overrides.json key): `hqReserve` (default 100 supplies, 0 = no floor) is the HQ stock
+that AI purchases (rule commander, LLM BUY, convoy trucks) and convoy loads never go below; player requests (`/request`, HQ menu, arsenal kits) may.
+`convoyMinLoad` (default 60): a convoy loads `stock - hqReserve` (capped by the truck) and is skipped below this. Code: `CLW_EconomyGuard` (`CLW_SupplyStore.c`).
+Refusal text for the AI / LLM: `HQ reserve: stock <s>, reserve <r>`. The situation shows `baseRules.hqReserve` and `logisticsRules.hqReserve`.
+Logs: `CLW: convoy <side> skipped: loadable <n> < min <m> (stock <s>, reserve <r>)`, `CLW: RuleCommander <side>: no buy, AI cap <n>/<cap>`,
+`CLW: RuleCommander <side>: no buy, HQ reserve: stock <s>, reserve <r>`, `CLW: idle check <side>: candidates <n>, oldest <s> s (...)` (once a minute per side).
+## Rematch (`rematch`, `rematchDelaySec`) - M4 round 3 WP4
+Top-level keys of the same file, read again at every war end (SERVER only). What happens after the war is over:
+```json
+{"rematch":"inPlace","rematchDelaySec":60}
+```
+| key | values | meaning |
+|---|---|---|
+| `rematch` | `"inPlace"` (default) | no engine game end, no world reload: results stay `rematchDelaySec` s, then the war entities are deleted, runtime state is reset and the session is back in the SETUP phase (setup menu for the setup owner, the `setup` preset with `autoStartSec` starts the next war). Players are switched to the default side and respawned through the setup flow. |
+| | `"reload"` | the old behaviour: `EndGameMode`, the server reloads the world about 30 s later (clients may fail to rejoin with `JIP_ERROR`). The war runtime statics are cleared in the game mode's `OnGameEnd`. |
+| | `"off"` | the war stays ENDED, nothing happens afterwards (restart the server for a new war). |
+| `rematchDelaySec` | number, default 60, minimum 5 | seconds the results (HUD winner label, `WAR OVER` + countdown announcements) stay before the reset. |
+Without `EndGameMode` there is no vanilla end screen; the results are the HUD (phase ENDED shows "<faction> wins"), the announcements and the log.
+Log lines: `CLW: rematch: choice ...`, `war over, results for <n> s`, `reset <manager> (<n> entities)`, `census before/after`, `back to setup (round <k>)`. Code: `CLW_Rematch.c`.
+
+## Kin fill mode (`kinFill`, `kinWeight`, `sidesDefault`) - wp9
+By default (`"kinFill":"missing"`) kin entries are imported only for roles the own faction lacks. With the vehicle packs (M1 Abrams, M2 Bradley, JLTV in the
+vanilla US catalog) a pack faction such as RHS_USAF already has an armor / light entry, so the other modern vehicles never reach the AI buy pool,
+`/request vehicle` or the LLM manifest. `"kinFill":"all"` also imports the kin entries for roles the own faction already has:
+own entries first. For roles the side already has, ONLY kin entries with a vehicle are imported (no kin infantry / recon foot teams / cargo-only groups: the side keeps its own infantry identity) unless `"kinAllInfantry": true` is set. Roles the side lacks are filled with any entry. Kin entries are deduped by vehicle model / group prefab as before (so an Abrams the side already owns is not added twice), the kin
+entries' weight scaled by `kinWeight` (default 0.5, minimum weight 1). Catalog overrides (`overrides.json` `overrides` list) apply to the imported
+entries afterwards, so an explicit `weight` there wins. `ownOnly`, `excludeFactions` and `excludePathContains` still apply.
+
+| key | meaning |
+|---|---|
+| `kinFill` | `missing` (default) or `all`, per side key, `*` or in `sidesDefault` |
+| `kinWeight` | number > 0, weight factor of kin entries imported for a role the side already has (default 0.5) |
+| `kinAllInfantry` | `true`: kinFill all also imports foot entries for roles the side already has (default false) |
+| `sidesDefault` | `{"kinFill":..., "kinWeight":...}`: default for every side; a `*` or per-faction `sides` value overrides it |
+
+Enable `all` for every side:
+```json
+{"sidesDefault": {"kinFill": "all"}}
+```
+or equivalently `{"sides": {"*": {"kinFill": "all", "kinWeight": 0.5}}}`.
+Log: `CLW: overrides sidesDefault: ...`, `CLW: overrides sides '<key>': ... kinFill='all' kinWeight=...`,
+`CLW: sidepool <side>: role <kind> added (own role present, kinFill all) from <kin>: kin_<type> (<vehicle>) cost=.. cargo=.. weight=..` (one line per
+imported entry; roles the side lacked keep `filled from <kin>`). `/request vehicle`, the HQ menu, the AI buy pool and the LLM catalog manifest all read
+`CLW_ForceCatalog.GetEntries`, so imported entries appear everywhere.
+
+## Urban base placement (WP11): HQ in villages, clearing small obstacles
+Random / auto start positions now prefer HQs in or at the edge of villages and towns, 8-30 m beside a vehicle road. Code: `CLW_RandomLayout.FindHqUrban`, `CLW_PlaceClear`, `CLW_FreeSpot.CheckPose` (clear mode).
+**HQ site search** (scenario `m_RandomLayout` block, all new fields optional: 0 / missing = built-in default; `m_bNoUrban 1` = old open-ground rules; the relaxed second search always uses the old rules):
+| field | default | meaning |
+|---|---|---|
+| `m_fUrbanCoreHalfM` | 12 | half size of the clear core (compact base, command post ~20x21 m) |
+| `m_fRoadPreferMinM` / `m_fRoadPreferMaxM` | 8 / 30 | preferred distance to the nearest vehicle road (cost 0.5 per metre outside the band) |
+| `m_fRoadRejectM` | 60 | farther from a vehicle road = rejected |
+| `m_fPlaceNearM` | 250 | within this of a village/town centre (`m_aSnapTypes`) costs <= 1, farther costs 1 + extra/50 |
+| `m_fUrbanPlaceRadiusM` | 130 | a place wish is taken within this of the centre (0 = inside the village) |
+| `m_fUrbanRingInnerM` / `m_fUrbanRingOuterM`, `m_iUrbanRingMinFree` | 12 / 45 / 5 | room check: of `m_iRingSamples` service-sized spots on this ring at least this many are clear (clearable objects count as clear) |
+| `m_iUrbanMaxBuildings` | 150 | max buildings within `m_fTownRadiusM` (dense town centres stay out) |
+| `m_iSiteSamples` / `m_iSiteValid` | 60 / 5 | candidates tried per HQ / valid ones scored before the best is taken |
+| `m_fWeightRoad` / `m_fWeightPlace` / `m_fWeightRoom` | 1 / 1 / 1 | cost weights |
+Score (lower = better) = road cost + place cost + room cost (8 * missing share of the ring) + density (0.03 per building over 40) + 4 if off the navmesh (unknown = 0) + 2 per metre of height range + 0.005 per metre moved from the wish.
+Logs: `CLW: layout HQ <A|B> site score <s> at <pos> grid <g> (wish moved .., N valid of M samples, k settlements near the wish): road=.. m (cost ..) place='<name>' .. m (cost ..) room=a/b clear samples (cost ..) buildings=.. (cost ..) navmesh=.. clearable objects in the core=..`, per-site rejects in the existing `CLW: layout random rejections (...)` line as `site <reason>=n` (`site road too far`, `site core object-norpl`, `site service ring too small`, `site too many buildings`, ...).
+
+**Clearing small obstacles** (`Configs/CLW/Placement/ClearRules.conf`, class `CLW_ClearRules`, loaded by path): an object under a service footprint no longer blocks the spot when it may be deleted; the objects under the FINAL pose are deleted (server only) just before the service is spawned.
+| key | meaning |
+|---|---|
+| `m_bEnabled` | master switch (0 = nothing is cleared, only free spots are used) |
+| `m_bRequireReplicated` | 1 (default): only entities with an `RplComponent` are cleared. A world object without it would be deleted on the server only and stay (visible + solid) on every client, so it keeps blocking (reject reason `object-norpl`) |
+| `m_fMaxRadiusM`, `m_fMaxHeightM`, `m_iMaxPerSpot` | global bounding radius (3 m) and height (8 m) limit of a clearable object, max objects removed per footprint (60) |
+| `m_aNeverPathContains`, `m_aNeverClassNames` | prefab path substrings / class names that are never cleared (houses, buildings, bridges, roads, power lines, vehicles ...) |
+| `m_aRules` | allow-list: `m_sKind`, `m_bEnabled`, `m_bAnyTree` (every BaseTree/TreeEntity), `m_aPathContains`, `m_aClassNames`, `m_fMaxRadiusM` (0 = global). The first matching rule decides; an object matching no rule is never touched |
+Always protected in code: characters, vehicles, `Building`, terrain, our own placed services (`CLW_PlaceClear.Protect`). Classification uses the ROOT entity of the queried object.
+Logs: `CLW: place clear rules loaded: ..`, `CLW: place clear <kind> removed <n> objects: <prefab>, ... (<side> <base> <kind>)`; the place line gets `clear=<n>`.
+
+**Depot**: `DEPOT_ROAD_M` 40 -> 60; in road mode the depot faces the road point (face target = road point), log `depot road search: ... facing the road`.

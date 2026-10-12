@@ -115,6 +115,7 @@ class CLW_Convoys
 		s_iNext = 0;
 		s_mRefusalLog.Clear();
 		CLW_SupplyStore.Reset();
+		CLW_EconomyGuard.Reset();
 		CLW_LogisticsDoctrine.Reset();
 	}
 
@@ -401,13 +402,29 @@ class CLW_Convoys
 			return false;
 		}
 
-		if (CLW_SupplyStore.Get(side, fromBase) < MIN_CARGO)
+		// HQ reserve (WP6): a convoy loads only stock - reserve and only when that reaches the minimum load
+		int loadable = CLW_EconomyGuard.Loadable(side, fromBase);
+		int minLoad = CLW_EconomyGuard.ConvoyMinLoad();
+		if (loadable < minLoad)
 		{
-			why = string.Format("%1 has too little stock to send (%2, minimum %3)", fromBase, CLW_SupplyStore.Get(side, fromBase), MIN_CARGO);
+			LogSkip(side, fromBase, loadable, minLoad);
+			why = string.Format("%1 has too little stock to send (loadable %2 = stock %3 - HQ reserve, minimum load %4)", fromBase, loadable, CLW_SupplyStore.Get(side, fromBase), minLoad);
 			return false;
 		}
 
+		CLW_EconomyGuard.LogChanged("convoyskip", side, "ok");
+
 		return true;
+	}
+
+	// "CLW: convoy <side> skipped: ..." once per state change (the loadable amount, bucketed by the state "skip <loadable>" so a
+	// changing stock does not spam: only logged when the loadable amount differs from the last logged one).
+	static void LogSkip(string side, string fromBase, int loadable, int minLoad)
+	{
+		if (!CLW_EconomyGuard.LogChanged("convoyskip", side, "skip " + fromBase + " " + loadable))
+			return;
+
+		Print(string.Format("CLW: convoy %1 skipped: loadable %2 < min %3 (stock %4, reserve %5)", side, loadable, minLoad, CLW_SupplyStore.Get(side, fromBase), CLW_EconomyGuard.HqReserve()), LogLevel.NORMAL);
 	}
 
 	// The doctrine wanted a convoy for the FOB but the side has no supply truck: one line per side every 2 minutes.
@@ -700,7 +717,12 @@ class CLW_Convoys
 
 		convoy.m_sTag = convoy.m_sId + "_truck";
 		string error;
-		if (!spawner.BuyTagged(convoy.m_sSide, pick.m_sType, "convoy " + convoy.m_sId, convoy.m_sTag, error))
+		bool bought;
+		// WP6: the truck must not take the HQ below its reserve either
+		if (CLW_EconomyGuard.CanAiSpend(convoy.m_sSide, pick.m_iCost, error))
+			bought = spawner.BuyTagged(convoy.m_sSide, pick.m_sType, "convoy " + convoy.m_sId, convoy.m_sTag, error);
+
+		if (!bought)
 		{
 			convoy.m_sTag = "";
 			convoy.m_iBuyTries++;
@@ -840,8 +862,17 @@ class CLW_Convoys
 
 		int capacity = CapacityOf(convoy.m_sSide, convoy.m_sTruckId);
 		int stock = CLW_SupplyStore.Get(convoy.m_sSide, convoy.m_sFrom);
-		int cargo = Math.Min(capacity, stock);
-		if (cargo < MIN_CARGO || !CLW_SupplyStore.TrySpend(convoy.m_sSide, convoy.m_sFrom, cargo))
+		int loadable = CLW_EconomyGuard.Loadable(convoy.m_sSide, convoy.m_sFrom);	// WP6: never below the HQ reserve
+		int minLoad = CLW_EconomyGuard.ConvoyMinLoad();
+		int cargo = Math.Min(capacity, loadable);
+		if (cargo < minLoad)
+		{
+			LogSkip(convoy.m_sSide, convoy.m_sFrom, loadable, minLoad);
+			End(convoy, CLW_EConvoyState.FAILED, string.Format("skipped: loadable %1 < min %2 at %3 (stock %4, reserve %5, capacity %6)", loadable, minLoad, convoy.m_sFrom, stock, CLW_EconomyGuard.HqReserve(), capacity));
+			return;
+		}
+
+		if (!CLW_SupplyStore.TrySpend(convoy.m_sSide, convoy.m_sFrom, cargo))
 		{
 			End(convoy, CLW_EConvoyState.FAILED, string.Format("nothing to load at %1 (stock %2, capacity %3)", convoy.m_sFrom, stock, capacity));
 			return;
@@ -1162,7 +1193,7 @@ class CLW_Convoys
 		if (truck)
 			cargo = truck.m_iCargo;
 
-		return "{\"convoyMax\":" + GetMax() + ",\"inFlight\":" + CountLive(side) + ",\"minCargo\":" + MIN_CARGO + ",\"lowStock\":" + CLW_LogisticsDoctrine.LOW_STOCK + ",\"truckCargo\":" + cargo + "}";
+		return "{\"convoyMax\":" + GetMax() + ",\"inFlight\":" + CountLive(side) + ",\"minCargo\":" + CLW_EconomyGuard.ConvoyMinLoad() + ",\"hqReserve\":" + CLW_EconomyGuard.HqReserve() + ",\"lowStock\":" + CLW_LogisticsDoctrine.LOW_STOCK + ",\"truckCargo\":" + cargo + "}";
 	}
 }
 
@@ -1216,8 +1247,12 @@ class CLW_LogisticsDoctrine
 				return;
 			}
 
-			if (war.GetSupplies(side) - CLW_RuleCommander.SUPPLY_RESERVE < CLW_Convoys.MIN_CARGO)
-				return;	// the HQ cannot spare a load
+			int sparable = CLW_EconomyGuard.Loadable(side, CLW_Services.BASE_HQ);
+			if (sparable < CLW_EconomyGuard.ConvoyMinLoad())
+			{
+				CLW_Convoys.LogSkip(side, CLW_Services.BASE_HQ, sparable, CLW_EconomyGuard.ConvoyMinLoad());
+				return;	// the HQ cannot spare a load (reserve floor)
+			}
 
 			CLW_ActionCall call = new CLW_ActionCall();
 			call.m_sAction = "RESUPPLY";

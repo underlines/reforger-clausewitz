@@ -786,4 +786,39 @@ class CLW_ControlPoints
 			flags |= 1 << factionManager.GetFactionIndex(second);
 		return flags;
 	}
+
+	// Rematch (CLW_Rematch.c): stop the tick, remove the objective and HQ map markers, drop the points and the invoker subscribers
+	// (WarState / FobManager subscribe again). Init(scenario) works again afterwards. Returns the markers removed.
+	int RematchReset()
+	{
+		Stop();
+		SCR_MapMarkerManagerComponent manager = SCR_MapMarkerManagerComponent.GetInstance();
+		int removed;
+		foreach (CLW_ControlPoint point : m_aPoints)
+		{
+			if (point.m_Marker && manager)
+			{
+				manager.RemoveStaticMarker(point.m_Marker);
+				removed++;
+			}
+
+			point.m_Marker = null;
+		}
+
+		foreach (SCR_MapMarkerBase baseMarker : m_aBaseMarkers)
+		{
+			if (manager)
+			{
+				manager.RemoveStaticMarker(baseMarker);
+				removed++;
+			}
+		}
+
+		m_aBaseMarkers.Clear();
+		m_aBaseMarkerKeys.Clear();
+		m_aPoints.Clear();
+		m_OnOwnerChanged = new ScriptInvoker();
+		m_OnContested = new ScriptInvoker();
+		return removed;
+	}
 }

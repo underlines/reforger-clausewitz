@@ -4,7 +4,7 @@
 //             paused (and logged) while it is away; a log line every 25 %. M4 WP5: a stalled builder close to the site may build from
 //             there (CLW_Fob.m_fPresentM, decided by CLW_FobManager); a builder away for AWAY_RETURN_SEC is sent back (MOVING)
 // "Standing" = named spawn point of the side (respawn at ticket cost like the base) + the FOB kit (arsenal box, supply box, sandbags: CLW_FactionProfile.m_aFobKit,
-// CLW_Services.SpawnFobKit; sides without a kit get the tier-1 services). Tier 2 (vehicle depot, medical) is Upgrade(). Remove() undoes
+// CLW_Services.SpawnFobKit; sides without a kit get the tier-1 services). Tier 2 (vehicle depot) is Upgrade(). Remove() undoes
 // all of it when the FOB is lost. The prefabs come from the faction data through CLW_PropResolver (kin fallback), the spawn
 // point prefab from the scenario faction setup: nothing is named here. Server only. Log prefix: "CLW: fob".
 class CLW_BuildExecutor
@@ -122,7 +122,7 @@ class CLW_BuildExecutor
 		return fob.m_sId + " " + fob.m_sName;
 	}
 
-	// Tier 2: vehicle depot and medical. The cost is paid by the caller.
+	// Tier 2: vehicle depot. The cost is paid by the caller.
 	static void Upgrade(CLW_Fob fob)
 	{
 		int placed;
@@ -130,13 +130,12 @@ class CLW_BuildExecutor
 		{
 			array<string> kinds = {};
 			kinds.Insert(CLW_ServiceKind.VEHICLE_DEPOT);
-			kinds.Insert(CLW_ServiceKind.MEDICAL);
 			placed = CLW_Services.SpawnServices(fob.m_sSide, fob.m_sId, fob.m_vPos, kinds);
 		}
 
 		fob.m_iTier = 2;
-		Print(string.Format("CLW: fob %1 upgraded to tier 2: %2 more services (vehicle depot, medical)", fob.m_sId, placed), LogLevel.NORMAL);
-		CLW_Debug.Announce(string.Format("%1 upgraded FOB %2 (depot, medical)", fob.m_sSide, fob.m_sId));
+		Print(string.Format("CLW: fob %1 upgraded to tier 2: %2 more services (vehicle depot)", fob.m_sId, placed), LogLevel.NORMAL);
+		CLW_Debug.Announce(string.Format("%1 upgraded FOB %2 (depot)", fob.m_sSide, fob.m_sId));
 	}
 
 	// The command post of the FOB is gone (deleted) or its main building is destroyed. [verify] the first damageable entity of the

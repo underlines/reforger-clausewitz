@@ -410,6 +410,28 @@ class CLW_Bases
 		return m_aOwnSpawns[i];
 	}
 
+	// Round 3 (compact base): moves the base spawn point of a faction next to the placed command post and gives it a small spawn radius, so
+	// players appear beside the HQ building. The base position (GetBasePos) stays. Returns false when the faction has no spawn point.
+	bool MoveBasePoint(string factionKey, vector pos, float radius)
+	{
+		SCR_SpawnPoint point = GetSpawnPoint(factionKey);
+		if (!point)
+		{
+			Print(string.Format("CLW: bases %1 spawn point not moved: none exists", factionKey), LogLevel.NORMAL);
+			return false;
+		}
+
+		vector old = point.GetOrigin();
+		CLW_Placement.SurfaceAt(pos);
+		point.SetOrigin(pos);	// [verify] spawn point transform replicates to clients (same as MoveBase)
+		float oldRadius = point.GetSpawnRadius();
+		if (radius > 0)
+			point.SetSpawnRadius(radius);
+
+		Print(string.Format("CLW: bases %1 spawn point moved %2 -> %3 (%4 m), radius %5 -> %6", factionKey, old, pos, Math.Round(vector.DistanceXZ(old, pos)), oldRadius, point.GetSpawnRadius()), LogLevel.NORMAL);
+		return true;
+	}
+
 	// Spawn point of a FOB: same prefab and radius as the faction's base spawn point (respawn there costs tickets like at the base).
 	// Null when the faction setup has no spawn point prefab.
 	SCR_SpawnPoint SpawnFobPoint(string factionKey, vector pos, string name = "")
@@ -508,5 +530,44 @@ class CLW_Bases
 		}
 
 		Print(string.Format("CLW: bases spawn points deleted=%1 (foreign), now per side:%2 (fob points %3, total %4)", deleted, perSide, m_aFobSpawns.Count(), SCR_SpawnPoint.CountSpawnPoints()), LogLevel.NORMAL);
+	}
+
+	// Rematch (CLW_Rematch.c): delete the base and FOB spawn points and forget the layout. Init(scenario) works again afterwards. Returns the points deleted.
+	int RematchReset()
+	{
+		GetGame().GetCallqueue().Remove(PruneForeignSpawns);
+		GetGame().GetCallqueue().Remove(RecheckBases);
+		int deleted;
+		foreach (SCR_SpawnPoint ownPoint : m_aOwnSpawns)
+		{
+			if (ownPoint)
+			{
+				ownPoint.SetSpawnPointEnabled_S(false);
+				SCR_EntityHelper.DeleteEntityAndChildren(ownPoint);
+				deleted++;
+			}
+		}
+
+		foreach (SCR_SpawnPoint fobPoint : m_aFobSpawns)
+		{
+			if (fobPoint)
+			{
+				fobPoint.SetSpawnPointEnabled_S(false);
+				SCR_EntityHelper.DeleteEntityAndChildren(fobPoint);
+				deleted++;
+			}
+		}
+
+		m_aKeys.Clear();
+		m_aPos.Clear();
+		m_aOwnSpawns.Clear();
+		m_aPlace.Clear();
+		m_aFobSpawns.Clear();
+		m_bStarted = false;
+		m_fSeparationScale = 1;
+		m_fAuthoredDistance = 0;
+		m_fHqDistance = 0;
+		m_sBattleSize = "";
+		return deleted;
 	}
 }

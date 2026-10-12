@@ -288,6 +288,18 @@ class CLW_RuleCommander
 
 		LogBuyState("need", string.Format("CLW: RuleCommander %1: %2 unmet task(s), %3 unit(s) missing, first: %4", m_sFaction, needs.Count(), missingTotal, needs[0].m_sReason));
 
+		// WP6: at the AI cap every purchase would be refused: do not plan or pay, log once per change (not every think)
+		int capLive;
+		int capMax;
+		if (CLW_EconomyGuard.AiCapFull(m_sFaction, capLive, capMax))
+		{
+			if (CLW_EconomyGuard.LogChanged("rulecap", m_sFaction, "" + capLive + "/" + capMax))
+				Print(string.Format("CLW: RuleCommander %1: no buy, AI cap %2/%3", m_sFaction, capLive, capMax), LogLevel.NORMAL);
+			return;
+		}
+
+		CLW_EconomyGuard.LogChanged("rulecap", m_sFaction, "ok");
+
 		// a buy was refused for the AI cap: wait until the live AI count drops or CAP_BLOCK_SEC passed
 		if (m_fCapBlockTime >= 0)
 		{
@@ -357,9 +369,14 @@ class CLW_RuleCommander
 			while (missing > 0 && bought < MAX_BUYS_PER_THINK && tries < MAX_BUYS_PER_THINK + 3)
 			{
 				tries++;
-				int spendable = war.GetSupplies(m_sFaction) - SUPPLY_RESERVE;
+				// WP6: the HQ reserve (mode param hqReserve, default 100) replaces the old fixed floor when it is higher
+				int floorSupplies = Math.Max(SUPPLY_RESERVE, CLW_EconomyGuard.HqReserve());
+				int spendable = war.GetSupplies(m_sFaction) - floorSupplies;
 				if (spendable <= 0)
+				{
+					LogBuyState("reserve", string.Format("CLW: RuleCommander %1: no buy, HQ reserve: stock %2, reserve %3", m_sFaction, war.GetSupplies(m_sFaction), floorSupplies));
 					return;
+				}
 
 				int total = counts[0] + counts[1] + counts[2] + counts[3];
 				// categories by deficit (largest first), only those with an affordable entry
@@ -396,7 +413,7 @@ class CLW_RuleCommander
 
 				if (!pick)
 				{
-					LogBuyState("saving", string.Format("CLW: RuleCommander %1: saving (supplies %2, reserve %3, nothing affordable or allowed for %4 %5)", m_sFaction, war.GetSupplies(m_sFaction), SUPPLY_RESERVE, CLW_Command.ToName(goal.m_eCommand), goal.m_sTarget));
+					LogBuyState("saving", string.Format("CLW: RuleCommander %1: saving (supplies %2, reserve %3, nothing affordable or allowed for %4 %5)", m_sFaction, war.GetSupplies(m_sFaction), floorSupplies, CLW_Command.ToName(goal.m_eCommand), goal.m_sTarget));
 					break;
 				}
 

@@ -137,6 +137,44 @@ FrameWidgetClass {
           ShadowOpacity 0.5
          }
         }
+        TextWidgetClass "{7D3A91C45E300036}" {
+         Name "Supply_Label"
+         Slot LayoutSlot "{7D3A91C45E300037}" {
+          HorizontalAlign 3
+          Padding 0 4 0 0
+         }
+         Color 1 1 1 1
+         Text ""
+         "Font Size" 16
+         "Min Font Size" 16
+         "Horizontal Alignment" Center
+         "Vertical Alignment" Center
+         FontProperties FontProperties "{7D3A91C45E300038}" {
+          Font "{EABA4FE9D014CCEF}UI/Fonts/RobotoCondensed/RobotoCondensed_Bold.fnt"
+          ShadowSize 4
+          ShadowOffset 5 5
+          ShadowOpacity 0.5
+         }
+        }
+        TextWidgetClass "{7D3A91C45E300039}" {
+         Name "Supply_Value"
+         Slot LayoutSlot "{7D3A91C45E30003A}" {
+          HorizontalAlign 3
+          Padding 0 0 0 0
+         }
+         Color 1 1 1 1
+         Text ""
+         "Font Size" 14
+         "Min Font Size" 14
+         "Horizontal Alignment" Center
+         "Vertical Alignment" Center
+         FontProperties FontProperties "{7D3A91C45E30003B}" {
+          Font "{EABA4FE9D014CCEF}UI/Fonts/RobotoCondensed/RobotoCondensed_Bold.fnt"
+          ShadowSize 4
+          ShadowOffset 5 5
+          ShadowOpacity 0.5
+         }
+        }
        }
       }
       VerticalLayoutWidgetClass "{7D3A91C45E300011}" {
@@ -188,6 +226,6 @@ FrameWidgetClass {
      }
     }
    }
-  }
+   }
  }
 }

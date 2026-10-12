@@ -14,6 +14,10 @@
 modded class SCR_MapMarkerManagerComponent
 {
 	protected ref map<int, ref SCR_MapMarkerBase> m_mCLWKept;
+	protected string m_sCLWAppliedFaction;	// faction key of the last restore (P14: log only a real change)
+	protected bool m_bCLWRestorePending;
+	protected int m_iCLWFactionEvents;
+	protected static const int CLW_RESTORE_DELAY_MS = 750;
 
 	protected map<int, ref SCR_MapMarkerBase> CLW_Kept()
 	{
@@ -52,6 +56,9 @@ modded class SCR_MapMarkerManagerComponent
 
 	// The local player got another faction: vanilla now deletes the markers of other factions. Keep them first, then restore the ones
 	// that are for the new faction (all that were dropped earlier for the previous one included).
+	// P14 (owner round 3): the faction can flip several times in a few seconds (deploy menu), so the restore is coalesced: the keep + vanilla
+	// handler run for every event (they must), the restore runs once RESTORE_DELAY_MS after the last event for the faction the local player
+	// has THEN, and is logged only when that faction differs from the last applied one.
 	override protected void OnPlayerFactionChanged(notnull FactionAffiliationComponent owner, Faction previousFaction, Faction newFaction)
 	{
 		if (!System.IsConsoleApp())
@@ -62,9 +69,31 @@ modded class SCR_MapMarkerManagerComponent
 		if (System.IsConsoleApp() || !newFaction)
 			return;
 
-		FactionManager factionManager = GetGame().GetFactionManager();
-		if (!factionManager)
+		m_iCLWFactionEvents++;
+		if (m_bCLWRestorePending)
 			return;
+
+		m_bCLWRestorePending = true;
+		GetGame().GetCallqueue().CallLater(CLW_ApplyRestore, CLW_RESTORE_DELAY_MS, false);
+	}
+
+	// Runs once after a burst of faction events: restores the kept markers of the current local faction.
+	protected void CLW_ApplyRestore()
+	{
+		m_bCLWRestorePending = false;
+		int events = m_iCLWFactionEvents;
+		m_iCLWFactionEvents = 0;
+
+		Faction newFaction = SCR_FactionManager.SGetLocalPlayerFaction();
+		FactionManager factionManager = GetGame().GetFactionManager();
+		if (!newFaction || !factionManager)
+			return;
+
+		string key = newFaction.GetFactionKey();
+		bool changed = key != m_sCLWAppliedFaction;
+		if (changed)
+			Print("CLW: markers restore for " + key + " (was " + m_sCLWAppliedFaction + ", " + events.ToString() + " faction event(s) coalesced)", LogLevel.NORMAL);
+		m_sCLWAppliedFaction = key;
 
 		int newIndex = factionManager.GetFactionIndex(newFaction);
 		map<int, ref SCR_MapMarkerBase> kept = CLW_Kept();
@@ -92,7 +121,7 @@ modded class SCR_MapMarkerManagerComponent
 		if (!restoreIds.IsEmpty())
 		{
 			CheckMarkersUserRestrictions();
-			Print("CLW: markers client faction " + newFaction.GetFactionKey() + ": restored " + restoreIds.Count().ToString() + " kept marker(s), " + kept.Count().ToString() + " still kept for other factions", LogLevel.NORMAL);
+			Print("CLW: markers client faction " + key + ": restored " + restoreIds.Count().ToString() + " kept marker(s), " + kept.Count().ToString() + " still kept for other factions", LogLevel.NORMAL);
 		}
 	}
 

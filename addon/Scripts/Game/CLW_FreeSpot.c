@@ -109,6 +109,8 @@ class CLW_SpotParams
 	ref array<float> m_aAvoidDist = {};	// required distance from the CENTRE of the pose to the avoid position
 	ref array<IEntity> m_aIgnore = {};	// entities (and their children) that do not block
 	float m_fRoadClearance;				// metres from the rotated footprint edge to the road edge (0 = roads allowed); default CLW_SpotConfig.ROAD_CLEARANCE_M, SetVehicle() sets 0
+	bool m_bClearSmall;					// small clearable objects (CLW_PlaceClear rules: vegetation, fences, clutter, props) do not block; CheckPose collects them
+	ref array<IEntity> m_aCollect;		// filled by CheckPose (cleared first) with the clearable objects of the pose when m_bClearSmall; null = collected locally and dropped
 	ref CLW_RoadCache m_RoadCache;		// built by FindFreeSpot when m_fRoadClearance > 0
 
 	void CLW_SpotParams()
@@ -162,6 +164,7 @@ class CLW_SpotResult
 	int m_iValid;
 	int m_iRoadSegs = -1;		// cached road segments of the search area (-1 = road clearance off)
 	string m_sVia;
+	ref array<IEntity> m_aClear = {};	// clearable small objects under the chosen pose (m_bClearSmall); the caller deletes them once the spot is final
 	ref map<string, int> m_mRejects = new map<string, int>();
 
 	void Reject(string reason)
@@ -412,6 +415,36 @@ class CLW_SpotQuery
 	bool m_bBlockTrees;
 	bool m_bBlockCharacters;
 	string m_sReason;
+	CLW_ClearRules m_Rules;				// non-null: clearable small objects are collected instead of blocking
+	ref array<IEntity> m_aCollect = {};
+	bool m_bNoRpl;						// an object matched a clear rule but is not replicated (kept as a blocker)
+
+	// true when the object may be cleared (and is in the collection)
+	protected bool TryClear(IEntity entity)
+	{
+		if (!m_Rules)
+			return false;
+
+		IEntity target;
+		string kind;
+		string skip;
+		if (!CLW_PlaceClear.Classify(m_Rules, entity, target, kind, skip))
+		{
+			if (skip == "norpl")
+				m_bNoRpl = true;
+
+			return false;
+		}
+
+		if (m_aCollect.Contains(target))
+			return true;
+
+		if (m_aCollect.Count() >= m_Rules.m_iMaxPerSpot)
+			return false;
+
+		m_aCollect.Insert(target);
+		return true;
+	}
 
 	bool OnEntity(IEntity entity)
 	{
@@ -456,6 +489,9 @@ class CLW_SpotQuery
 			if (sizeY < CLW_SpotConfig.SMALL_VEG_H || !m_bBlockTrees)
 				return true;
 
+			if (TryClear(entity))
+				return true;
+
 			m_sReason = "tree";
 			return true;
 		}
@@ -465,6 +501,10 @@ class CLW_SpotQuery
 
 		if (Vehicle.Cast(entity))
 			m_sReason = "vehicle";
+		else if (TryClear(entity))
+			return true;
+		else if (m_bNoRpl)
+			m_sReason = "object-norpl";
 		else
 			m_sReason = "object";
 
@@ -714,11 +754,30 @@ class CLW_FreeSpot
 		if (ChimeraWorldUtils.TryGetWaterSurface(world, Vector(pos[0], surfaceY, pos[2]), waterPoint, waterType, waterTransform, waterExtents) && waterPoint[1] > surfaceY - 0.05)
 			return "water";
 
+		// clear mode: the entity query runs first (it collects the clearable small objects); the traces below would hit those very objects
+		// and are skipped when some were collected (the query box already covers the whole footprint)
+		CLW_ClearRules clearRules;
+		if (p.m_bClearSmall)
+			clearRules = CLW_PlaceClear.Get();
+
+		int collected;
+		if (clearRules)
+		{
+			if (!p.m_aCollect)
+				p.m_aCollect = new array<IEntity>();
+
+			string clearReason = QueryFootprint(p, pos, yaw, minY, maxY, clearRules);
+			if (!clearReason.IsEmpty())
+				return clearReason;
+
+			collected = p.m_aCollect.Count();
+		}
+
 		// five short cylinder traces: centre and the four corners (pulled in), they catch colliders the entity query box misses
 		float cylH = Math.Clamp(p.m_fHeight, 1.5, 3);
 		float insetX = Math.Max(0, p.m_fHalfX - 0.6);
 		float insetZ = Math.Max(0, p.m_fHalfZ - 0.6);
-		for (int tp = 0; tp < 5; tp++)
+		for (int tp = 0; tp < 5 && collected == 0; tp++)
 		{
 			float tx = p.m_fOffsetX;
 			float tz = p.m_fOffsetZ;
@@ -742,6 +801,16 @@ class CLW_FreeSpot
 		}
 
 		// the footprint box (+ margin) against every entity that touches it
+		if (clearRules)
+			return "";
+
+		return QueryFootprint(p, pos, yaw, minY, maxY, null);
+	}
+
+	// The footprint box (+ margin) against every entity that touches it: "" when clear, else the reason of the first blocker. With clearRules the
+	// clearable small objects are collected into p.m_aCollect (cleared first, when set) instead of blocking.
+	protected static string QueryFootprint(CLW_SpotParams p, vector pos, float yaw, float minY, float maxY, CLW_ClearRules clearRules)
+	{
 		vector box[4];
 		Math3D.AnglesToMatrix(Vector(yaw, 0, 0), box);
 		box[3] = Vector(pos[0], minY, pos[2]);
@@ -751,7 +820,15 @@ class CLW_FreeSpot
 		query.m_aIgnore = p.m_aIgnore;
 		query.m_bBlockTrees = p.m_bBlockTrees;
 		query.m_bBlockCharacters = p.m_bBlockCharacters;
-		world.QueryEntitiesByOBB(mins, maxs, box, query.OnEntity, null, EQueryEntitiesFlags.STATIC | EQueryEntitiesFlags.DYNAMIC | EQueryEntitiesFlags.WITH_OBJECT);
+		query.m_Rules = clearRules;
+		GetGame().GetWorld().QueryEntitiesByOBB(mins, maxs, box, query.OnEntity, null, EQueryEntitiesFlags.STATIC | EQueryEntitiesFlags.DYNAMIC | EQueryEntitiesFlags.WITH_OBJECT);
+		if (p.m_aCollect)
+		{
+			p.m_aCollect.Clear();
+			if (query.m_sReason.IsEmpty())
+				p.m_aCollect.Copy(query.m_aCollect);
+		}
+
 		return query.m_sReason;
 	}
 
@@ -921,6 +998,16 @@ class CLW_FreeSpot
 		}
 
 		bool ok = res.m_iValid > 0;
+		if (ok && p.m_bClearSmall)
+		{
+			// the objects the chosen pose needs cleared (collected again for the final pose only)
+			float finalRange;
+			float finalSurfaceY;
+			CheckPose(p, res.m_vPos, res.m_fYaw, finalRange, finalSurfaceY);
+			if (p.m_aCollect)
+				res.m_aClear.Copy(p.m_aCollect);
+		}
+
 		if (ok)
 			res.m_sVia = "ring";
 		else
@@ -1116,7 +1203,7 @@ class CLW_FreeSpot
 	{
 		if (ok)
 		{
-			Print(string.Format("CLW: place %1 at %2 grid %3 yaw=%4 via=%5 score=%6 range=%7 tries=%8 cand=%9", p.m_sLabel, res.m_vPos, CLW_Places.Grid(res.m_vPos), Math.Round(res.m_fYaw), res.m_sVia, Math.Round(res.m_fScore), Math.Round(res.m_fRange * 10) / 10, res.m_iTries, res.m_iCandidates) + " valid=" + res.m_iValid + " roadSegs=" + res.m_iRoadSegs + " rejected: " + res.Summary(), LogLevel.NORMAL);
+			Print(string.Format("CLW: place %1 at %2 grid %3 yaw=%4 via=%5 score=%6 range=%7 tries=%8 cand=%9", p.m_sLabel, res.m_vPos, CLW_Places.Grid(res.m_vPos), Math.Round(res.m_fYaw), res.m_sVia, Math.Round(res.m_fScore), Math.Round(res.m_fRange * 10) / 10, res.m_iTries, res.m_iCandidates) + " valid=" + res.m_iValid + " roadSegs=" + res.m_iRoadSegs + " clear=" + res.m_aClear.Count() + " rejected: " + res.Summary(), LogLevel.NORMAL);
 			return;
 		}
 

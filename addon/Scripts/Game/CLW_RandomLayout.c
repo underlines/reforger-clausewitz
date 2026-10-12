@@ -96,6 +96,91 @@ class CLW_RandomLayoutSetup
 	[Attribute("200", UIWidgets.EditBox, "An objective may be nudged this far (m) to clear ground")]
 	float m_fNudgeRadiusM;
 
+	// ---- urban sites (WP11): HQs in / at the edge of villages and towns, very near a road. A value of 0 below = the built-in default
+	// (FillSnapTypes), so a data block written before these fields existed gets the urban search too. ----
+
+	[Attribute("0", UIWidgets.CheckBox, "1 = switch the urban HQ site search OFF (old rules: open ground, out of towns)")]
+	bool m_bNoUrban;
+
+	[Attribute("12", UIWidgets.EditBox, "Urban: half size (m) of the clear square core of an HQ (the compact base: command post ~20x21 m)")]
+	float m_fUrbanCoreHalfM;
+
+	[Attribute("8", UIWidgets.EditBox, "Urban: preferred distance (m) of the HQ to the nearest vehicle road, lower end")]
+	float m_fRoadPreferMinM;
+
+	[Attribute("30", UIWidgets.EditBox, "Urban: preferred distance to the nearest vehicle road, upper end")]
+	float m_fRoadPreferMaxM;
+
+	[Attribute("60", UIWidgets.EditBox, "Urban: an HQ farther than this (m) from a vehicle road is rejected")]
+	float m_fRoadRejectM;
+
+	[Attribute("250", UIWidgets.EditBox, "Urban: an HQ within this distance (m) of a village / town centre (snap types) costs nothing extra, farther costs more")]
+	float m_fPlaceNearM;
+
+	[Attribute("130", UIWidgets.EditBox, "Urban: a place wish is taken this far (m, max) from the place centre (min 0: inside the village)")]
+	float m_fUrbanPlaceRadiusM;
+
+	[Attribute("12", UIWidgets.EditBox, "Urban: inner radius (m) of the ring where service-sized room (arsenal, supply, depot) is counted")]
+	float m_fUrbanRingInnerM;
+
+	[Attribute("45", UIWidgets.EditBox, "Urban: outer radius (m) of that ring")]
+	float m_fUrbanRingOuterM;
+
+	[Attribute("5", UIWidgets.EditBox, "Urban: ring samples that must be clear (small clearable objects count as clear)")]
+	int m_iUrbanRingMinFree;
+
+	[Attribute("150", UIWidgets.EditBox, "Urban: max buildings within m_fTownRadiusM (a dense town centre is still rejected)")]
+	int m_iUrbanMaxBuildings;
+
+	[Attribute("60", UIWidgets.EditBox, "Urban: candidate sites tried per HQ")]
+	int m_iSiteSamples;
+
+	[Attribute("5", UIWidgets.EditBox, "Urban: valid candidate sites scored per HQ before the best is taken")]
+	int m_iSiteValid;
+
+	[Attribute("1", UIWidgets.EditBox, "Urban: weight of the road distance cost")]
+	float m_fWeightRoad;
+
+	[Attribute("1", UIWidgets.EditBox, "Urban: weight of the settlement distance cost")]
+	float m_fWeightPlace;
+
+	[Attribute("1", UIWidgets.EditBox, "Urban: weight of the room cost (free service ring samples)")]
+	float m_fWeightRoom;
+
+	void FillUrbanDefaults()
+	{
+		if (m_fUrbanCoreHalfM <= 0)
+			m_fUrbanCoreHalfM = 12;
+		if (m_fRoadPreferMinM <= 0)
+			m_fRoadPreferMinM = 8;
+		if (m_fRoadPreferMaxM <= 0)
+			m_fRoadPreferMaxM = 30;
+		if (m_fRoadRejectM <= 0)
+			m_fRoadRejectM = 60;
+		if (m_fPlaceNearM <= 0)
+			m_fPlaceNearM = 250;
+		if (m_fUrbanPlaceRadiusM <= 0)
+			m_fUrbanPlaceRadiusM = 130;
+		if (m_fUrbanRingInnerM <= 0)
+			m_fUrbanRingInnerM = 12;
+		if (m_fUrbanRingOuterM <= 0)
+			m_fUrbanRingOuterM = 45;
+		if (m_iUrbanRingMinFree <= 0)
+			m_iUrbanRingMinFree = 5;
+		if (m_iUrbanMaxBuildings <= 0)
+			m_iUrbanMaxBuildings = 150;
+		if (m_iSiteSamples <= 0)
+			m_iSiteSamples = 60;
+		if (m_iSiteValid <= 0)
+			m_iSiteValid = 5;
+		if (m_fWeightRoad <= 0)
+			m_fWeightRoad = 1;
+		if (m_fWeightPlace <= 0)
+			m_fWeightPlace = 1;
+		if (m_fWeightRoom <= 0)
+			m_fWeightRoom = 1;
+	}
+
 	// Same values as the attribute defaults, for a scenario without the block.
 	void SetDefaults()
 	{
@@ -131,6 +216,7 @@ class CLW_RandomLayoutSetup
 
 	void FillSnapTypes()
 	{
+		FillUrbanDefaults();
 		if (m_iLandSamples <= 0)
 		{
 			// a data block written before the land-only wish fields existed: take the built-in values for them
@@ -233,6 +319,7 @@ class CLW_RandomLayout
 		loose.m_iMaxBuildingsNear = -1;
 		loose.m_iMaxWaterSamples = Math.Max(m_Cfg.m_iMaxWaterSamples, 2);
 		loose.m_aSnapTypes = m_Cfg.m_aSnapTypes;
+		loose.m_bNoUrban = true;	// the old open-ground rules
 		m_Cfg = loose;
 		Print("CLW: layout random search relaxed (no road needed, towns allowed, smaller core, double attempts)", LogLevel.WARNING);
 	}
@@ -485,6 +572,8 @@ class CLW_RandomLayout
 				cand = m_aPlaceWishes[m_Rng.RandInt(0, m_aPlaceWishes.Count())];
 				float angle = m_Rng.RandFloatXY(0, Math.PI2);
 				float radius = m_Rng.RandFloatXY(m_Cfg.m_fPlaceOffsetMinM, Math.Max(m_Cfg.m_fPlaceOffsetMinM + 1, m_Cfg.m_fPlaceOffsetMaxM));	// out of the town: it has many buildings
+				if (!m_Cfg.m_bNoUrban)
+					radius = m_Rng.RandFloatXY(0, m_Cfg.m_fUrbanPlaceRadiusM);	// urban: inside / at the edge of the village
 				cand = cand + Vector(Math.Sin(angle) * radius, 0, Math.Cos(angle) * radius);
 				src = "place";
 				got = true;
@@ -496,6 +585,8 @@ class CLW_RandomLayout
 				{
 					float roadAngle = m_Rng.RandFloatXY(0, Math.PI2);
 					float roadRadius = m_Rng.RandFloatXY(m_Cfg.m_fRoadOffsetMinM, Math.Max(m_Cfg.m_fRoadOffsetMinM + 1, m_Cfg.m_fRoadOffsetMaxM));
+					if (!m_Cfg.m_bNoUrban)
+						roadRadius = m_Rng.RandFloatXY(m_Cfg.m_fRoadPreferMinM, m_Cfg.m_fRoadPreferMaxM + 40);
 					cand = cand + Vector(Math.Sin(roadAngle) * roadRadius, 0, Math.Cos(roadAngle) * roadRadius);
 					src = "road";
 				}
@@ -572,6 +663,9 @@ class CLW_RandomLayout
 			return false;
 		}
 
+		if (!m_Cfg.m_bNoUrban)
+			return FindHqUrban(label, wish, pos, why);
+
 		float coreHalf = m_Cfg.m_fHqCoreHalfM;
 		CLW_SpotParams p = new CLW_SpotParams();
 		p.m_sLabel = "hq " + label;
@@ -634,10 +728,234 @@ class CLW_RandomLayout
 		return true;
 	}
 
+	// ---- urban HQ site (WP11): in / at the edge of a village or town, very near a vehicle road ----
+
+	protected void SiteReject(map<string, int> local, string reason)
+	{
+		Reject("site " + reason);
+		int n;
+		local.Find(reason, n);
+		local.Set(reason, n + 1);
+	}
+
+	protected int CountBuildings(vector spot)
+	{
+		CLW_BuildingCounter counter = new CLW_BuildingCounter();
+		GetGame().GetWorld().QueryEntitiesBySphere(spot, m_Cfg.m_fTownRadiusM, counter.OnEntity, null, EQueryEntitiesFlags.STATIC);
+		return counter.m_iCount;
+	}
+
+	// Samples candidate sites around the wish (around villages / towns of the snap types within the search radius first, then around the wish),
+	// road-anchored: a point 8..30 m (data) beside the nearest vehicle road. A candidate needs a vehicle road within m_fRoadRejectM, a clear
+	// compact core (small clearable objects count as clear, CLW_PlaceClear), not too many buildings and enough service room around it. The valid
+	// ones are scored (lower = better): road distance outside the preferred band, distance to the nearest settlement centre beyond
+	// m_fPlaceNearM, missing room, building density, off-navmesh, distance moved from the wish. The best of m_iSiteValid valid ones wins.
+	protected bool FindHqUrban(string label, vector wish, out vector pos, out string why)
+	{
+		vector bmin, bmax;
+		GetPlayableBounds(bmin, bmax);
+		float areaMargin = m_Cfg.m_fEdgeMarginM;
+		CLW_SpotParams core = new CLW_SpotParams();
+		core.m_sLabel = "hq core " + label;
+		core.m_fHalfX = m_Cfg.m_fUrbanCoreHalfM;
+		core.m_fHalfZ = m_Cfg.m_fUrbanCoreHalfM;
+		core.m_fHeight = 3;
+		core.m_fRoadClearance = 0;	// the road is meant to be close: the services keep their own road clearance
+		core.m_fMaxHeightRange = 2 * 1.414 * m_Cfg.m_fUrbanCoreHalfM * m_Cfg.m_fMaxGrade;
+		core.m_bClearSmall = true;
+
+		// settlements near the wish: sample around them
+		array<vector> nearPlaces = {};
+		array<ref CLW_Place> places = {};
+		CLW_Places.GetAll(places);
+		foreach (CLW_Place place : places)
+		{
+			if (place.m_sType.IsEmpty() || vector.DistanceXZ(place.m_vPos, wish) > m_Cfg.m_fHqSearchRadiusM)
+				continue;
+
+			foreach (string typePart : m_Cfg.m_aSnapTypes)
+			{
+				if (place.m_sType.Contains(typePart))
+				{
+					nearPlaces.Insert(place.m_vPos);
+					break;
+				}
+			}
+		}
+
+		map<string, int> siteRej = new map<string, int>();
+		int valid;
+		int sampled;
+		float bestScore = 1000000000;
+		vector bestPos;
+		float bestRoad;
+		float bestRoadCost;
+		float bestPlaceDist;
+		string bestPlaceName;
+		float bestPlaceCost;
+		int bestFree;
+		float bestRoomCost;
+		int bestBuild;
+		float bestDensCost;
+		int bestNav;
+		int bestClear;
+		float bestMoved;
+		int ringSamples = Math.Max(1, m_Cfg.m_iRingSamples);
+		for (int s = 0; s < m_Cfg.m_iSiteSamples && valid < m_Cfg.m_iSiteValid; s++)
+		{
+			sampled++;
+			vector centre = wish;
+			float radiusMax = m_Cfg.m_fHqSearchRadiusM;
+			if (!nearPlaces.IsEmpty() && m_Rng.RandFloat01() < 0.7)
+			{
+				centre = nearPlaces[m_Rng.RandInt(0, nearPlaces.Count())];
+				radiusMax = m_Cfg.m_fUrbanPlaceRadiusM;
+			}
+
+			float ang = m_Rng.RandFloatXY(0, Math.PI2);
+			float rad = Math.Sqrt(m_Rng.RandFloat01()) * radiusMax;
+			vector cand = centre + Vector(Math.Sin(ang) * rad, 0, Math.Cos(ang) * rad);
+			CLW_RoadHit seek;
+			if (s % 3 != 2 && CLW_FreeSpot.NearestRoad(cand, m_Cfg.m_fRoadRejectM, CLW_WarConfig.PLACE_ROAD_MIN_WIDTH_M, seek))
+			{
+				float side = 1;
+				if (m_Rng.RandFloat01() < 0.5)
+					side = -1;
+
+				float offset = m_Rng.RandFloatXY(m_Cfg.m_fRoadPreferMinM, m_Cfg.m_fRoadPreferMaxM);
+				cand = seek.m_vPoint + Vector(-seek.m_vDir[2] * side * offset, 0, seek.m_vDir[0] * side * offset);
+			}
+
+			if (!InsideArea(cand, bmin, bmax, areaMargin))
+			{
+				SiteReject(siteRej, "outside area");
+				continue;
+			}
+
+			CLW_Placement.SurfaceAt(cand);
+			if (CLW_Placement.IsWater(cand) || CLW_Placement.NearWater(cand, 25))
+			{
+				SiteReject(siteRej, "water");
+				continue;
+			}
+
+			CLW_RoadHit roadHit;
+			if (!CLW_FreeSpot.NearestRoad(cand, m_Cfg.m_fRoadRejectM, CLW_WarConfig.PLACE_ROAD_MIN_WIDTH_M, roadHit))
+			{
+				SiteReject(siteRej, "road too far");
+				continue;
+			}
+
+			int build = CountBuildings(cand);
+			if (build > m_Cfg.m_iUrbanMaxBuildings)
+			{
+				SiteReject(siteRej, "too many buildings");
+				continue;
+			}
+
+			float range;
+			float surfaceY;
+			string reason = CLW_FreeSpot.CheckPose(core, cand, 0, range, surfaceY);
+			if (!reason.IsEmpty())
+			{
+				SiteReject(siteRej, "core " + reason);
+				continue;
+			}
+
+			int clearCount = 0;
+			if (core.m_aCollect)
+				clearCount = core.m_aCollect.Count();
+
+			int free = CountFreeRingEx(cand, m_Cfg.m_fUrbanRingInnerM, m_Cfg.m_fUrbanRingOuterM, true);
+			if (free < m_Cfg.m_iUrbanRingMinFree)
+			{
+				SiteReject(siteRej, "service ring too small");
+				continue;
+			}
+
+			// ---- score ----
+			float roadDist = roadHit.m_fDist;
+			float roadCost = 0;
+			if (roadDist < m_Cfg.m_fRoadPreferMinM)
+				roadCost = (m_Cfg.m_fRoadPreferMinM - roadDist) * 0.5;
+			else if (roadDist > m_Cfg.m_fRoadPreferMaxM)
+				roadCost = (roadDist - m_Cfg.m_fRoadPreferMaxM) * 0.5;
+
+			float placeDist;
+			vector placePos;
+			string placeName = CLW_Places.NearestOfTypes(cand, 5000, m_Cfg.m_aSnapTypes, placeDist, placePos);
+			placeDist = Math.Min(placeDist, m_Cfg.m_fPlaceNearM + 500);
+			float placeCost = placeDist / m_Cfg.m_fPlaceNearM;
+			if (placeDist > m_Cfg.m_fPlaceNearM)
+				placeCost = 1 + (placeDist - m_Cfg.m_fPlaceNearM) / 50;
+
+			float roomCost = (ringSamples - free) * 8.0 / ringSamples;
+			float densCost = 0;
+			if (build > 40)
+				densCost = (build - 40) * 0.03;
+
+			vector snapped;
+			int nav = CLW_Placement.NavmeshCheck(cand, CLW_WarConfig.PLACE_BASE_NAVMESH_TOL_M, snapped);
+			float navCost = 0;
+			if (nav == 0)
+				navCost = 4;
+
+			float moved = vector.DistanceXZ(cand, wish);
+			float score = m_Cfg.m_fWeightRoad * roadCost + m_Cfg.m_fWeightPlace * placeCost + m_Cfg.m_fWeightRoom * roomCost + densCost + navCost + range * 2 + moved * 0.005;
+			valid++;
+			if (score < bestScore)
+			{
+				bestScore = score;
+				bestPos = cand;
+				bestRoad = roadDist;
+				bestRoadCost = roadCost;
+				bestPlaceDist = placeDist;
+				bestPlaceName = placeName;
+				bestPlaceCost = placeCost;
+				bestFree = free;
+				bestRoomCost = roomCost;
+				bestBuild = build;
+				bestDensCost = densCost;
+				bestNav = nav;
+				bestClear = clearCount;
+				bestMoved = moved;
+			}
+		}
+
+		if (valid == 0)
+		{
+			string text = "";
+			foreach (string key, int count : siteRej)
+			{
+				if (!text.IsEmpty())
+					text += "; ";
+				text += key + "=" + count;
+			}
+
+			why = string.Format("no urban site in %1 samples (%2 settlements near the wish): %3", sampled, nearPlaces.Count(), text);
+			Reject("no urban site");
+			return false;
+		}
+
+		pos = bestPos;
+		string line = string.Format("CLW: layout HQ %1 site score %2 at %3 grid %4 (wish moved %5 m, %6 valid of %7 samples, %8 settlements near the wish): ", label, Math.Round(bestScore * 10) / 10, bestPos, CLW_Places.Grid(bestPos), Math.Round(bestMoved), valid, sampled, nearPlaces.Count());
+		line += string.Format("road=%1 m (cost %2) place='%3' %4 m (cost %5) ", Math.Round(bestRoad * 10) / 10, Math.Round(bestRoadCost * 10) / 10, bestPlaceName, Math.Round(bestPlaceDist), Math.Round(bestPlaceCost * 10) / 10);
+		line += string.Format("room=%1/%2 clear samples (cost %3) buildings=%4 (cost %5) navmesh=%6 clearable objects in the core=%7", bestFree, ringSamples, Math.Round(bestRoomCost * 10) / 10, bestBuild, Math.Round(bestDensCost * 10) / 10, bestNav, bestClear);
+		Print(line, LogLevel.NORMAL);
+		return true;
+	}
+
 	// Number of clear service-sized spots among iRingSamples points on the annulus around the HQ.
 	protected int CountFreeRing(vector center)
 	{
+		return CountFreeRingEx(center, m_Cfg.m_fRingInnerM, m_Cfg.m_fRingOuterM, false);
+	}
+
+	// Same with the ring radii given; clearSmall = small clearable objects (CLW_PlaceClear) do not count as blocked.
+	protected int CountFreeRingEx(vector center, float ringInner, float ringOuter, bool clearSmall)
+	{
 		CLW_SpotParams p = new CLW_SpotParams();
+		p.m_bClearSmall = clearSmall;
 		p.m_sLabel = "hq ring";
 		p.m_fHalfX = m_Cfg.m_fServiceHalfM;
 		p.m_fHalfZ = m_Cfg.m_fServiceHalfM;
@@ -652,7 +970,7 @@ class CLW_RandomLayout
 		{
 			float angle = offset + Math.PI2 * i / samples;
 			int band = i - (i / 3) * 3 + 1;	// 1..3 (no '%' inside a float expression: "Unknown operator '%'")
-			float radius = m_Cfg.m_fRingInnerM + (m_Cfg.m_fRingOuterM - m_Cfg.m_fRingInnerM) * band / 3.0;
+			float radius = ringInner + (ringOuter - ringInner) * band / 3.0;
 			vector cand = center + Vector(Math.Cos(angle) * radius, 0, Math.Sin(angle) * radius);
 			float range;
 			float surfaceY;

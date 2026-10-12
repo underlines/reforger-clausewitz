@@ -1,0 +1,28 @@
+GenericEntity : "{5753634EAFFBA2F6}Prefabs/Props/Military/Compositions/US/VehicleService_US.et" {
+ ID "872DC300CA2ED5C3"
+ components {
+  ActionsManagerComponent "{5CB6952C9693C41C}" {
+   ActionContexts {
+    UserActionContext "{70C198588C9F4A4B}" {
+     ContextName "clwdepot"
+     Position PointInfo "{C484D66129505DDA}" {
+      Offset 0 1.2 0.25
+     }
+     Radius 1.5
+     Omnidirectional 0
+    }
+   }
+   additionalActions {
+    CLW_OpenDepotAction "{D3E07A41B6C25901}" {
+     ParentContextList {
+      "clwdepot"
+     }
+     UIInfo UIInfo "{7A2D4E90C1B3F611}" {
+      Name "Request vehicle"
+     }
+     VisibilityRange 10
+    }
+   }
+  }
+ }
+}

@@ -506,6 +506,35 @@ class CLW_Orders
 		order.m_sStatusWhy = why;
 		order.m_fEndedAt = now;
 		Print(string.Format("CLW: orders %1 %2 %3 %4 -> %5: %6 (after %7 s)", m_sFaction, order.m_sSquad, CLW_Command.ToName(order.m_eCommand), order.m_sTarget, status, why, Math.Round(now - order.m_fIssuedAt)), LogLevel.NORMAL);
+		PushOutcomeEvent(order, status, why, now);
+	}
+
+	// HQ journal (WP5): an ATTACK that ended (done / failed) and a DEFEND that was lost become a situation event, so the sidecar can count the
+	// faction's attack record (tries / failed per objective). Format, parsed by the sidecar (dev/tools/agent/journal.mjs):
+	//   outcome <squad> <ATTACK|DEFEND> <objective id or -> <done|failed>: <why> (after N s)
+	// Orders of human-led squads (missions) are not the HQ's attacks and are skipped.
+	protected void PushOutcomeEvent(CLW_UnitOrder order, string status, string why, float now)
+	{
+		if (order.m_sSource == SOURCE_MISSION)
+			return;
+
+		if (order.m_eCommand != CLW_ECommand.ATTACK && order.m_eCommand != CLW_ECommand.DEFEND)
+			return;
+
+		if (order.m_eCommand == CLW_ECommand.DEFEND && status != STATUS_FAILED)
+			return;
+
+		CLW_WarState war = CLW_GameMode.GetWarState();
+		if (!war || !war.IsRunning())
+			return;
+
+		string target = order.m_sTarget;
+		if (target.IsEmpty())
+			target = "-";
+
+		string text = string.Format("outcome %1 %2 %3 %4: %5 (after %6 s)", order.m_sSquad, CLW_Command.ToName(order.m_eCommand), target, status, why, Math.Round(now - order.m_fIssuedAt));
+		war.PushEvent(m_sFaction, text);
+		Print(string.Format("CLW: journal outcome event %1: %2", m_sFaction, text), LogLevel.NORMAL);
 	}
 
 	// False for groups that are linked cargo and still mounted in their vehicle unit (not stuck, just riding).

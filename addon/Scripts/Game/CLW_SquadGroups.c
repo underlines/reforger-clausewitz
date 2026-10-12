@@ -5,8 +5,8 @@
 // client menus, so the server tells every client (RPC in CLW_GroupMirrorController.c) which groups to register locally.
 // Idempotent on both sides; resent to a player on connect and on every spawn.
 //
-// Joinable = adopted by the registry, infantry kind, no vehicle link, not hidden, alive, on a side (decided by
-// CLW_SquadRegistry.SyncJoinable). Vehicle crews / linked cargo are never registered.
+// Joinable = adopted by the registry, dismounted kinds (rifle, recon) or the embarked cargo group of a vehicle unit, alive, on a side (decided by
+// CLW_SquadRegistry.SyncJoinable). Vehicle crews are never registered; cargo groups are named after their parent unit.
 class CLW_SquadGroups
 {
 	protected static const int MIRROR_RETRY_MS = 500;
@@ -39,18 +39,23 @@ class CLW_SquadGroups
 		return count;
 	}
 
-	// "<id> - <display type>", e.g. "CLW_Squad_US_1 - Rifle squad".
+	// Readable squad name from the registry ("1st Rifle Squad", "HQ Garrison"); the id stays internal. A group the registry does not
+	// know gets its display type.
 	static string DisplayName(notnull SCR_AIGroup group)
 	{
 		CLW_SquadRegistry registry = CLW_GameMode.GetRegistry();
-		string id;
 		if (registry)
-			id = registry.GetId(group);
-		string type = CLW_SquadInfo.TypeName(group);
-		if (id.IsEmpty())
-			return type;
+		{
+			string id = registry.GetId(group);
+			if (!id.IsEmpty())
+			{
+				string name = registry.GetName(id);
+				if (!name.IsEmpty())
+					return name;
+			}
+		}
 
-		return id + " - " + type;
+		return CLW_SquadInfo.TypeName(group);
 	}
 
 	// ---- server ----

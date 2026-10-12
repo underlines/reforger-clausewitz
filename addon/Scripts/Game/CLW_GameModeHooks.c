@@ -11,6 +11,14 @@ modded class SCR_BaseGameMode
 		CLW_WarRuntime.OnGameModeStart(this);
 	}
 
+	// World shutdown / reload (every machine): the war runtime and its statics are released, so a reloaded world (rematch mode "reload",
+	// admin restart) does not meet a stale holder of the dead game mode entity. [verify] SCR_BaseGameMode.OnGameEnd is the override point.
+	override void OnGameEnd()
+	{
+		super.OnGameEnd();
+		CLW_WarRuntime.OnGameModeEnd(this);
+	}
+
 	// Respawn gate: a faction without tickets (or a finished war) cannot spawn players.
 	override bool CanPlayerSpawn_S(SCR_SpawnRequestComponent requestComponent, SCR_SpawnHandlerComponent handlerComponent, SCR_SpawnData data, out SCR_ESpawnResult result = SCR_ESpawnResult.SPAWN_NOT_ALLOWED)
 	{

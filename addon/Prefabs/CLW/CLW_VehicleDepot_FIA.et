@@ -1,0 +1,28 @@
+GenericEntity : "{C3F1807561FEFCFC}Prefabs/Props/Military/Compositions/FIA/VehicleService_FIA.et" {
+ ID "41D0CAFCF6D5CEAC"
+ components {
+  ActionsManagerComponent "{5CB6952C9693C41C}" {
+   ActionContexts {
+    UserActionContext "{04C60109848DE394}" {
+     ContextName "clwdepot"
+     Position PointInfo "{6FE643838125D2CE}" {
+      Offset 0 1.2 0.25
+     }
+     Radius 1.5
+     Omnidirectional 0
+    }
+   }
+   additionalActions {
+    CLW_OpenDepotAction "{D3E07A41B6C25903}" {
+     ParentContextList {
+      "clwdepot"
+     }
+     UIInfo UIInfo "{7A2D4E90C1B3F633}" {
+      Name "Request vehicle"
+     }
+     VisibilityRange 10
+    }
+   }
+  }
+ }
+}

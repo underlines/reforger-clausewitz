@@ -28,6 +28,16 @@ AI High Command for Arma Reforger (built-in rule-based commander, optional LLM):
 ## Status
 v1.0.0 (local tag, not published). M0 skeleton, M1 LLM bridge, M1.5 dashboard, M2 real war + mechanized, UX + SITREP, M3 logistics/bases/requests and M4 any map/any pack are done; M4 verified on the local dedicated server (vanilla, RHS, WCS, GRS packs; Arland, Everon, Kolguyev, Takistan, GM takeover). Next: the round 3 polish (`dev/notes/m4-round3-plan.md`); see `dev/PROGRESS.md`.
 
+## Run locally (dedicated server)
+Workspace tooling in `D:\GitHub\ReforgerMods\_dedicated\` (see `dev/notes/dedicated-server.md`):
+1. Stamp the build: `pwsh _tools\stamp-build.ps1 -Mod Clausewitz -Tag CLW` (PowerShell 7; Windows PowerShell writes a BOM and breaks the compile).
+2. Optional LLM sidecar + dashboard: `node llm_sidecar.mjs` in `dev/tools` (dashboard http://127.0.0.1:8788/; provider fake or OpenRouter in the Configuration view).
+3. Server: `_dedicated\start-server.ps1 -World <world> -Packs <packs file> [-Extra "-clwTakeover"]`. Game Master takeover on vanilla Everon:
+   `start-server.ps1 -World worlds/GameMaster/GM_Eden.ent -Packs packs-e2e-full.txt -Extra "-clwTakeover"`. Packs files list the Workshop mods to load
+   (`packs-e2e-full.txt` = RHS + WCS gear + WCS_Arsenal + GRS + WCS Loadout Editor). A setup preset in `_dedicated\profile\profile\Clausewitz\overrides.json` starts the war unattended.
+4. Client: `_dedicated\start-client.ps1 -Packs <same packs file>` joins 127.0.0.1. Stop with `_dedicated\stop-server.ps1`.
+Logs: `_dedicated\profile\logs\<latest>\console.log` (server). Current work: `dev/notes/m4-round3-plan.md`.
+
 ## Dependencies
 None (base game only). RHS / WCS / GRS factions, vehicles and gear work when loaded alongside, without a hard dependency.
 

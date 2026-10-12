@@ -160,3 +160,92 @@ class CLW_SupplyStore
 		return total;
 	}
 }
+
+// Economy guard (M4 round 3 WP6, owner problems P9 / P10): the HQ reserve floor and the AI-cap pre-check, in one place for the
+// rule commander, the LLM buy gate (CLW_Action_Buy) and the convoys (CLW_Convoys). Mode params (CLW_WarMode_ShortConflict):
+// hqReserve (default 100) and convoyMinLoad (default 60). AI purchases and convoys never take the HQ stock below hqReserve; player
+// requests (/request, HQ menu, arsenal kits) are NOT checked here and may (first come). Server only.
+// Log prefix: "CLW: economy", the rule commander / convoys log their own lines.
+class CLW_EconomyGuard
+{
+	static const int DEFAULT_HQ_RESERVE = 100;
+	static const int DEFAULT_CONVOY_MIN_LOAD = 60;
+
+	protected static ref map<string, string> s_mLogState = new map<string, string>();	// "<key>|<side>" -> last logged state
+
+	static void Reset()
+	{
+		s_mLogState.Clear();
+	}
+
+	// Supplies the HQ keeps back from AI purchases and convoys (mode param hqReserve, 0 = no floor).
+	static int HqReserve()
+	{
+		CLW_WarState war = CLW_GameMode.GetWarState();
+		if (!war || !war.GetMode())
+			return DEFAULT_HQ_RESERVE;
+
+		return Math.Clamp(war.GetMode().GetIntParam("hqReserve", DEFAULT_HQ_RESERVE), 0, 2000);
+	}
+
+	// Smallest convoy load worth a trip (mode param convoyMinLoad).
+	static int ConvoyMinLoad()
+	{
+		CLW_WarState war = CLW_GameMode.GetWarState();
+		if (!war || !war.GetMode())
+			return DEFAULT_CONVOY_MIN_LOAD;
+
+		return Math.Max(1, war.GetMode().GetIntParam("convoyMinLoad", DEFAULT_CONVOY_MIN_LOAD));
+	}
+
+	// What the AI (purchases, convoys) may take from the base's stock: HQ stock minus the reserve; a FOB stock has no reserve.
+	static int Loadable(string side, string baseId)
+	{
+		int stock = CLW_SupplyStore.Get(side, baseId);
+		if (CLW_SupplyStore.HasOwnStock(side, baseId))
+			return stock;
+
+		return Math.Max(0, stock - HqReserve());
+	}
+
+	// AI purchase check: true when paying 'cost' leaves the HQ stock at or above the reserve. Otherwise 'why' is the text the LLM sees.
+	static bool CanAiSpend(string side, int cost, out string why)
+	{
+		CLW_WarState war = CLW_GameMode.GetWarState();
+		if (!war)
+			return true;
+
+		int stock = war.GetSupplies(side);
+		int reserve = HqReserve();
+		if (stock - cost >= reserve)
+			return true;
+
+		why = string.Format("HQ reserve: stock %1, reserve %2", stock, reserve);
+		return false;
+	}
+
+	// True when the side is at or over its AI cap (live + pending AI >= cap): any purchase would be refused. Cap 0 = unlimited.
+	static bool AiCapFull(string side, out int live, out int cap)
+	{
+		CLW_WarState war = CLW_GameMode.GetWarState();
+		CLW_ForceSpawner spawner = CLW_GameMode.GetForceSpawner();
+		if (!war || !spawner)
+			return false;
+
+		cap = war.GetAiCap(side);
+		live = spawner.GetLiveAI(side) + spawner.GetPendingAI(side);
+		return cap > 0 && live >= cap;
+	}
+
+	// True when 'state' differs from the last state logged under key + side (then it is remembered): log once per change.
+	static bool LogChanged(string key, string side, string state)
+	{
+		string mapKey = key + "|" + side;
+		string last;
+		if (s_mLogState.Find(mapKey, last) && last == state)
+			return false;
+
+		s_mLogState.Set(mapKey, state);
+		return true;
+	}
+}

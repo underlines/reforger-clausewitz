@@ -5,6 +5,31 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 
 ## [Unreleased]
 
+### Added
+- Readable squad names everywhere (`1st Rifle Squad`, `Recon Team 1`, `Motorized Squad 1`, `Mechanized Squad 1`, `Armor 1`, `Supply Truck 1`, `FOB Team 1`, `HQ Garrison`): group list, HQ menu, map markers, situation (`name` per squad; orders keep the `id`). Dismount groups of motorized/mech squads and recon teams are joinable again under their parent's name.
+- HUD: own side's supplies centred in the ticket row.
+- Vehicle depot: one "Request vehicle" action opens a paged vehicle list (category filter: light, motorized, mech, armor, logistics) with the whole side pool incl. pack vehicles (M1 Abrams, M2 Bradley, JLTV); the vehicle spawns at that depot and is paid from that base's stock.
+- In-game map: FOB base marker with its state (`FOB1 (planned)` -> `(building N %)` -> `FOB1`) and following task markers `<unit> -> <destination>` for FOB builders, escorts and convoy trucks; dashboard FOB base icon, status label and arrows builder -> site and truck -> destination; squad names on the dashboard.
+- Rematch in place: after the war ends the results stay `rematchDelaySec` (60 s), then the same session returns to setup without a world reload (no more `JIP_ERROR` kick); leftover AI and vehicles of the finished war are swept. overrides.json `rematch`: `inPlace` | `reload` | `off`.
+- HQ war journal (LLM): per faction intent, 3 goals, 3 lessons (review call every `memory.reviewMin` minutes) and code-counted attack tries/fails, injected into the commander and `/hq` prompts with "do not repeat an attack that failed twice"; dashboard Journal tab and memory toggle. Game reports attack outcomes; objectives carry `side` (left/centre/right) for a flank nudge.
+- Economy guard: mode params `hqReserve` (100) and `convoyMinLoad` (60): AI purchases, the LLM buy action, AI FOB spending and convoys never take the HQ stock below the reserve (player requests still may); no AI buy attempts at the AI cap; idle stand-down check log.
+- overrides.json `sides` / `sidesDefault`: `kinFill` (`missing` | `all`: kin vehicles also for roles the side already has), `kinWeight`, `kinAllInfantry`.
+- Urban HQ sites for random/auto starts: scored search near vehicle roads and villages with room for the base; small replicated obstacles (vegetation, fences, clutter) in a service footprint can be cleared (`Configs/CLW/Placement/ClearRules.conf`); the depot faces the road.
+- Logs: kit purchases (`CLW: kit <player> ... (stock a -> b)`), depot/arsenal supply check 10 s after spawn, depot list size per side.
+
+### Changed
+- Base 30 % tighter: the command post sits on the HQ point, the spawn point right beside it (radius 4 m), arsenal and supply cache around the command post; the vehicle depot about half the old distance, next to a road where one is near.
+- Only the command post gets a request terminal (none at the depot).
+- Time limit can be set from 5 min.
+- The engine game end (`EndGameMode`) is no longer called after a war by default.
+
+### Removed
+- Field hospital (medical service) from base services, the FOB upgrade (tier 2 = vehicle depot only), faction profiles and prop sets.
+
+### Fixed
+- Supplies drained to ~40 and convoys emptying the HQ to 0.
+- Client map-marker restore ran on every faction flip in the deploy menu; now once per real change.
+
 ## [1.0.0] - 2026-10-12
 
 ### Added
