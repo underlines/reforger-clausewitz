@@ -66,7 +66,8 @@
 //   Cache in dev/tools/.cache/ (world.json, vector/<worldKey>.json, maps/). Overrides: dev/tools/maps/<World>.png + .json.
 //
 // Dashboard (http://127.0.0.1:8788/, static files from dev/tools/dashboard/):
-//   GET  /api/state   -> factions, latest situations/orders, recent exchanges (ring of 100), counters, config (no secrets)
+//   GET  /api/state   -> factions, latest situations/orders, recent exchanges (ring of 100), counters, config (no secrets);
+//                        activeFactions = factions of the current war (same war epoch, last post <= staleAfterSec of the newest post)
 //   GET  /api/config  -> current settings; apiKey is reported only as {apiKeySet, apiKeyLast4}
 //   POST /api/config  -> change settings (JSON, localhost Origin/Host only), persisted to sidecar-config.json
 //   POST /api/usage/refresh -> re-poll the OpenRouter key budget now -> {ok,usage}
@@ -957,7 +958,10 @@ async function handleOrders(req, res) {
     const eventLog = [...(old?.eventLog ?? [])];
     for (const text of newEvents.slice().reverse()) eventLog.unshift({ ts: state.lastRequestTs, time: isNum(sit.time) ? sit.time : null, text });
     if (eventLog.length > 40) eventLog.length = 40;
-    state.factions[faction] = { ts: state.lastRequestTs, situation: sit, orders: keepOld ? (old?.orders ?? []) : r.orders,
+    // war epoch (read-only bookkeeping for activeFactions): a faction whose game time went backwards starts a new epoch, unless it
+    // is catching up with an epoch another faction already started.
+    if (old && (old.epoch ?? 0) === (state.epoch ?? 0) && isNum(old.situation?.time) && isNum(sit.time) && sit.time < old.situation.time - 5) state.epoch = (state.epoch ?? 0) + 1;
+    state.factions[faction] = { ts: state.lastRequestTs, epoch: state.epoch ?? 0, situation: sit, orders: keepOld ? (old?.orders ?? []) : r.orders,
       buy: keepOld ? (old?.buy ?? []) : (r.buy ?? []), missions: keepOld ? (old?.missions ?? []) : (r.missions ?? []), eventLog, prevPos, orderTs };
   }
   if (!r.gated) state.exchanges.unshift({
@@ -1160,13 +1164,24 @@ function handleWorldApi(req, res, url) {
   return false;
 }
 
+// Factions of the CURRENT war (generic, no names): same epoch as the newest post and last post within STALE_FACTION_MS of the newest one.
+// Setup-phase factions that stopped posting after the host picked other factions, or factions of a previous war, drop out.
+const STALE_FACTION_MS = 60_000;
+function activeFactions() {
+  const es = Object.entries(state.factions);
+  if (!es.length) return [];
+  const ep = state.epoch ?? 0, newest = Math.max(...es.map(([, e]) => e.ts ?? 0));
+  return es.filter(([, e]) => (e.epoch ?? 0) === ep && (e.ts ?? 0) >= newest - STALE_FACTION_MS).map(([n]) => n).sort();
+}
+
 async function handleApi(req, res, url) {
   if (!hostOk(req)) return send(res, 403, { error: "forbidden host" });
   if (handleWorldApi(req, res, url) !== false) return;
   if (req.method === "GET" && url === "/api/state") {
     return send(res, 200, {
       now: Date.now(), startedAt: state.startedAt, lastRequestTs: state.lastRequestTs,
-      factions: state.factions, exchanges: state.exchanges, counters: state.counters, config: publicConfig(), usage: usageView(), scheduler: schedulerView(), paused,
+      factions: state.factions, activeFactions: activeFactions(), staleAfterSec: STALE_FACTION_MS / 1000,
+      exchanges: state.exchanges, counters: state.counters, config: publicConfig(), usage: usageView(), scheduler: schedulerView(), paused,
     });
   }
   if (req.method === "POST" && url === "/api/pause") {

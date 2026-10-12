@@ -25,6 +25,7 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 ### Changed
 - Sidecar system prompt rewritten for protocol v2 (war doctrine, combined arms, field reference, reply schema); fake provider has a simple v2 doctrine (buy, attack nearest foreign objective, defend threatened, offers for human squads).
 - Dashboard faction colours are derived from the faction keys instead of fixed US/USSR names.
+- Dashboard split into views (Overview, Map, Forces, HQ / LLM, Missions, Usage & Config; selected tab remembered, deep link via `#tab`); factions of a previous war or setup phase are hidden (`activeFactions` in `/api/state`, toggle "show inactive factions").
 
 ## [0.2.0] - 2026-10-12
 

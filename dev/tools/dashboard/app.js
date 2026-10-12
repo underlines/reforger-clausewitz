@@ -79,17 +79,25 @@ function hatchPattern(ctx) {
 }
 
 // ---------- data ----------
-function useState2() {
-  const [st, setSt] = useState({ offline: true, factions: {}, exchanges: [], counters: {}, config: {} });
+// Only the factions of the CURRENT war are shown (server-side `activeFactions`: same war epoch, posted within staleAfterSec of the newest post).
+// showInactive keeps everything (debugging). Without activeFactions (older sidecar) nothing is hidden.
+function deriveState(raw, showInactive) {
+  const all = Object.keys(raw.factions ?? {});
+  if (!Array.isArray(raw.activeFactions) || showInactive) return { ...raw, hidden: [] };
+  const act = new Set(raw.activeFactions), pick = (o) => Object.fromEntries(Object.entries(o ?? {}).filter(([k]) => act.has(k)));
+  return { ...raw, factions: pick(raw.factions), scheduler: pick(raw.scheduler), exchanges: (raw.exchanges ?? []).filter((x) => act.has(x.faction)), hidden: all.filter((k) => !act.has(k)) };
+}
+function useState2(showInactive) {
+  const [raw, setRaw] = useState({ offline: true, factions: {}, exchanges: [], counters: {}, config: {} });
   const poll = useCallback(async () => {
     try {
       const r = await fetch("/api/state", { cache: "no-store" });
       const j = await r.json();
-      setFactions(j);
-      setSt({ ...j, offline: false, recvAt: Date.now() });
-    } catch { setSt((s) => ({ ...s, offline: true })); }
+      setRaw({ ...j, offline: false, recvAt: Date.now() });
+    } catch { setRaw((s) => ({ ...s, offline: true })); }
   }, []);
   useEffect(() => { poll(); const t = setInterval(poll, 2000); return () => clearInterval(t); }, [poll]);
+  const st = useMemo(() => { const d = deriveState(raw, showInactive); setFactions(d); return d; }, [raw, showInactive]);
   return [st, poll];
 }
 
@@ -212,7 +220,7 @@ function Strip({ st, toast, refresh }) {
 }
 
 // ---------- map (canvas renderer with pan/zoom, tooltips, layers) ----------
-function MapPanel({ st, faction, rows, sel, onSel, layers, world }) {
+function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall }) {
   const box = useRef(), cv = useRef();
   const view = useRef({ s: 0.1, ox: 0, oy: 0, fitted: false });
   const hits = useRef([]);
@@ -537,7 +545,7 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world }) {
     if (d && d.moved < 4) { const [mx, my] = local(e), h = pick(mx, my, true); onSel(h ? h.key : null); }
   };
 
-  return html`<section class="panel">
+  return html`<section class=${"panel" + (tall ? " tall" : "")}>
     <h2>Map <span class="sub">${Math.round(ext.x1 - ext.x0)} x ${Math.round(ext.z1 - ext.z0)} m, x east / z north${world.map?.status === "resolving" ? ", loading map image..." : ""}</span></h2>
     <div class="mapbox" ref=${box}>
       <canvas ref=${cv} onMouseDown=${onDown} onMouseMove=${onMove} onMouseUp=${onUp}
@@ -726,36 +734,186 @@ function useWorld() {
   return w;
 }
 
-// ---------- HQ view ----------
+// ---------- views ----------
 const LAYER_KEY = "clw.mapLayers";
 const LAYER_DEFAULTS = { image: true, roads: true, buildings: true, objects: true, places: true, grid: true, objectives: true, squads: true, contacts: true, orders: true, labels: true, flip: false, dim: 0.8 };
 function loadLayers() {
   try { return { ...LAYER_DEFAULTS, ...JSON.parse(localStorage.getItem(LAYER_KEY) ?? "{}") }; } catch { return { ...LAYER_DEFAULTS }; }
 }
-function HQ({ st }) {
-  const [faction, setFaction] = useState("all");
-  const [sel, setSel] = useState(null);
-  const [layers, setLayers] = useState(loadLayers);
-  const world = useWorld();
-  useEffect(() => { try { localStorage.setItem(LAYER_KEY, JSON.stringify(layers)); } catch { /* storage unavailable */ } }, [layers]);
+const ago = (st, ts) => (ts ? `${Math.max(0, Math.round(((st.now ?? Date.now()) - ts) / 1000))} s ago` : "-");
+
+// Faction selector + "show inactive" toggle; shared by all views (except Usage & Config).
+function FactionBar({ names, faction, setFaction, hidden, showInactive, setShowInactive }) {
+  return html`<div class="toolbar subbar">
+    <div class="seg">${["all", ...names].map((n) => html`<button key=${n} class=${faction === n ? "on" : ""} onClick=${() => setFaction(n)}>${n}</button>`)}</div>
+    <label class="toggles inact" title="Factions that stopped posting (setup-phase factions before the host picked others, or a previous war) are hidden. Show them for debugging.">
+      <span><input type="checkbox" checked=${showInactive} onChange=${(e) => setShowInactive(e.target.checked)} /> show inactive factions${hidden.length ? ` (${hidden.length} hidden: ${hidden.join(", ")})` : ""}</span></label>
+  </div>`;
+}
+
+// ---- Overview ----
+function OwnerBar({ st }) {
+  const { objs } = publicPicture(st);
+  if (!objs.length) return null;
+  const wt = (o) => (num(o.value) && o.value > 0 ? o.value : 1), tot = objs.reduce((n, o) => n + wt(o), 0), by = new Map();
+  for (const o of objs) { const k = o.owner && o.owner !== "none" ? o.owner : ""; by.set(k, (by.get(k) ?? 0) + wt(o)); }
+  const keys = [...by.keys()].sort((a, b) => (a === "" ? 1 : b === "" ? -1 : a < b ? -1 : 1));
+  const contested = objs.filter((o) => o.contested).length;
+  return html`<section class="panel"><h2>Objective control <span class="sub">${objs.length} points, weighted by value${contested ? `, ${contested} contested` : ""}</span></h2><div class="cfgbody">
+    <div class="ownbar">${keys.map((k) => html`<i key=${k} style=${{ width: (100 * by.get(k) / tot) + "%", background: k ? colorOf(k) : NEUTRAL }} title=${(k || "neutral") + ": " + by.get(k) + " / " + tot}></i>`)}</div>
+    <div class="ownleg">${keys.map((k) => html`<span key=${k}><b class=${k ? facClass(k) : "f-none"}>${k || "neutral"}</b> <span class="muted">${by.get(k)} / ${tot}</span></span>`)}</div></div></section>`;
+}
+function ForceSummary({ st, rows }) {
   const names = Object.keys(st.factions ?? {}).sort();
-  const rows = useMemo(() => buildRows(st, faction), [st, faction]);
-  const tog = (k) => html`<label><input type="checkbox" checked=${layers[k]} onChange=${() => setLayers((l) => ({ ...l, [k]: !l[k] }))} /> ${k}</label>`;
-  return html`<main>
+  if (!names.length) return null;
+  return html`<section class="panel"><h2>Forces <span class="sub">per side</span></h2><div class="scroll"><table>
+    <thead><tr><th>Faction</th><th>Squads</th><th>Soldiers</th><th>By kind</th><th>Human-led</th><th>Contacts</th><th>Updated</th></tr></thead><tbody>
+    ${names.map((f) => {
+      const e = st.factions[f], sit = e.situation ?? {}, mine = rows.filter((r) => r.faction === f), kinds = new Map();
+      for (const r of mine) kinds.set(r.kind || "?", (kinds.get(r.kind || "?") ?? 0) + 1);
+      const ag = mine.reduce((n, r) => n + (num(r.agents) ? r.agents : 0), 0), st0 = mine.reduce((n, r) => n + (num(r.agents) ? (num(r.pct) && r.pct > 0 ? Math.round(r.agents * 100 / r.pct) : r.agents) : 0), 0);
+      return html`<tr key=${f}><td class=${facClass(f)}>${f}</td><td>${mine.length}</td><td class="mono">${ag}${st0 > ag ? html`<span class="muted"> / ${st0}</span>` : ""}</td>
+        <td>${[...kinds.entries()].map(([k, n]) => html`<span class=${"badge kind k-" + k} key=${k}>${kindLabel(k)} ${n}</span> `)}</td>
+        <td>${mine.filter((r) => r.human).length}</td><td>${Array.isArray(sit.contacts) ? sit.contacts.length : 0}</td><td class="muted">${ago(st, e.ts)}</td></tr>`;
+    })}</tbody></table></div></section>`;
+}
+function Overview({ st, faction, rows }) {
+  return html`<main class="view">
+    <${WarStrip} st=${st} faction=${faction} />
+    <div class="grid" style=${{ marginTop: "12px" }}>
+      <div class="col"><${OwnerBar} st=${st} /><${ObjectivesPanel} st=${st} /></div>
+      <div class="col"><${ForceSummary} st=${st} rows=${rows} /><${EventsPanel} st=${st} faction=${faction} /></div>
+    </div>
+    ${!Object.keys(st.factions ?? {}).length && html`<div class="empty">No data yet: waiting for the game to post a situation.</div>`}</main>`;
+}
+
+// ---- Map ----
+function SelCard({ rows, sel }) {
+  const r = sel ? rows.find((x) => x.key === sel) : null;
+  if (!r) return html`<div class="muted selcard">Click a squad on the map to see its details.</div>`;
+  const o = r.obj;
+  return html`<div class="selcard"><b class=${facClass(r.faction)}>${r.id}</b> ${r.kind ? html`<span class=${"badge kind k-" + r.kind}>${kindLabel(r.kind)}</span>` : ""} <span class=${"badge " + stateBadge(r.state)}>${r.state}</span>
+    <span class="muted">${r.size} soldiers${r.pct !== null ? ", " + r.pct + "%" : ""}${r.vehicle ? ", " + dash(r.vehicle.type) + (r.vehicle.mounted ? " (mounted)" : " (dismounted)") : ""}, ${r.move}, at ${r.posTxt}</span>
+    ${o ? html` <span class=${"cmd " + o.command}>${o.command}</span> ${o.target ?? ""} <span class="muted">${o.reason ?? ""}</span>` : ""}${r.human ? html` <span class="badge human">human</span>` : ""}</div>`;
+}
+function MapView({ st, faction, rows, sel, onSel, layers, setLayers, world }) {
+  const tog = (k) => html`<label key=${k}><input type="checkbox" checked=${layers[k]} onChange=${() => setLayers((l) => ({ ...l, [k]: !l[k] }))} /> ${k}</label>`;
+  return html`<main class="view">
     <div class="toolbar">
-      <div class="seg">${["all", ...names].map((n) => html`<button class=${faction === n ? "on" : ""} onClick=${() => setFaction(n)}>${n}</button>`)}</div>
-      <div class="toggles">${["grid", "objectives", "squads", "contacts", "orders", "labels"].map(tog)}</div>
+      <div class="toggles nomargin">${["grid", "objectives", "squads", "contacts", "orders", "labels"].map(tog)}</div>
       <div class="toggles" title="Map background: toggles, image opacity; flip = image y axis inverted (calibration)">
         ${["image", "roads", "buildings", "objects", "places", "flip"].map(tog)}
         <span class="muted" title="Objects key: diamond = base, triangle over a bar = airport, ring = port. Buildings: grey = house, large = bigger than 250 m2, orange = military / industrial">◆ base ▲ airport ◎ port</span>
         <label>dim <input type="range" min="0.1" max="1" step="0.05" value=${layers.dim} onInput=${(e) => setLayers((l) => ({ ...l, dim: Number(e.target.value) }))} style=${{ width: "80px", verticalAlign: "middle" }} /></label>
       </div>
     </div>
-    <div class="grid">
-      <div class="col"><${WarStrip} st=${st} faction=${faction} /><${MapPanel} st=${st} faction=${faction} rows=${rows} sel=${sel} onSel=${setSel} layers=${layers} world=${world} /><${SquadsTable} rows=${rows} sel=${sel} onSel=${setSel} /></div>
-      <div class="col"><${ObjectivesPanel} st=${st} /><${Sitrep} st=${st} faction=${faction} /><${EventsPanel} st=${st} faction=${faction} /><${Log} st=${st} faction=${faction} /></div>
-    </div></main>`;
+    <${MapPanel} st=${st} faction=${faction} rows=${rows} sel=${sel} onSel=${onSel} layers=${layers} world=${world} tall=${true} />
+    <${SelCard} rows=${rows} sel=${sel} /></main>`;
 }
+
+// ---- Forces ----
+function CatalogPanel({ st, f }) {
+  const e = st.factions[f], sit = e.situation ?? {}, sup = sit.war?.supplies;
+  const cat = (Array.isArray(sit.catalog) ? sit.catalog : []).filter((c) => c && typeof c.type === "string").sort((a, b) => (num(a.cost) ? a.cost : 1e9) - (num(b.cost) ? b.cost : 1e9));
+  return html`<section class="panel"><h2><span class=${facClass(f)}>${f}</span> buy list <span class="sub">supplies ${dash(sup)}${num(sit.war?.income) ? ` (+${sit.war.income}/min)` : ""}, AI ${dash(sit.war?.liveAI)}/${dash(sit.war?.aiCap)}, vehicles ${dash(sit.war?.vehicles)}/${dash(sit.war?.vehicleCap)}</span></h2><div class="scroll"><table>
+    <thead><tr><th>Type</th><th>Kind</th><th>Cost</th><th>Affordable</th><th>Description</th></tr></thead><tbody>
+    ${cat.map((c) => html`<tr key=${c.type}><td><b>${c.type}</b></td><td>${c.kind ? html`<span class=${"badge kind k-" + c.kind}>${kindLabel(c.kind)}</span>` : "-"}</td><td class="mono">${dash(c.cost)}</td>
+      <td>${num(c.cost) && num(sup) ? html`<span class=${"badge " + (c.cost <= sup ? "ok" : "bad")}>${c.cost <= sup ? "yes" : "short " + (c.cost - sup)}</span>` : "-"}</td><td class="wrap muted">${dash(c.desc)}</td></tr>`)}
+    </tbody></table>${!cat.length && html`<div class="empty">No catalog reported.</div>`}</div></section>`;
+}
+function PurchasesPanel({ st, faction }) {
+  const list = [];
+  for (const x of st.exchanges ?? []) if ((faction === "all" || x.faction === faction) && x.buy?.length) for (const b of x.buy) list.push({ ts: x.ts, faction: x.faction, ...b });
+  return html`<section class="panel"><h2>Purchases <span class="sub">decided by the HQ, this sidecar session</span></h2><div class="scroll"><table>
+    <thead><tr><th>Time</th><th>Faction</th><th>Order</th><th>Reason</th></tr></thead><tbody>
+    ${list.slice(0, 60).map((b, i) => html`<tr key=${i}><td class="mono muted">${new Date(b.ts).toLocaleTimeString()}</td><td class=${facClass(b.faction)}>${b.faction}</td><td><b>${b.count}x ${b.type}</b></td><td class="wrap muted">${dash(b.reason)}</td></tr>`)}
+    </tbody></table>${!list.length && html`<div class="empty">No purchases yet.</div>`}</div></section>`;
+}
+function ForcesView({ st, faction, rows, sel, onSel }) {
+  const names = Object.keys(st.factions ?? {}).filter((f) => faction === "all" || f === faction).sort();
+  return html`<main class="view forces">
+    <${ForceSummary} st=${st} rows=${rows.filter((r) => faction === "all" || r.faction === faction)} />
+    <${SquadsTable} rows=${rows} sel=${sel} onSel=${onSel} />
+    <div class="grid2">${names.map((f) => html`<${CatalogPanel} key=${f} st=${st} f=${f} />`)}</div>
+    <${PurchasesPanel} st=${st} faction=${faction} /></main>`;
+}
+
+// ---- HQ / LLM ----
+function Decision({ st, f }) {
+  const exs = (st.exchanges ?? []).filter((x) => x.faction === f);
+  const x = exs.find((e) => !(e.ok && String(e.reason ?? "").startsWith("skipped"))) ?? exs[0];
+  const sc = st.scheduler?.[f];
+  const e = st.factions[f];
+  const dropLabel = (d) => { const k = Object.keys(d).find((q) => q !== "reason"); return k ? `${k}: ${J(d[k])}` : ""; };
+  return html`<section class="panel"><h2><span class=${facClass(f)}>${f}</span> HQ decision <span class="sub">${x ? new Date(x.ts).toLocaleTimeString() : "no exchange yet"}</span></h2><div class="cfgbody">
+    ${sc && html`<div class="muted" title=${(sc.lastWakeTriggers ?? []).join("\n")}>Scheduler: next call ${sc.manual ? "pending (wake)" : sc.nextDueInSec > 0 ? "in " + sc.nextDueInSec + " s" : "due"}, interval ${dash(sc.intervalSec)} s (chosen ${dash(sc.chosenSec)} s${sc.chosenReason ? ": " + sc.chosenReason : ""}), budget stretch x${(sc.stretch ?? 1).toFixed(2)},
+      last wake ${sc.lastWakeReason ?? "-"}${sc.lastWakeTriggers?.length ? " (" + sc.lastWakeTriggers.join("; ") + ")" : ""}, last LLM call ${sc.lastLlmAgoSec === null || sc.lastLlmAgoSec === undefined ? "never" : sc.lastLlmAgoSec + " s ago"}, gated polls ${sc.gated ?? 0}${sc.failed ? ", last call FAILED (rule fallback)" : ""}</div>`}
+    ${!x ? html`<div class="empty">No exchange for this faction yet.</div>` : html`
+      <div class="hdr">${x.ok ? html`<span class=${"badge " + (x.orders.length || x.buy?.length || x.missions?.length ? "ok" : "warn")}>ok</span>` : html`<span class="badge bad">fallback: ${x.reason}</span>`}
+        <span class="muted">${x.provider}${x.model ? " / " + x.model : ""}, ${x.latencyMs} ms${x.usage ? `, ${x.usage.input}/${x.usage.output} tok` : ""}${num(x.usage?.cost) ? `, $${x.usage.cost.toFixed(4)}` : ""}</span>
+        ${x.wake && html`<span class="badge info" title=${x.wake.triggers?.join("\n") ?? ""}>wake: ${x.wake.reason}</span>`}
+        ${x.nextCheck && html`<span class="muted">next check ${x.nextCheck.sec} s${x.nextCheck.reason ? ": " + x.nextCheck.reason : ""}</span>`}${x.keep ? html`<span class="badge info">keep</span>` : ""}</div>
+      <h3 class="cfgh">Orders applied (${x.orders.length})</h3>
+      ${x.orders.length ? html`<table><thead><tr><th>Squad</th><th>Command</th><th>Target</th><th>Reason</th></tr></thead><tbody>${x.orders.map((o, i) => html`<tr key=${i}><td><b>${o.squad}</b></td><td><span class=${"cmd " + o.command}>${o.command}</span></td>
+        <td class="mono">${o.target ?? gridTxt(Array.isArray(o.pos) ? [o.pos[0], 0, o.pos[1]] : null)}</td><td class="wrap muted">${dash(o.reason)}</td></tr>`)}</tbody></table>` : html`<div class="dim">none</div>`}
+      ${x.buy?.length ? html`<h3 class="cfgh">Buy (${x.buy.length})</h3><table><tbody>${x.buy.map((b, i) => html`<tr key=${i}><td><b>${b.count}x ${b.type}</b></td><td class="wrap muted">${dash(b.reason)}</td></tr>`)}</tbody></table>` : ""}
+      ${x.missions?.length ? html`<h3 class="cfgh">Mission offers</h3><table><tbody>${x.missions.flatMap((m) => m.offers.map((o, i) => html`<tr key=${m.squad + i}><td><b>${m.squad}</b></td><td>${o.kind}</td><td class="mono">${o.target ?? gridTxt(Array.isArray(o.pos) ? [o.pos[0], 0, o.pos[1]] : null)}</td><td class="wrap muted">${dash(o.brief)}</td></tr>`))}</tbody></table>` : ""}
+      ${x.dropped?.length ? html`<h3 class="cfgh">Dropped (${x.dropped.length})</h3><table><tbody>${x.dropped.map((d, i) => html`<tr key=${i}><td class="wrap mono">${dropLabel(d)}</td><td class="wrap"><span class="badge warn">${d.reason}</span></td></tr>`)}</tbody></table>` : ""}
+      ${x.request?.events?.length ? html`<details><summary class="muted">Events in this request (${x.request.events.length})</summary><pre>${x.request.events.join("\n")}</pre></details>` : ""}
+      <details><summary class="muted">Raw LLM reply</summary><pre>${x.rawReply != null ? x.rawReply : "(no raw reply: rules / fake / skipped)"}</pre></details>`}
+    ${e.orders?.length ? html`<div class="muted">Standing orders in the game: ${e.orders.length}</div>` : ""}
+  </div></section>`;
+}
+function HqView({ st, faction }) {
+  const names = Object.keys(st.factions ?? {}).filter((f) => faction === "all" || f === faction).sort();
+  return html`<main class="view">
+    <div class="grid2">${names.map((f) => html`<${Decision} key=${f} st=${st} f=${f} />`)}</div>
+    <div class="grid" style=${{ marginTop: "12px" }}><div class="col"><${Log} st=${st} faction=${faction} /></div><div class="col"><${Sitrep} st=${st} faction=${faction} /></div></div></main>`;
+}
+
+// ---- Missions (human squad leaders) ----
+function MissionsView({ st, faction, rows }) {
+  const humans = rows.filter((r) => r.human);
+  const offers = [];
+  for (const f of Object.keys(st.factions ?? {})) if (faction === "all" || f === faction) for (const m of st.factions[f].missions ?? []) for (const o of m.offers ?? []) offers.push({ faction: f, squad: m.squad, ...o });
+  const hist = [];
+  for (const x of st.exchanges ?? []) if ((faction === "all" || x.faction === faction) && x.missions?.length) for (const m of x.missions) for (const o of m.offers ?? []) hist.push({ ts: x.ts, faction: x.faction, squad: m.squad, ...o });
+  const evs = [];
+  for (const f of Object.keys(st.factions ?? {})) if (faction === "all" || f === faction) for (const e of st.factions[f].eventLog ?? []) if (/mission/i.test(e.text)) evs.push({ ...e, faction: f });
+  evs.sort((a, b) => b.ts - a.ts);
+  const stBadge = (s) => (s === "accepted" ? "ok" : s === "offered" ? "warn" : s === "completed" ? "info" : "");
+  return html`<main class="view">
+    <section class="panel"><h2>Human-led squads <span class="sub">${humans.length}</span></h2><div class="scroll"><table>
+      <thead><tr><th>Squad</th><th>Faction</th><th>Mission</th><th>Kind</th><th>Target</th><th>State</th><th>Position x, z</th></tr></thead><tbody>
+      ${humans.map((r) => html`<tr key=${r.key}><td><b>${r.id}</b></td><td class=${facClass(r.faction)}>${r.faction}</td>
+        <td>${r.mission ? html`<span class=${"badge " + stBadge(r.mission.state)}>${r.mission.state}</span>` : html`<span class="dim">none</span>`}</td><td>${dash(r.mission?.kind)}</td><td>${dash(r.mission?.target)}</td>
+        <td><span class=${"badge " + stateBadge(r.state)}>${r.state}</span></td><td class="mono">${r.posTxt}</td></tr>`)}</tbody></table>
+      ${!humans.length && html`<div class="empty">No human-led squads right now.</div>`}</div></section>
+    <div class="grid2" style=${{ marginTop: "12px" }}>
+      <section class="panel"><h2>Current offers <span class="sub">latest HQ reply</span></h2><div class="scroll"><table>
+        <thead><tr><th>Faction</th><th>Squad</th><th>Kind</th><th>Target</th><th>Brief</th></tr></thead><tbody>
+        ${offers.map((o, i) => html`<tr key=${i}><td class=${facClass(o.faction)}>${o.faction}</td><td><b>${o.squad}</b></td><td>${o.kind}</td><td class="mono">${o.target ?? gridTxt(Array.isArray(o.pos) ? [o.pos[0], 0, o.pos[1]] : null)}</td><td class="wrap muted">${dash(o.brief)}</td></tr>`)}</tbody></table>
+        ${!offers.length && html`<div class="empty">No LLM offers pending (without them the game plans offers itself).</div>`}</div></section>
+      <section class="panel"><h2>Mission events <span class="sub">offered / accepted / completed / failed</span></h2><div class="scroll"><table><tbody>
+        ${evs.slice(0, 40).map((e, i) => html`<tr key=${i}><td class="mono muted">${new Date(e.ts).toLocaleTimeString()}</td><td class=${facClass(e.faction)}>${e.faction}</td><td class="wrap">${e.text}</td></tr>`)}</tbody></table>
+        ${!evs.length && html`<div class="empty">No mission events yet.</div>`}</div></section>
+    </div>
+    <section class="panel" style=${{ marginTop: "12px" }}><h2>Offer history <span class="sub">from HQ replies this session</span></h2><div class="scroll"><table>
+      <thead><tr><th>Time</th><th>Faction</th><th>Squad</th><th>Kind</th><th>Target</th><th>Brief</th></tr></thead><tbody>
+      ${hist.slice(0, 60).map((o, i) => html`<tr key=${i}><td class="mono muted">${new Date(o.ts).toLocaleTimeString()}</td><td class=${facClass(o.faction)}>${o.faction}</td><td><b>${o.squad}</b></td><td>${o.kind}</td><td class="mono">${o.target ?? gridTxt(Array.isArray(o.pos) ? [o.pos[0], 0, o.pos[1]] : null)}</td><td class="wrap muted">${dash(o.brief)}</td></tr>`)}</tbody></table>
+      ${!hist.length && html`<div class="empty">No offers yet.</div>`}</div></section></main>`;
+}
+
+// ---- tabs ----
+const TABS = [["overview", "Overview"], ["map", "Map"], ["forces", "Forces"], ["hq", "HQ / LLM"], ["missions", "Missions"], ["usage", "Usage & Config"]];
+const TAB_KEY = "clw.tab", INACT_KEY = "clw.showInactive";
+const tabOf = (s) => { const k = String(s ?? "").replace(/^#/, ""), t = k === "config" ? "usage" : k; return TABS.some(([id]) => id === t) ? t : null; };
+function loadTab() {
+  let saved = null;
+  try { saved = localStorage.getItem(TAB_KEY); } catch { /* storage unavailable */ }
+  return tabOf(location.hash) ?? tabOf(saved) ?? "overview";
+}
+function loadInactive() { try { return localStorage.getItem(INACT_KEY) === "1"; } catch { return false; } }
 
 // ---------- configuration view ----------
 async function postJson(url, body) {
@@ -840,7 +998,7 @@ function Config({ st, toast, refresh }) {
     } catch (err) { setTest({ ok: false, error: err.message }); toast("Error: " + err.message, "err"); }
     setBusy(false);
   };
-  return html`<main><div class="cfgwrap"><section class="panel"><h2>Configuration <span class="sub">saved to dev/tools/sidecar-config.json</span></h2>
+  return html`<main class="view"><div class="cfgwrap">${st.usage?.enabled && html`<${UsageCard} u=${st.usage} now=${st.now} toast=${toast} refresh=${refresh} />`}<section class="panel" style=${{ marginTop: "12px" }}><h2>Configuration <span class="sub">saved to dev/tools/sidecar-config.json</span></h2>
     <form class="cfgbody" onSubmit=${save} autocomplete="off">
       <label class="field"><span>Provider</span><select value=${f.provider} onChange=${(e) => set("provider", e.target.value)}>
         <option value="fake">fake (rule-based stub, no network)</option>
@@ -886,7 +1044,6 @@ function Config({ st, toast, refresh }) {
       ${test && html`<pre>${test.pending ? "testing with the form values (nothing is saved)..." : J(test)}</pre>`}
     </form></section>
     <${MapCard} toast=${toast} />
-    ${st.config?.provider === "openrouter" && f.provider === "openrouter" && html`<${UsageCard} u=${st.usage} now=${st.now} toast=${toast} refresh=${refresh} />`}
     </div></main>`;
 }
 
@@ -930,7 +1087,7 @@ function UsageCard({ u, now, toast, refresh }) {
   const models = Object.entries(s.byModel ?? {}).sort((a, c) => c[1].cost - a[1].cost);
   const facs = Object.entries(s.byFaction ?? {}).sort((a, c) => c[1].cost - a[1].cost);
   const polled = k?.ts ? `${Math.round(((now ?? Date.now()) - k.ts) / 1000)} s ago` : "never";
-  return html`<section class="panel" style=${{ marginTop: "12px" }}><h2>Usage <span class="sub">OpenRouter${d?.label ? " key " + d.label : ""}</span></h2>
+  return html`<section class="panel"><h2>Usage <span class="sub">OpenRouter${d?.label ? " key " + d.label : ""}</span></h2>
     <div class="cfgbody">
       ${b && b.level !== "ok" && html`<div class=${"banner " + (b.level === "warn" ? "warn" : "bad")}>${b.level === "reached"
         ? `Spending limit reached (${usd(b.limit)}).${u.stopAtLimit ? " Provider calls are stopped; the game uses its rule commander until budget is available again." : ""}`
@@ -954,18 +1111,36 @@ function UsageCard({ u, now, toast, refresh }) {
 
 // ---------- app ----------
 function App() {
-  const [st, refresh] = useState2();
-  const [hash, setHash] = useState(location.hash);
+  const [showInactive, setShowInactive] = useState(loadInactive);
+  const [st, refresh] = useState2(showInactive);
+  const [tab, setTab] = useState(loadTab);
+  const [faction, setFaction] = useState("all");
+  const [sel, setSel] = useState(null);
+  const [layers, setLayers] = useState(loadLayers);
   const [toasts, toast] = useToasts();
-  useEffect(() => { const h = () => setHash(location.hash); window.addEventListener("hashchange", h); return () => window.removeEventListener("hashchange", h); }, []);
-  const cfg = hash === "#config";
+  const world = useWorld();
+  useEffect(() => { const h = () => { const t = tabOf(location.hash); if (t) setTab(t); }; window.addEventListener("hashchange", h); return () => window.removeEventListener("hashchange", h); }, []);
+  useEffect(() => { try { localStorage.setItem(TAB_KEY, tab); } catch { /* storage unavailable */ } }, [tab]);
+  useEffect(() => { try { localStorage.setItem(INACT_KEY, showInactive ? "1" : "0"); } catch { /* storage unavailable */ } }, [showInactive]);
+  useEffect(() => { try { localStorage.setItem(LAYER_KEY, JSON.stringify(layers)); } catch { /* storage unavailable */ } }, [layers]);
+  const names = Object.keys(st.factions ?? {}).sort();
+  const fac = faction === "all" || names.includes(faction) ? faction : "all"; // a selected faction that became inactive falls back to all
+  const rows = useMemo(() => buildRows(st, fac), [st, fac]);
+  const go = (id) => (e) => { e.preventDefault(); setTab(id); try { history.replaceState(null, "", "#" + id); } catch { location.hash = id; } };
+  const common = { st, faction: fac, rows, sel, onSel: setSel };
   return html`<div>
     <header class="topbar">
       <div class="brand"><span class="logo"><${Icon} n="logo" /></span>Clausewitz HQ</div>
-      <nav><a href="#hq" class=${cfg ? "" : "active"}>HQ</a><a href="#config" class=${cfg ? "active" : ""}>Configuration</a></nav>
+      <nav>${TABS.map(([id, label]) => html`<a key=${id} href=${"#" + id} class=${tab === id ? "active" : ""} onClick=${go(id)}>${label}</a>`)}</nav>
       <${Strip} st=${st} toast=${toast} refresh=${refresh} />
     </header>
-    ${cfg ? html`<${Config} st=${st} toast=${toast} refresh=${refresh} />` : html`<${HQ} st=${st} />`}
+    ${tab !== "usage" && html`<div class="subwrap"><${FactionBar} names=${names} faction=${fac} setFaction=${setFaction} hidden=${st.hidden ?? []} showInactive=${showInactive} setShowInactive=${setShowInactive} /></div>`}
+    ${tab === "overview" && html`<${Overview} ...${common} />`}
+    ${tab === "map" && html`<${MapView} ...${common} layers=${layers} setLayers=${setLayers} world=${world} />`}
+    ${tab === "forces" && html`<${ForcesView} ...${common} />`}
+    ${tab === "hq" && html`<${HqView} ...${common} />`}
+    ${tab === "missions" && html`<${MissionsView} ...${common} />`}
+    ${tab === "usage" && html`<${Config} st=${st} toast=${toast} refresh=${refresh} />`}
     <div class="toasts">${toasts.map((t) => html`<div class=${"toast " + t.kind} key=${t.id}>${t.text}</div>`)}</div>
   </div>`;
 }
