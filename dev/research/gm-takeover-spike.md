@@ -199,3 +199,53 @@ Pass/fail needs one DS boot each (~25 s) plus a client for steps 3-4; fits one e
 
 Keep the wrapper-world plan (A) for M4; it is independent. Add the step-1/2 test to the M4 e2e session (cheap) to decide whether option C
 is worth scheduling after M4. Do not touch `CLW_GameMode` for this before the test passes.
+
+## 10. Implementation (option C), 2026-10-12
+
+Spike result (DS, GM_Eden / GM_Cain / GM_Arland with `-addons <Clausewitz>`): a modded `SCR_BaseGameMode.OnGameStart` fires in the vanilla GM worlds; the game
+mode is `SCR_GameModeEditor`, factions US / FIA / CIV / USSR exist (not playable), `SCR_LoadoutManager`, `SCR_AIWorld`, `SCR_RespawnSystemComponent` exist,
+0 spawn points. Built from that, code only (not yet run end to end).
+
+**Shape.**
+- `CLW_WarRuntime` (`Scripts/Game/CLW_WarRuntime.c`): a plain holder with everything `CLW_GameMode` used to own (bases, points, war state, registry, catalog,
+  vehicle manager, spawner, activity, contact books / markers / commanders, the OnGameStart bootstrap, scenario resolution, the player-join flow, the
+  timers). One static instance, hosted by exactly one game mode entity (`m_Owner`).
+- `modded class SCR_BaseGameMode` (`CLW_GameModeHooks.c`): `OnGameStart`, `CanPlayerSpawn_S`, `OnControllableDestroyedEx`, `OnPlayerKilledEx`,
+  `OnPlayerSpawnFinalize_S` call `super` and then forward to the runtime only if `CLW_WarRuntime.Of(this)` is set (this entity hosts it). The war status
+  RPC (`CLW_BroadcastWarStatus`, `CLW_RpcAsk_WarStatus`, broadcast) moved here so it works on any subclass instance.
+- `CLW_GameMode` keeps the class name and the prefab attribute `m_ScenarioConfig` (so `CLW_GameMode.et` is unchanged), plus the static API
+  (`GetBases`, `GetControlPoints`, `GetWarState`, `GetRegistry`, `GetForceCatalog`, `GetForceSpawner`, `GetVehicleManager`, `GetCommander`, `GetScenario`),
+  now delegating to the runtime. `GetInstance()` returns the hosting `SCR_BaseGameMode` (nobody outside the file called it).
+- Callers: `CLW_WarStatus.Push` casts the game mode to `SCR_BaseGameMode` (was `CLW_GameMode`); `CLW_ArsenalPool.IsActive` asks `CLW_WarRuntime.IsActive()`
+  (was "game mode is a `CLW_GameMode`": true for our mode, for a taken-over server, and on a client once a war status arrived). Everything else is untouched.
+- Native worlds: `CLW_GameMode` always hosts the runtime on every machine, same call order as before (build line, "game mode started", commanding limit, server
+  block). `RUN_*_SPIKE` code moved along (off).
+
+**Switch.** Server only, default OFF: `-clwTakeover` on the command line, or `"takeover": true` in `$profile:Clausewitz/overrides.json` (`CLW_WarRuntime.TakeoverSwitch`).
+Applies to any game mode entity that is not a `CLW_GameMode`. Off: one line `CLW: takeover off for game mode <class> in <world> ...` and nothing else changes.
+
+**Scenario rule (`CLW_WarRuntime.LoadTakeoverScenario`).** 1. `-clwScenario <name>` (`Configs/CLW/Scenarios/<name>.conf`, `.conf` suffix optional);
+2. the world file name without a leading `GM_` through `CLW_AutoScenario.FindForWorld` (`GM_Arland` -> `Arland.conf`; `GM_Eden` -> none); 3. the normal chain
+(`LoadScenario("")`: by-world with the full name, by-listing, auto scenario). Only public API of `CLW_AutoScenario` / `CLW_ScenarioConfig` is used.
+
+**Spawn logic (option a).** The setup autospawn / forced faction / HQ-squad wait moved from `CLW_SpawnLogic` into a `modded class SCR_MenuSpawnLogic`
+(`CLW_SpawnFlow.c`), gated per instance by `CLW_SpawnFlowActive()`: `CLW_SpawnLogic` is now an empty subclass that returns true (our prefab, behaviour as
+before, no double execution), any other menu logic returns `CLW_WarRuntime.IsTakeover()`. With the flow off every override is a plain `super`.
+
+**GM host check (`CheckHost`, takeover only).** Logs: switch/class/world, faction manager with factions + playable flags, loadout manager, AI world, the
+`ScriptedChatEntity` child, PerceptionManager (spawns `{028DAEAD63E056BE}Prefabs/World/Game/PerceptionManager.et` when `GetPerceptionManager()` is null),
+respawn system and spawn point count, commanding manager, commanding limit. No abort: a missing piece is logged `FAILED` and the bootstrap goes on.
+
+**Log lines (takeover).** `CLW: takeover of <class> in <world> (switch: cli|overrides)`; then `CLW: takeover step <n> <what> ok|FAILED <why>` for: host
+check (switch+class+world, faction manager, loadout manager, ai world, chat entity, perception manager, respawn system, commanding manager, spawn logic),
+action registry, scenario (name), bases, control points, war state, forces, mission board, squad join + group lock, squad registry, faction objects,
+timers; and 12 s later `spawn points after start` (per side), `war state`, `joinable squads`. Scenario choice: `CLW: scenario <name> (source takeover-cli|takeover-by-world|...)`.
+
+**Known gaps / risks.**
+- `modded class SCR_MenuSpawnLogic`: the script-dev skill says a modded `[BaseContainerProps]` class that prefabs reference gave "Unknown class" (seen with
+  `SCR_AutoSpawnLogic` named in OUR prefab). The vanilla GM prefab names `SCR_MenuSpawnLogic`. If the prefab loader rejects it, the GM world has no spawn logic.
+  Fallback: drop the modded class and drive the takeover spawn from the runtime (player registered -> spawn request), not done here.
+- Persistence: none (the `-server <world>` route has no mission `SystemsConfig`). A mission header route (published mod) would add `SCR_PersistenceSystem`: untested.
+- Client side Clausewitz rules (arsenal pool, commanding limit) switch on when the first war status RPC arrives, not at world load.
+- GM rights / voting / editor stay vanilla; the GM can spawn AI which the registry adopts.
+- Pack factions: not in the GM world (same as any wrapper); other spawn logics than `SCR_MenuSpawnLogic` (a map mod with its own GM prefab) are not handled.

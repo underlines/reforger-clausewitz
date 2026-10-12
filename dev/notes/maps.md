@@ -92,3 +92,19 @@ The rule is therefore **no wrapper-internal GUID references**: the generated fil
 addon or the base game, and the world is passed by path (`-server Worlds/CLW_<World>.ent`; its layer is found by path). The generator's reference
 check enforces this on every run. Do not reintroduce a prefab in the wrapper. (The shipped Arland / Eden / Cain wrappers live in the Clausewitz addon,
 whose tracked `resourceDatabase.rdb` Workbench maintains.)
+
+## Run a Game Master world with takeover (no wrapper world)
+Instead of a Clausewitz wrapper, load the map's vanilla Game Master world and let Clausewitz take over its game mode (`SCR_GameModeEditor`; design:
+`dev/research/gm-takeover-spike.md`, "Implementation (option C)"). Server only, default OFF; switch = command line `-clwTakeover` or `"takeover": true` in
+`$profile:Clausewitz/overrides.json` (see `overrides.md`). `start-server.ps1` forwards extra arguments with `-Extra`:
+```powershell
+& "D:\GitHub\ReforgerMods\_dedicated\start-server.ps1" -World "worlds/GameMaster/GM_Eden.ent" -Extra "-clwTakeover"
+# the same by hand:
+# ArmaReforgerServer.exe -server worlds/GameMaster/GM_Eden.ent -addonsDir <...\addons> -addons C1A05E7B3D9F4A28 ... -clwTakeover
+```
+Worlds: `worlds/GameMaster/GM_Eden.ent`, `GM_Cain.ent`, `GM_Arland.ent` (base game, no extra addon). Scenario: `-clwScenario <name>` (a
+`Configs/CLW/Scenarios/<name>.conf`), else the world file name without a leading `GM_` (`GM_Arland` -> `Arland.conf`; `GM_Eden` has none -> the auto
+scenario), else the normal chain. Example: `-Extra "-clwTakeover","-clwScenario","Arland"`.
+What to look for in `console.log`: `CLW: takeover of SCR_GameModeEditor in $ArmaReforger:worlds/GameMaster/GM_Eden.ent (switch: cli)`, then
+`CLW: takeover step <n> <what> ok|FAILED <why>` for every bootstrap step (any `FAILED` names the broken piece), `CLW: scenario <name> (source ...)`,
+`CLW: war RUNNING` after the auto start. Without the switch the log has one line `CLW: takeover off for game mode ...` and the GM world is vanilla.
