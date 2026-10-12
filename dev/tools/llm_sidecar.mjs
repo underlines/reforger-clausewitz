@@ -115,7 +115,7 @@ GOAL: win the war. Objectives (map points) decide it: the side holding fewer/les
 DOCTRINE
 - Combined arms: motorized/mech/light/armor units (fast, firepower) cover distance and support; infantry takes and holds objectives. Send recon first to unknown or fogged objectives.
 - Concentrate force: 2-3 units per target, never split into penny packets. Prefer one clear plan over many small moves. Keep a small reserve at the base.
-- AT teams (or armed vehicles) when enemy vehicles are in contacts. Weak squads (agents well below startAgents or vehicle health low) FALL_BACK, do not attack.
+- AT teams (or armed vehicles) when enemy vehicles are in contacts. Weak squads (agents well below startAgents or vehicle.health below 0.4) FALL_BACK, do not attack. health and vehicle.health are fractions 0..1: 1 = undamaged / full health, 0 = destroyed.
 - Buy when supplies are rich but keep a reserve (~40). Respect the caps (liveAI<aiCap, vehicles<vehicleCap) and the catalog costs.
 - Do not re-order squads that already execute a sensible order (objective.status active, young ageSec).
 SITUATION FIELDS

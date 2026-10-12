@@ -48,6 +48,7 @@ class CLW_Orders
 
 	static const float ARRIVE_M = 40;				// arrived when the unit is this close to the target
 	static const float STABILITY_SEC = 45;			// no re-order within this unless done / failed / weak
+	static const float LLM_PRIORITY_SEC = 120;		// the rule fallback leaves a younger LLM order alone
 	static const float WAYPOINT_GRACE_SEC = 15;		// ignore "no waypoint" this long after issuing
 	static const float STUCK_SEC = 120;				// infantry without progress this long fails its order
 	static const float STUCK_MIN_PROGRESS_M = 15;
@@ -368,6 +369,14 @@ class CLW_Orders
 			if (age < STABILITY_SEC && old.m_sSource == source && !IsWeak(squadId))
 			{
 				why = string.Format("order stable (%1 s old, %2)", Math.Round(age), CLW_Command.ToName(old.m_eCommand));
+				return false;
+			}
+
+			// The rule commander only stands in while the LLM is slow/unavailable: it must not overwrite a fresh LLM order
+			// (seen 2026-10-12: rules ATTACK vs LLM FALL_BACK flip-flopped vehicles at the base for minutes).
+			if (source == SOURCE_RULES && old.m_sSource == SOURCE_LLM && age < LLM_PRIORITY_SEC)
+			{
+				why = string.Format("LLM order is fresh (%1 s old, %2)", Math.Round(age), CLW_Command.ToName(old.m_eCommand));
 				return false;
 			}
 		}
