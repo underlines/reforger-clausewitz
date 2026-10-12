@@ -1024,6 +1024,8 @@ function MissionsView({ st, faction, rows, sel, onSel, layers, world, act }) {
   const evs = [];
   for (const f of Object.keys(st.factions ?? {})) if (faction === "all" || f === faction) for (const e of st.factions[f].eventLog ?? []) if (/mission/i.test(e.text)) evs.push({ ...e, faction: f });
   evs.sort((a, b) => b.ts - a.ts);
+  const noHum = Object.keys(st.factions ?? {}).filter((f) => (faction === "all" || f === faction) && !rows.some((r) => r.human && r.faction === f));
+  const why = noHum.length ? ` HQ only offers missions to player-led squads; none in ${noHum.join(", ")}.` : "";
   const stBadge = (s) => (s === "accepted" ? "ok" : s === "offered" ? "warn" : s === "completed" ? "info" : "");
   // where an offer / mission points: objective id -> objective centre, else explicit [x, z], else (fallback) the squad
   const aim = (o, squadKey) => {
@@ -1048,17 +1050,17 @@ function MissionsView({ st, faction, rows, sel, onSel, layers, world, act }) {
       <section class="panel"><h2>Current offers <span class="sub">latest HQ reply, click to show the target</span></h2><div class="scroll"><table>
         <thead><tr><th>Faction</th><th>Squad</th><th>Kind</th><th>Target</th><th>Brief</th></tr></thead><tbody>
         ${offers.map((o, i) => { const key = "o:" + i; return html`<tr key=${i} class=${"sqrow" + (focus?.key === key ? " sel" : "")} onClick=${() => go(key, aim(o, o.faction + "/" + o.squad), o.faction + "/" + o.squad)}><td style=${{ borderLeft: "3px solid " + colorOf(o.faction) }} class=${facClass(o.faction)}>${o.faction}</td><td><b>${o.squad}</b></td><td>${o.kind}</td><td class="mono">${tgt(o)}</td><td class="wrap muted">${dash(o.brief)}</td></tr>`; })}</tbody></table>
-        ${!offers.length && html`<div class="empty">No LLM offers pending (without them the game plans offers itself).</div>`}</div></section>
+        ${!offers.length && html`<div class="empty">No LLM offers pending (without them the game plans offers itself).${why}</div>`}</div></section>
     </div>
     <${MapPanel} st=${st} faction=${faction} rows=${rows} sel=${sel} onSel=${onSel} layers=${mapLayers} world=${world} act=${act} focus=${focus} compact=${true} />
     <div class="grid2" style=${{ marginTop: "12px" }}>
       <section class="panel"><h2>Mission events <span class="sub">offered / accepted / completed / failed</span></h2><div class="scroll"><table><tbody>
         ${evs.slice(0, 40).map((e, i) => html`<tr key=${i}><td class="mono muted">${new Date(e.ts).toLocaleTimeString()}</td><td class=${facClass(e.faction)}>${e.faction}</td><td class="wrap">${e.text}</td></tr>`)}</tbody></table>
-        ${!evs.length && html`<div class="empty">No mission events yet.</div>`}</div></section>
+        ${!evs.length && html`<div class="empty">No mission events yet.${why}</div>`}</div></section>
       <section class="panel"><h2>Offer history <span class="sub">from HQ replies this session, click to show the target</span></h2><div class="scroll"><table>
         <thead><tr><th>Time</th><th>Faction</th><th>Squad</th><th>Kind</th><th>Target</th><th>Brief</th></tr></thead><tbody>
         ${hist.slice(0, 60).map((o, i) => { const key = "x:" + i; return html`<tr key=${i} class=${"sqrow" + (focus?.key === key ? " sel" : "")} onClick=${() => go(key, aim(o, o.faction + "/" + o.squad), null)}><td class="mono muted">${new Date(o.ts).toLocaleTimeString()}</td><td class=${facClass(o.faction)}>${o.faction}</td><td><b>${o.squad}</b></td><td>${o.kind}</td><td class="mono">${tgt(o)}</td><td class="wrap muted">${dash(o.brief)}</td></tr>`; })}</tbody></table>
-        ${!hist.length && html`<div class="empty">No offers yet.</div>`}</div></section>
+        ${!hist.length && html`<div class="empty">No offers yet.${why}</div>`}</div></section>
     </div></main>`;
 }
 
