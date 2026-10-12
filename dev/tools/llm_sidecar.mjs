@@ -61,6 +61,12 @@
 //     {text, headline, sections:[{id,title,body}], scope:"faction", unit, source:"llm"|"rules", generatedAt (epoch ms), warTimeSec}
 //     (the LLM one while it is at most 360 s of war time old, else the game's rules one, else a sidecar-built rules one; null before any).
 //
+//   HQ war journal (M4 round 3 WP5; agent/journal.mjs, section "HQ war journal" below): per faction intent (1 x 120 chars), 3 goals (open|done|failed),
+//     3 lessons, written ONLY by a small review call every memory.reviewMin minutes (JSON, validated against the caps; invalid -> old journal kept), plus
+//     the attack record "tries" counted by CODE from the ATTACK orders sent and the game's outcome events ("outcome <squad> <ATTACK|DEFEND> <target|-> <done|failed>: <why>",
+//     "<squad> lost", "<id> <name> captured by <faction>"). One HQ JOURNAL block follows the situation in the commander prompt and in the /hq agent prompt.
+//     Reset when a new war starts (phase back to setup, game time or war id changes). Config group memory {enabled:true, reviewMin:5}. GET /api/state "journals" {faction: view}.
+//     v2 objectives may carry side left|centre|right (of the HQ-HQ axis, from the faction's own view): the flank nudge in the prompt.
 //   Any LLM/validation failure, or the panel's "enabled" switch off -> 200 {"orders":[]} (v2: plus empty buy/missions)
 //   (game falls back to its rule commander). Unparsable request body -> 400.
 //   Cost control (real providers only, not "fake"): settings minIntervalSec (at most one provider call per
@@ -100,6 +106,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import * as J from "./agent/journal.mjs"; // HQ war journal (pure functions), see "HQ war journal" below
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const DASH_DIR = path.join(DIR, "dashboard");
@@ -180,7 +187,7 @@ const fieldsText = (e) => (Array.isArray(e.params) ? e.params : []).map((p) => `
 const sentence = (t) => String(t ?? "").trim().replace(/\.$/, "");
 
 // FOB paragraph (M3 phase F): added to the prompt only when the manifest contains FOB intents (capability fob on, fobMax > 0).
-const FOB_PROMPT = "FOBS: a FOB is a forward base (spawn point, command post, supply cache, arsenal) that a transport builds at a site you pick from fobSites (pos, grid, place, front, toFront); it costs fobRules.cost supplies up front (refunded if it fails), takes time to build and is lost if the enemy holds the zone. TIMING: establish a FOB only after the opening phase, toward the front you are fighting for, when it shortens reinforcement paths - never at war start. fobRules.ready says whether the game accepts one now (fobRules.earliestSec of war time must have passed AND you must know the front: an enemy contact, a contested or lost objective); while ready is false read fobRules.readyReason and do not send ESTABLISH_FOB (it is dropped). Prefer the first fobSites entry (best toward the front) once a front objective is clear and the FOB is worth fobRules.cost; keep ~100 supplies for units; fobRules.live < fobRules.max and fobRules.inProgress = 0; fobs[] lists yours (state planned|moving|building|active|lost, build %, tier, underAttack). Upgrade an active tier-1 FOB (vehicle depot, medical) when supplies are plentiful. Squads with a reserved field are building a FOB: do not order them.\n";
+const FOB_PROMPT = "FOBS: a FOB is a forward base (spawn point, command post, supply cache, arsenal) that a transport builds at a site you pick from fobSites (pos, grid, place, front, toFront); it costs fobRules.cost supplies up front (refunded if it fails), takes time to build and is lost if the enemy holds the zone. TIMING: establish a FOB only after the opening phase, toward the front you are fighting for, when it shortens reinforcement paths - never at war start. fobRules.ready says whether the game accepts one now (fobRules.earliestSec of war time must have passed AND you must know the front: an enemy contact, a contested or lost objective); while ready is false read fobRules.readyReason and do not send ESTABLISH_FOB (it is dropped). Prefer the first fobSites entry (best toward the front) once a front objective is clear and the FOB is worth fobRules.cost; keep ~100 supplies for units; fobRules.live < fobRules.max and fobRules.inProgress = 0; fobs[] lists yours (state planned|moving|building|active|lost, build %, tier, underAttack). Upgrade an active tier-1 FOB (adds the vehicle depot) when supplies are plentiful. Squads with a reserved field are building a FOB: do not order them.\n";
 
 // Logistics paragraph (M3 phase L): added only when the manifest contains RESUPPLY (capability logistics on, FOBs allowed, a supply truck in the catalog).
 const LOGISTICS_PROMPT = "LOGISTICS: stock is per base. war.supplies is the HQ stock (income lands there, units and FOBs are paid from it); each FOB has its own fobs[].stock, which its arsenal, requests and upgrade draw from, and a new FOB starts empty. A supply truck convoy (convoys[]: id, from, to, cargo, state loading|en_route|delivered|lost, pos, grid) loads min(truck capacity logisticsRules.truckCargo, source stock) at departure, drives to the destination and adds it to that stock on arrival; a destroyed truck loses its cargo. Keep every active FOB above logisticsRules.lowStock with RESUPPLY (HQ -> FOB) while the HQ can spare a load (keep ~50), one convoy at a time per FOB and at most logisticsRules.convoyMax in flight; CONVOY moves stock between two bases. Do not order squads that have a reserved field (convoy trucks).\n";
@@ -241,6 +248,7 @@ Example (invented): {"headline":"Holding two of five points; enemy armor massing
 // System prompt incl. the wakeup paragraph. v2 = protocol v2 situation. sitrep = ask for the SITREP object too.
 function systemPrompt(c, v2 = false, sitrep = false, manifest = DEFAULT_MANIFEST) {
   let base = v2 ? SYSTEM_V2 + commandsSection(manifest ?? DEFAULT_MANIFEST) : SYSTEM;
+  if (v2) base += "\n" + J.FLANK_PROMPT + " " + J.SQUAD_NAME_PROMPT + (c.memory?.enabled ? " " + J.JOURNAL_RULE : "") + "\n";
   if (c.wakeup?.dynamic) base += wakeupText(c.wakeup);
   if (v2 && sitrep) base += SITREP_PROMPT;
   return base;
@@ -270,12 +278,15 @@ const cfg = {
   sitrep: { enabled: true, intervalSec: 120 },
   // HQ chat (/hq <text>): AI SDK agent turn per player message, see agent/agentTurn.mjs and "HQ chat" below
   agent: { enabled: true, maxSteps: 4, timeoutSec: 40, maxConcurrent: 3 },
+  // HQ war journal (intent / goals / lessons written by a small review call every reviewMin minutes + the game-counted attack record), see "HQ war journal" below
+  memory: { enabled: true, reviewMin: 5 },
 };
 
 // Group settings: "bool" or [min, max] number range per key. Partial objects are merged onto the current group.
 const GROUP_SPECS = {
   sitrep: { enabled: "bool", intervalSec: [30, 3600] },
   agent: { enabled: "bool", maxSteps: [1, 8], timeoutSec: [5, 120], maxConcurrent: [1, 10] },
+  memory: { enabled: "bool", reviewMin: [1, 60] },
   wakeup: { dynamic: "bool", defaultSec: [5, 3600], minSec: [5, 3600], maxSec: [5, 7200], budgetStretch: "bool" },
   triggers: { enabled: "bool", newContact: "bool", contactNearSquadM: [0, 5000], casualties: [0, 1000], squadLost: "bool", strengthDropPct: [0, 100], objectiveReached: "bool", squadChange: "bool", cooldownSec: [0, 600],
     objectiveChanged: "bool", ticketsDropPct: [0, 100], unitSpawned: "bool", missionEvent: "bool", idleUnits: "bool", idleSec: [0, 3600] },
@@ -347,6 +358,7 @@ function validateConfig(inp) {
       case "wakeup":
       case "sitrep":
       case "agent":
+      case "memory":
       case "triggers": {
         const g = validateGroup(k, v);
         if (g.error) return g;
@@ -683,7 +695,7 @@ function fakeV2(sit, manifest = DEFAULT_MANIFEST) {
       out.fobs.push({ command: "ESTABLISH_FOB", site: sites[0].id, reason: `fake provider: forward base at ${sites[0].name ?? sites[0].id}` });
     else if (fobNames.has("UPGRADE_FOB") && isNum(fobRules.upgradeCost) && supplies >= fobRules.upgradeCost + 150 && minute % 3 === 2) {
       const up = mine.find((f) => f?.state === "active" && f.tier < 2);
-      if (up) out.fobs.push({ command: "UPGRADE_FOB", fob: up.id, reason: "fake provider: depot and medical" });
+      if (up) out.fobs.push({ command: "UPGRADE_FOB", fob: up.id, reason: "fake provider: vehicle depot" });
     }
   }
   // Logistics (M3 phase L): RESUPPLY an active FOB whose stock is low, when the HQ can spare a load and no convoy is on its way there
@@ -745,7 +757,7 @@ const SITREP_EXTRA_TOKENS = 450; // room for the SITREP object on top of the con
 // Returns {raw, usage:{input,output}}. Throws Error on transport/HTTP failure.
 async function callProvider(c, sit, opts = {}) {
   const { structures: _structures, ...llmSit } = sit ?? {}; // situation.structures[] (base markers, dashboard map only) is not sent to the model
-  const userMsg = "Current situation:\n" + JSON.stringify(llmSit);
+  const userMsg = opts.userMsg ?? ("Current situation:\n" + JSON.stringify(llmSit) + (opts.journal ? "\n\n" + opts.journal : "")); // opts.userMsg / system / maxTokens: the journal review call
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), c.timeoutSec * 1000);
   try {
@@ -754,14 +766,14 @@ async function callProvider(c, sit, opts = {}) {
       if (!c.apiKey) throw new Error("API key not set");
       url = (c.baseUrl || "https://api.anthropic.com") + "/v1/messages";
       headers = { "x-api-key": c.apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" };
-      body = { model: c.model, max_tokens: c.maxTokens + (opts.sitrep ? SITREP_EXTRA_TOKENS : 0), system: systemPrompt(c, isV2(sit), opts.sitrep, opts.manifest), messages: [{ role: "user", content: userMsg }] };
+      body = { model: c.model, max_tokens: opts.maxTokens ?? c.maxTokens + (opts.sitrep ? SITREP_EXTRA_TOKENS : 0), system: opts.system ?? systemPrompt(c, isV2(sit), opts.sitrep, opts.manifest), messages: [{ role: "user", content: userMsg }] };
     } else {
       const base = c.provider === "openrouter" ? (c.baseUrl || OR_BASE) : c.baseUrl;
       if (!base) throw new Error("baseUrl not set");
       url = base + "/chat/completions";
       headers = { "content-type": "application/json" };
       if (c.apiKey) headers.authorization = "Bearer " + c.apiKey;
-      body = { model: c.model, max_tokens: c.maxTokens + (opts.sitrep ? SITREP_EXTRA_TOKENS : 0), messages: [{ role: "system", content: systemPrompt(c, isV2(sit), opts.sitrep, opts.manifest) },{ role: "user", content: userMsg }] };
+      body = { model: c.model, max_tokens: opts.maxTokens ?? c.maxTokens + (opts.sitrep ? SITREP_EXTRA_TOKENS : 0), messages: [{ role: "system", content: opts.system ?? systemPrompt(c, isV2(sit), opts.sitrep, opts.manifest) },{ role: "user", content: userMsg }] };
       if (c.provider === "openrouter") body.usage = { include: true };
     }
     const r = await fetch(url, { method: "POST", signal: ac.signal, headers, body: JSON.stringify(body) });
@@ -1104,7 +1116,7 @@ async function hqRun(job) {
   try {
     const mod = await loadAgent();
     if (c.provider !== "fake") { session.requests++; }
-    const r = await mod.runAgentTurn({ manifest, situation: sit, message: entry.msg, config: c, agentConfig: { maxSteps: c.agent.maxSteps, timeoutSec: c.agent.timeoutSec } });
+    const r = await mod.runAgentTurn({ manifest, situation: sit, message: entry.msg, config: c, agentConfig: { maxSteps: c.agent.maxSteps, timeoutSec: c.agent.timeoutSec }, journal: journalBlock(faction, c, sit) });
     if (c.provider === "openrouter") recordUsage(c.model, faction, r.usage);
     hqFinish(entry, faction, r);
   } catch (e) {
@@ -1144,6 +1156,89 @@ function hqDrain(faction) {
   const res = { ...(o.actions.length ? { hqActions: o.actions } : {}), ...(o.replies.length ? { hqReplies: o.replies } : {}) };
   hqOut[faction] = { actions: [], replies: [] };
   return res;
+}
+
+// ---------- HQ war journal ----------
+// Simple first version of the commander's long-term memory (dev/VISION.md 1c, dev/notes/m4-round3-plan.md WP5). Per faction: intent (1 x 120 chars),
+// 3 goals, 3 lessons, written ONLY by a small review call (no tools, no inline edits) every memory.reviewMin minutes, plus the attack record ("tries")
+// that the CODE counts from the ATTACK orders it sent and the game's outcome events. Reset at war start. Pure logic + prompt text: agent/journal.mjs.
+// Injection: one "HQ JOURNAL" block after the situation in the commander prompt (callProvider opts.journal) and in the /hq agent prompt.
+// GET /api/state "journals" {faction: view} (dashboard Journal tab); settings group "memory" {enabled, reviewMin}.
+const journals = {};        // faction -> journal (agent/journal.mjs emptyJournal)
+const journalBlockKey = {}; // faction -> last logged block (log the size once per change)
+const journalFor = (f) => (journals[f] ??= J.emptyJournal());
+const jlog = (f) => (m) => console.log(`journal faction=${f} ${m}`);
+
+// Every v2 situation: war boundary (reset), bookkeeping, outcome events (only while the war runs).
+function journalTick(faction, sit, events, prevSit) {
+  let j = journalFor(faction);
+  const why = J.newWarReason(j, sit);
+  if (why) { journals[faction] = j = J.emptyJournal(); j.resetReason = why; journalBlockKey[faction] = ""; console.log(`journal faction=${faction} reset: ${why}`); }
+  J.noteSituation(j, sit);
+  if (typeof sit?.war?.phase === "string" && sit.war.phase !== "running") return j;
+  J.ingestEvents(j, events, sit, prevSit, jlog(faction));
+  return j;
+}
+// The orders just validated for this faction: ATTACKs on objectives are tries.
+function journalOrders(faction, sit, orders) {
+  if (Array.isArray(orders) && orders.length) J.noteOrders(journalFor(faction), orders, sit, jlog(faction));
+}
+// The prompt block ("" = memory off or nothing to say yet). The size is logged once per change.
+function journalBlock(faction, c, sit) {
+  if (!c.memory?.enabled) return "";
+  const block = J.renderBlock(journalFor(faction), sit), key = block.replace(/, \d+ min ago/g, "");
+  if (key !== (journalBlockKey[faction] ?? "")) {
+    journalBlockKey[faction] = key;
+    console.log(`journal faction=${faction} prompt block ${block.length} chars (~${Math.ceil(block.length / 4)} tokens) changed`);
+  }
+  return block;
+}
+async function journalReview(faction, c, sit) {
+  const j = journalFor(faction), t0 = Date.now(), periodMs = c.memory.reviewMin * 60000;
+  j.reviewing = true; j.nextReviewAt = t0 + periodMs;
+  let usage = null;
+  try {
+    let reply;
+    if (c.provider === "fake") reply = J.fakeReview();
+    else {
+      session.requests++;
+      const p = await callProvider(c, { faction }, { system: J.reviewSystem(), userMsg: J.reviewUser(sit, j), maxTokens: 400 });
+      usage = p.usage;
+      if (c.provider === "openrouter") recordUsage(c.model, faction, p.usage);
+      reply = p.raw;
+    }
+    const v = J.validateReview(reply);
+    if (journals[faction] !== j) { console.log(`journal faction=${faction} review discarded: the journal was reset meanwhile`); return; }
+    if (v.error) {
+      j.rejected++; j.lastError = v.error; j.nextReviewAt = Math.min(j.nextReviewAt, Date.now() + 60000);
+      console.log(`journal faction=${faction} review REJECTED (${v.error}), keeping the old journal; reply: ${typeof reply === "string" ? reply.slice(0, 200).replace(/\s+/g, " ") : "-"}`);
+      return;
+    }
+    j.intent = v.value.intent; j.goals = v.value.goals; j.lessons = v.value.lessons;
+    j.reviews++; j.reviewedAt = Date.now(); j.reviewWarTime = isNum(sit?.time) ? sit.time : null; j.lastError = "";
+    console.log(`journal faction=${faction} review ok (${c.provider === "fake" ? "fake" : c.model}) intent="${j.intent}" goals=${j.goals.length} lessons=${j.lessons.length}${v.notes.length ? " notes=[" + v.notes.join("; ") + "]" : ""} ${Date.now() - t0}ms${usage ? ` tokens=${usage.input}+${usage.output}` : ""}${isNum(usage?.cost) ? ` cost=$${usage.cost.toFixed(5)}` : ""}`);
+  } catch (e) {
+    if (e?.cooldownMs) cooldownUntil = Date.now() + e.cooldownMs;
+    j.rejected++; j.lastError = e?.name === "AbortError" ? "timeout" : String(e?.message ?? e).slice(0, 200);
+    j.nextReviewAt = Math.min(j.nextReviewAt, Date.now() + 60000);
+    console.log(`journal faction=${faction} review FAILED (${j.lastError}), keeping the old journal`);
+  } finally {
+    j.reviewing = false;
+  }
+}
+// Started from the poll of a running war when due; runs in the background (the orders reply never waits for it).
+function journalMaybeReview(faction, c, sit) {
+  if (!c.memory?.enabled || !c.enabled || c.engine !== "llm" || paused || sit?.war?.phase !== "running") return;
+  const j = journalFor(faction);
+  if (j.reviewing || Date.now() < j.nextReviewAt) return;
+  if (c.provider !== "fake" && (budgetStopped(c) || Date.now() < cooldownUntil)) return;
+  console.log(`journal faction=${faction} review due (every ${c.memory.reviewMin} min, ${j.reviews} done)`);
+  void journalReview(faction, { ...c, memory: { ...c.memory } }, sit).catch((e) => console.log(`journal faction=${faction} review error: ${e?.message ?? e}`));
+}
+function journalsView() {
+  const out = {};
+  for (const [f, j] of Object.entries(journals)) out[f] = J.view(j, state.factions[f]?.situation ?? null, !!cfg.memory?.enabled);
+  return out;
 }
 
 // ---------- HQ scheduler ----------
@@ -1366,6 +1461,7 @@ async function handleOrders(req, res) {
     sc.pendingEvents.push(...newEvents);
     if (sc.pendingEvents.length > 30) sc.pendingEvents.splice(0, sc.pendingEvents.length - 30);
   }
+  if (v2) journalTick(faction, sit, newEvents, state.factions[faction]?.situation ?? null); // HQ journal: war boundary + outcome events -> tries
   // a v2 faction without squads can still spend supplies
   const canBuy = v2 && isNum(sit.war?.supplies) && Array.isArray(sit.catalog) && sit.catalog.some((e) => isNum(e?.cost) && e.cost <= sit.war.supplies);
   const phase = v2 && typeof sit.war?.phase === "string" ? sit.war.phase : "running";
@@ -1402,7 +1498,8 @@ async function handleOrders(req, res) {
       if (valid) sc.pendingEvents = [];
       const srCfg = snapshot.sitrep, srSt = srFor(faction);
       const wantSitrep = v2 && !!srCfg?.enabled && (!srSt.lastAt || Date.now() - srSt.lastAt >= srCfg.intervalSec * 1000 || dec.reason === "manual" || dec.triggers.some((t) => /objective|tickets|lost/i.test(t)));
-      r = await computeOrders(snapshot, callSit, false, { sitrep: wantSitrep, manifest });
+      r = await computeOrders(snapshot, callSit, false, { sitrep: wantSitrep, manifest, journal: v2 ? journalBlock(faction, snapshot, sit) : "" });
+      if (v2 && r.ok && !r.keep) journalOrders(faction, sit, r.orders);
       if (r.sitrep) {
         srSt.lastAt = Date.now();
         srSt.llm = { value: r.sitrep, generatedAt: srSt.lastAt, warTimeSec: isNum(sit.time) ? sit.time : 0 };
@@ -1416,6 +1513,7 @@ async function handleOrders(req, res) {
       }
     }
   }
+  if (v2) journalMaybeReview(faction, snapshot, sit);
   const latencyMs = Date.now() - t0;
 
   if (r.gated) state.counters.gated++;
@@ -1677,7 +1775,7 @@ async function handleApi(req, res, url) {
     return send(res, 200, {
       now: Date.now(), startedAt: state.startedAt, lastRequestTs: state.lastRequestTs,
       factions: state.factions, activeFactions: activeFactions(), staleAfterSec: STALE_FACTION_MS / 1000,
-      exchanges: state.exchanges, hq: hqLog, debugLog: state.debugLog, manifests: manifestsView(), counters: state.counters, config: publicConfig(), usage: usageView(), scheduler: schedulerView(), paused,
+      exchanges: state.exchanges, hq: hqLog, debugLog: state.debugLog, manifests: manifestsView(), counters: state.counters, config: publicConfig(), usage: usageView(), scheduler: schedulerView(), journals: journalsView(), paused,
     });
   }
   if (req.method === "POST" && url === "/api/pause") {
@@ -1759,6 +1857,7 @@ http.createServer((req, res) => {
     if (!hostOk(req)) return send(res, 403, { error: "forbidden host" });
     if (url === "/" || url === "/index.html") return serveStatic(res, "index.html");
     if (url === "/app.js") return serveStatic(res, "app.js");
+    if (url === "/journal.js") return serveStatic(res, "journal.js");
     if (url === "/style.css") return serveStatic(res, "style.css");
     // vendored libraries: flat names only (no slashes, no dot-dot), known extensions
     const m = /^\/vendor\/([A-Za-z0-9][A-Za-z0-9._-]*)$/.exec(url);

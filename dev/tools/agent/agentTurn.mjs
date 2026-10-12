@@ -1,7 +1,7 @@
 // HQ chat agent turn (M3 phase A): a player's free-text request (/hq <text>) is answered by a small tool-using agent.
 // Design: dev/notes/decision-command-tools.md. Built on the Vercel AI SDK core (ai 7.x, ToolLoopAgent) with the OpenRouter provider.
 //
-//   runAgentTurn({ manifest, situation, message, config }) -> { replyText, actions, steps, usage, latencyMs, ... }   (never throws)
+//   runAgentTurn({ manifest, situation, message, config, journal }) -> { replyText, actions, steps, usage, latencyMs, ... }   (never throws)
 //
 // The SDK is hidden behind callModel(): swap that one function (and createModel) to change framework / transport.
 // Tools given to the model:
@@ -10,10 +10,12 @@
 //     (so the grant rules - role, cooldown, ledger, caps - apply there) and tells the player the result.
 //     Beyond CORE_TOOLS_MAX entries the rest is deferred (deferLoading) behind find_tools (AI SDK toolSearch + our own ranker).
 //   - read-only, fog-limited: query_own_forces, query_bases, query_contacts (computed from the situation the HQ already has).
+// journal = the HQ JOURNAL block (agent/journal.mjs renderBlock, "" = none): appended to the system prompt with the stick-to-your-intent rule.
 // The final model text is the radio reply to the player. No MCP, no raw game commands, nothing the manifest does not list.
 import { ToolLoopAgent, tool, stepCountIs, toolSearch } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
+import { JOURNAL_RULE } from "./journal.mjs";
 
 export const DEFAULTS = { maxSteps: 4, timeoutSec: 40, maxActions: 3, coreToolsMax: 6, maxOutputTokens: 700 };
 const isNum = (n) => typeof n === "number" && Number.isFinite(n);
@@ -148,7 +150,7 @@ export function buildTools(manifest, situation, message, limits = {}) {
 }
 
 // ---------- prompt ----------
-export function systemPrompt(situation, message, tools) {
+export function systemPrompt(situation, message, tools, journal = "") {
   return `You are the HQ radio operator of one faction in a tactical war game (Arma Reforger). A player talks to HQ over the radio and you answer in a short radio style.
 Player: ${message.player} (${message.role}, squad ${message.squad || "none"}, grid ${message.grid || "?"}). Faction ${situation?.faction ?? "?"}, supplies ${situation?.war?.supplies ?? "?"}.
 Rules:
@@ -157,7 +159,7 @@ Rules:
 - Use the query_* tools only when the player asks about forces, bases or enemies. HQ knows only what units reported (fog of war).
 - Do not invent ids, types, grids or numbers. If something is unclear, ask one short question instead of guessing.
 - Your final text is the radio reply: 1-2 short sentences, in the language the player wrote. After calling a tool, only acknowledge (for example "Roger, requesting a truck for you.").
-${tools.find_tools ? "- Tools not shown are found with find_tools.\n" : ""}`;
+${tools.find_tools ? "- Tools not shown are found with find_tools.\n" : ""}${journal ? `\n${journal}\n${JOURNAL_RULE}\n` : ""}`;
 }
 
 // ---------- model seam ----------
@@ -224,14 +226,14 @@ async function fakeTurn({ tools, message, manifest }) {
 }
 
 // ---------- entry point ----------
-export async function runAgentTurn({ manifest, situation, message, config, agentConfig = {} }) {
+export async function runAgentTurn({ manifest, situation, message, config, agentConfig = {}, journal = "" }) {
   const t0 = Date.now();
   const lim = { ...DEFAULTS, ...agentConfig };
   const out = { msgId: message.id, ok: true, replyText: "", actions: [], steps: [], usage: { input: 0, output: 0, cost: 0, calls: 0 }, latencyMs: 0, provider: config.provider, model: config.provider === "fake" ? null : config.model, tools: [], error: null };
   try {
     const built = buildTools(manifest, situation, message, lim);
     out.tools = Object.keys(built.tools);
-    const system = systemPrompt(situation, message, built.tools);
+    const system = systemPrompt(situation, message, built.tools, journal);
     const prompt = String(message.text ?? "").slice(0, 500);
     let r;
     if (config.provider === "fake") r = await fakeTurn({ tools: built.tools, message, manifest });

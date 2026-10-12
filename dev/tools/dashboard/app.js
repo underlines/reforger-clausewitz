@@ -1,6 +1,7 @@
 // Clausewitz HQ dashboard. Preact + htm (vendored, offline). All game text is rendered through Preact
 // (auto-escaped); no dangerouslySetInnerHTML anywhere.
 import { html, render, useState, useEffect, useRef, useMemo, useCallback } from "/vendor/standalone.module.js";
+import { JournalView, MemorySettings } from "/journal.js"; // HQ war journal view + memory settings (WP5, dashboard/journal.js)
 
 const WORLD = 4096, GRID = 512, STALE_MS = 30000; // WORLD = fallback extent until /api/world reports the real one
 const DEF_EXT = { x0: 0, z0: 0, x1: WORLD, z1: WORLD };
@@ -1203,7 +1204,7 @@ function ActionsView({ st }) {
 }
 
 // ---- tabs ----
-const TABS = [["overview", "Overview"], ["map", "Map"], ["forces", "Forces"], ["hq", "HQ / LLM"], ["missions", "Missions"], ["requests", "Requests"], ["hqchat", "HQ chat"], ["actions", "Actions"], ["debug", "Debug log"], ["usage", "Usage & Config"]];
+const TABS = [["overview", "Overview"], ["map", "Map"], ["forces", "Forces"], ["hq", "HQ / LLM"], ["journal", "Journal"], ["missions", "Missions"], ["requests", "Requests"], ["hqchat", "HQ chat"], ["actions", "Actions"], ["debug", "Debug log"], ["usage", "Usage & Config"]];
 const TAB_KEY = "clw.tab", INACT_KEY = "clw.showInactive";
 const tabOf = (s) => { const k = String(s ?? "").replace(/^#/, ""), t = k === "config" ? "usage" : k; return TABS.some(([id]) => id === t) ? t : null; };
 function loadTab() {
@@ -1261,7 +1262,7 @@ function Config({ st, toast, refresh }) {
   const load = useCallback(async () => {
     try {
       const c = await (await fetch("/api/config", { cache: "no-store" })).json();
-      setF({ provider: c.provider, model: c.model, baseUrl: c.baseUrl, apiKey: "", timeoutSec: c.timeoutSec, maxTokens: c.maxTokens, enabled: !!c.enabled, engine: c.engine ?? "llm", minIntervalSec: c.minIntervalSec ?? 0, skipUnchanged: c.skipUnchanged !== false, stopAtLimit: c.stopAtLimit !== false, wakeup: { ...c.wakeup }, triggers: { ...c.triggers } });
+      setF({ provider: c.provider, model: c.model, baseUrl: c.baseUrl, apiKey: "", timeoutSec: c.timeoutSec, maxTokens: c.maxTokens, enabled: !!c.enabled, engine: c.engine ?? "llm", minIntervalSec: c.minIntervalSec ?? 0, skipUnchanged: c.skipUnchanged !== false, stopAtLimit: c.stopAtLimit !== false, wakeup: { ...c.wakeup }, triggers: { ...c.triggers }, memory: { ...c.memory } });
       setKeyMeta({ set: c.apiKeySet, last4: c.apiKeyLast4 });
     } catch (e) { toast("Could not load config: " + e.message, "err"); }
   }, []);
@@ -1274,7 +1275,7 @@ function Config({ st, toast, refresh }) {
   const gnum = (g, k, label, min, max) => html`<label class="field"><span>${label}</span><input type="number" min=${min} max=${max} value=${f[g][k]} onInput=${(e) => setG(g, k, e.target.value)} /></label>`;
   const gsw = (g, k, label) => html`<label class="switch"><input type="checkbox" checked=${f[g][k]} onChange=${(e) => setG(g, k, e.target.checked)} /><span>${label}</span></label>`;
   const body = () => {
-    const b = { provider: f.provider, model: f.model, baseUrl: f.baseUrl, timeoutSec: Number(f.timeoutSec), maxTokens: Number(f.maxTokens), enabled: f.enabled, engine: f.engine, minIntervalSec: Number(f.minIntervalSec), skipUnchanged: f.skipUnchanged, stopAtLimit: f.stopAtLimit, wakeup: numG("wakeup"), triggers: numG("triggers") };
+    const b = { provider: f.provider, model: f.model, baseUrl: f.baseUrl, timeoutSec: Number(f.timeoutSec), maxTokens: Number(f.maxTokens), enabled: f.enabled, engine: f.engine, minIntervalSec: Number(f.minIntervalSec), skipUnchanged: f.skipUnchanged, stopAtLimit: f.stopAtLimit, wakeup: numG("wakeup"), triggers: numG("triggers"), memory: numG("memory") };
     if (f.apiKey) b.apiKey = f.apiKey;
     return b;
   };
@@ -1333,6 +1334,7 @@ function Config({ st, toast, refresh }) {
       <div class="pair">${gsw("triggers", "objectiveChanged", "Objective changed owner (v2)")}${gsw("triggers", "unitSpawned", "New unit spawned (v2)")}</div>
       <div class="pair">${gsw("triggers", "missionEvent", "Mission offered / accepted / done (v2)")}${gnum("triggers", "ticketsDropPct", "Own tickets dropped since last call (%, 0 = off, v2)", 0, 100)}</div>
       <small class="muted">Compared with the situation at the last LLM call. Triggered calls also respect the min interval above. Use "wake now" in the status strip to force a call.</small>
+      <${MemorySettings} f=${f} setG=${setG} />
       ${f.provider === "openrouter" && html`<label class="switch"><input type="checkbox" checked=${f.stopAtLimit} onChange=${(e) => set("stopAtLimit", e.target.checked)} />
         <span>Stop provider calls at the key's spending limit <span class="muted">(the game then runs on its rule commander; LLM resumes automatically when budget is available again)</span></span></label>`}
       <label class="switch"><input type="checkbox" checked=${f.enabled} onChange=${(e) => set("enabled", e.target.checked)} />
@@ -1438,6 +1440,7 @@ function App() {
     ${tab === "map" && html`<${MapView} ...${common} layers=${layers} setLayers=${setLayers} world=${world} />`}
     ${tab === "forces" && html`<${ForcesView} ...${common} />`}
     ${tab === "hq" && html`<${HqView} ...${common} />`}
+    ${tab === "journal" && html`<${JournalView} st=${st} faction=${fac} facClass=${facClass} />`}
     ${tab === "missions" && html`<${MissionsView} ...${common} layers=${layers} world=${world} />`}
     ${tab === "requests" && html`<${RequestsView} st=${st} faction=${fac} />`}
     ${tab === "hqchat" && html`<${HqChatView} st=${st} faction=${fac} />`}
