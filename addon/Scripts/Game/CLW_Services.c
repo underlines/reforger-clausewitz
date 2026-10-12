@@ -62,6 +62,7 @@ class CLW_Services
 	// anchor (the base spawn point, "tent"), the arsenal 2-4 m and the supply cache 5-8 m from it (per-kind gaps, overridable in the profile).
 	static const float PLACE_SCALE = 0.7;
 	static const float PLACE_SCALE_DEPOT = 1.0;
+	static const float DEPOT_ROAD_M = 40;			// HQ depot: a road within this distance of the base point is the target (CLW_Services.FindDepotSpot)
 	static const int PLACE_BATCHES = 4;				// search widths, each wider than the last
 	static const float PLACE_GAP_M = 3;				// full: free space between the footprints of two services
 	static const float PLACE_OVERLAP_FACTOR = 0.8;	// full: footprint radius is the circumscribed circle: 80 % of it is enough, CheckPose blocks real overlaps
@@ -495,10 +496,26 @@ class CLW_Services
 			}
 		}
 
+		string depotVia;
+		if (!pinned && entry.m_sKind == CLW_ServiceKind.VEHICLE_DEPOT && baseId == BASE_HQ)
+		{
+			depotVia = FindDepotSpot(placeLabel, anchor, keepClear, foot, tune, entry.m_fYaw, placedPos, placedRad, spot, yaw);
+			if (!depotVia.IsEmpty())
+			{
+				pinned = true;
+				via = depotVia;
+			}
+		}
+
 		if (!pinned)
 			via = FindSpot(placeLabel, anchor, keepClear, foot, tune, entry.m_fYaw, placedPos, placedRad, spot, yaw);
 
 		float anchorDist = vector.DistanceXZ(spot, anchor);
+		if (!depotVia.IsEmpty())
+			Print(string.Format("CLW: place %1 HQ vehicle_depot via=%2 dist=%3 road=%4", sideKey, depotVia, Math.Round(anchorDist), Math.Round(CLW_Placement.NearestRoadDistance(spot))), LogLevel.NORMAL);
+		else if (entry.m_sKind == CLW_ServiceKind.VEHICLE_DEPOT && baseId == BASE_HQ)
+			Print(string.Format("CLW: place %1 HQ vehicle_depot via=%2 (road/half search found nothing, normal ring) dist=%3 road=%4", sideKey, via, Math.Round(anchorDist), Math.Round(CLW_Placement.NearestRoadDistance(spot))), LogLevel.NORMAL);
+
 		if (anchorDist > tune.m_fCompactMax && !tune.m_bAroundCp)
 			Print(string.Format("CLW: place %1 went %2 m from the base point (compact limit %3 m) via=%4: %5 | rejects on the way: %6", placeLabel, Math.Round(anchorDist), Math.Round(tune.m_fCompactMax), via, s_sPlaceWhy, s_sPlaceRejects), LogLevel.NORMAL);
 
@@ -829,6 +846,41 @@ class CLW_Services
 
 		Print(string.Format("CLW: place %1 FORCED at %2 (no clear ground found: the composition may overlap objects)", label, spot), LogLevel.WARNING);
 		return "forced";
+	}
+
+	// Vehicle depot at the HQ (owner 2026-10-13: the ring search landed it 26-62 m from the base point). Target: beside the nearest road when one
+	// lies within DEPOT_ROAD_M of the base point (the search is centred on that road point; CLW_FreeSpot keeps its road clearance, so the depot sits
+	// beside the road surface, vehicles bought or requested there are on / near the road), else halfway: the ring of the normal search halved.
+	// Collision, slope and water checks are the normal ones (SearchPass, 3 passes). Returns "road" / "half", "" when neither finds ground (the caller
+	// then runs the normal FindSpot).
+	protected static string FindDepotSpot(string label, vector anchor, float keepClear, CLW_Footprint foot, CLW_PlaceTuning tune, float fixedYaw, notnull array<vector> placedPos, notnull array<float> placedRad, out vector spot, out float yaw)
+	{
+		float footRadius = foot.Radius();
+		string why;
+		CLW_RoadHit hit;
+		if (CLW_FreeSpot.NearestRoad(anchor, DEPOT_ROAD_M, CLW_SpotConfig.ROAD_MIN_WIDTH_M, hit))
+		{
+			float roadMax = footRadius + hit.m_fWidth * 0.5 + tune.m_fRing;
+			Print(string.Format("CLW: place %1 depot road search: road point %2 is %3 m from the base point, ring 0..%4 m", label, hit.m_vPoint, Math.Round(hit.m_fDist), Math.Round(roadMax)), LogLevel.NORMAL);
+			for (int roadPass = 0; roadPass < 3; roadPass++)
+			{
+				if (SearchPass(label + " (road)", anchor, hit.m_vPoint, 0, roadMax, roadPass, foot, tune, fixedYaw, placedPos, placedRad, spot, yaw, why))
+					return "road";
+			}
+		}
+
+		float minDist = footRadius + Math.Min(tune.m_fInner, keepClear);
+		float maxDist = minDist + tune.m_fRing + (PLACE_BATCHES - 1) * tune.m_fGrow;
+		float halfMin = minDist * 0.5;
+		float halfMax = Math.Max(maxDist * 0.5, halfMin + 3);
+		Print(string.Format("CLW: place %1 depot half search: ring %2..%3 m (normal %4..%5 m)", label, Math.Round(halfMin), Math.Round(halfMax), Math.Round(minDist), Math.Round(maxDist)), LogLevel.NORMAL);
+		for (int halfPass = 0; halfPass < 3; halfPass++)
+		{
+			if (SearchPass(label + " (half)", anchor, anchor, halfMin, halfMax, halfPass, foot, tune, fixedYaw, placedPos, placedRad, spot, yaw, why))
+				return "half";
+		}
+
+		return "";
 	}
 
 	protected static bool Overlaps(vector pos, float radius, notnull array<vector> placedPos, notnull array<float> placedRad)
@@ -1317,6 +1369,7 @@ class CLW_Services
 				{
 					resources = spawner.GetSpawnerResourceComponent();
 					via = "spawner component";
+					Print(string.Format("CLW: services depot %1 %2 vehicle spawn slots: %3", sideKey, baseId, spawner.CLW_SlotInfo()), LogLevel.NORMAL);
 				}
 				else if (SCR_ArsenalComponent.Cast(entity.FindComponent(SCR_ArsenalComponent)) && inst.m_sKind == CLW_ServiceKind.ARSENAL)
 				{
@@ -1406,19 +1459,156 @@ modded class SCR_CatalogEntitySpawnerComponent
 	protected int m_iCLWActions;		// user actions on the depot's action manager
 	protected int m_iCLWCut;			// entries dropped because the depot has fewer actions than the list
 	protected string m_sCLWFitLog;		// last fit line (logged again only when it changes)
+	protected string m_sCLWKeptLog;		// last kept-list line (logged again only when it changes)
+	protected int m_iCLWMergedOwn;		// own entries before the cap
+	protected int m_iCLWMergedAll;		// own + kin entries before the cap
+
+	// Vehicle roles for the capped depot list (see CLW_OrderForCap).
+	static const int CLW_ROLE_ARMOR = 0;
+	static const int CLW_ROLE_MECH = 1;
+	static const int CLW_ROLE_LIGHT = 2;
+	static const int CLW_ROLE_LOGISTICS = 3;
+	static const int CLW_ROLE_OTHER = 4;
+	static const int CLW_ROLES = 5;
 
 	protected override void SetCurrentFactionCatalog()
 	{
 		super.SetCurrentFactionCatalog();
 		CLW_ExtendDepotList();
+		m_iCLWMergedAll = m_aAssetList.Count();
+		m_iCLWMergedOwn = m_iCLWMergedAll - m_iCLWKinAdded;
 		CLW_FitToActions();
+	}
+
+	// Role of a vehicle entry from its catalog labels (data, no faction or prefab names): armor (tank: armour, no APC), mech (APC), light (car),
+	// logistics (truck), other.
+	protected static int CLW_RoleOf(SCR_EntityCatalogEntry entry)
+	{
+		array<EEditableEntityLabel> labels = {};
+		entry.GetEditableEntityLabels(labels);
+		if (labels.Contains(EEditableEntityLabel.VEHICLE_APC))
+			return CLW_ROLE_MECH;
+
+		if (labels.Contains(EEditableEntityLabel.TRAIT_ARMOR))
+			return CLW_ROLE_ARMOR;
+
+		if (labels.Contains(EEditableEntityLabel.VEHICLE_TRUCK))
+			return CLW_ROLE_LOGISTICS;
+
+		if (labels.Contains(EEditableEntityLabel.VEHICLE_CAR))
+			return CLW_ROLE_LIGHT;
+
+		return CLW_ROLE_OTHER;
+	}
+
+	// The vanilla spawner puts a bought vehicle on a free SCR_EntitySpawnerSlotComponent (child of the depot first, else a slot within
+	// SCR_SlotServiceComponentClass.m_fMaxSlotDistance = 5 m of the depot origin): no slot, no purchase at the depot. The CLW depot prefabs carry
+	// three child slots (small / medium / large vehicle) in front of the depot.
+	string CLW_SlotInfo()
+	{
+		return string.Format("child=%1 near=%2", m_aChildSlots.Count(), m_aNearSlots.Count());
+	}
+
+	// Takes one entry per bucket in 'order' per round until all buckets are empty.
+	protected static void CLW_RoundRobin(notnull array<ref array<SCR_EntityCatalogEntry>> buckets, notnull array<int> order, notnull array<SCR_EntityCatalogEntry> result)
+	{
+		bool any = true;
+		while (any)
+		{
+			any = false;
+			foreach (int role : order)
+			{
+				array<SCR_EntityCatalogEntry> bucket = buckets[role];
+				if (bucket.IsEmpty())
+					continue;
+
+				result.Insert(bucket[0]);
+				bucket.Remove(0);
+				any = true;
+			}
+		}
+	}
+
+	// Depot list when the prefab has fewer actions than entries (owner test 2026-10-13: 30 actions). Deterministic (catalog order inside a role,
+	// no randomness), so server and client build the same list. Order: (a) the first own entry of each role (armor, mech, light, logistics),
+	// (b) kin entries interleaved by role, roles the own faction lacks first, (c) the remaining own entries interleaved by role, (d) the rest
+	// (role other, kin before own). The caller cuts the tail.
+	protected void CLW_OrderForCap(int ownCount)
+	{
+		array<ref array<SCR_EntityCatalogEntry>> own = {};
+		array<ref array<SCR_EntityCatalogEntry>> kin = {};
+		for (int r = 0; r < CLW_ROLES; r++)
+		{
+			own.Insert(new array<SCR_EntityCatalogEntry>());
+			kin.Insert(new array<SCR_EntityCatalogEntry>());
+		}
+
+		foreach (int idx, SCR_EntityCatalogEntry entry : m_aAssetList)
+		{
+			if (!entry)
+				continue;
+
+			if (idx < ownCount)
+				own[CLW_RoleOf(entry)].Insert(entry);
+			else
+				kin[CLW_RoleOf(entry)].Insert(entry);
+		}
+
+		array<SCR_EntityCatalogEntry> result = {};
+		array<int> lacking = {};
+		array<int> present = {};
+		array<int> allRoles = {};
+		for (int role = 0; role < CLW_ROLE_OTHER; role++)
+		{
+			if (own[role].IsEmpty())
+				lacking.Insert(role);
+			else
+				present.Insert(role);
+
+			allRoles.Insert(role);
+		}
+
+		foreach (int bestRole : present)
+		{
+			result.Insert(own[bestRole][0]);
+			own[bestRole].Remove(0);
+		}
+
+		array<int> kinOrder = {};
+		foreach (int lackRole : lacking)
+		{
+			kinOrder.Insert(lackRole);
+		}
+
+		foreach (int presentRole : present)
+		{
+			kinOrder.Insert(presentRole);
+		}
+
+		CLW_RoundRobin(kin, kinOrder, result);
+		CLW_RoundRobin(own, allRoles, result);
+		foreach (SCR_EntityCatalogEntry kinOther : kin[CLW_ROLE_OTHER])
+		{
+			result.Insert(kinOther);
+		}
+
+		foreach (SCR_EntityCatalogEntry ownOther : own[CLW_ROLE_OTHER])
+		{
+			result.Insert(ownOther);
+		}
+
+		m_aAssetList.Clear();
+		foreach (SCR_EntityCatalogEntry sorted : result)
+		{
+			m_aAssetList.Insert(sorted);
+		}
 	}
 
 	// Rebuilds the list now (server: after the depot was affiliated with its side). Returns the number of entries; info = what was merged.
 	int CLW_RebuildDepotList(out string info)
 	{
 		SetCurrentFactionCatalog();
-		info = string.Format("[own %1 + kin %2 from %3 friendly faction(s)]", m_aAssetList.Count() - m_iCLWPad - m_iCLWKinAdded, m_iCLWKinAdded, m_iCLWKinFactions);
+		info = string.Format("[own %1 + kin %2 from %3 friendly faction(s), kept %4]", m_iCLWMergedOwn, m_iCLWKinAdded, m_iCLWKinFactions, m_aAssetList.Count() - m_iCLWPad);
 		return m_aAssetList.Count() - m_iCLWPad;
 	}
 
@@ -1432,7 +1622,7 @@ modded class SCR_CatalogEntitySpawnerComponent
 	// A depot prefab that has other actions ahead of its SCR_CatalogSpawnerUserAction ones (the vanilla build action of VehicleService_*) would
 	// lose the entry at that index, so the list is padded with copies of the first entry up to the first catalog action (the padding sits on a
 	// non-catalog action: never shown, never bought). Entries beyond the number of actions cannot be shown at all (vanilla prints "not enough
-	// of SCR_CatalogSpawnerUserAction"): they are cut off the end of the list (own entries come first, so the kin tail goes first). The action
+	// of SCR_CatalogSpawnerUserAction"): the list is ordered by CLW_OrderForCap and cut at the end. The action
 	// list is prefab data and the faction catalogs are replicated data: server and client compute the same list and the same indices.
 	protected void CLW_FitToActions()
 	{
@@ -1467,6 +1657,36 @@ modded class SCR_CatalogEntitySpawnerComponent
 			return;
 		}
 
+		// more entries than actions: order the list so the cut keeps a useful mix (one per model, every role, kin variety), then trim it
+		int capacity = m_iCLWActions - firstCatalog;
+		int before = m_aAssetList.Count();
+		int capCut;
+		if (before > capacity && capacity > 0)
+		{
+			capCut = before - capacity;
+			CLW_OrderForCap(m_iCLWMergedOwn);
+			while (m_aAssetList.Count() > capacity)
+			{
+				m_aAssetList.Remove(m_aAssetList.Count() - 1);
+			}
+
+			string kept;
+			foreach (int keptIdx, SCR_EntityCatalogEntry keptEntry : m_aAssetList)
+			{
+				if (keptIdx > 0)
+					kept += ", ";
+
+				kept += CLW_SidePool.BaseOf(keptEntry.GetPrefab());
+			}
+
+			string keptLine = string.Format("CLW: services depot %1 kept %2/%3: ", sideKey, m_aAssetList.Count(), before) + kept;
+			if (keptLine != m_sCLWKeptLog)
+			{
+				m_sCLWKeptLog = keptLine;
+				Print(keptLine, LogLevel.NORMAL);
+			}
+		}
+
 		SCR_EntityCatalogEntry first = m_aAssetList[0];
 		for (int p = 0; p < firstCatalog; p++)
 		{
@@ -1480,6 +1700,7 @@ modded class SCR_CatalogEntitySpawnerComponent
 			m_iCLWCut++;
 		}
 
+		m_iCLWCut += capCut;	// entries dropped by the capacity cut above
 		AssignUserActions();	// the lists above changed after the base call assigned them
 		CLW_LogFit(sideKey, "");
 	}
