@@ -214,4 +214,16 @@ class CLW_SitrepStore
 		s_mSent.Remove(playerId);
 		SyncPlayers(true);
 	}
+
+	// Rematch (CLW_Rematch.c): forget every SITREP and delivery record (EnsureInit rebuilds the maps on the next use).
+	static void RematchReset()
+	{
+		s_mRules = null;
+		s_mLlm = null;
+		s_mVersion = null;
+		s_mSignature = null;
+		s_mRulesAt = null;
+		s_mSent = null;
+		s_fLastSync = -1000;
+	}
 }

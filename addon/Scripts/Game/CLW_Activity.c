@@ -528,4 +528,15 @@ class CLW_Activity
 
 		Print(string.Format("CLW: activity management is OFF in the scenario config (%1 units released, engine LOD behaviour)", released), LogLevel.NORMAL);
 	}
+
+	// Rematch (CLW_Rematch.c): stop the tick and forget the AI LOD state (the groups are deleted by the registry).
+	void RematchReset()
+	{
+		GetGame().GetCallqueue().Remove(Tick);
+		m_bRunning = false;
+		m_bOffHandled = false;
+		m_mStates.Clear();
+		m_mPlayers.Clear();
+		m_fLastLog = -100000;
+	}
 }

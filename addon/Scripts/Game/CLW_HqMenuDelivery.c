@@ -134,4 +134,15 @@ class CLW_VehicleDelivery
 			GetGame().GetCallqueue().Remove(Poll);
 		}
 	}
+
+	// Rematch (CLW_Rematch.c): remove the delivery markers still on the map, then forget the list (Reset alone leaves the markers).
+	static void RematchReset()
+	{
+		foreach (CLW_VehicleDeliveryInfo info : s_aList)
+		{
+			RemoveMarker(info);
+		}
+
+		Reset();
+	}
 }

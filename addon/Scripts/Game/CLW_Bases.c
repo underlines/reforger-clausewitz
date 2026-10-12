@@ -509,4 +509,43 @@ class CLW_Bases
 
 		Print(string.Format("CLW: bases spawn points deleted=%1 (foreign), now per side:%2 (fob points %3, total %4)", deleted, perSide, m_aFobSpawns.Count(), SCR_SpawnPoint.CountSpawnPoints()), LogLevel.NORMAL);
 	}
+
+	// Rematch (CLW_Rematch.c): delete the base and FOB spawn points and forget the layout. Init(scenario) works again afterwards. Returns the points deleted.
+	int RematchReset()
+	{
+		GetGame().GetCallqueue().Remove(PruneForeignSpawns);
+		GetGame().GetCallqueue().Remove(RecheckBases);
+		int deleted;
+		foreach (SCR_SpawnPoint ownPoint : m_aOwnSpawns)
+		{
+			if (ownPoint)
+			{
+				ownPoint.SetSpawnPointEnabled_S(false);
+				SCR_EntityHelper.DeleteEntityAndChildren(ownPoint);
+				deleted++;
+			}
+		}
+
+		foreach (SCR_SpawnPoint fobPoint : m_aFobSpawns)
+		{
+			if (fobPoint)
+			{
+				fobPoint.SetSpawnPointEnabled_S(false);
+				SCR_EntityHelper.DeleteEntityAndChildren(fobPoint);
+				deleted++;
+			}
+		}
+
+		m_aKeys.Clear();
+		m_aPos.Clear();
+		m_aOwnSpawns.Clear();
+		m_aPlace.Clear();
+		m_aFobSpawns.Clear();
+		m_bStarted = false;
+		m_fSeparationScale = 1;
+		m_fAuthoredDistance = 0;
+		m_fHqDistance = 0;
+		m_sBattleSize = "";
+		return deleted;
+	}
 }

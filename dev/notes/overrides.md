@@ -150,3 +150,16 @@ that AI purchases (rule commander, LLM BUY, convoy trucks) and convoy loads neve
 Refusal text for the AI / LLM: `HQ reserve: stock <s>, reserve <r>`. The situation shows `baseRules.hqReserve` and `logisticsRules.hqReserve`.
 Logs: `CLW: convoy <side> skipped: loadable <n> < min <m> (stock <s>, reserve <r>)`, `CLW: RuleCommander <side>: no buy, AI cap <n>/<cap>`,
 `CLW: RuleCommander <side>: no buy, HQ reserve: stock <s>, reserve <r>`, `CLW: idle check <side>: candidates <n>, oldest <s> s (...)` (once a minute per side).
+## Rematch (`rematch`, `rematchDelaySec`) - M4 round 3 WP4
+Top-level keys of the same file, read again at every war end (SERVER only). What happens after the war is over:
+```json
+{"rematch":"inPlace","rematchDelaySec":60}
+```
+| key | values | meaning |
+|---|---|---|
+| `rematch` | `"inPlace"` (default) | no engine game end, no world reload: results stay `rematchDelaySec` s, then the war entities are deleted, runtime state is reset and the session is back in the SETUP phase (setup menu for the setup owner, the `setup` preset with `autoStartSec` starts the next war). Players are switched to the default side and respawned through the setup flow. |
+| | `"reload"` | the old behaviour: `EndGameMode`, the server reloads the world about 30 s later (clients may fail to rejoin with `JIP_ERROR`). The war runtime statics are cleared in the game mode's `OnGameEnd`. |
+| | `"off"` | the war stays ENDED, nothing happens afterwards (restart the server for a new war). |
+| `rematchDelaySec` | number, default 60, minimum 5 | seconds the results (HUD winner label, `WAR OVER` + countdown announcements) stay before the reset. |
+Without `EndGameMode` there is no vanilla end screen; the results are the HUD (phase ENDED shows "<faction> wins"), the announcements and the log.
+Log lines: `CLW: rematch: choice ...`, `war over, results for <n> s`, `reset <manager> (<n> entities)`, `census before/after`, `back to setup (round <k>)`. Code: `CLW_Rematch.c`.

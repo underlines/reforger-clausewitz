@@ -215,4 +215,13 @@ class CLW_PendingOrders
 		Remove(pending.m_sTag);
 		return true;
 	}
+
+	// Rematch (CLW_Rematch.c): drop the orders waiting for purchases of the finished war.
+	static void RematchReset()
+	{
+		GetGame().GetCallqueue().Remove(Tick);
+		s_bTicking = false;
+		s_aPending.Clear();
+		s_iNext = 0;
+	}
 }
