@@ -17,7 +17,7 @@
 [BaseContainerProps()]
 class CLW_PropRoleCandidates
 {
-	[Attribute("", UIWidgets.EditBox, "Role id: service.command_post, service.supply, service.arsenal, service.vehicle_depot, service.medical, service.repair, fob.arsenal_box, fob.supply_box, fort.sandbag_long, ...")]
+	[Attribute("", UIWidgets.EditBox, "Role id: service.command_post, service.supply, service.arsenal, service.vehicle_depot, service.repair, fob.arsenal_box, fob.supply_box, fort.sandbag_long, ...")]
 	string m_sRole;
 
 	[Attribute("", UIWidgets.ResourceNamePicker, "Candidate prefabs in order of preference; the first one that loads is used", "et")]
@@ -152,7 +152,6 @@ class CLW_PropResolver
 		kinds.Insert(CLW_ServiceKind.SUPPLY);
 		kinds.Insert(CLW_ServiceKind.ARSENAL);
 		kinds.Insert(CLW_ServiceKind.VEHICLE_DEPOT);
-		kinds.Insert(CLW_ServiceKind.MEDICAL);
 		kinds.Insert(CLW_ServiceKind.REPAIR);
 		int found;
 		foreach (string kind : kinds)
@@ -533,12 +532,16 @@ class CLW_PropResolver
 			made.m_vFootprint = placement.m_vFootprint;
 			made.m_iMapMarker = placement.m_iMapMarker;
 			made.m_sRole = placement.m_sRole;
+			made.m_fGapM = placement.m_fGapM;
+			made.m_fRingMinM = placement.m_fRingMinM;
+			made.m_fRingMaxM = placement.m_fRingMaxM;
 			return made;
 		}
 
 		made.m_sKind = KindOfRole(role);
 		made.m_fYaw = -1;
 		made.m_iMapMarker = -1;
+		made.m_fGapM = -1;	// script-made entries get no attribute defaults: -1 = default of the kind
 		return made;
 	}
 
