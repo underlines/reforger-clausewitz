@@ -147,6 +147,44 @@ class CLW_Situation
 		string sitesJson = CLW_FobManager.SitesJson(m_sFaction);
 		string extra = ",\"fobs\":[" + fobsJson + "],\"fobSites\":[" + sitesJson + "],\"fobRules\":" + CLW_FobManager.RulesJson(m_sFaction);
 		json = CLW_Str.DropLast(json) + extra + "}";
+		AppendFobTasks(json);	// WP3: builder / escort positions for the dashboard arrows
+	}
+
+	// WP3 (round 3): where the builder and the escort of each FOB in progress are now (fobTasks[]: fob, role, unit, pos [x,z]) so the
+	// dashboard can draw the arrows unit -> site. Appended after the trim, called from AppendFobBlocks.
+	protected void AppendFobTasks(inout string json)
+	{
+		if (json.Length() < 2 || !m_Orders)
+			return;
+
+		array<CLW_Fob> fobs = {};
+		CLW_FobManager.GetFobs(m_sFaction, fobs);
+		string tasks = "";
+		foreach (CLW_Fob fob : fobs)
+		{
+			if (!fob || !fob.IsInProgress())
+				continue;
+
+			tasks = AddFobTask(tasks, fob.m_sId, "builder", fob.m_sBuilderId);
+			tasks = AddFobTask(tasks, fob.m_sId, "escort", fob.m_sEscortId);
+		}
+
+		if (tasks.IsEmpty())
+			return;
+
+		json = CLW_Str.DropLast(json) + ",\"fobTasks\":[" + tasks + "]}";
+	}
+
+	protected string AddFobTask(string tasks, string fobId, string role, string unitId)
+	{
+		vector pos;
+		if (unitId.IsEmpty() || !m_Orders.UnitPos(unitId, pos) || pos == vector.Zero)
+			return tasks;
+
+		if (!tasks.IsEmpty())
+			tasks += ",";
+
+		return tasks + "{\"fob\":\"" + Escape(fobId) + "\",\"role\":\"" + role + "\",\"unit\":\"" + Escape(unitId) + "\",\"pos\":[" + Math.Round(pos[0]) + "," + Math.Round(pos[2]) + "]}";
 	}
 
 	// ---- parts ----

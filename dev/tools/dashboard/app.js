@@ -170,7 +170,7 @@ function buildRows(state, faction) {
       const state_ = s.state ? String(s.state) : s.agents === 0 ? "dead" : moving ? "moving" : s.mode === "ATTACK" ? "engaged" : s.mode === "DEFEND" ? "defending" : "idle";
       const ots = e.orderTs?.[s.id];
       rows.push({
-        key: f + "/" + s.id, id: String(s.id), faction: f, type: dash(s.type), agents: s.agents, size: num(s.agents) ? `${s.agents}/${s.startAgents}` : "-",
+        key: f + "/" + s.id, id: String(s.id), name: typeof s.name === "string" && s.name ? s.name : "", faction: f, type: dash(s.type), agents: s.agents, size: num(s.agents) ? `${s.agents}/${s.startAgents}` : "-",
         pct, wounded: num(s.wounded) ? s.wounded : null, health: num(s.health) ? s.health : null, obj, state: state_, move, speed: speed ?? -1,
         human: !!s.humanLed, pos: s.pos, posTxt: gridTxt(s.pos), orderAge: ots ? Math.round((now - ots) / 1000) : null, mode: s.mode,
         dormant: typeof s.dormant === "boolean" ? s.dormant : null, reason: o?.reason ?? obj?.reason,
@@ -456,27 +456,48 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall, act = "a
         if (layers.labels) { ctx.font = "bold 11px system-ui, sans-serif"; ctx.lineWidth = 3.5; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(8,11,16,.9)"; ctx.strokeText(b.faction + " base", x + 12, y); ctx.fillStyle = col; ctx.fillText(b.faction + " base", x + 12, y); ctx.lineJoin = "miter"; ctx.font = "11px system-ui, sans-serif"; }
         h.push({ x, y, r: 12, title: `${b.faction} main base`, lines: [`at ${Math.round(b.pos[0])}, ${Math.round(b.pos[1])}`] });
       }
+      // WP3: task arrows (dashed, unit -> destination): FOB builder / escort -> site, convoy truck -> destination base
+      const taskArrow = (x0, y0, x1, y1, col) => {
+        const a = Math.atan2(y1 - y0, x1 - x0);
+        ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2; ctx.globalAlpha = .8; ctx.setLineDash([7, 4]);
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); ctx.setLineDash([]);
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x1 - 11 * Math.cos(a - .4), y1 - 11 * Math.sin(a - .4)); ctx.lineTo(x1 - 11 * Math.cos(a + .4), y1 - 11 * Math.sin(a + .4)); ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+      };
+      const destOf = (fe, baseId) => { // world [x,z] of a base id of a faction: HQ (situation.bases) or one of its FOBs
+        const sit0 = fe?.situation ?? {};
+        const fb = (Array.isArray(sit0.fobs) ? sit0.fobs : []).find((f0) => f0 && f0.id === baseId);
+        if (fb && Array.isArray(fb.pos)) return fb.pos;
+        const hq = (Array.isArray(sit0.bases) ? sit0.bases : []).find((b0) => b0 && b0.faction === sit0.faction && Array.isArray(b0.pos));
+        return baseId === "HQ" && hq ? hq.pos : null;
+      };
+      const nameOfUnit = (fe, id) => { const q = (Array.isArray(fe?.situation?.squads) ? fe.situation.squads : []).find((s0) => s0 && s0.id === id); return q?.name || id; };
       // Convoys (M3 phase L): supply trucks between bases, a small square with the cargo; hollow while loading, red when lost
       for (const [fk, fe] of Object.entries(st.factions ?? {})) for (const c of Array.isArray(fe.situation?.convoys) ? fe.situation.convoys : []) {
         if (!c || !Array.isArray(c.pos) || !num(c.pos[0]) || !num(c.pos[1]) || c.state === "failed") continue;
         const x = sx(c.pos[0]), y = sy(c.pos[1]), col = c.state === "lost" ? "#ff5a4d" : colorOf(fk), moving = c.state === "en_route";
         ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2; ctx.beginPath(); ctx.rect(x - 5, y - 5, 10, 10); if (moving) ctx.fill(); ctx.stroke();
         if (layers.labels) { const txt = `${c.id} ${num(c.cargo) ? c.cargo : 0}`; ctx.font = "bold 10px system-ui, sans-serif"; ctx.lineWidth = 3; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(8,11,16,.9)"; ctx.strokeText(txt, x + 9, y + 3); ctx.fillStyle = col; ctx.fillText(txt, x + 9, y + 3); ctx.lineJoin = "miter"; ctx.font = "11px system-ui, sans-serif"; }
+        const cd = c.state === "lost" ? null : destOf(fe, c.to);
+        if (cd && num(cd[0]) && num(cd[1]) && (c.state === "en_route" || c.state === "loading")) taskArrow(x, y, sx(cd[0]), sy(cd[1]), col);
         h.push({ x, y, r: 10, title: `${fk} convoy ${c.id}`, lines: [`${c.from} -> ${c.to}, ${c.state}`, `cargo ${dash(c.cargo)}`] });
       }
       // FOBs (M3 phase F): each faction's own situation lists its FOBs; a diamond, hollow while planned / moving / building
       for (const [fk, fe] of Object.entries(st.factions ?? {})) for (const f of Array.isArray(fe.situation?.fobs) ? fe.situation.fobs : []) {
         if (!f || !Array.isArray(f.pos) || !num(f.pos[0]) || !num(f.pos[1]) || f.state === "lost") continue;
         const x = sx(f.pos[0]), y = sy(f.pos[1]), col = colorOf(fk), up = f.state === "active";
-        ctx.globalAlpha = f.underAttack ? 0.5 + 0.5 * Math.sin(t / 200) : 1; ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2.5;
-        ctx.beginPath(); ctx.moveTo(x, y - 9); ctx.lineTo(x + 9, y); ctx.lineTo(x, y + 9); ctx.lineTo(x - 9, y); ctx.closePath();
-        if (up) ctx.fill(); ctx.stroke(); ctx.globalAlpha = 1;
-        if (layers.labels) { const txt = `${f.id}${up ? "" : " " + f.state + (f.state === "building" ? " " + Math.round(f.build ?? 0) + "%" : "")}${num(f.stock) ? " [" + Math.round(f.stock) + "]" : ""}`; ctx.font = "bold 11px system-ui, sans-serif"; ctx.lineWidth = 3.5; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(8,11,16,.9)"; ctx.strokeText(txt, x + 12, y); ctx.fillStyle = col; ctx.fillText(txt, x + 12, y); ctx.lineJoin = "miter"; ctx.font = "11px system-ui, sans-serif"; }
+        // base icon like the HQ (square with text): filled when standing, hollow while planned / moving / building (never an objective)
+        ctx.globalAlpha = f.underAttack ? 0.5 + 0.5 * Math.sin(t / 200) : 1; ctx.strokeStyle = col; ctx.fillStyle = up ? col : "rgba(8,11,16,.85)"; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.rect(x - 9, y - 9, 18, 18); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = up ? "#0a0d12" : col; ctx.font = "bold 9px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillText("FOB", x, y + 1); ctx.textAlign = "start"; ctx.globalAlpha = 1;
+        const fobTasks = Array.isArray(fe.situation?.fobTasks) ? fe.situation.fobTasks.filter((tk) => tk && tk.fob === f.id && Array.isArray(tk.pos)) : [];
+        if (!up) for (const tk of fobTasks) taskArrow(sx(tk.pos[0]), sy(tk.pos[1]), x, y, col);
+        if (!up && !fobTasks.length && f.builder) { const bq = (Array.isArray(fe.situation?.squads) ? fe.situation.squads : []).find((s0) => s0 && s0.id === f.builder && okPos(s0.pos)); if (bq) taskArrow(sx(bq.pos[0]), sy(bq.pos[2]), x, y, col); }
+        if (layers.labels) { const txt = `${f.id}${up ? "" : f.state === "building" ? ` (building ${Math.round(f.build ?? 0)} %)` : " (planned)"}${num(f.stock) ? " [" + Math.round(f.stock) + "]" : ""}`; ctx.font = "bold 11px system-ui, sans-serif"; ctx.lineWidth = 3.5; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(8,11,16,.9)"; ctx.strokeText(txt, x + 14, y); ctx.fillStyle = col; ctx.fillText(txt, x + 14, y); ctx.lineJoin = "miter"; ctx.font = "11px system-ui, sans-serif"; }
         h.push({ x, y, r: 12, title: `${fk} FOB ${f.id}${f.name ? " " + f.name : ""}`, lines: [...(num(f.stock) ? [`stock ${Math.round(f.stock)} supplies`] : []), `state ${f.state}${f.state === "building" ? " " + Math.round(f.build ?? 0) + "%" : ""}, tier ${dash(f.tier)}${f.underAttack ? " (UNDER ATTACK)" : ""}`, `services: ${Array.isArray(f.services) && f.services.length ? f.services.join(", ") : "-"}`, `at ${Math.round(f.pos[0])}, ${Math.round(f.pos[1])}`] });
       }
     }
     if (layers.structures) { // base / FOB structures (arsenal, depot, ...): situation.structures[] of each faction, a small lettered square
-      const GLYPH = { command_post: "C", arsenal: "A", vehicle_depot: "V", supply: "S", medical: "+", repair: "R" };
+      const GLYPH = { command_post: "C", arsenal: "A", vehicle_depot: "V", supply: "S", repair: "R" };
       for (const [fk, fe] of Object.entries(st.factions ?? {})) {
         if (faction !== "all" && fk !== faction) continue;
         for (const s of Array.isArray(fe.situation?.structures) ? fe.situation.structures : []) {
@@ -552,12 +573,12 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall, act = "a
         if (veh && veh.mounted === false) { ctx.strokeStyle = "#0a0d12"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - 4, y); ctx.lineTo(x + 4, y); ctx.stroke(); } // dismounted: bar across the symbol
         if (layers.labels) {
           ctx.fillStyle = dm ? "rgba(221,227,236,.6)" : "#dde3ec";
-          ctx.font = "600 11px system-ui, sans-serif"; ctx.fillText(shortId(s.id) + (s.humanLed ? " ★" : ""), x + 9, y - 11);
+          ctx.font = "600 11px system-ui, sans-serif"; ctx.fillText((s.name || shortId(s.id)) + (s.humanLed ? " ★" : ""), x + 9, y - 11);
           if (s.kind || veh) { ctx.font = "9px system-ui, sans-serif"; ctx.fillStyle = dm ? "rgba(221,227,236,.45)" : "rgba(221,227,236,.7)"; ctx.fillText([kindLabel(s.kind), veh?.type, veh ? (veh.mounted ? "mounted" : "dismounted") : null].filter(Boolean).join(" "), x + 9, y + 13); }
           ctx.font = "11px system-ui, sans-serif";
         }
         const oc = s.objective?.command ?? (byOrder.get(s.id)?.command ?? "-"), ot = s.objective?.target ?? byOrder.get(s.id)?.target;
-        h.push({ x, y, r: 11, key, title: String(s.id), lines: [`${f}, ${s.agents}/${s.startAgents} agents, ${s.mode ?? s.state ?? "-"}`, `activity: ${typeof s.dormant !== "boolean" ? "unknown (game does not report it)" : dm ? "dormant (engine max AI LOD, barely simulated)" : "active (kept awake)"}`, ...(s.kind ? [`kind ${s.kind}${s.type ? ": " + s.type : ""}`] : []),
+        h.push({ x, y, r: 11, key, title: s.name ? `${s.name} (${s.id})` : String(s.id), lines: [`${f}, ${s.agents}/${s.startAgents} agents, ${s.mode ?? s.state ?? "-"}`, `activity: ${typeof s.dormant !== "boolean" ? "unknown (game does not report it)" : dm ? "dormant (engine max AI LOD, barely simulated)" : "active (kept awake)"}`, ...(s.kind ? [`kind ${s.kind}${s.type ? ": " + s.type : ""}`] : []),
           ...(veh ? [`vehicle ${dash(veh.type)}, ${veh.mounted ? "mounted" : "dismounted"}${veh.state ? ", " + veh.state : ""}${num(veh.health) ? ", hp " + Math.round(veh.health * 100) + "%" : ""}`] : []),
           `objective: ${oc}${ot ? " " + ot : ""}`, s.humanLed ? "human-led" + (s.mission?.state && s.mission.state !== "none" ? `, mission ${s.mission.state} ${s.mission.kind ?? ""} ${s.mission.target ?? ""}` : "") : "AI-led", `at ${gridTxt(s.pos)}`] });
       }
@@ -707,7 +728,7 @@ function SquadsTable({ rows, sel, onSel }) {
       <tbody>${sorted.map((r) => {
         const col = r.pct === null ? "#5d697c" : r.pct >= 66 ? "var(--ok)" : r.pct >= 33 ? "var(--warn)" : "var(--bad)", o = r.obj, on = sel === r.key;
         const main = html`<tr key=${r.key} data-key=${r.key} class=${"sqrow" + (on ? " sel" : "") + (r.dormant === true ? " dormrow" : "")} onClick=${() => onSel(on ? null : r.key)}>
-          <td style=${{ borderLeft: "3px solid " + colorOf(r.faction) }}><b>${r.id}</b>${r.human ? html` <span class="badge human">human</span>` : ""}</td><td class=${facClass(r.faction)}>${r.faction}</td>
+          <td style=${{ borderLeft: "3px solid " + colorOf(r.faction) }} title=${r.id}><b>${r.name || r.id}</b>${r.name ? html` <span class="muted mono">${r.id}</span>` : ""}${r.human ? html` <span class="badge human">human</span>` : ""}</td><td class=${facClass(r.faction)}>${r.faction}</td>
           <td>${r.kind ? html`<span class=${"badge kind k-" + r.kind}>${kindLabel(r.kind)}</span>` : "-"}</td>
           <td>${r.pct === null ? "-" : html`<span class="bar"><i style=${{ width: Math.min(100, r.pct) + "%", background: col }}></i></span><span class="mono">${r.size}</span> <span class="muted">${r.pct}%</span>`}</td>
           <td class="wrap">${o ? html`<span class=${"cmd " + o.command}>${o.command}</span> ${o.target ? html`<b>${o.target}</b>` : ""}${!o.target && Array.isArray(o.pos) && num(o.pos[0]) ? html`<span class="mono">${Math.round(o.pos[0])}, ${Math.round(o.pos[1])}</span>` : ""}${o.status ? html` <span class="muted">${o.status}</span>` : ""}` : "-"}</td>
@@ -964,7 +985,7 @@ function SelCard({ rows, sel }) {
   const r = sel ? rows.find((x) => x.key === sel) : null;
   if (!r) return html`<div class="muted selcard">Click a squad on the map to see its details.</div>`;
   const o = r.obj;
-  return html`<div class="selcard"><b class=${facClass(r.faction)}>${r.id}</b> ${r.kind ? html`<span class=${"badge kind k-" + r.kind}>${kindLabel(r.kind)}</span>` : ""} <span class=${"badge " + stateBadge(r.state)}>${r.state}</span> <${DormBadge} r=${r} />${r.dormant === false ? html`<span class="badge actv">active</span>` : ""}
+  return html`<div class="selcard"><b class=${facClass(r.faction)}>${r.name || r.id}</b>${r.name ? html` <span class="muted mono">${r.id}</span>` : ""} ${r.kind ? html`<span class=${"badge kind k-" + r.kind}>${kindLabel(r.kind)}</span>` : ""} <span class=${"badge " + stateBadge(r.state)}>${r.state}</span> <${DormBadge} r=${r} />${r.dormant === false ? html`<span class="badge actv">active</span>` : ""}
     <span class="muted">${r.size} soldiers${r.pct !== null ? ", " + r.pct + "%" : ""}${r.vehicle ? ", " + dash(r.vehicle.type) + (r.vehicle.mounted ? " (mounted)" : " (dismounted)") : ""}, ${r.move}, at ${r.posTxt}</span>
     ${o ? html` <span class=${"cmd " + o.command}>${o.command}</span> ${o.target ?? ""} <span class="muted">${o.reason ?? ""}</span>` : ""}${r.human ? html` <span class="badge human">human</span>` : ""}</div>`;
 }
