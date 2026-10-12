@@ -29,8 +29,10 @@ class CLW_WarHud
 		string nameA, infoA, nameB, infoB;
 		int colorA, colorB;
 		bool lowA, lowB;
-		FillSide(parts[3], 0, phase, nameA, infoA, colorA, lowA);
-		FillSide(parts[4], 1, phase, nameB, infoB, colorB, lowB);
+		int suppliesA, suppliesB;
+		FillSide(parts[3], 0, phase, nameA, infoA, colorA, lowA, suppliesA);
+		FillSide(parts[4], 1, phase, nameB, infoB, colorB, lowB, suppliesB);
+		int supplies = Math.Max(suppliesA, suppliesB);
 		int warn = ARGB(255, 255, 90, 60);
 		int normal = ARGB(255, 235, 235, 235);
 		int infoColorA = normal;
@@ -62,6 +64,21 @@ class CLW_WarHud
 			clock = FormatTime(timeLeft);
 		}
 
+		// Own side's supplies: own centred element below the two side blocks, hidden when unused (-1) or in setup.
+		Widget supplyPanel = null;
+		if (s_wRoot)
+			supplyPanel = s_wRoot.FindAnyWidget("SupplyPanel");
+		if (supplyPanel)
+		{
+			bool showSupplies = supplies >= 0 && phase != 0;
+			supplyPanel.SetVisible(showSupplies);
+			if (showSupplies)
+			{
+				SetText("Supply_Label", "Supplies", normal);
+				SetText("Supply_Value", supplies.ToString(), normal);
+			}
+		}
+
 		SetText("Status", status, normal);
 		SetText("Clock", clock, normal);
 		if (s_wRoot)
@@ -69,8 +86,9 @@ class CLW_WarHud
 	}
 
 	// side = key,identity,tickets,maxTickets,heldCount,heldValue,supplies (supplies shown for the local side only)
-	protected static void FillSide(string side, int index, int phase, out string name, out string info, out int color, out bool low)
+	protected static void FillSide(string side, int index, int phase, out string name, out string info, out int color, out bool low, out int supplies)
 	{
+		supplies = -1;
 		array<string> f = {};
 		side.Split(",", f, false);
 		if (f.Count() < 6)
@@ -97,9 +115,7 @@ class CLW_WarHud
 		info = ticketText + "  |  " + f[4] + " (" + f[5] + ")";
 		if (f.Count() >= 7 && IsLocalSide(f[0]))
 		{
-			int supplies = f[6].ToInt();
-			if (supplies >= 0)
-				info += "  |  Supplies " + supplies.ToString();
+			supplies = f[6].ToInt();
 		}
 	}
 
