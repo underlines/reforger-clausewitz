@@ -12,6 +12,7 @@ class CLW_Place
 {
 	string m_sName;
 	vector m_vPos;
+	string m_sType;	// map descriptor type text, lower case without the MDT_ prefix (e.g. name_village); "" = unknown
 }
 
 class CLW_Places
@@ -41,6 +42,9 @@ class CLW_Places
 
 				array<MapItem> found = {};
 				mapEnt.GetByType(found, t);
+				string typeKey = typeName;
+				typeKey.Replace("MDT_", "");
+				typeKey.ToLower();
 				foreach (MapItem item : found)
 				{
 					if (!item || s_aPlaces.Count() >= MAX_PLACES)
@@ -50,7 +54,7 @@ class CLW_Places
 					if (name.IsEmpty())
 						continue;
 
-					AddPlace(name, item.GetPos());
+					AddPlace(name, item.GetPos(), typeKey);
 				}
 			}
 		}
@@ -65,7 +69,7 @@ class CLW_Places
 				{
 					CLW_ControlPoint point = points.Get(i);
 					if (point && !point.m_sName.IsEmpty())
-						AddPlace(point.m_sName, point.m_vPos);
+						AddPlace(point.m_sName, point.m_vPos, "");
 				}
 			}
 		}
@@ -73,7 +77,7 @@ class CLW_Places
 		Print("CLW: places: " + s_aPlaces.Count() + " named places cached", LogLevel.NORMAL);
 	}
 
-	protected static void AddPlace(string name, vector pos)
+	protected static void AddPlace(string name, vector pos, string type)
 	{
 		foreach (CLW_Place known : s_aPlaces)
 		{
@@ -84,7 +88,65 @@ class CLW_Places
 		CLW_Place place = new CLW_Place();
 		place.m_sName = name;
 		place.m_vPos = pos;
+		place.m_sType = type;
 		s_aPlaces.Insert(place);
+	}
+
+	// Forget the cached places (rebuilt on the next use). Used after a random layout moved the objectives when the list was built from
+	// the objective names (no map items on this server).
+	static void Invalidate()
+	{
+		s_bBuilt = false;
+		s_aPlaces = null;
+	}
+
+	// True when at least one place came from a map item (has a descriptor type).
+	static bool HasTypedPlaces()
+	{
+		Ensure();
+		foreach (CLW_Place place : s_aPlaces)
+		{
+			if (!place.m_sType.IsEmpty())
+				return true;
+		}
+
+		return false;
+	}
+
+	// Nearest named place within maxDist whose descriptor type contains one of the given texts. "" when none.
+	static string NearestOfTypes(vector pos, float maxDist, notnull array<string> typeParts, out float dist, out vector placePos)
+	{
+		Ensure();
+		string best = "";
+		dist = maxDist;
+		foreach (CLW_Place place : s_aPlaces)
+		{
+			if (place.m_sType.IsEmpty())
+				continue;
+
+			bool match;
+			foreach (string part : typeParts)
+			{
+				if (place.m_sType.Contains(part))
+				{
+					match = true;
+					break;
+				}
+			}
+
+			if (!match)
+				continue;
+
+			float d = vector.DistanceXZ(pos, place.m_vPos);
+			if (d < dist)
+			{
+				dist = d;
+				best = place.m_sName;
+				placePos = place.m_vPos;
+			}
+		}
+
+		return best;
 	}
 
 	// Nearest named place within maxDist (m). "" when none. dist = metres to it.

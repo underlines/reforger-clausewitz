@@ -222,6 +222,43 @@ class CLW_Bases
 			Print(string.Format("CLW: bases WARNING hq distance %1 m is far from the wanted %2 m (terrain forced the sites)", Math.Round(actual), Math.Round(wanted)), LogLevel.WARNING);
 	}
 
+	// Random start positions (CLW_RandomLayout): both HQs go to generated, validated sites at the battle-size distance (authored distance
+	// * scale, same floor as ApplyLayout). Outputs like ApplyLayout: mid = midpoint of the authored HQs, factor = new / authored distance.
+	// False (nothing moved) when the generator found no valid pair: the caller falls back to ApplyLayout.
+	bool ApplyRandomLayout(notnull CLW_ScenarioConfig scenario, string sizeName, float scale, float minHq, notnull CLW_RandomLayout layout, out vector mid, out float factor)
+	{
+		factor = 1;
+		if (!Replication.IsServer() || !m_bStarted || m_aKeys.Count() != 2 || scenario.m_aFactions.Count() != 2)
+		{
+			Print("CLW: bases random layout skipped: bases not started or not two sides", LogLevel.WARNING);
+			return false;
+		}
+
+		vector authoredA = m_aPos[0];
+		vector authoredB = m_aPos[1];
+		mid = Vector((authoredA[0] + authoredB[0]) * 0.5, 0, (authoredA[2] + authoredB[2]) * 0.5);
+		float authored = vector.DistanceXZ(authoredA, authoredB);
+		if (authored < 1)
+			return false;
+
+		float wanted = authored * scale;
+		if (wanted < minHq)
+			wanted = Math.Min(minHq, authored);
+
+		if (!layout.Generate(authoredA, authoredB, wanted, minHq))
+			return false;
+
+		m_fAuthoredDistance = authored;
+		m_fSeparationScale = scale;
+		m_sBattleSize = sizeName;
+		MoveBase(scenario, 0, layout.m_vHqA);
+		MoveBase(scenario, 1, layout.m_vHqB);
+		m_fHqDistance = vector.DistanceXZ(m_aPos[0], m_aPos[1]);
+		factor = m_fHqDistance / authored;
+		Print(string.Format("CLW: bases random layout battleSize=%1 hqDistance=%2 m (authored %3 m, wanted %4 m) %5 at %6, %7 at %8", sizeName, Math.Round(m_fHqDistance), Math.Round(authored), Math.Round(wanted), m_aKeys[0], m_aPos[0], m_aKeys[1], m_aPos[1]), LogLevel.NORMAL);
+		return true;
+	}
+
 	// Moves base i to a new site: positions, placement state, own spawn point, humans standing at the old HQ.
 	protected void MoveBase(notnull CLW_ScenarioConfig scenario, int i, vector site)
 	{

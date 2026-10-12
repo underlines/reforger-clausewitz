@@ -57,6 +57,12 @@ class CLW_WarModeConfig_Short : CLW_WarModeConfig
 	[Attribute("120", UIWidgets.EditBox, "Scaled objectives keep this much free ground (m) between their capture circles (centre distance >= both radii + this)")]
 	float m_fObjectiveGapM;
 
+	[Attribute("fixed", UIWidgets.EditBox, "Default start positions: fixed (scenario HQs) or random (CLW_RandomLayout)")]
+	string m_sStartPositions;
+
+	[Attribute("0", UIWidgets.EditBox, "Default random seed (0 = time based, 0-9999999)")]
+	int m_iRandomSeed;
+
 	[Attribute("1", UIWidgets.CheckBox, "Ticket bleed for the side holding fewer points")]
 	bool m_bTicketBleed;
 

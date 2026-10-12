@@ -118,7 +118,7 @@ class CLW_ControlPoints
 	// (CLW_ObjectiveSetup.m_iMinBattleSize), and when the HQs were moved (factor != 1) scales the remaining objectives about the
 	// authored HQ midpoint by the same factor, then snaps each to a usable site that keeps hqClear metres from both HQs.
 	// Objectives keep their id, name, value, radius and start owner. Scenario and runtime points stay consistent.
-	void ApplyLayout(notnull CLW_ScenarioConfig scenario, int sizeIndex, string sizeName, vector mid, float factor, array<vector> hqs, float hqClear, float objGap)
+	void ApplyLayout(notnull CLW_ScenarioConfig scenario, int sizeIndex, string sizeName, vector mid, float factor, array<vector> hqs, float hqClear, float objGap, CLW_RandomLayout layoutGen = null)
 	{
 		if (!Replication.IsServer())
 			return;
@@ -159,7 +159,10 @@ class CLW_ControlPoints
 		// spacing (centre distance >= both radii + objGap from every objective placed before it). Search order: radius R, 3R, 6R
 		// with both constraints; then HQ clearance only (spacing relaxed, logged); then the authored position (logged, and flagged
 		// when even that violates the clearance). A site that breaks the HQ clearance is never accepted.
-		if (Math.AbsFloat(factor - 1) >= 0.0001)
+		// Random start positions (layoutGen != null): every objective is carried over to the new HQ line, snapped / kept / nudged by
+		// CLW_RandomLayout.PlanObjective; that result is taken as is when it satisfies the HQ clearance and spacing, else the search below
+		// runs around it.
+		if (layoutGen || Math.AbsFloat(factor - 1) >= 0.0001)
 		{
 			array<vector> placed = {};
 			array<float> placedRadius = {};
@@ -167,6 +170,14 @@ class CLW_ControlPoints
 			{
 				vector authored = point.m_vPos;
 				vector wish = mid + (point.m_vPos - mid) * factor;
+				vector planned = vector.Zero;
+				string plannedHow = "";
+				if (layoutGen)
+				{
+					layoutGen.PlanObjective(authored, planned, plannedHow);
+					wish = planned;
+				}
+
 				float searchRadius = Math.Max(OBJECTIVE_SITE_RADIUS_MIN_M, point.m_fRadius * 2);
 				float hqNeed = hqClear + point.m_fRadius;
 
@@ -192,9 +203,37 @@ class CLW_ControlPoints
 				float roadDist;
 				float score;
 				string how = "";
-				bool ok = CLW_Placement.FindSiteEx(wish, searchRadius, avoid, avoidDist, site, roadDist, score);
-				if (ok)
-					how = "site search";
+				bool ok;
+				if (layoutGen)
+				{
+					bool plannedOk = true;
+					for (int qi = 0; qi < avoid.Count(); qi++)
+					{
+						if (vector.DistanceXZ(planned, avoid[qi]) < avoidDist[qi])
+						{
+							plannedOk = false;
+							break;
+						}
+					}
+
+					if (plannedOk)
+					{
+						site = planned;
+						roadDist = CLW_Placement.NearestRoadDistance(site);
+						how = "random layout (" + plannedHow + ")";
+						ok = true;
+					}
+					else
+						Print(string.Format("CLW: points layout %1: planned spot %2 (%3) breaks the HQ clearance / spacing, searching around it", point.m_sId, planned, plannedHow), LogLevel.NORMAL);
+				}
+
+				if (!ok)
+				{
+					ok = CLW_Placement.FindSiteEx(wish, searchRadius, avoid, avoidDist, site, roadDist, score);
+					if (ok)
+						how = "site search";
+				}
+
 				if (!ok)
 				{
 					ok = CLW_Placement.FindSiteEx(wish, searchRadius * 3, avoid, avoidDist, site, roadDist, score);
@@ -222,6 +261,8 @@ class CLW_ControlPoints
 				if (!ok)
 				{
 					site = authored;
+					if (layoutGen)
+						site = planned;	// the authored position means nothing on a random layout
 					CLW_Placement.SurfaceAt(site);
 					roadDist = -1;
 					how = "AUTHORED position (no site satisfied the HQ clearance)";
@@ -229,6 +270,14 @@ class CLW_ControlPoints
 				}
 
 				Print(string.Format("CLW: points layout %1 %2 -> %3 via %4 (scaled wish %5, moved %6 m, nearestRoad=%7 m)", point.m_sId, authored, site, how, wish, Math.Round(vector.DistanceXZ(site, wish)), roadDist), LogLevel.NORMAL);
+				if (layoutGen)
+				{
+					string finalHow = "nudged";
+					if (vector.DistanceXZ(site, planned) < 1)
+						finalHow = plannedHow;
+					Print(string.Format("CLW: layout objective %1 -> %2 grid %3 (%4)", point.m_sId, site, CLW_Places.Grid(site), finalHow), LogLevel.NORMAL);
+				}
+
 				point.m_vPos = site;
 				CLW_ObjectiveSetup setup2 = scenario.FindObjective(point.m_sId);
 				if (setup2)

@@ -256,7 +256,18 @@ class CLW_WarMode
 
 		vector mid;
 		float factor = 1;
-		bases.ApplyLayout(scenario, GetBattleSizeName(), GetDistanceScale(), GetMinHqDistanceM(), mid, factor);
+		CLW_RandomLayout randomLayout;
+		if (GetChoiceParam("startPositions") == "random")
+		{
+			CLW_RandomLayout candidate = CLW_RandomLayout.Create(scenario, GetIntParam("randomSeed", 0));
+			if (bases.ApplyRandomLayout(scenario, GetBattleSizeName(), GetDistanceScale(), GetMinHqDistanceM(), candidate, mid, factor))
+				randomLayout = candidate;
+			else
+				Print("CLW: layout WARNING random start positions failed, falling back to the fixed layout", LogLevel.WARNING);
+		}
+
+		if (!randomLayout)
+			bases.ApplyLayout(scenario, GetBattleSizeName(), GetDistanceScale(), GetMinHqDistanceM(), mid, factor);
 		if (points)
 		{
 			array<vector> hqs = {};
@@ -267,8 +278,12 @@ class CLW_WarMode
 				hqs.Insert(bases.GetBasePos(key));
 			}
 
-			points.ApplyLayout(scenario, GetBattleSizeIndex(), GetBattleSizeName(), mid, factor, hqs, GetHqObjectiveClearM(), GetObjectiveGapM());
+			points.ApplyLayout(scenario, GetBattleSizeIndex(), GetBattleSizeName(), mid, factor, hqs, GetHqObjectiveClearM(), GetObjectiveGapM(), randomLayout);
 		}
+
+		// the place list may have been built from the objective names (no map items): forget it so it follows the new positions
+		if (randomLayout && !CLW_Places.HasTypedPlaces())
+			CLW_Places.Invalidate();
 	}
 
 	// Seconds left (-1 = no time limit).
