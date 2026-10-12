@@ -5,6 +5,8 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-12
+
 ### Added
 - Dashboard map: building footprints (cached vector layer, toggle `buildings`) and base / airport / port symbols with bold labels (toggle `objects`), including vanilla military bases with faction.
 - LLM bridge: HQ commanders send the contact picture to a local sidecar (`dev/tools/llm_sidecar.mjs`) and apply the validated orders; falls back to the rule commander on errors or empty replies.
@@ -31,3 +33,4 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 
 ### Added
 - M0 skeleton: game mode with US vs USSR, player spawn and squad join, per-faction contact book with map markers, rule-based commander (MOVE/ATTACK/DEFEND), vanilla commanding menu, missions as vanilla tasks for human-led squads, debug chat.
+
