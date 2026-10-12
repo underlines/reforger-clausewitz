@@ -2,7 +2,9 @@
 // Clausewitz: generate a tiny compat addon ("wrapper") that lets Clausewitz run on ANY map mod.
 //
 // The wrapper holds: addon.gproj (depends on Clausewitz + the map addon), a sub-scene world whose parent is the map's
-// bare world, one layer with the nine Clausewitz entities (same as Worlds/CLW_Arland.ent), an AIWorld prefab and .meta files.
+// bare world and one layer with the nine Clausewitz entities (same as Worlds/CLW_Arland.ent). It writes NO prefab of its own:
+// the layer's AIWorld entity references the map's AIWorld prefab, or the vanilla SCR_AIWorld.et plus inline navmesh components.
+// Every {GUID}path the output references must be registered elsewhere (map rdb, Clausewitz addon, base game); the run checks that.
 // The game mode entity sets NO scenario config: Clausewitz picks a scenario by world name or builds the auto scenario.
 //
 // Usage: node new-map-wrapper.mjs <map addon folder | world .ent path> [options]
@@ -20,6 +22,8 @@
 //   --no-nav             write the world only (AI will not move)
 //   --prefix <p>         file prefix of the wrapper resources (default CLW_)
 //   --spawn "x,y,z;x,y,z"  spawn point coordinates (USSR;US) instead of the town search
+//   --game <dir>         base game / server install for the reference check (default D:/GitHub/ReforgerMods/_dedicated/server)
+//   --ds <dir>           dedicated server root for the printed PowerShell block (default D:\GitHub\ReforgerMods\_dedicated)
 //   --list               print the discovered worlds / navmeshes / AIWorld prefabs / places and exit
 //   --yes                pick the best-scored candidate when ambiguous (otherwise: print the candidates, exit code 2)
 // Pak reader: the Enfusion MCP's dist (default D:/GitHub/enfusion-workbench-mcp/dist, override with env ENFUSION_MCP_DIST).
@@ -313,7 +317,6 @@ const outDir = join(outRoot, name);
 const wrapperWorld = `${prefix}${worldBase}`;
 const worldFile = `Worlds/${wrapperWorld}.ent`;
 const layerFile = `Worlds/${wrapperWorld}_Layers/default.layer`;
-const aiFile = `Prefabs/AI/${prefix}AIWorld_${worldBase}.et`;
 
 // fresh GUIDs: not in the map rdb, not used in the Clausewitz addon next to this script (if present)
 const used = new Set();
@@ -330,14 +333,28 @@ function freshGuid() {
 		used.add(g); return g;
 	}
 }
-const wrapperAddonGuid = freshGuid(), worldGuid = freshGuid(), aiGuid = freshGuid();
+const wrapperAddonGuid = freshGuid(), worldGuid = freshGuid();
 
 const NL = "\r\n"; // layers are CRLF in the repo (the Workbench writes them so), the rest LF
 const fmt = (n) => (Math.round(n * 1000) / 1000).toString();
 const cx = (spawns.ussr.x + spawns.us.x) / 2, cz = (spawns.ussr.z + spawns.us.z) / 2;
 const ent = (cls, nm, ref, x, y, z, extra = "") => `${cls} ${nm}${ref ? ` : "${ref}"` : ""} {${NL} coords ${fmt(x)} ${fmt(y)} ${fmt(z)}${NL}${extra}}${NL}`;
+function navComponent(compGuid, cls, cfgGuid, fileRef, extra = "") {
+	return `  NavmeshWorldComponent "{${compGuid}}" {\n   NavmeshSettings ${cls} "{50FC63BEBE3973C5}" {\n    NavmeshFilesConfig BaseNavmeshFilesConfig "{${cfgGuid}}" {\n     NavmeshFile "${fileRef}"\n    }\n${extra}   }\n  }\n`;
+}
+// AIWorld entity: the map's own AIWorld prefab (it carries the navmeshes), or the vanilla SCR_AIWorld.et with the navmesh components inline
+// as entity component overrides. Never a prefab of the wrapper (a wrapper without resourceDatabase.rdb cannot resolve its own prefabs).
+// Component / config GUIDs are the ones of CLW_AIWorld_Arland.et (they address the vanilla prefab's components).
+let aiRef = BASE_AIWORLD, aiClass = "SCR_AIWorld", aiExtra = "";
+if (navMode === "own") { aiRef = aiParent; aiClass = aiParentClass; }
+else if (navMode === "explicit") {
+	let comps = "";
+	if (soldierNav) comps += navComponent("5584F30E67F617AD", "NavmeshWorld", "60B8A2995A7E8BC2", refOf(src, soldierNav));
+	if (vehicleNav) comps += navComponent("5584F30EEFEE1223", "ChimeraNavmeshWorld", "60B8A299509CF377", refOf(src, vehicleNav));
+	aiExtra = (" components {\n" + comps + " }\n").replace(/\n/g, NL);
+}
 const layer =
-	ent("SCR_AIWorld", "CLW_AIWorld", `{${aiGuid}}${aiFile}`, cx, 0, cz + 30) +
+	ent(aiClass, "CLW_AIWorld", aiRef, cx, 0, cz + 30, aiExtra) +
 	ent("PerceptionManager", "CLW_PerceptionManager", REF.perception, cx, 0, cz + 40) +
 	ent("SCR_FactionManager", "CLW_FactionManager", REF.factions, cx, 0, cz + 10) +
 	ent("CLW_GameMode", "CLW_GameMode", REF.gameMode, cx, 0, cz) +
@@ -351,20 +368,6 @@ function metaFile(guid, vpath, cls) {
 	const cfg = (n, parent) => `  ${cls} ${n}${parent ? " : " + parent : ""} {\n  }\n`;
 	return `MetaFileClass {\n Name "{${guid}}${vpath}"\n Configurations {\n${cfg("PC")}${["XBOX_ONE", "XBOX_SERIES", "PS4", "PS5", "HEADLESS"].map((n) => cfg(n, "PC")).join("")} }\n}`;
 }
-function navComponent(compGuid, cls, cfgGuid, fileRef, extra = "") {
-	return `  NavmeshWorldComponent "{${compGuid}}" {\n   NavmeshSettings ${cls} "{50FC63BEBE3973C5}" {\n    NavmeshFilesConfig BaseNavmeshFilesConfig "{${cfgGuid}}" {\n     NavmeshFile "${fileRef}"\n    }\n${extra}   }\n  }\n`;
-}
-let aiText = `${aiParentClass} : "${aiParent}" {\n`;
-if (navMode === "explicit") {
-	aiText += " components {\n";
-	// component / config GUIDs are the ones of CLW_AIWorld_Arland.et (they address the parent's components)
-	if (soldierNav) aiText += navComponent("5584F30E67F617AD", "NavmeshWorld", "60B8A2995A7E8BC2", refOf(src, soldierNav));
-	if (vehicleNav) aiText += navComponent("5584F30EEFEE1223", "ChimeraNavmeshWorld", "60B8A299509CF377", refOf(src, vehicleNav));
-	aiText += " }\n";
-}
-aiText += "}\n";
-aiText = aiText.replace(/\n$/, "");
-
 const depList = [CLAUSEWITZ_GUID, mapGuid].map((g) => `"${g}"`).join(" ");
 const gproj = `GameProject {\n ID "${name}"\n GUID "${wrapperAddonGuid}"\n TITLE "Clausewitz on ${mapId}"\n Dependencies {\n  ${depList}\n }\n Configurations {\n  GameProjectConfig PC {\n  }\n  GameProjectConfig HEADLESS {\n  }\n }\n}`;
 
@@ -373,8 +376,6 @@ const out = {
 	[worldFile]: `SubScene {\n Parent "${worldRef}"\n}`,
 	[worldFile + ".meta"]: metaFile(worldGuid, worldFile, "ENTResourceClass"),
 	[layerFile]: layer,
-	[aiFile]: aiText,
-	[aiFile + ".meta"]: metaFile(aiGuid, aiFile, "EntityTemplateResourceClass"),
 };
 for (const [p, text] of Object.entries(out)) {
 	const full = join(outDir, p);
@@ -384,8 +385,75 @@ for (const [p, text] of Object.entries(out)) {
 info(`\nwrote ${Object.keys(out).length} files to ${outDir}`);
 info(`  addon GUID     ${wrapperAddonGuid}  (project id ${name})`);
 info(`  world          ${worldFile}  {${worldGuid}}  parent ${worldRef}`);
-info(`  AIWorld prefab ${aiFile}  {${aiGuid}}  parent ${aiParent}`);
+info(`  AIWorld entity ${aiClass} : "${aiRef}"${aiExtra ? " + inline navmesh components (soldier " + (soldierNav ? "yes" : "no") + ", vehicle " + (vehicleNav ? "yes" : "no") + ")" : ""}  [no prefab written]`);
 info(`  dependencies   Clausewitz ${CLAUSEWITZ_GUID}, map ${mapGuid} (map needs: ${mapDeps.join(", ") || "-"})`);
-info(`\nDedicated server: see dev/notes/maps.md. Server -addons list: ${CLAUSEWITZ_GUID},${[...mapDeps.filter((d) => d !== BASE_GAME_GUID), mapGuid, wrapperAddonGuid].join(",")}`);
-info(`Server world argument: -World "Worlds/${wrapperWorld}.ent"`);
-if (!existsSync(join(outDir, "resourceDatabase.rdb"))) info("Note: the wrapper has no resourceDatabase.rdb; open it once in Workbench (or let the server build it) to register the new resources.");
+
+// ---------------------------------------------------------------- reference check
+// Every {GUID}path in the output must be registered outside the wrapper: the wrapper has no resourceDatabase.rdb, so a reference to one of
+// its own resources fails on the server ("Wrong GUID/name for resource"). Sources: map rdb/.meta, Clausewitz addon, base game.
+const REF_RE = /\{([0-9A-Fa-f]{16})\}([^"\s{}]+)/g;
+const clwSrc = existsSync(clwAddon) ? await openSource(clwAddon) : null;
+const seen = new Map(); // lower(path) -> Set(GUID): references that exist in files that load in game (Clausewitz addon text, map AIWorld prefab)
+const addSeen = (text) => { for (const m of text.matchAll(REF_RE)) { const k = lower(m[2]); if (!seen.has(k)) seen.set(k, new Set()); seen.get(k).add(m[1].toUpperCase()); } };
+if (clwSrc) for (const f of clwSrc.files) if (/\.(meta|et|layer|ent|conf|gproj)$/i.test(f)) addSeen(clwSrc.read(f).toString("utf8"));
+addSeen(BASE_AIWORLD); // vanilla SCR_AIWorld.et: the parent of SCR_AIWorld_Takistan.et (not referenced by the Clausewitz addon itself); its path is checked in the game pak
+if (aiPick) addSeen(src.read(aiPick).toString("utf8"));
+let gamePaths = null;
+const gameDir = opt.game || "D:/GitHub/ReforgerMods/_dedicated/server";
+try {
+	const { PakVirtualFS } = await import(pathToFileURL(join(MCP_DIST, "pak/vfs.js")).href);
+	const vfs = PakVirtualFS.get(gameDir);
+	if (vfs) gamePaths = new Set(vfs.allFilePaths().map(lower));
+} catch { /* pak reader unavailable: base game paths are not verified */ }
+const refs = new Map(); // "GUID path" -> files that use it
+for (const [p, text] of Object.entries(out)) {
+	if (p.endsWith(".meta") || p === "addon.gproj") continue; // .meta Name = the resource's own definition, gproj = addon GUIDs (checked below)
+	for (const m of text.matchAll(REF_RE)) { const k = m[1].toUpperCase() + " " + m[2]; if (!refs.has(k)) refs.set(k, new Set()); refs.get(k).add(p); }
+}
+const offenders = [], bySource = {};
+for (const [k, files] of refs) {
+	const [g, p] = k.split(" ");
+	let how = null;
+	if (guidOf(src, p) === g) how = "map";
+	else if (clwSrc && guidOf(clwSrc, p) === g) how = "Clausewitz";
+	else if (seen.get(lower(p))?.has(g)) how = gamePaths ? (gamePaths.has(lower(p)) ? "base game" : null) : "base game (pak not checked)";
+	if (how) bySource[how] = (bySource[how] || 0) + 1; else offenders.push(`{${g}}${p}  (in ${[...files].join(", ")})`);
+}
+info(`\nreferences: ${refs.size}, ${offenders.length ? offenders.length + " NOT REGISTERED" : "all registered"} (${Object.entries(bySource).map(([a, b]) => `${a} ${b}`).join(", ") || "-"}; wrapper-internal GUID references: ${offenders.length ? "see below" : "0"})`);
+for (const o of offenders) console.error("  OFFENDER " + o);
+if (offenders.length) process.exitCode = 3;
+
+// ---------------------------------------------------------------- local dedicated server block
+const ds = (opt.ds || "D:\\GitHub\\ReforgerMods\\_dedicated").replace(/\//g, "\\").replace(/\\$/, "");
+const mapFolder = basename(addonDir) === "addon" ? dirname(addonDir) : addonDir;
+const addonsRoot = dirname(mapFolder);
+const folderByGuid = new Map();
+for (const e of readdirSync(addonsRoot, { withFileTypes: true })) {
+	const m = e.isDirectory() && /_([0-9A-Fa-f]{16})$/.exec(e.name);
+	if (m) folderByGuid.set(m[1].toUpperCase(), join(addonsRoot, e.name));
+}
+folderByGuid.set(mapGuid, mapFolder);
+const packGuids = [], packDirs = new Map(), missingDeps = [], visiting = new Set();
+function visitAddon(g) {
+	if (g === BASE_GAME_GUID || g === CLAUSEWITZ_GUID || visiting.has(g)) return;
+	visiting.add(g);
+	const dir = folderByGuid.get(g);
+	if (!dir) { missingDeps.push(g); return; }
+	const gp = [join(dir, "addon.gproj"), join(dir, "addon", "addon.gproj")].find(existsSync);
+	const deps = gp ? ((/Dependencies\s*\{([^}]*)\}/.exec(readFileSync(gp, "utf8")) || [])[1] || "").match(/[0-9A-Fa-f]{16}/g) || [] : [];
+	for (const d of deps) visitAddon(d.toUpperCase());
+	packGuids.push(g); packDirs.set(g, g === mapGuid ? addonDir : (existsSync(join(dir, "addon.gproj")) || !existsSync(join(dir, "addon", "addon.gproj")) ? dir : join(dir, "addon")));
+}
+visitAddon(mapGuid);
+const packsFile = `packs-${worldBase.toLowerCase()}.txt`;
+const ps = (s) => s.replace(/\//g, "\\");
+const junction = (nm, target) => `if (-not (Test-Path "$ds\\addons\\${nm}")) { New-Item -ItemType Junction -Path "$ds\\addons\\${nm}" -Target "${ps(target)}" | Out-Null }`;
+const lines = [`$ds = "${ds}"`];
+for (const g of packGuids) lines.push(junction(g === mapGuid ? basename(mapFolder) : basename(folderByGuid.get(g)), packDirs.get(g)));
+lines.push(junction(name, outDir));
+lines.push(`Set-Content "$ds\\${packsFile}" "${[...packGuids, wrapperAddonGuid].join(",")}"   # base game ${BASE_GAME_GUID} and Clausewitz ${CLAUSEWITZ_GUID} are not listed (the start script adds Clausewitz)`);
+lines.push(`& "$ds\\start-server.ps1" -World "Worlds/${wrapperWorld}.ent" -Packs ${packsFile}`);
+info("\n# ---- local dedicated server (paste into PowerShell) ----");
+for (const l of lines) info(l);
+info("# ---------------------------------------------------------");
+for (const g of missingDeps) warn(`dependency ${g} not found as a folder under ${addonsRoot} (expected <Name>_${g}); install it or add its junction by hand`);
