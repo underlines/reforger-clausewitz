@@ -515,6 +515,6 @@ class CLW_SquadRegistry
 			line += "]";
 		}
 
-		Print(line, LogLevel.NORMAL);
+		Print("" + line, LogLevel.NORMAL);	// Print(variable) would log "string line = ..."
 	}
 }

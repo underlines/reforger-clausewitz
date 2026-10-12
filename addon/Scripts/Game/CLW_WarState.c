@@ -713,6 +713,6 @@ class CLW_WarState
 		}
 
 		line += " | t=" + m_iElapsedSec + "s left=" + GetTimeLeftSec();
-		Print(line, LogLevel.NORMAL);
+		Print("" + line, LogLevel.NORMAL);	// Print(variable) would log "string line = ..."
 	}
 }
