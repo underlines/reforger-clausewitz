@@ -163,7 +163,7 @@ class CLW_Situation
 				owner = point.m_sOwner;
 			if (!text.IsEmpty())
 				text += ",";
-			text += "{\"id\":\"" + Escape(point.m_sId) + "\",\"name\":\"" + Escape(point.m_sName) + "\",\"pos\":[" + Math.Round(point.m_vPos[0]) + "," + Math.Round(point.m_vPos[2]) + "],\"radius\":" + Math.Round(point.m_fRadius);
+			text += "{\"id\":\"" + Escape(point.m_sId) + "\",\"name\":\"" + Escape(point.m_sName) + "\",\"pos\":[" + Math.Round(point.m_vPos[0]) + "," + Math.Round(point.m_vPos[2]) + "],\"grid\":\"" + CLW_Places.Grid(point.m_vPos) + "\",\"radius\":" + Math.Round(point.m_fRadius);
 			text += ",\"value\":" + point.m_iValue + ",\"owner\":\"" + Escape(owner) + "\",\"contested\":" + BoolText(point.m_bContested) + ",\"progress\":" + Math.Round(points.ProgressFor(point, m_sFaction)) + "}";
 		}
 
@@ -233,6 +233,7 @@ class CLW_Situation
 			sorted.InsertAt(contact, at);
 		}
 
+		CLW_ControlPoints points = CLW_GameMode.GetControlPoints();
 		string text = "";
 		int written;
 		foreach (CLW_Contact seen : sorted)
@@ -242,8 +243,11 @@ class CLW_Situation
 
 			if (written > 0)
 				text += ",";
-			string desc = seen.m_iCount.ToString() + "x " + seen.m_sEnemyFaction + " " + seen.m_sKind;
-			text += "{\"pos\":[" + Math.Round(seen.m_vPos[0]) + "," + Math.Round(seen.m_vPos[1]) + "," + Math.Round(seen.m_vPos[2]) + "],\"desc\":\"" + Escape(desc) + "\",\"kind\":\"" + Escape(seen.m_sKind) + "\",\"ageSec\":" + Math.Round(Math.Max(0, now - seen.m_fLastSeen)) + "}";
+			// size in words ("a vehicle platoon with dismounts"), counts split into vehicles / infantry, nearest objective or named place, 1 km map grid
+			string size = CLW_Places.SizeText(seen.m_iVehicles, seen.m_iInfantry, seen.m_iCount);
+			text += "{\"pos\":[" + Math.Round(seen.m_vPos[0]) + "," + Math.Round(seen.m_vPos[1]) + "," + Math.Round(seen.m_vPos[2]) + "],\"size\":\"" + Escape(size) + "\",\"kind\":\"" + Escape(seen.m_sKind) + "\"";
+			text += ",\"vehicles\":" + seen.m_iVehicles + ",\"infantry\":" + seen.m_iInfantry + ",\"place\":\"" + Escape(CLW_Places.PlaceLabel(seen.m_vPos, points)) + "\",\"grid\":\"" + CLW_Places.Grid(seen.m_vPos) + "\"";
+			text += ",\"ageSec\":" + Math.Round(Math.Max(0, now - seen.m_fLastSeen)) + "}";
 			written++;
 		}
 
@@ -346,6 +350,20 @@ class CLW_Situation
 				objectiveJson += ",\"pos\":[" + Math.Round(order.m_vPos[0]) + "," + Math.Round(order.m_vPos[2]) + "],\"reason\":\"" + Escape(order.m_sReason) + "\",\"ageSec\":" + Math.Round(Math.Max(0, now - order.m_fIssuedAt)) + ",\"status\":\"" + order.m_sStatus + "\"}";
 			}
 
+			// dormant = every agent of the unit (crew + linked cargo) sits in the engine's max AI LOD (not kept active by CLW_Activity)
+			int lodTotal;
+			int lodMax;
+			CLW_SquadInfo.LodCounts(group, lodTotal, lodMax);
+			if (unit && unit.GetCargoGroup())
+			{
+				int cargoTotal;
+				int cargoMax;
+				CLW_SquadInfo.LodCounts(unit.GetCargoGroup(), cargoTotal, cargoMax);
+				lodTotal += cargoTotal;
+				lodMax += cargoMax;
+			}
+			bool dormant = lodTotal > 0 && lodMax == lodTotal;
+
 			string missionJson = "null";
 			if (human)
 			{
@@ -358,7 +376,7 @@ class CLW_Situation
 				text += ",";
 			text += "{\"id\":\"" + Escape(id) + "\",\"kind\":\"" + Escape(kind) + "\",\"type\":\"" + Escape(CLW_SquadInfo.TypeName(group)) + "\",\"pos\":[" + Math.Round(pos[0]) + "," + Math.Round(pos[1]) + "," + Math.Round(pos[2]) + "]";
 			text += ",\"agents\":" + alive + ",\"startAgents\":" + start + ",\"vehicle\":" + vehicleJson + ",\"humanLed\":" + BoolText(human);
-			text += ",\"wounded\":" + wounded + ",\"health\":" + avgHealth.ToString(-1, 2) + ",\"speed\":" + speed.ToString(-1, 1) + ",\"heading\":" + headingDeg + ",\"state\":\"" + stateText + "\"";
+			text += ",\"wounded\":" + wounded + ",\"health\":" + avgHealth.ToString(-1, 2) + ",\"speed\":" + speed.ToString(-1, 1) + ",\"heading\":" + headingDeg + ",\"state\":\"" + stateText + "\",\"dormant\":" + BoolText(dormant);
 			text += ",\"objective\":" + objectiveJson + ",\"mission\":" + missionJson + "}";
 			squadCount++;
 		}

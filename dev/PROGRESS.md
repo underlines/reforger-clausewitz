@@ -1,6 +1,6 @@
 # Clausewitz - Progress
 
-Updated: 2026-10-11. Roadmap: `VISION.md` section 13. Decisions: `notes/`.
+Updated: 2026-10-12. Roadmap: `VISION.md` section 13. Decisions: `notes/`.
 
 ## Done: M0 - Skeleton, M1 - LLM bridge, M1.5 - Dashboard
 
@@ -46,6 +46,16 @@ Implemented P1-P6 + S, then e2e-tested in Workbench (vanilla, RHS test project, 
 - [x] Vehicle unstuck escalation, server overrides file `$profile:Clausewitz/overrides.json`, classifier fixes, vanilla role loadouts, ticket HUD, dashboard side order + identity colours.
 - [x] LLM/rules flip-flop fixed (health scale in the prompt; rules don't override fresh LLM orders).
 - [ ] Open: end of war + end screen and mission completion/reward not yet watched; RHS open-top UAZ seating; harmless vanilla UI exception when the deploy menu closes during a squad list update; dedicated-server checks (group mirror RPC, remote commanding, SetIsPlayable replication).
+
+### UX + SITREP batch -> v0.4.0 (2026-10-12, branch `feature/ux-sitrep`, builds #33-#35)
+Implemented by subagents (code only), then one Workbench e2e (vanilla, OpenRouter on, small battle). Designs: `notes/sitrep-design.md`, `research/sitrep-and-briefing.md`.
+- [x] Battle-size layout (small): HQs 956 m apart (authored 1911 m), D/E dropped, spawn point and setup-phase player moved, markers rebuilt. Objective spacing fix verified: every `points layout check` ok, closest pair 248 m (>= 220 m). The "F 211 m from HQ" seen in build #34 was a log bug (distance of the pre-snap wish).
+- [x] SITREP: rules version at T+0, LLM version at ~15 s, delivered to the own side only (`CLW: sitrep deliver / client received`); new prose style for rules and LLM (sizes/times in words, Intel title, place names, no ids/coordinates). Contact counts fixed (live targets, vehicles vs infantry), seen as 1 and 7 infantry.
+- [x] Dashboard: compare tables, SITREP cards, missions page (empty for sides without player-led squads, now explained), map dormant shading.
+- [ ] Not yet seen: 100 m grid `025-285` (changed after the run, not compiled yet), H re-show and `/sitrep` in game, journal line breaks, no-sidecar run, plausibility of `dormant`, medium layout unchanged, dedicated server (SITREP per side, player teleport at war start).
+- Plan only: loadouts/arsenals (`notes/loadouts-arsenal-plan.md`, reviewed against `research/mod-agnostic-asset-discovery.md`). Vision added: in-game friendly map picture (VISION 8a), per-player-squad briefings (4), dashboard accounts + soldier tablet view (12a).
+- Known: units take 30-60 s to move at start (first tick 10 s, LLM answer up to 30 s, rules only on error); proposed: one rule-commander pass at war start, LLM overrides it (`LLM_PRIORITY_SEC`). LLM intel sometimes states more than the contacts show (owner: leave as is).
+- Watch: `dev/tools/sidecar-config.json` selects openrouter and `CLW_LLM=fake` does not override it; local tests must use a temp config.
 
 ## Next up
 M3 (logistics & intel, base buildings incl. the command post entry point from `notes/squad-join-design.md`); before that, one long war to the end and a dedicated-server smoke test.

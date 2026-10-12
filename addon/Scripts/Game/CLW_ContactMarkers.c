@@ -26,7 +26,7 @@ class CLW_ContactMarkers
 
 		foreach (CLW_Contact contact : contacts)
 		{
-			string text = contact.m_iCount.ToString();
+			string text = MarkerText(contact);
 			SCR_MapMarkerBase marker = m_mMarkers.Get(contact.m_iId);
 			if (marker)
 			{
@@ -55,6 +55,24 @@ class CLW_ContactMarkers
 			m_mMarkers.Insert(contact.m_iId, marker);
 				m_mKinds.Set(contact.m_iId, contact.m_sKind);
 		}
+	}
+
+	// Short label with size words instead of raw counts. Vehicles first, dismounts after.
+	protected string MarkerText(CLW_Contact contact)
+	{
+		string text = "";
+		if (contact.m_iVehicles > 0)
+			text = CLW_Places.VehicleShort(contact.m_iVehicles);
+		if (contact.m_iInfantry > 0)
+		{
+			if (!text.IsEmpty())
+				text += " + ";
+			text += CLW_Places.InfantryShort(contact.m_iInfantry);
+		}
+		if (text.IsEmpty())
+			text = CLW_Places.InfantryShort(contact.m_iCount);
+
+		return text;
 	}
 
 	// Remove the markers of expired contact ids.

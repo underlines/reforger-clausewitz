@@ -89,6 +89,9 @@ class CLW_ObjectiveSetup
 
 	[Attribute("", UIWidgets.EditBox, "Faction key owning the point at start (empty = neutral)")]
 	string m_sStartOwner;
+
+	[Attribute("0", UIWidgets.EditBox, "Smallest battle size (index into the war mode's m_aBattleSizes: 0 = small) that uses this objective. Smaller battles drop it. 0 = always used")]
+	int m_iMinBattleSize;
 }
 
 [BaseContainerProps()]

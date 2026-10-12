@@ -45,6 +45,18 @@ class CLW_WarModeConfig_Short : CLW_WarModeConfig
 	[Attribute()]
 	ref array<float> m_aIncomeScales;	// per battle size: bigger battles need more income to fill the bigger caps
 
+	[Attribute()]
+	ref array<float> m_aDistanceScales;	// per battle size: scale of the authored HQ separation (and of future FOB distances). 1 = as authored in the scenario
+
+	[Attribute("600", UIWidgets.EditBox, "Never place the two HQs closer than this (m), whatever the scale")]
+	float m_fMinHqDistanceM;
+
+	[Attribute("250", UIWidgets.EditBox, "Objectives are kept at least this far (m) from both HQs (spawn safety)")]
+	float m_fHqObjectiveClearM;
+
+	[Attribute("120", UIWidgets.EditBox, "Scaled objectives keep this much free ground (m) between their capture circles (centre distance >= both radii + this)")]
+	float m_fObjectiveGapM;
+
 	[Attribute("1", UIWidgets.CheckBox, "Ticket bleed for the side holding fewer points")]
 	bool m_bTicketBleed;
 

@@ -136,6 +136,40 @@ class CLW_SquadInfo
 		}
 	}
 
+	// AI LOD census of a group (incl. its slave group): agents total / agents sitting in the engine's maximum LOD.
+	// A unit whose agents are ALL at max LOD is "dormant": the engine barely simulates it (see CLW_Activity).
+	static void LodCounts(SCR_AIGroup group, out int total, out int atMax)
+	{
+		total = 0;
+		atMax = 0;
+		if (!group)
+			return;
+
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		SCR_AIGroup slave = group.GetSlave();
+		if (slave)
+		{
+			array<AIAgent> slaveAgents = {};
+			slave.GetAgents(slaveAgents);
+			foreach (AIAgent slaveAgent : slaveAgents)
+			{
+				agents.Insert(slaveAgent);
+			}
+		}
+
+		int maxLod = AIAgent.GetMaxLOD();
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent)
+				continue;
+
+			total++;
+			if (agent.GetLOD() == maxLod)
+				atMax++;
+		}
+	}
+
 	// Living AI members. group.GetAgentsCount() still counts agents whose body is dead (a corpse leader keeps the squad "alive" at 1/6).
 	static int AliveCount(notnull SCR_AIGroup group)
 	{

@@ -172,6 +172,13 @@ An optional mode in the initial scenario setup (section 3), next to the usual se
 - Orders carry: intent, objective, constraints (ROE, route, avoid), priority, and a timeout.
 - Units acknowledge, report progress, and report failure (cannot comply: blocked, no fuel, outgunned).
 
+**Player briefings (SITREP to players):** today one briefing per faction (side A, side B), rules version in game, LLM version in the
+commander reply (`notes/sitrep-design.md`), shown in the map journal, as a hint (H) and via `/sitrep`. Vision: **per-player-squad briefings**:
+the same sections (situation, intel, mission, execution, logistics) tailored to one human-led squad: its own HQ mission as the mission
+paragraph, intel filtered to its sector, execution = its task plus the neighbouring units, logistics = its strength and resupply. The data shape
+already carries `scope:"squad"` + `unit`; missing are a builder per squad, the recipient rule (members of that squad only) and an LLM budget
+rule (squad briefings only on mission change, not every planning tick).
+
 ### 4a. Squad-leader agents (very late feature, not planned soon)
 
 Not only HQ decides: AI **squad leaders can run their own LLM agent loop**, giving a proper hierarchical tree. HQ makes high-level decisions (troop movements, objectives) and hands each squad leader a **goal**, not a step-by-step order. The leader then works toward that goal autonomously over a longer period instead of waiting for HQ on every move.
@@ -298,6 +305,28 @@ Every group has an **orders age** timer. If no order arrives for N minutes AND t
   - Order: A, then chat, then B (all M3). Contacts -> faction map markers (server `InsertStaticMarker` with faction flags, removed on expiry) is automatic and goes into M0.
 - Same pipeline whether the report came from AI or player: `Contact` objects -> faction picture -> prompt context + map.
 
+### 8a. In-game map: friendly operational picture (backlog, owner request 2026-10-12)
+
+Bring the dashboard's friendly picture onto the in-game map for players of that faction: own squads and vehicle units (unit symbol by
+kind, strength, human-led), **arrows for HQ-assigned movement orders** (squad -> objective/waypoint), objective capture state (owner, contested,
+progress), HQ intent from the SITREP. Enemy side: only what the faction already knows (its contact markers), never more.
+
+- **Map markers vs dashboard circles (checked 2026-10-12):** same data. Objective positions in the game log, the in-game markers and
+  `/api/state` agree (also after the battle-size re-layout, markers are removed and rebuilt). The dashboard draws north up (screen y from world z).
+  They look different because of rendering: the game shows a NATO point symbol + label (`PrepareMilitaryMarker`, INSTALLATION/RELAY),
+  the dashboard draws the capture radius (50-80 m) with an owner hatch and auto-fits the view to the battle area, while the game map shows
+  the whole island. Converge: same objective glyph on both (radius ring + owner colour + progress), same unit symbols.
+- **Feasibility:** yes, in two tiers.
+  - *Points* (unit symbols, objective state): vanilla `SCR_MapMarkerManagerComponent` static markers with faction flags, already used for
+    objectives and contacts. Fine for slow-changing items; NOT for per-squad positions every few seconds (each insert/remove is replicated
+    to all clients).
+  - *Lines/arrows and moving units*: a client-side map layer (modded map UI component drawing on a canvas over `SCR_MapEntity`, the way
+    route/drawing mods do [verify the hook]) fed by a compact per-faction "friendly picture" (squad id, kind, pos, strength, order target)
+    that the server sends only to that faction's players every 5-10 s, the same path as the SITREP delivery (`CLW_SitrepStore` /
+    player-controller RPC). No enemy leak, low bandwidth, updates smoothly.
+- Toggle per layer in the map legend (squads, orders, objectives); off by default for realism-focused servers (server setting).
+- Shared spec with the dashboard (symbols, colours, active/dormant shading) so both read the same.
+
 ---
 
 ## 9. World-state hygiene: cleanup, pausing, size of war
@@ -380,6 +409,21 @@ Because the game already talks to the sidecar over HTTP, the sidecar can serve a
 
 - **Basic (early, read-only):** per faction: map with own squads, known contacts (age/confidence) and active orders; squad list (strength, mode, human/AI led); latest situation sent, raw LLM reply, validation drops, fallback events; request latency and token/cost counters. Fed by the `/orders` traffic the sidecar already sees (keep a ring buffer of recent situations/replies), served as a static page + JSON/SSE endpoint on the sidecar port.
 - **Advanced (later, editable):** pause/resume the LLM per faction, switch commander mode (Rules / LLM), edit the prompt or settings live, issue or cancel orders by hand from the map, approve/reject LLM orders before execution, replay a timeline of the war. Needs an authenticated command channel back to the game (game polls the sidecar for queued commands, section 1) and must respect the same validation rules as LLM orders.
+- **Far future: player accounts and a soldier's "battle tablet" view (owner idea 2026-10-12).**
+  - **Two roles:** *admin* login (today's full dashboard: both factions, LLM exchange, config, usage, write access) vs. *user*
+    registration/login. A user links their **SteamID** (Reforger identity, `BackendApi.GetPlayerIdentityId` / platform id), so the server knows
+    which player and therefore which faction and squad the account is. The faction comes from the live game, not from the account, so a
+    side switch changes the view.
+  - **Fog of war in the web UI:** a user sees only their own faction: its SITREP (later the squad briefing, section 4), own forces and the
+    contacts their faction knows. The other faction is blinded completely (no tickets breakdown beyond what the in-game HUD shows, no
+    positions, no orders, no LLM data). Filtering happens on the server per request, never in the browser.
+  - **Much less data:** what a modern soldier would see on a rugged Android tablet / field laptop running a real-time battle management
+    system (ATAK-like: blue-force tracking, own unit and neighbours, reported enemy markers with age, tasking, objectives, chat/SITREP
+    feed, grid tool). No staff-level analytics, no raw model output, no exact strengths of other units beyond need-to-know.
+  - **Few write paths for users:** e.g. acknowledge a mission, send a contact report (same `Contact` pipeline as section 8), request
+    support/resupply, maybe pick a saved loadout (loadout plan L5). Everything else stays admin-only.
+  - **Needs:** accounts + sessions in the sidecar (or a separate service), SteamID verification (at least: the game confirms the link
+    in-game, e.g. a `/link <code>` chat command), HTTPS when exposed beyond localhost, per-user rate limits, and a mobile-first UI.
 
 ---
 
