@@ -22,7 +22,7 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 			sizes.Insert("large");
 		}
 
-		m_aParams.Insert(CLW_ModeParam.CreateNumber("timeLimitMin", "Time limit (min)", "The war ends after this time; more tickets wins.", CLW_ModeParam.TYPE_INT, 15, 180, 5, config.m_iTimeLimitMin));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("timeLimitMin", "Time limit (min)", "The war ends after this time; more tickets wins.", CLW_ModeParam.TYPE_INT, 5, 180, 5, config.m_iTimeLimitMin));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("startTickets", "Start tickets", "War will of each side; at 0 the side loses.", CLW_ModeParam.TYPE_INT, 100, 2000, 50, config.m_iStartTickets));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("startSupplies", "Start supplies", "Purchasing power of each side at the start.", CLW_ModeParam.TYPE_INT, 0, 2000, 50, config.m_iStartSupplies));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("incomeMultiplier", "Income multiplier", "Scales the supplies income.", CLW_ModeParam.TYPE_FLOAT, 0.25, 3, 0.25, config.m_fIncomeMultiplier));
