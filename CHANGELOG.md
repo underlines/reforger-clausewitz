@@ -5,6 +5,8 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-12
+
 ### Added
 - M4 any map: scenario per world (the scenario attribute only for the worlds its `m_aWorlds` lists, then `Configs/CLW/Scenarios/<world>.conf`, then a scenario listing the world, else the **auto scenario**). The auto scenario (`_Auto.conf`, `CLW_AutoScenario`) fills a map at game start: HQ pair from the random-layout search (strict, then relaxed), objectives from named map places in the band between the HQs (towns first, line points otherwise), counts per battle size, FOB sites computed. Log `CLW: scenario ... (source attribute|by-world|by-listing|auto)`, `CLW: auto ...`.
 - Wrapper worlds `Worlds/CLW_Eden.ent` (Everon) and `Worlds/CLW_Cain.ent` (Kolguyev) on the campaign navmeshes; `dev/tools/new-map-wrapper.mjs` generates the wrapper compat addon for any map mod (`dev/notes/maps.md`).
