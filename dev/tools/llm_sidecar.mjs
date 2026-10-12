@@ -7,23 +7,49 @@
 //
 // Game API:
 //   GET  /health -> {"ok":true,"mode":"<provider>"}
-//   POST /orders body:
+//   POST /orders: one faction's situation. Two protocol versions, selected by the field "v":
+//
+//   Protocol v1 (no "v" field; legacy, still supported):
 //     {"faction":"US","time":123,
 //      "squads":[{"id":"US_Squad1","pos":[x,y,z],"agents":8,"startAgents":8,
 //                 "mode":"NONE|SEARCH|ATTACK|DEFEND","humanLed":false}],
 //      "contacts":[{"pos":[x,y,z],"desc":"2x infantry","ageSec":12}]}
 //     -> 200 {"orders":[{"squad":"US_Squad1","command":"MOVE|ATTACK|DEFEND","pos":[x,z],"reason":"..."}]}
-//   Any LLM/validation failure, or the panel's "enabled" switch off -> 200 {"orders":[]}
+//
+//   Protocol v2 ("v":2; M2 "real war"; design: dev/notes/m2-design.md section 8). Nothing is hard-wired: faction keys, unit kinds,
+//   catalog types and objective ids all come from the situation.
+//     {"v":2,"faction":"US","time":1234,"timeLeftSec":3200,
+//      "war":{"tickets":350,"enemyTickets":310,"supplies":220,"income":60,"liveAI":38,"aiCap":50,"vehicles":3,"vehicleCap":6},
+//      "objectives":[{"id":"C","name":"Timber Hub","pos":[x,z],"radius":80,"value":2,"owner":"none|<faction>","contested":false,"progress":-35}],
+//      "bases":[{"faction":"US","pos":[x,z]}],
+//      "catalog":[{"type":"rifle_squad","kind":"infantry","cost":100,"desc":"..."}],
+//      "squads":[{"id","kind","type","pos":[x,y,z],"agents","startAgents","vehicle":{"type","health","mounted","state"}|null,"humanLed",
+//                 "wounded","health","speed","heading","state","objective":{"command","target","pos","reason","ageSec","status"}|null,
+//                 "mission":{"state":"offered|accepted|none","kind","target"}|null}],
+//      "contacts":[{"pos":[x,y,z],"desc","kind":"infantry|vehicle|unknown","ageSec"}],
+//      "events":["C captured by USSR", ...]}   (events since the last POST; the sidecar accumulates them per faction and hands the
+//                                               model the ones since its last call)
+//     -> 200 {"orders":[{"squad","command":"MOVE|ATTACK|DEFEND|RECON|FALL_BACK","target":"<objective id>" | "pos":[x,z],"reason"}],
+//             "buy":[{"type":"<catalog type>","count":1..3,"reason"}],
+//             "missions":[{"squad":"<human-led squad>","offers":[{"kind":"CAPTURE|DEFEND|RECON|DESTROY","target":"<objective id>" | "pos":[x,z],"brief":"<=240 chars"}]}]}
+//     Validation (everything invalid is dropped with a reason, see "Dropped" in the exchange log): orders need a known squad that is NOT
+//     humanLed, a known objective id as target or a finite pos (FALL_BACK may have neither = own base), one order per squad; buy: known
+//     catalog type, integer count 1..3, max 3 entries, running cost <= war.supplies; missions: only humanLed squads without an accepted
+//     mission, max 3 offers per squad, target = objective id or pos. A model reply with "keep":true and nothing else = keep orders.
+//
+//   Any LLM/validation failure, or the panel's "enabled" switch off -> 200 {"orders":[]} (v2: plus empty buy/missions)
 //   (game falls back to its rule commander). Unparsable request body -> 400.
 //   Cost control (real providers only, not "fake"): settings minIntervalSec (at most one provider call per
-//   faction per N s, 0 = off) and skipUnchanged (skip the call when squads/contacts are materially unchanged:
-//   same ids/modes/agents, every squad and contact moved < 75 m, same contact count). A skipped request
+//   faction per N s, 0 = off) and skipUnchanged (skip the call when the situation is materially unchanged: same squad
+//   ids/modes/agents/kinds/vehicle state, every squad and contact moved < 75 m, same contact count; v2 also same objective
+//   owners/contested, tickets within 5 %, supplies within 100, same AI/vehicle counts, no new events). A skipped request
 //   answers 200 {"orders":[],"keep":true}: the game keeps its current orders (no rule fallback).
 //
 // HQ scheduler (all providers, per faction): the game polls every 10 s but the LLM is only called on the first request, at the
 //   scheduled time (model-chosen next_check_sec, clamped to wakeup.minSec..maxSec, else wakeup.defaultSec; x budget stretch factor),
 //   when a trigger fires (config "triggers": new contact, contact near squad, casualties, squad lost, strength drop, objective
-//   reached, squad change; min gap triggers.cooldownSec) or after POST /api/wake {faction?}. minIntervalSec is the hard floor
+//   reached, squad change; v2 also objectiveChanged (any owner change), ticketsDropPct (own tickets fell >= N % since the last call),
+//   unitSpawned (new squad / spawn event), missionEvent (mission offered/accepted/done); min gap triggers.cooldownSec) or after POST /api/wake {faction?}. minIntervalSec is the hard floor
 //   between any two calls. Other polls answer {"orders":[],"keep":true} without an exchange entry (counted as counters.gated).
 //   The model sees a "wake" object {reason,triggers,sinceLastSec}; /api/state has "scheduler" per faction.
 //
@@ -55,6 +81,9 @@ const DASH_DIR = path.join(DIR, "dashboard");
 const CONFIG_FILE = path.join(DIR, "sidecar-config.json");
 const PORT = Number(process.env.CLW_PORT) || 8788;
 const COMMANDS = new Set(["MOVE", "ATTACK", "DEFEND"]);
+const COMMANDS_V2 = new Set(["MOVE", "ATTACK", "DEFEND", "RECON", "FALL_BACK"]);
+const MISSION_KINDS = new Set(["CAPTURE", "DEFEND", "RECON", "DESTROY"]);
+const isV2 = (sit) => sit?.v === 2;
 const PROVIDERS = ["fake", "anthropic", "openai-compatible", "openrouter"];
 // HQ engine: llm = LLM provider decides; rules = sidecar answers {"orders":[]} so the game's rule commander drives (no LLM calls);
 // model = future trained decision-model tier (not implemented: treated like rules, logged once).
@@ -79,16 +108,41 @@ Use an empty orders array if no action is needed.
 The situation may contain a "wake" object telling you why you are being consulted now: reason first|scheduled|trigger|manual,
 triggers (short descriptions of what happened since your last decision) and sinceLastSec. React to the triggers first.`;
 
-// System prompt incl. the wakeup paragraph (only when the model may choose its next wakeup).
-function systemPrompt(c) {
-  if (!c.wakeup?.dynamic) return SYSTEM;
-  const w = c.wakeup;
-  return SYSTEM + `
+// Protocol v2 prompt (situation field "v":2). Content-agnostic: names, kinds, types and objective ids come from the situation.
+const SYSTEM_V2 = `You are the HQ commander of one faction in a tactical war simulation (Arma Reforger). You see only what your units reported (fog of war): contacts may be old or incomplete.
+GOAL: win the war. Objectives (map points) decide it: the side holding fewer/less valuable objectives loses tickets over time (bleed), and tickets are also lost with every dead soldier and destroyed vehicle. Tickets at 0 = defeat. Supplies buy new units. So: hold or take objectives, preserve your tickets, spend supplies.
+DOCTRINE
+- Combined arms: motorized/mech/light/armor units (fast, firepower) cover distance and support; infantry takes and holds objectives. Send recon first to unknown or fogged objectives.
+- Concentrate force: 2-3 units per target, never split into penny packets. Prefer one clear plan over many small moves. Keep a small reserve at the base.
+- AT teams (or armed vehicles) when enemy vehicles are in contacts. Weak squads (agents well below startAgents or vehicle health low) FALL_BACK, do not attack.
+- Buy when supplies are rich but keep a reserve (~40). Respect the caps (liveAI<aiCap, vehicles<vehicleCap) and the catalog costs.
+- Do not re-order squads that already execute a sensible order (objective.status active, young ageSec).
+SITUATION FIELDS
+war: your tickets, enemyTickets, supplies, income per minute, liveAI/aiCap, vehicles/vehicleCap; timeLeftSec = time limit. objectives: id, name, pos [x,z], radius m, value, owner ("none" or a faction key), contested, progress (-100..100 toward the capturer). bases: base positions per faction. catalog: what you may buy (type, kind, cost, desc). squads: kind (infantry|recon|motorized|light|mech|armor|armored_recon), type, pos [x,y,z], agents/startAgents, vehicle {type,health,mounted,state} or null, humanLed, objective (its current order and status), mission (for human-led squads). contacts: pos, kind, desc, ageSec. events: what happened since your last decision. wake: why you are consulted now.
+COMMANDS (orders, one per squad, only for squads with humanLed=false)
+MOVE (redeploy), ATTACK (assault; on an objective = capture it), DEFEND (hold), RECON (go there and observe, no assault), FALL_BACK (retreat; no target = own base).
+Each order has "target": an objective id from the situation, or "pos": [x, z].
+HUMAN-LED SQUADS (humanLed=true) are never ordered. You may offer them up to 3 missions: kind CAPTURE|DEFEND|RECON|DESTROY with "target" (objective id) or "pos" [x, z] and a "brief" (max 240 chars, in the voice of HQ). Skip squads whose mission.state is "accepted".
+REPLY with ONLY one JSON object, no prose, no code fences:
+{"orders":[{"squad":"<id>","command":"ATTACK","target":"C","reason":"short"},{"squad":"<id>","command":"MOVE","pos":[x,z],"reason":"short"}],
+ "buy":[{"type":"<catalog type>","count":1,"reason":"short"}],
+ "missions":[{"squad":"<human-led id>","offers":[{"kind":"CAPTURE","target":"D","brief":"..."}]}]}
+orders/buy/missions may be empty or omitted. buy: max 3 entries, count 1-3, total cost <= war.supplies. {"keep":true} alone = keep all current orders.`;
+
+// The wakeup paragraph is appended only when the model may choose its next wakeup.
+function wakeupText(w) {
+  return `
 You are not polled continuously: you also choose when you are consulted next. Add to the JSON object the optional fields
 "next_check_sec" (integer seconds, allowed range ${w.minSec}..${w.maxSec}, default ${w.defaultSec}) and "next_check_reason" (short text), e.g.
 {"orders":[...],"next_check_sec":120,"next_check_reason":"quiet, no contacts"}.
-You are woken early anyway when something important happens (new contact, casualties, lost squad, objective reached), so choose
+You are woken early anyway when something important happens (new contact, casualties, lost squad, objective reached or changed owner, tickets dropping, new units, mission events), so choose
 long intervals in quiet phases and short ones during fights or while an assault is developing.`;
+}
+
+// System prompt incl. the wakeup paragraph. v2 = protocol v2 situation.
+function systemPrompt(c, v2 = false) {
+  const base = v2 ? SYSTEM_V2 : SYSTEM;
+  return c.wakeup?.dynamic ? base + wakeupText(c.wakeup) : base;
 }
 
 // ---------- config ----------
@@ -109,13 +163,15 @@ const cfg = {
   // HQ scheduler: how often the LLM is called (see "HQ scheduler" below)
   wakeup: { dynamic: true, defaultSec: 60, minSec: 20, maxSec: 300, budgetStretch: true },
   // events that wake the HQ before its scheduled time (each tunable; 0 / false = off)
-  triggers: { enabled: true, newContact: true, contactNearSquadM: 300, casualties: 2, squadLost: true, strengthDropPct: 25, objectiveReached: true, squadChange: true, cooldownSec: 15 },
+  triggers: { enabled: true, newContact: true, contactNearSquadM: 300, casualties: 2, squadLost: true, strengthDropPct: 25, objectiveReached: true, squadChange: true, cooldownSec: 15,
+    objectiveChanged: true, ticketsDropPct: 10, unitSpawned: true, missionEvent: true },
 };
 
 // Group settings: "bool" or [min, max] number range per key. Partial objects are merged onto the current group.
 const GROUP_SPECS = {
   wakeup: { dynamic: "bool", defaultSec: [5, 3600], minSec: [5, 3600], maxSec: [5, 7200], budgetStretch: "bool" },
-  triggers: { enabled: "bool", newContact: "bool", contactNearSquadM: [0, 5000], casualties: [0, 1000], squadLost: "bool", strengthDropPct: [0, 100], objectiveReached: "bool", squadChange: "bool", cooldownSec: [0, 600] },
+  triggers: { enabled: "bool", newContact: "bool", contactNearSquadM: [0, 5000], casualties: [0, 1000], squadLost: "bool", strengthDropPct: [0, 100], objectiveReached: "bool", squadChange: "bool", cooldownSec: [0, 600],
+    objectiveChanged: "bool", ticketsDropPct: [0, 100], unitSpawned: "bool", missionEvent: "bool" },
 };
 function validateGroup(name, v) {
   if (!v || typeof v !== "object" || Array.isArray(v)) return { error: `${name} must be an object` };
@@ -343,12 +399,79 @@ function fakeOrders(sit) {
   return orders;
 }
 
+// Fake provider, protocol v2: simple doctrine, content-agnostic (everything from the situation).
+const xz = (p) => (Array.isArray(p) ? (p.length > 2 ? [p[0], p[2]] : [p[0], p[1]]) : [NaN, NaN]);
+const dist2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+function fakeV2(sit) {
+  const me = sit.faction, out = { orders: [], buy: [], missions: [] };
+  const objs = (Array.isArray(sit.objectives) ? sit.objectives : []).filter((o) => o && typeof o.id === "string" && okPos(o.pos));
+  const squads = (Array.isArray(sit.squads) ? sit.squads : []).filter((s) => s && typeof s.id === "string" && okPos(s.pos));
+  const contacts = (Array.isArray(sit.contacts) ? sit.contacts : []).filter((c) => c && okPos(c.pos));
+  const war = sit.war ?? {}, supplies = isNum(war.supplies) ? war.supplies : 0;
+  const myBase = (Array.isArray(sit.bases) ? sit.bases : []).find((b) => b?.faction === me && okPos(b.pos));
+  const base = myBase ? xz(myBase.pos) : squads.length ? xz(squads[0].pos) : [0, 0];
+
+  // buy: the cheapest entry of every kind, rotated by game time; keep a 100 reserve
+  const catalog = (Array.isArray(sit.catalog) ? sit.catalog : []).filter((e) => e && typeof e.type === "string" && isNum(e.cost) && e.cost > 0);
+  if (supplies > 200 && catalog.length && !(isNum(war.aiCap) && isNum(war.liveAI) && war.liveAI >= war.aiCap)) {
+    const cheapest = new Map();
+    for (const e of catalog) if (!cheapest.has(e.kind) || e.cost < cheapest.get(e.kind).cost) cheapest.set(e.kind, e);
+    const list = [...cheapest.values()].sort((a, b) => a.cost - b.cost);
+    const vehFull = isNum(war.vehicles) && isNum(war.vehicleCap) && war.vehicles >= war.vehicleCap;
+    let budget = supplies - 100;
+    const rot = list.length ? Math.floor((isNum(sit.time) ? sit.time : 0) / 60) % list.length : 0;
+    for (let i = 0; i < list.length && out.buy.length < 3; i++) {
+      const e = list[(i + rot) % list.length];
+      if (e.cost > budget || (vehFull && e.kind !== "infantry" && e.kind !== "recon")) continue;
+      budget -= e.cost;
+      out.buy.push({ type: e.type, count: 1, reason: `cheapest ${e.kind} entry, supplies ${supplies}` });
+    }
+  }
+
+  const ai = squads.filter((s) => !s.humanLed);
+  const assigned = new Set();
+  const give = (s, command, tgt, reason) => { assigned.add(s.id); out.orders.push(tgt.id ? { squad: s.id, command, target: tgt.id, reason } : { squad: s.id, command, pos: tgt.pos, reason }); };
+  const weak = (s) => isNum(s.agents) && isNum(s.startAgents) && s.startAgents > 0 && s.agents < s.startAgents * 0.5;
+  for (const s of ai) if (weak(s)) give(s, "FALL_BACK", { pos: base }, "weak unit, falling back to base");
+  // defend own objectives with a contact within 400 m
+  for (const o of objs.filter((o) => o.owner === me)) {
+    const near = contacts.filter((c) => dist2(xz(c.pos), xz(o.pos)) <= 400);
+    if (!near.length) continue;
+    const free = ai.filter((s) => !assigned.has(s.id)).sort((a, b) => dist2(xz(a.pos), xz(o.pos)) - dist2(xz(b.pos), xz(o.pos)));
+    if (free[0]) give(free[0], "DEFEND", { id: o.id }, `contact ${Math.round(dist2(xz(near[0].pos), xz(o.pos)))} m from ${o.id}`);
+  }
+  // attack the objective not owned by us that is nearest to our base, with up to 2 units
+  const targets = objs.filter((o) => o.owner !== me).sort((a, b) => dist2(xz(a.pos), base) - dist2(xz(b.pos), base));
+  if (targets[0]) {
+    const t = targets[0];
+    const free = ai.filter((s) => !assigned.has(s.id)).sort((a, b) => dist2(xz(a.pos), xz(t.pos)) - dist2(xz(b.pos), xz(t.pos)));
+    for (const s of free.slice(0, 2)) give(s, "ATTACK", { id: t.id }, `nearest objective not ours: ${t.name ?? t.id}`);
+  }
+  // offers for human-led squads that have no accepted mission
+  for (const s of squads.filter((s) => s.humanLed && s.mission?.state !== "accepted")) {
+    const p = xz(s.pos), offers = [];
+    const byDist = (a, b) => dist2(xz(a.pos), p) - dist2(xz(b.pos), p);
+    const nonOwned = objs.filter((o) => o.owner !== me).sort(byDist), own = objs.filter((o) => o.owner === me).sort(byDist);
+    if (nonOwned[0]) offers.push({ kind: "CAPTURE", target: nonOwned[0].id, brief: `Seize ${nonOwned[0].name ?? nonOwned[0].id}. It is held by ${nonOwned[0].owner === "none" ? "nobody" : nonOwned[0].owner}; holding it bleeds the enemy's tickets.` });
+    const hot = contacts.slice().sort(byDist)[0];
+    if (hot && offers.length < 2 && dist2(xz(hot.pos), p) <= 1500) offers.push({ kind: "DESTROY", pos: xz(hot.pos), brief: `Destroy the reported enemy force (${hot.desc ?? "contact"}) before it reaches our lines.` });
+    if (offers.length < 2 && own[0]) offers.push({ kind: "DEFEND", target: own[0].id, brief: `Hold ${own[0].name ?? own[0].id}; expect enemy pressure.` });
+    if (offers.length < 2 && nonOwned[1]) offers.push({ kind: "RECON", target: nonOwned[1].id, brief: `Scout ${nonOwned[1].name ?? nonOwned[1].id} and report enemy strength.` });
+    if (offers.length) out.missions.push({ squad: s.id, offers: offers.slice(0, 2) });
+  }
+  return out;
+}
+
 // Shared by both providers: pull the JSON object out of the reply text.
-function extractOrders(text) {
+// v1: needs an orders array. v2: orders/buy/missions may be omitted, but the reply must contain at least one of them or keep:true.
+function extractOrders(text, v2 = false) {
   const a = text.indexOf("{"), b = text.lastIndexOf("}");
   if (a < 0 || b < a) throw new Error("no JSON object in reply");
   const obj = JSON.parse(text.slice(a, b + 1));
-  if (!Array.isArray(obj.orders)) throw new Error("reply has no orders array");
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) throw new Error("reply is not a JSON object");
+  if (v2) {
+    if (!["orders", "buy", "missions"].some((k) => Array.isArray(obj[k])) && obj.keep !== true) throw new Error("reply has no orders/buy/missions array");
+  } else if (!Array.isArray(obj.orders)) throw new Error("reply has no orders array");
   return obj;
 }
 
@@ -363,14 +486,14 @@ async function callProvider(c, sit) {
       if (!c.apiKey) throw new Error("API key not set");
       url = (c.baseUrl || "https://api.anthropic.com") + "/v1/messages";
       headers = { "x-api-key": c.apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" };
-      body = { model: c.model, max_tokens: c.maxTokens, system: systemPrompt(c), messages: [{ role: "user", content: userMsg }] };
+      body = { model: c.model, max_tokens: c.maxTokens, system: systemPrompt(c, isV2(sit)), messages: [{ role: "user", content: userMsg }] };
     } else {
       const base = c.provider === "openrouter" ? (c.baseUrl || OR_BASE) : c.baseUrl;
       if (!base) throw new Error("baseUrl not set");
       url = base + "/chat/completions";
       headers = { "content-type": "application/json" };
       if (c.apiKey) headers.authorization = "Bearer " + c.apiKey;
-      body = { model: c.model, max_tokens: c.maxTokens, messages: [{ role: "system", content: systemPrompt(c) }, { role: "user", content: userMsg }] };
+      body = { model: c.model, max_tokens: c.maxTokens, messages: [{ role: "system", content: systemPrompt(c, isV2(sit)) },{ role: "user", content: userMsg }] };
       if (c.provider === "openrouter") body.usage = { include: true };
     }
     const r = await fetch(url, { method: "POST", signal: ac.signal, headers, body: JSON.stringify(body) });
@@ -412,17 +535,109 @@ function validate(raw, sit, dropped = []) {
   return out;
 }
 
+// Protocol v2 validation. Returns {orders, buy, missions}; every dropped item goes to `dropped` with a reason.
+function validateV2(obj, sit, dropped = []) {
+  const drop = (key, item, reason) => { console.log(`  dropped ${key}: ${reason}`); dropped.push({ [key]: item, reason }); };
+  const squads = new Map((Array.isArray(sit.squads) ? sit.squads : []).filter((s) => s && typeof s.id === "string").map((s) => [s.id, s]));
+  const objIds = new Set((Array.isArray(sit.objectives) ? sit.objectives : []).filter((o) => o && typeof o.id === "string").map((o) => o.id));
+  const xzOk = (p) => Array.isArray(p) && p.length === 2 && isNum(p[0]) && isNum(p[1]);
+  // target/pos resolution shared by orders and offers: {target} | {pos} | {} (none given) | {error}
+  const aim = (o) => {
+    if (typeof o.target === "string" && o.target) {
+      if (objIds.has(o.target)) return { target: o.target };
+      if (!xzOk(o.pos)) return { error: `unknown target ${o.target}` };
+    } else if (o.target !== undefined && o.target !== null) return { error: "bad target" };
+    if (o.pos !== undefined && o.pos !== null) return xzOk(o.pos) ? { pos: [o.pos[0], o.pos[1]] } : { error: "bad pos" };
+    return {};
+  };
+  const res = { orders: [], buy: [], missions: [] };
+
+  const seen = new Set();
+  for (const o of Array.isArray(obj.orders) ? obj.orders : []) {
+    const s = o && typeof o === "object" ? squads.get(o.squad) : null;
+    const a = s ? aim(o) : {};
+    const why = !o || typeof o !== "object" ? "not an object"
+      : !s ? `unknown squad ${o.squad}`
+      : s.humanLed ? `${o.squad} is human-led: no orders, only missions`
+      : seen.has(o.squad) ? `duplicate order for ${o.squad}`
+      : !COMMANDS_V2.has(o.command) ? `bad command ${o.command}`
+      : a.error ? a.error
+      : !a.target && !a.pos && o.command !== "FALL_BACK" ? "order needs a target or pos"
+      : o.reason !== undefined && typeof o.reason !== "string" ? "bad reason" : null;
+    if (why) { drop("order", o, why); continue; }
+    seen.add(o.squad);
+    res.orders.push({ squad: o.squad, command: o.command, ...(a.target ? { target: a.target } : a.pos ? { pos: a.pos } : {}), reason: (o.reason ?? "").slice(0, 120) });
+  }
+
+  const catalog = new Map((Array.isArray(sit.catalog) ? sit.catalog : []).filter((e) => e && typeof e.type === "string" && isNum(e.cost)).map((e) => [e.type, e]));
+  let left = isNum(sit.war?.supplies) ? sit.war.supplies : 0;
+  for (const b of Array.isArray(obj.buy) ? obj.buy : []) {
+    const e = b && typeof b === "object" ? catalog.get(b.type) : null;
+    const cost = e ? e.cost * b.count : 0;
+    const why = !b || typeof b !== "object" ? "not an object"
+      : res.buy.length >= 3 ? "more than 3 buy entries"
+      : !e ? `unknown catalog type ${b.type}`
+      : !Number.isInteger(b.count) || b.count < 1 || b.count > 3 ? "count must be an integer 1..3"
+      : cost > left ? `cost ${cost} exceeds remaining supplies ${left}` : null;
+    if (why) { drop("buy", b, why); continue; }
+    left -= cost;
+    res.buy.push({ type: b.type, count: b.count, reason: typeof b.reason === "string" ? b.reason.slice(0, 120) : "" });
+  }
+
+  const offered = new Set();
+  for (const m of Array.isArray(obj.missions) ? obj.missions : []) {
+    const s = m && typeof m === "object" ? squads.get(m.squad) : null;
+    const why = !m || typeof m !== "object" ? "not an object"
+      : !s ? `unknown squad ${m.squad}`
+      : !s.humanLed ? `${m.squad} is not human-led: missions are for human-led squads only`
+      : s.mission?.state === "accepted" ? `${m.squad} already has an accepted mission`
+      : offered.has(m.squad) ? `duplicate missions entry for ${m.squad}`
+      : !Array.isArray(m.offers) ? "offers must be an array" : null;
+    if (why) { drop("mission", m, why); continue; }
+    const offers = [];
+    for (const f of m.offers) {
+      const a = f && typeof f === "object" ? aim(f) : {};
+      const w2 = !f || typeof f !== "object" ? "not an object"
+        : offers.length >= 3 ? "more than 3 offers per squad"
+        : !MISSION_KINDS.has(f.kind) ? `bad mission kind ${f.kind}`
+        : a.error ? a.error
+        : !a.target && !a.pos ? "offer needs a target or pos"
+        : f.brief !== undefined && typeof f.brief !== "string" ? "bad brief" : null;
+      if (w2) { drop("offer", { squad: m.squad, offer: f }, w2); continue; }
+      offers.push({ kind: f.kind, ...(a.target ? { target: a.target } : { pos: a.pos }), brief: (f.brief ?? "").slice(0, 240) });
+    }
+    if (offers.length) { offered.add(m.squad); res.missions.push({ squad: m.squad, offers }); }
+  }
+  return res;
+}
+
 // After a 429/5xx the provider is skipped for a while; the game falls back to the rule commander meanwhile.
 const RATE_COOLDOWN_MS = 20000;
 let cooldownUntil = 0;
 
 // Runs one situation through the given config. Never throws.
 async function computeOrders(c, sit, isTest = false) {
-  const r = { orders: [], dropped: [], rawReply: null, usage: null, ok: true, reason: null };
+  const r = { orders: [], buy: [], missions: [], keep: false, dropped: [], rawReply: null, usage: null, ok: true, reason: null };
   try {
     if (!isTest && c.provider !== "fake" && Date.now() < cooldownUntil) throw new Error(`provider cooling down after rate limit/server error (${Math.ceil((cooldownUntil - Date.now()) / 1000)}s left)`);
     if (!sit || typeof sit !== "object" || !Array.isArray(sit.squads)) throw new Error("no squads array");
+    const v2 = isV2(sit);
     let raw;
+    if (v2) {
+      let obj;
+      if (c.provider === "fake") obj = fakeV2(sit);
+      else {
+        session.requests++;
+        const p = await callProvider(c, sit);
+        if (c.provider === "openrouter") recordUsage(c.model, typeof sit.faction === "string" ? sit.faction : "?", p.usage);
+        r.rawReply = p.raw; r.usage = p.usage;
+        obj = extractOrders(p.raw, true);
+        if (isNum(obj.next_check_sec)) r.nextCheck = { sec: Math.round(obj.next_check_sec), reason: typeof obj.next_check_reason === "string" ? obj.next_check_reason.slice(0, 120) : "" };
+      }
+      Object.assign(r, validateV2(obj, sit, r.dropped));
+      r.keep = obj.keep === true && !r.orders.length && !r.buy.length && !r.missions.length;
+      return r;
+    }
     if (c.provider === "fake") raw = fakeOrders(sit);
     else {
       session.requests++;
@@ -438,7 +653,7 @@ async function computeOrders(c, sit, isTest = false) {
     if (e?.cooldownMs && !isTest) cooldownUntil = Date.now() + e.cooldownMs;
     r.ok = false;
     r.reason = e?.name === "AbortError" ? "timeout" : String(e?.message ?? e);
-    r.orders = [];
+    r.orders = []; r.buy = []; r.missions = []; r.keep = false;
     console.log(`  error: ${r.reason}`);
   }
   return r;
@@ -447,12 +662,35 @@ async function computeOrders(c, sit, isTest = false) {
 // Materially unchanged = same squad ids/modes/agent counts, same contact count, nothing moved >= 75 m.
 const MOVE_EPS = 75;
 function moved(a, b) { return !(Array.isArray(a) && Array.isArray(b)) || Math.hypot((a[0] ?? 0) - (b[0] ?? 0), (a[2] ?? 0) - (b[2] ?? 0)) >= MOVE_EPS; }
-function unchanged(a, b) {
+const TICKET_EPS_PCT = 5, SUPPLY_EPS = 100;
+const objList = (s) => (Array.isArray(s?.objectives) ? s.objectives.filter((o) => o && typeof o.id === "string") : []);
+// v2 part of unchanged(): an objective owner change is never "unchanged"; war numbers must be materially the same too.
+function warUnchanged(a, b, pendingEvents) {
+  if (pendingEvents > 0) return false;
+  const oa = new Map(objList(a).map((o) => [o.id, o]));
+  const ob = objList(b);
+  if (oa.size !== ob.length) return false;
+  for (const o of ob) {
+    const p = oa.get(o.id);
+    if (!p || String(p.owner) !== String(o.owner) || !!p.contested !== !!o.contested) return false;
+  }
+  const wa = a.war ?? {}, wb = b.war ?? {};
+  if (isNum(wa.tickets) !== isNum(wb.tickets) || isNum(wa.supplies) !== isNum(wb.supplies)) return false;
+  if (isNum(wa.tickets) && Math.abs(wa.tickets - wb.tickets) > Math.max(5, wa.tickets * TICKET_EPS_PCT / 100)) return false;
+  if (isNum(wa.enemyTickets) && isNum(wb.enemyTickets) && Math.abs(wa.enemyTickets - wb.enemyTickets) > Math.max(5, wa.enemyTickets * TICKET_EPS_PCT / 100)) return false;
+  if (isNum(wa.supplies) && Math.abs(wa.supplies - wb.supplies) >= SUPPLY_EPS) return false;
+  if (wa.liveAI !== wb.liveAI || wa.vehicles !== wb.vehicles) return false;
+  return true;
+}
+function unchanged(a, b, pendingEvents = 0) {
   if (!a || !b || !Array.isArray(a.squads) || !Array.isArray(b.squads) || a.squads.length !== b.squads.length) return false;
+  if ((isV2(a) || isV2(b)) && !(isV2(a) && isV2(b) && warUnchanged(a, b, pendingEvents))) return false;
   const old = new Map(a.squads.map((s) => [s?.id, s]));
   for (const s of b.squads) {
     const o = old.get(s?.id);
     if (!o || o.mode !== s.mode || o.agents !== s.agents || !!o.humanLed !== !!s.humanLed || moved(o.pos, s.pos)) return false;
+    if (isV2(b) && (o.kind !== s.kind || o.vehicle?.mounted !== s.vehicle?.mounted || o.vehicle?.state !== s.vehicle?.state
+      || !!o.vehicle !== !!s.vehicle || o.mission?.state !== s.mission?.state || o.objective?.status !== s.objective?.status)) return false;
   }
   const ca = Array.isArray(a.contacts) ? a.contacts : [], cb = Array.isArray(b.contacts) ? b.contacts : [];
   if (ca.length !== cb.length) return false;
@@ -473,7 +711,7 @@ const lastCall = {}; // faction -> {ts of last provider attempt}
 const sched = {}; // faction -> scheduler state
 function schedFor(f) {
   return (sched[f] ??= { baseline: null, lastLlmAt: 0, nextDueAt: 0, chosenSec: null, chosenReason: "", intervalSec: null, stretch: 1,
-    lastWakeReason: null, lastWakeTriggers: [], gated: 0, manual: false, failed: false });
+    lastWakeReason: null, lastWakeTriggers: [], gated: 0, manual: false, failed: false, pendingEvents: [] });
 }
 const d2 = (a, b) => Math.hypot((a[0] ?? 0) - (b[0] ?? 0), (a[a.length > 2 ? 2 : 1] ?? 0) - (b[b.length > 2 ? 2 : 1] ?? 0));
 const okPos = (p) => Array.isArray(p) && p.length >= 2 && p.every(isNum);
@@ -481,9 +719,37 @@ const IDLE_MODES = new Set(["none", "idle"]);
 const NEW_CONTACT_M = 150, OBJECTIVE_M = 50;
 
 // Descriptions of what changed between the baseline situation and now, per the enabled triggers.
-function evalTriggers(t, base, sit) {
+const SPAWN_EVENT = /spawn|purchas|bought|reinforc|arriv/i, MISSION_EVENT = /mission|offer/i;
+function evalTriggers(t, base, sit, events = []) {
   const out = [];
-  const bs = new Map((base.squads ?? []).map((s) => [s?.id, s]));
+  if (isV2(sit) && isV2(base)) { // protocol v2: war picture first, so the 8-entry cap never hides it
+    if (t.objectiveChanged) {
+      const bo = new Map(objList(base).map((o) => [o.id, o]));
+      for (const o of objList(sit)) {
+        const p = bo.get(o.id);
+        if (p && String(p.owner) !== String(o.owner)) out.push(`objective ${o.id}${o.name ? " " + o.name : ""}: ${p.owner} -> ${o.owner}`);
+      }
+    }
+    const tb = base.war?.tickets, tn = sit.war?.tickets;
+    if (t.ticketsDropPct > 0 && isNum(tb) && isNum(tn) && tb > 0) {
+      const pct = 100 * (tb - tn) / tb;
+      if (pct >= t.ticketsDropPct) out.push(`tickets ${tb} -> ${tn} (-${Math.round(pct)}%)`);
+    }
+    if (t.unitSpawned) {
+      const known = new Set((base.squads ?? []).map((s) => s?.id));
+      for (const s of sit.squads ?? []) if (s?.id && !known.has(s.id)) out.push(`unit spawned: ${s.id}${s.kind ? " (" + s.kind + ")" : ""}`);
+      for (const e of events) if (SPAWN_EVENT.test(String(e))) out.push(`event: ${String(e).slice(0, 80)}`);
+    }
+    if (t.missionEvent) {
+      const bm = new Map((base.squads ?? []).map((s) => [s?.id, s]));
+      for (const s of sit.squads ?? []) {
+        const p = bm.get(s?.id);
+        if (p && s.humanLed && (p.mission?.state ?? "none") !== (s.mission?.state ?? "none")) out.push(`${s.id} mission ${p.mission?.state ?? "none"} -> ${s.mission?.state ?? "none"}`);
+      }
+      for (const e of events) if (MISSION_EVENT.test(String(e))) out.push(`event: ${String(e).slice(0, 80)}`);
+    }
+  }
+  const bs =new Map((base.squads ?? []).map((s) => [s?.id, s]));
   const cs = new Map((sit.squads ?? []).map((s) => [s?.id, s]));
   const bc = (Array.isArray(base.contacts) ? base.contacts : []).filter((c) => okPos(c?.pos));
   const cc = (Array.isArray(sit.contacts) ? sit.contacts : []).filter((c) => okPos(c?.pos));
@@ -523,8 +789,8 @@ function evalTriggers(t, base, sit) {
     if (t.squadChange && !!b.humanLed !== !!s.humanLed) out.push(`${id} ${s.humanLed ? "now player-led" : "no longer player-led"}`);
   }
   if (t.casualties > 0 && lost >= t.casualties) out.push(`${lost} casualties`);
-  if (t.squadChange) for (const id of cs.keys()) if (!bs.has(id)) out.push(`${id} appeared`);
-  return out.slice(0, 8);
+  if (t.squadChange && !(t.unitSpawned && isV2(sit))) for (const id of cs.keys()) if (!bs.has(id)) out.push(`${id} appeared`);
+  return [...new Set(out)].slice(0, 8);
 }
 
 // Interval multiplier from the OpenRouter pace estimate: projected spend over the key limit stretches the interval (max x3).
@@ -552,11 +818,11 @@ function decideWake(c, sc, lc, sit, now) {
   if (sc.manual) return { call: true, reason: "manual", triggers: [] };
   if (!sc.baseline) return { call: true, reason: "first", triggers: [] };
   if (c.triggers.enabled && now - lc.ts >= c.triggers.cooldownSec * 1000) {
-    const fired = evalTriggers(c.triggers, sc.baseline, sit);
+    const fired = evalTriggers(c.triggers, sc.baseline, sit, sc.pendingEvents);
     if (fired.length) return { call: true, reason: "trigger", triggers: fired };
   }
   if (now >= sc.nextDueAt) {
-    if (c.skipUnchanged && unchanged(sc.baseline, sit)) return { skip: "skipped: unchanged" };
+    if (c.skipUnchanged && unchanged(sc.baseline, sit, sc.pendingEvents.length)) return { skip: "skipped: unchanged" };
     return { call: true, reason: "scheduled", triggers: [] };
   }
   return { gate: true };
@@ -617,8 +883,16 @@ async function handleOrders(req, res) {
   const lc = (lastCall[faction] ??= { ts: 0, sit: null });
   const valid = !!sit && Array.isArray(sit.squads);
   const sc = schedFor(faction);
+  const v2 = valid && isV2(sit);
   let r, wake = null, interval = null;
-  if (valid && sit.squads.length === 0) {
+  const newEvents = v2 && Array.isArray(sit.events) ? sit.events.filter((e) => typeof e === "string" && e).map((e) => e.slice(0, 200)) : [];
+  if (newEvents.length) { // events are "since the last POST": keep them for the model until its next call, and for the dashboard log
+    sc.pendingEvents.push(...newEvents);
+    if (sc.pendingEvents.length > 30) sc.pendingEvents.splice(0, sc.pendingEvents.length - 30);
+  }
+  // a v2 faction without squads can still spend supplies
+  const canBuy = v2 && isNum(sit.war?.supplies) && Array.isArray(sit.catalog) && sit.catalog.some((e) => isNum(e?.cost) && e.cost <= sit.war.supplies);
+  if (valid && sit.squads.length === 0 && !canBuy) {
     // faction has no squads left: just record the (empty) situation so the dashboard stops showing the last survivors; no LLM call
     r = { orders: [], dropped: [], rawReply: null, usage: null, ok: true, reason: "no squads left", gated: true, rules: true };
   } else if (snapshot.enabled && snapshot.engine !== "llm") {
@@ -643,7 +917,9 @@ async function handleOrders(req, res) {
       wake = { reason: dec.reason, triggers: dec.triggers, sinceLastSec: lc.ts ? Math.round((now - lc.ts) / 1000) : 0 };
       lc.ts = now;
       if (valid) { sc.manual = false; sc.baseline = sit; sc.lastLlmAt = now; sc.lastWakeReason = wake.reason; sc.lastWakeTriggers = wake.triggers; }
-      r = await computeOrders(snapshot, valid ? { ...sit, wake } : sit);
+      const callSit = !valid ? sit : v2 ? { ...sit, events: sc.pendingEvents.slice(-15), wake } : { ...sit, wake };
+      if (valid) sc.pendingEvents = [];
+      r = await computeOrders(snapshot, callSit);
       if (valid) {
         sc.failed = !r.ok;
         if (r.ok) scheduleNext(snapshot, sc, r.nextCheck?.sec, r.nextCheck?.reason ?? "", Date.now());
@@ -659,7 +935,7 @@ async function handleOrders(req, res) {
     state.counters.requests++;
     if (r.skipped) state.counters.skipped++;
     if (!r.ok && r.reason !== "disabled" && r.reason !== "budget limit reached") state.counters.errors++;
-    if (!r.skipped && (!r.ok || r.orders.length === 0)) state.counters.fallbacks++;
+    if (!r.skipped && !r.keep && (!r.ok || (r.orders.length === 0 && !r.buy?.length && !r.missions?.length))) state.counters.fallbacks++;
     if (r.usage) { state.counters.inputTokens += r.usage.input; state.counters.outputTokens += r.usage.output; }
   }
   state.lastRequestTs = Date.now();
@@ -672,20 +948,26 @@ async function handleOrders(req, res) {
       if (s && Array.isArray(s.pos)) prevPos[s.id] = { pos: s.pos, ts: old.ts, time: old.situation.time };
     }
     for (const o of r.orders) orderTs[o.squad] = state.lastRequestTs;
-    state.factions[faction] = { ts: state.lastRequestTs, situation: sit, orders: r.skipped ? (old?.orders ?? []) : r.orders, prevPos, orderTs };
+    const keepOld = r.skipped || r.keep;
+    const eventLog = [...(old?.eventLog ?? [])];
+    for (const text of newEvents.slice().reverse()) eventLog.unshift({ ts: state.lastRequestTs, time: isNum(sit.time) ? sit.time : null, text });
+    if (eventLog.length > 40) eventLog.length = 40;
+    state.factions[faction] = { ts: state.lastRequestTs, situation: sit, orders: keepOld ? (old?.orders ?? []) : r.orders,
+      buy: keepOld ? (old?.buy ?? []) : (r.buy ?? []), missions: keepOld ? (old?.missions ?? []) : (r.missions ?? []), eventLog, prevPos, orderTs };
   }
   if (!r.gated) state.exchanges.unshift({
     ts: state.lastRequestTs, faction, provider: snapshot.enabled ? snapshot.provider : "disabled",
     model: snapshot.provider === "fake" ? null : snapshot.model,
-    request: sit, rawReply: r.rawReply, orders: r.orders, dropped: r.dropped,
+    request: sit, rawReply: r.rawReply, orders: r.orders, buy: r.buy ?? [], missions: r.missions ?? [], keep: !!r.keep, dropped: r.dropped,
     latencyMs, ok: r.ok, reason: r.reason, usage: r.usage,
     wake, nextCheck: r.nextCheck ?? null, intervalSec: interval,
   });
   if (state.exchanges.length > RING_MAX) state.exchanges.length = RING_MAX;
 
   const nContacts = Array.isArray(sit?.contacts) ? sit.contacts.length : 0;
-  if (!r.gated) console.log(`orders faction=${faction} squads=${sit?.squads?.length ?? 0} contacts=${nContacts} orders=${r.orders.length} ${latencyMs}ms${r.skipped ? " (" + r.reason + ")" : ""}${wake ? " wake=" + wake.reason + (wake.triggers.length ? " [" + wake.triggers.join("; ") + "]" : "") : ""}${r.nextCheck ? " next=" + r.nextCheck.sec + "s" : ""}`);
-  send(res, 200, r.rules ? { orders: [] } : r.paused ? { orders: [], keep: true } : r.gated && sc.failed ? { orders: [] } : r.skipped ? { orders: [], keep: true } : { orders: r.orders });
+  if (!r.gated) console.log(`orders faction=${faction} squads=${sit?.squads?.length ?? 0} contacts=${nContacts} orders=${r.orders.length}${v2 ? ` buy=${r.buy?.length ?? 0} missions=${r.missions?.length ?? 0}` : ""} ${latencyMs}ms${r.skipped ? " (" + r.reason + ")" : ""}${wake ? " wake=" + wake.reason + (wake.triggers.length ? " [" + wake.triggers.join("; ") + "]" : "") : ""}${r.nextCheck ? " next=" + r.nextCheck.sec + "s" : ""}`);
+  send(res, 200, r.rules ? { orders: [] } : r.paused ? { orders: [], keep: true } : r.gated && sc.failed ? { orders: [] } : r.skipped || r.keep ? { orders: [], keep: true }
+    : v2 ? { orders: r.orders, buy: r.buy ?? [], missions: r.missions ?? [] } : { orders: r.orders });
 }
 
 // ---------- world info, map image, vector overlay (roads, locations) ----------

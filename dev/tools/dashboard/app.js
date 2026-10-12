@@ -4,10 +4,39 @@ import { html, render, useState, useEffect, useRef, useMemo, useCallback } from 
 
 const WORLD = 4096, GRID = 512, STALE_MS = 30000; // WORLD = fallback extent until /api/world reports the real one
 const DEF_EXT = { x0: 0, z0: 0, x1: WORLD, z1: WORLD };
-const COLORS = { US: "#4aa3ff", USSR: "#ff5c5c" };
-const colorOf = (f) => COLORS[f] ?? "#f0b429";
-const enemyColor = (f) => (f === "US" ? COLORS.USSR : f === "USSR" ? COLORS.US : "#f0b429");
-const facClass = (f) => (f === "US" || f === "USSR" ? "f-" + f : "f-other");
+// Faction colours are derived from the sorted faction keys (no hard-wired names): first blue, second red, then a palette; unowned = grey.
+const PALETTE = ["#4aa3ff", "#ff5c5c", "#f0b429", "#3fcf8e", "#b57bff", "#ff8fd1"];
+const NEUTRAL = "#8793a6";
+let FACTIONS = []; // sorted faction keys seen in the state (set on every poll by setFactions)
+function setFactions(st) {
+  const set = new Set(Object.keys(st.factions ?? {}));
+  for (const e of Object.values(st.factions ?? {})) {
+    const sit = e.situation ?? {};
+    for (const b of Array.isArray(sit.bases) ? sit.bases : []) if (typeof b?.faction === "string") set.add(b.faction);
+    for (const o of Array.isArray(sit.objectives) ? sit.objectives : []) if (typeof o?.owner === "string" && o.owner !== "none" && o.owner !== "") set.add(o.owner);
+  }
+  FACTIONS = [...set].sort();
+}
+const facIdx = (f) => FACTIONS.indexOf(f);
+const colorOf = (f) => { const i = facIdx(f); return i < 0 ? NEUTRAL : PALETTE[i % PALETTE.length]; };
+const enemyColor = (f) => { const o = FACTIONS.find((x) => x !== f); return o === undefined ? "#f0b429" : colorOf(o); };
+const facClass = (f) => { const i = facIdx(f); return i < 0 ? "f-none" : "f-c" + (i % PALETTE.length); };
+const KIND_LABEL = { infantry: "INF", recon: "RECON", motorized: "MOT", light: "LIGHT", mech: "MECH", armor: "ARMOR", armored_recon: "A-RECON" };
+const kindLabel = (k) => (typeof k === "string" && k ? KIND_LABEL[k] ?? k.toUpperCase().slice(0, 8) : "-");
+const fmtTime = (sec) => (num(sec) ? `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}` : "-");
+// public picture (objectives, bases, war) from the freshest v2 situation of any faction
+function publicPicture(st) {
+  let objs = [], bases = [], ts = -1;
+  for (const e of Object.values(st.factions ?? {})) {
+    const sit = e.situation ?? {};
+    if (Array.isArray(sit.objectives) && sit.objectives.length && (e.ts ?? 0) >= ts) { objs = sit.objectives; ts = e.ts ?? 0; }
+  }
+  const seen = new Set();
+  for (const e of Object.values(st.factions ?? {})) for (const b of Array.isArray(e.situation?.bases) ? e.situation.bases : []) {
+    if (b && typeof b.faction === "string" && Array.isArray(b.pos) && num(b.pos[0]) && num(b.pos[1]) && !seen.has(b.faction)) { seen.add(b.faction); bases.push(b); }
+  }
+  return { objs: objs.filter((o) => o && Array.isArray(o.pos) && num(o.pos[0]) && num(o.pos[1])), bases };
+}
 const num = (v) => typeof v === "number" && Number.isFinite(v);
 const okPos = (p) => Array.isArray(p) && p.length >= 3 && num(p[0]) && num(p[2]);
 const gridTxt = (p) => (okPos(p) ? `${Math.round(p[0])}, ${Math.round(p[2])}` : "-");
@@ -24,13 +53,40 @@ const P = {
 };
 const Icon = ({ n }) => html`<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d=${P[n]} /></svg>`;
 
+// ---------- map symbols ----------
+// Squad symbol path by unit kind (generic kinds; unknown kinds get the infantry circle). The caller fills / strokes the current path.
+function kindShape(ctx, kind, x, y) {
+  ctx.beginPath();
+  switch (kind) {
+    case "recon": ctx.moveTo(x, y - 8); ctx.lineTo(x + 6, y); ctx.lineTo(x, y + 8); ctx.lineTo(x - 6, y); ctx.closePath(); break; // narrow diamond
+    case "armored_recon": ctx.moveTo(x, y - 9); ctx.lineTo(x + 9, y); ctx.lineTo(x, y + 9); ctx.lineTo(x - 9, y); ctx.closePath(); break; // big diamond
+    case "motorized": ctx.rect(x - 6, y - 5, 12, 10); break; // box (truck)
+    case "light": ctx.moveTo(x, y - 8); ctx.lineTo(x + 7, y + 6); ctx.lineTo(x - 7, y + 6); ctx.closePath(); break; // triangle
+    case "mech": ctx.rect(x - 8, y - 7, 16, 14); break; // large box
+    case "armor": ctx.moveTo(x - 10, y - 5); ctx.lineTo(x + 10, y - 5); ctx.lineTo(x + 10, y + 5); ctx.lineTo(x - 10, y + 5); ctx.closePath(); break; // wide hull
+    default: ctx.arc(x, y, 7, 0, Math.PI * 2);
+  }
+}
+let hatchCache = null; // diagonal hatch pattern for contested objectives
+function hatchPattern(ctx) {
+  if (hatchCache) return hatchCache;
+  try {
+    const c = document.createElement("canvas"); c.width = c.height = 8;
+    const g = c.getContext("2d"); g.strokeStyle = "#fff"; g.lineWidth = 1.5; g.beginPath(); g.moveTo(0, 8); g.lineTo(8, 0); g.moveTo(-2, 2); g.lineTo(2, -2); g.moveTo(6, 10); g.lineTo(10, 6); g.stroke();
+    hatchCache = ctx.createPattern(c, "repeat");
+  } catch { hatchCache = null; }
+  return hatchCache;
+}
+
 // ---------- data ----------
 function useState2() {
   const [st, setSt] = useState({ offline: true, factions: {}, exchanges: [], counters: {}, config: {} });
   const poll = useCallback(async () => {
     try {
       const r = await fetch("/api/state", { cache: "no-store" });
-      setSt({ ...(await r.json()), offline: false, recvAt: Date.now() });
+      const j = await r.json();
+      setFactions(j);
+      setSt({ ...j, offline: false, recvAt: Date.now() });
     } catch { setSt((s) => ({ ...s, offline: true })); }
   }, []);
   useEffect(() => { poll(); const t = setInterval(poll, 2000); return () => clearInterval(t); }, [poll]);
@@ -57,7 +113,7 @@ function buildRows(state, faction) {
     for (const s of Array.isArray(sit.squads) ? sit.squads : []) {
       if (!s || typeof s !== "object") continue;
       const o = orders.get(s.id);
-      const obj = s.objective && typeof s.objective === "object" ? s.objective : o ? { command: o.command, pos: o.pos, reason: o.reason } : null;
+      const obj = s.objective && typeof s.objective === "object" ? s.objective : o ? { command: o.command, pos: o.pos, target: o.target, reason: o.reason } : null;
       const pct = num(s.agents) && num(s.startAgents) && s.startAgents > 0 ? Math.round((100 * s.agents) / s.startAgents) : null;
       let speed = num(s.speed) ? s.speed : null, heading = num(s.heading) ? s.heading : null, derived = false;
       const pv = e.prevPos?.[s.id];
@@ -77,6 +133,8 @@ function buildRows(state, faction) {
         key: f + "/" + s.id, id: String(s.id), faction: f, type: dash(s.type), agents: s.agents, size: num(s.agents) ? `${s.agents}/${s.startAgents}` : "-",
         pct, wounded: num(s.wounded) ? s.wounded : null, health: num(s.health) ? s.health : null, obj, state: state_, move, speed: speed ?? -1,
         human: !!s.humanLed, pos: s.pos, posTxt: gridTxt(s.pos), orderAge: ots ? Math.round((now - ots) / 1000) : null, mode: s.mode,
+        kind: typeof s.kind === "string" ? s.kind : "", vehicle: s.vehicle && typeof s.vehicle === "object" ? s.vehicle : null,
+        mission: s.mission && typeof s.mission === "object" && s.mission.state && s.mission.state !== "none" ? s.mission : null,
       });
     }
   }
@@ -184,6 +242,8 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world }) {
         x0 = Math.min(x0, o.pos[0]); x1 = Math.max(x1, o.pos[0]); z0 = Math.min(z0, o.pos[2]); z1 = Math.max(z1, o.pos[2]);
       }
     }
+    const pic = publicPicture(latest.current.st);
+    for (const o of [...pic.objs, ...pic.bases]) { x0 = Math.min(x0, o.pos[0]); x1 = Math.max(x1, o.pos[0]); z0 = Math.min(z0, o.pos[1]); z1 = Math.max(z1, o.pos[1]); }
     const hasData = x0 <= x1;
     const E = latest.current.world.extent ?? DEF_EXT, EW = E.x1 - E.x0, EH = E.z1 - E.z0;
     if (!hasData) { x0 = E.x0; x1 = E.x1; z0 = E.z0; z1 = E.z1; }
@@ -314,7 +374,43 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world }) {
     }
     const h = [];
     ctx.font = "11px system-ui, sans-serif"; ctx.textBaseline = "middle";
-    const shown = Object.keys(st.factions ?? {}).filter((f) => faction === "all" || f === faction);
+    const pic = publicPicture(st), objById = new Map(pic.objs.map((o) => [o.id, o]));
+    if (layers.objectives) {
+      const hatch = hatchPattern(ctx);
+      for (const o of pic.objs) {
+        const x = sx(o.pos[0]), y = sy(o.pos[1]);
+        if (x < -200 || x > r.width + 200 || y < -200 || y > r.height + 200) continue;
+        const col = o.owner && o.owner !== "none" ? colorOf(o.owner) : NEUTRAL, rad = Math.max(7, (num(o.radius) ? o.radius : 50) * v.s);
+        const blink = o.contested ? 0.5 + 0.5 * Math.sin(t / 250) : 1;
+        ctx.fillStyle = col; ctx.globalAlpha = 0.16; ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill();
+        if (o.contested && hatch) { ctx.save(); ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.clip(); ctx.globalAlpha = 0.55; ctx.fillStyle = hatch; ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2); ctx.restore(); }
+        ctx.globalAlpha = o.contested ? 0.35 + 0.65 * blink : 0.95; ctx.strokeStyle = col; ctx.lineWidth = o.contested ? 3 : 2;
+        ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.stroke();
+        if (num(o.progress) && o.progress !== 0) { // progress ring: |progress| % of the circle, drawn just inside the radius
+          ctx.globalAlpha = 0.95; ctx.lineWidth = 4; ctx.strokeStyle = col;
+          ctx.beginPath(); ctx.arc(x, y, Math.max(3, rad - 5), -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(100, Math.abs(o.progress)) / 100); ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+        if (layers.labels) {
+          ctx.font = "bold 12px system-ui, sans-serif"; ctx.lineJoin = "round"; ctx.lineWidth = 3.5; ctx.strokeStyle = "rgba(8,11,16,.9)";
+          const txt = `${o.id}${num(o.value) && o.value > 1 ? " (v" + o.value + ")" : ""}${num(o.progress) && o.progress !== 0 ? " " + Math.round(o.progress) + "%" : ""}`;
+          ctx.strokeText(txt, x + 6, y - rad - 8); ctx.fillStyle = "#fff"; ctx.fillText(txt, x + 6, y - rad - 8);
+          if (v.s > 0.08 && o.name) { ctx.font = "10px system-ui, sans-serif"; ctx.strokeText(String(o.name), x + 6, y - rad + 5); ctx.fillStyle = "#dde3ec"; ctx.fillText(String(o.name), x + 6, y - rad + 5); }
+          ctx.font = "11px system-ui, sans-serif"; ctx.lineJoin = "miter";
+        }
+        h.push({ x, y, r: Math.max(12, rad), title: `Objective ${o.id}${o.name ? " " + o.name : ""}`, lines: [`owner: ${o.owner ?? "?"}${o.contested ? " (CONTESTED)" : ""}`, `value ${dash(o.value)}, radius ${dash(o.radius)} m`, `capture progress ${dash(o.progress)}`, `at ${Math.round(o.pos[0])}, ${Math.round(o.pos[1])}`] });
+      }
+      for (const b of pic.bases) {
+        const x = sx(b.pos[0]), y = sy(b.pos[1]), col = colorOf(b.faction);
+        ctx.fillStyle = col; ctx.strokeStyle = "#0a0d12"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.rect(x - 8, y - 8, 16, 16); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = "#0a0d12"; ctx.font = "bold 10px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillText("HQ", x, y + 1); ctx.textAlign = "start";
+        if (layers.labels) { ctx.font = "bold 11px system-ui, sans-serif"; ctx.lineWidth = 3.5; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(8,11,16,.9)"; ctx.strokeText(b.faction + " base", x + 12, y); ctx.fillStyle = col; ctx.fillText(b.faction + " base", x + 12, y); ctx.lineJoin = "miter"; ctx.font = "11px system-ui, sans-serif"; }
+        h.push({ x, y, r: 12, title: `${b.faction} main base`, lines: [`at ${Math.round(b.pos[0])}, ${Math.round(b.pos[1])}`] });
+      }
+    }
+    const shown =Object.keys(st.factions ?? {}).filter((f) => faction === "all" || f === faction);
     for (const f of shown) {
       const e = st.factions[f], sit = e.situation ?? {};
       const squads = (Array.isArray(sit.squads) ? sit.squads : []).filter((s) => s && okPos(s.pos));
@@ -335,20 +431,22 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world }) {
       for (const s of squads) {
         const lo = byOrder.get(s.id), ob = s.objective;
         if (lo) arrows.push(lo);
-        else if (ob && Array.isArray(ob.pos) && ob.command) arrows.push({ squad: s.id, command: ob.command, pos: ob.pos, reason: ob.reason });
+        else if (ob && ob.command && (Array.isArray(ob.pos) || ob.target)) arrows.push({ squad: s.id, command: ob.command, pos: ob.pos, target: ob.target, reason: ob.reason });
       }
-      if (layers.orders) for (const o of arrows) {
-        const s = byId.get(o.squad);
+      if (layers.orders) for (const o0 of arrows) {
+        const s = byId.get(o0.squad);
+        const tg = o0.target ? objById.get(o0.target) : null; // order on an objective id: aim at the objective centre
+        const o = tg ? { ...o0, pos: tg.pos } : o0;
         if (!s || !Array.isArray(o.pos) || !num(o.pos[0]) || !num(o.pos[1])) continue;
         const x0 = sx(s.pos[0]), y0 = sy(s.pos[2]), x1 = sx(o.pos[0]), y1 = sy(o.pos[1]);
         const col = colorOf(f), a = Math.atan2(y1 - y0, x1 - x0);
         ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2; ctx.globalAlpha = .85;
-        ctx.setLineDash(o.command === "MOVE" ? [6, 5] : []);
+        ctx.setLineDash(o.command === "MOVE" || o.command === "FALL_BACK" ? [6, 5] : o.command === "RECON" ? [2, 4] : []);
         ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); ctx.setLineDash([]);
         ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x1 - 10 * Math.cos(a - .4), y1 - 10 * Math.sin(a - .4)); ctx.lineTo(x1 - 10 * Math.cos(a + .4), y1 - 10 * Math.sin(a + .4)); ctx.closePath(); ctx.fill();
         ctx.globalAlpha = 1;
-        if (layers.labels) { ctx.font = "9px system-ui, sans-serif"; ctx.fillStyle = "rgba(221,227,236,.75)"; ctx.fillText(o.command, x1 + 8, y1 + 12); ctx.font = "11px system-ui, sans-serif"; }
-        h.push({ x: x1, y: y1, r: 8, title: `${o.command} order`, lines: [String(o.squad), String(o.reason ?? "")] });
+        if (layers.labels) { ctx.font = "9px system-ui, sans-serif"; ctx.fillStyle = "rgba(221,227,236,.75)"; ctx.fillText(o.command + (o.target ? " " + o.target : ""), x1 + 8, y1 + 12); ctx.font = "11px system-ui, sans-serif"; }
+        h.push({ x: x1, y: y1, r: 8, title: `${o.command} order${o.target ? " -> " + o.target : ""}`, lines: [String(o.squad), String(o.reason ?? "")] });
       }
       if (layers.squads) for (const s of squads) {
         const x = sx(s.pos[0]), y = sy(s.pos[2]), key = f + "/" + s.id, col = colorOf(f);
@@ -366,13 +464,20 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world }) {
           ctx.globalAlpha = 1;
         }
         ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 10;
-        ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+        kindShape(ctx, s.kind, x, y); ctx.fill(); ctx.shadowBlur = 0;
         if (s.humanLed) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke(); }
+        const veh = s.vehicle && typeof s.vehicle === "object" ? s.vehicle : null;
+        if (veh && veh.mounted === false) { ctx.strokeStyle = "#0a0d12"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - 4, y); ctx.lineTo(x + 4, y); ctx.stroke(); } // dismounted: bar across the symbol
         if (layers.labels) {
           ctx.fillStyle = "#dde3ec";
-          ctx.font = "600 11px system-ui, sans-serif"; ctx.fillText(shortId(s.id) + (s.humanLed ? " ★" : ""), x + 9, y - 11); ctx.font = "11px system-ui, sans-serif";
+          ctx.font = "600 11px system-ui, sans-serif"; ctx.fillText(shortId(s.id) + (s.humanLed ? " ★" : ""), x + 9, y - 11);
+          if (s.kind || veh) { ctx.font = "9px system-ui, sans-serif"; ctx.fillStyle = "rgba(221,227,236,.7)"; ctx.fillText([kindLabel(s.kind), veh?.type, veh ? (veh.mounted ? "mounted" : "dismounted") : null].filter(Boolean).join(" "), x + 9, y + 13); }
+          ctx.font = "11px system-ui, sans-serif";
         }
-        h.push({ x, y, r: 11, key, title: String(s.id), lines: [`${f}, ${s.agents}/${s.startAgents} agents, ${s.mode ?? "-"}`, `objective: ${s.objective?.command ?? (byOrder.get(s.id)?.command ?? "-")}`, s.humanLed ? "human-led" : "AI-led", `at ${gridTxt(s.pos)}`] });
+        const oc = s.objective?.command ?? (byOrder.get(s.id)?.command ?? "-"), ot = s.objective?.target ?? byOrder.get(s.id)?.target;
+        h.push({ x, y, r: 11, key, title: String(s.id), lines: [`${f}, ${s.agents}/${s.startAgents} agents, ${s.mode ?? s.state ?? "-"}`, ...(s.kind ? [`kind ${s.kind}${s.type ? ": " + s.type : ""}`] : []),
+          ...(veh ? [`vehicle ${dash(veh.type)}, ${veh.mounted ? "mounted" : "dismounted"}${veh.state ? ", " + veh.state : ""}${num(veh.health) ? ", hp " + Math.round(veh.health * 100) + "%" : ""}`] : []),
+          `objective: ${oc}${ot ? " " + ot : ""}`, s.humanLed ? "human-led" + (s.mission?.state && s.mission.state !== "none" ? `, mission ${s.mission.state} ${s.mission.kind ?? ""} ${s.mission.target ?? ""}` : "") : "AI-led", `at ${gridTxt(s.pos)}`] });
       }
     }
     hits.current = h;
@@ -447,9 +552,9 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world }) {
 }
 
 // ---------- squads table ----------
-const COLS = [["id", "Squad"], ["faction", "Faction"], ["type", "Type"], ["size", "Size"], ["strength", "Strength"], ["wounded", "Wnd"], ["objective", "Objective"],
+const COLS = [["id", "Squad"], ["faction", "Faction"], ["kind", "Kind"], ["type", "Type"], ["vehicle", "Vehicle"], ["size", "Size"], ["strength", "Strength"], ["wounded", "Wnd"], ["objective", "Objective"],
   ["state", "State"], ["movement", "Movement"], ["leader", "Leader"], ["position", "Position x, z"], ["order", "Last order"]];
-const SORTKEY = { id: (r) => r.id, faction: (r) => r.faction, type: (r) => String(r.type), size: (r) => r.agents ?? -1, strength: (r) => r.pct ?? -1, wounded: (r) => r.wounded ?? -1,
+const SORTKEY = { id: (r) => r.id, faction: (r) => r.faction, kind: (r) => r.kind, vehicle: (r) => r.vehicle?.type ?? "", type:(r) => String(r.type), size: (r) => r.agents ?? -1, strength: (r) => r.pct ?? -1, wounded: (r) => r.wounded ?? -1,
   objective: (r) => r.obj?.command ?? "", state: (r) => r.state, movement: (r) => r.speed, leader: (r) => (r.human ? 1 : 0), position: (r) => (okPos(r.pos) ? r.pos[0] : -1), order: (r) => r.orderAge ?? 1e9 };
 const stateBadge = (s) => ({ dead: "bad", engaged: "bad", moving: "info", defending: "ok" }[s] ?? "");
 
@@ -468,16 +573,59 @@ function SquadsTable({ rows, sel, onSel }) {
         const col = r.pct === null ? "#5d697c" : r.pct >= 66 ? "var(--ok)" : r.pct >= 33 ? "var(--warn)" : "var(--bad)";
         const o = r.obj;
         return html`<tr key=${r.key} data-key=${r.key} class=${"sqrow" + (sel === r.key ? " sel" : "")} onClick=${() => onSel(sel === r.key ? null : r.key)}>
-          <td><b>${r.id}</b></td><td class=${facClass(r.faction)}>${r.faction}</td><td>${r.type}</td><td class="mono">${r.size}</td>
+          <td><b>${r.id}</b></td><td class=${facClass(r.faction)}>${r.faction}</td>
+          <td>${r.kind ? html`<span class=${"badge kind k-" + r.kind}>${kindLabel(r.kind)}</span>` : "-"}</td><td>${r.type}</td>
+          <td>${r.vehicle ? html`${dash(r.vehicle.type)} <span class=${"badge " + (r.vehicle.mounted ? "info" : "warn")}>${r.vehicle.mounted ? "mounted" : "dismounted"}</span>${r.vehicle.state ? html` <span class="muted">${r.vehicle.state}</span>` : ""}${num(r.vehicle.health) ? html` <span class="muted">hp ${Math.round(r.vehicle.health * 100)}%</span>` : ""}` : "-"}</td><td class="mono">${r.size}</td>
           <td>${r.pct === null ? "-" : html`<span class="bar"><i style=${{ width: Math.min(100, r.pct) + "%", background: col }}></i></span>${r.pct}%${r.health !== null && html` <span class="muted">hp ${Math.round(r.health * 100)}%</span>`}`}</td>
           <td>${r.wounded === null ? "-" : r.wounded}</td>
-          <td class="wrap">${o ? html`<span class=${"cmd " + o.command}>${o.command}</span> ${Array.isArray(o.pos) && num(o.pos[0]) ? html`<span class="mono">${Math.round(o.pos[0])}, ${Math.round(o.pos[1])}</span>` : ""} ${o.reason && html`<span class="muted">${o.reason}</span>`}` : "-"}</td>
+          <td class="wrap">${o ? html`<span class=${"cmd " + o.command}>${o.command}</span> ${o.target ? html`<b>${o.target}</b>` : ""}${!o.target && Array.isArray(o.pos) && num(o.pos[0]) ? html`<span class="mono">${Math.round(o.pos[0])}, ${Math.round(o.pos[1])}</span>` : ""}${o.status ? html` <span class="badge info">${o.status}</span>` : ""} ${o.reason && html`<span class="muted">${o.reason}</span>`}` : "-"}</td>
           <td><span class=${"badge " + stateBadge(r.state)}>${r.state}</span></td><td class="mono">${r.move}</td>
-          <td>${r.human ? html`<span class="badge human">human</span>` : "AI"}</td><td class="mono">${r.posTxt}</td>
+          <td>${r.human ? html`<span class="badge human">human</span>${r.mission ? html` <span class="badge warn" title="mission state">${r.mission.state} ${r.mission.kind ?? ""} ${r.mission.target ?? ""}</span>` : ""}` : "AI"}</td><td class="mono">${r.posTxt}</td>
           <td>${r.orderAge === null ? "-" : r.orderAge + " s"}</td></tr>`;
       })}</tbody></table>
       ${!rows.length && html`<div class="empty">No squads reported yet.</div>`}</div>
   </section>`;
+}
+
+// ---------- war strip (protocol v2): tickets, supplies, caps per faction ----------
+function WarStrip({ st, faction }) {
+  const names = Object.keys(st.factions ?? {}).filter((f) => (faction === "all" || f === faction) && st.factions[f].situation?.war).sort();
+  if (!names.length) return null;
+  const cap = (v, c) => html`<b>${dash(v)}</b>${num(c) ? html`<span class="muted"> / ${c}</span>` : ""}`;
+  return html`<div class="warstrip">${names.map((f) => {
+    const sit = st.factions[f].situation, w = sit.war, col = colorOf(f);
+    const tl = num(w.tickets) && num(w.enemyTickets) ? w.tickets / Math.max(1, w.tickets + w.enemyTickets) : null;
+    return html`<div class="warcard" style=${{ borderTopColor: col }} key=${f}>
+      <div class="wname"><b class=${facClass(f)}>${f}</b><span class="muted">time left ${fmtTime(sit.timeLeftSec)}</span></div>
+      <div class="wgrid">
+        <div title="War will: 0 = defeat. Enemy in brackets"><span class="muted">tickets</span>${cap(w.tickets)}${num(w.enemyTickets) ? html`<span class="muted"> (enemy ${w.enemyTickets})</span>` : ""}</div>
+        <div title="Purchasing power; income per minute"><span class="muted">supplies</span><b>${dash(w.supplies)}</b>${num(w.income) ? html`<span class="muted"> +${w.income}/min</span>` : ""}</div>
+        <div title="Live AI soldiers / cap"><span class="muted">AI</span>${cap(w.liveAI, w.aiCap)}</div>
+        <div title="Vehicles / cap"><span class="muted">vehicles</span>${cap(w.vehicles, w.vehicleCap)}</div>
+      </div>
+      ${tl !== null && html`<div class="tbar" title="Share of the combined tickets"><i style=${{ width: Math.round(tl * 100) + "%", background: col }}></i></div>`}</div>`;
+  })}</div>`;
+}
+
+// ---------- objectives + recent events ----------
+function ObjectivesPanel({ st }) {
+  const { objs } = publicPicture(st);
+  if (!objs.length) return null;
+  return html`<section class="panel side"><h2>Objectives <span class="sub">${objs.length} points</span></h2><div class="scroll"><table>
+    <thead><tr><th>Id</th><th>Name</th><th>Value</th><th>Owner</th><th>Progress</th><th>Position x, z</th></tr></thead><tbody>
+    ${objs.map((o) => html`<tr key=${o.id}><td><b>${o.id}</b></td><td>${dash(o.name)}</td><td>${dash(o.value)}</td>
+      <td>${o.owner && o.owner !== "none" ? html`<b class=${facClass(o.owner)}>${o.owner}</b>` : html`<span class="dim">neutral</span>`}${o.contested ? html` <span class="badge warn">contested</span>` : ""}</td>
+      <td class="mono">${num(o.progress) ? o.progress + " %" : "-"}</td><td class="mono">${Math.round(o.pos[0])}, ${Math.round(o.pos[1])}</td></tr>`)}
+    </tbody></table></div></section>`;
+}
+function EventsPanel({ st, faction }) {
+  const list = [];
+  for (const f of Object.keys(st.factions ?? {})) if (faction === "all" || f === faction) for (const e of st.factions[f].eventLog ?? []) list.push({ ...e, faction: f });
+  list.sort((a, b) => b.ts - a.ts);
+  if (!list.length) return null;
+  return html`<section class="panel side"><h2>Recent events <span class="sub">newest first</span></h2><div class="scroll"><table><tbody>
+    ${list.slice(0, 30).map((e, i) => html`<tr key=${i}><td class="mono muted">${new Date(e.ts).toLocaleTimeString()}</td><td class=${facClass(e.faction)}>${e.faction}</td><td class="wrap">${e.text}</td></tr>`)}
+    </tbody></table></div></section>`;
 }
 
 // ---------- sitrep ----------
@@ -489,7 +637,7 @@ function Sitrep({ st, faction }) {
       return html`<div class="facblock"><div class="hd"><b class=${facClass(f)}>${f}</b>
         <span class="muted">time ${dash(sit.time)} s, ${Array.isArray(sit.squads) ? sit.squads.length : 0} squads, updated ${(((st.now ?? Date.now()) - e.ts) / 1000).toFixed(0)} s ago</span></div>
         <table><thead><tr><th>Contact</th><th>Position x, z</th><th>Age</th></tr></thead><tbody>
-        ${ct.length ? ct.map((c) => html`<tr><td>${dash(c.desc)}</td><td class="mono">${gridTxt(c.pos)}</td><td>${dash(c.ageSec)} s</td></tr>`) : html`<tr><td colspan="3" class="dim">no contacts</td></tr>`}
+        ${ct.length ? ct.map((c) => html`<tr><td>${dash(c.desc)}${c.kind && c.kind !== "unknown" ? html` <span class=${"badge " + (c.kind === "vehicle" ? "bad" : "info")}>${c.kind}</span>` : ""}</td><td class="mono">${gridTxt(c.pos)}</td><td>${dash(c.ageSec)} s</td></tr>`) : html`<tr><td colspan="3" class="dim">no contacts</td></tr>`}
         </tbody></table></div>`;
     })}
     ${!names.length && html`<div class="empty">No data yet.</div>`}</div></section>`;
@@ -509,8 +657,14 @@ function Log({ st, faction }) {
       ${x.dropped?.length ? html`<span class="badge warn">${x.dropped.length} dropped</span>` : ""}
       ${x.wake && html`<span class=${"badge " + (x.wake.reason === "trigger" ? "warn" : "info")} title=${x.wake.triggers?.join("\n") ?? ""}>wake: ${x.wake.reason}${x.wake.triggers?.length ? ": " + x.wake.triggers.slice(0, 2).join("; ") + (x.wake.triggers.length > 2 ? ` +${x.wake.triggers.length - 2}` : "") : ""}</span>`}
       ${x.nextCheck && html`<span class="muted" title=${x.nextCheck.reason}>next ${x.nextCheck.sec} s${x.nextCheck.reason ? ": " + x.nextCheck.reason : ""}</span>`}
-      <span>${x.orders.length} orders</span><span class="muted">${x.latencyMs} ms${x.usage ? ` , ${x.usage.input}/${x.usage.output} tok` : ""}${num(x.usage?.cost) ? ` , $${x.usage.cost.toFixed(4)}` : ""}</span></summary>
+      <span>${x.orders.length} orders</span>
+      ${x.buy?.length ? html`<span class="badge ok" title=${x.buy.map((b) => `${b.count}x ${b.type}`).join(", ")}>buy ${x.buy.map((b) => `${b.count}x ${b.type}`).join(", ")}</span>` : ""}
+      ${x.missions?.length ? html`<span class="badge info">${x.missions.reduce((n, m) => n + m.offers.length, 0)} mission offers</span>` : ""}
+      ${x.keep ? html`<span class="badge info">keep</span>` : ""}<span class="muted">${x.latencyMs} ms${x.usage ? ` , ${x.usage.input}/${x.usage.output} tok` : ""}${num(x.usage?.cost) ? ` , $${x.usage.cost.toFixed(4)}` : ""}</span></summary>
       <div class="body"><h3>Orders</h3><pre>${J(x.orders)}</pre>
+      ${x.buy?.length ? html`<h3>Purchases</h3><pre>${J(x.buy)}</pre>` : ""}
+      ${x.missions?.length ? html`<h3>Mission offers (human-led squads)</h3><pre>${J(x.missions)}</pre>` : ""}
+      ${x.request?.events?.length ? html`<h3>Events in this request</h3><pre>${x.request.events.join("\n")}</pre>` : ""}
       ${x.dropped?.length ? html`<h3>Dropped (with reason)</h3><pre>${J(x.dropped)}</pre>` : ""}
       ${x.rawReply != null ? html`<h3>Raw LLM reply</h3><pre>${x.rawReply}</pre>` : ""}
       <h3>Request</h3><pre>${J(x.request)}</pre></div></details>`)}
@@ -570,7 +724,7 @@ function useWorld() {
 
 // ---------- HQ view ----------
 const LAYER_KEY = "clw.mapLayers";
-const LAYER_DEFAULTS = { image: true, roads: true, buildings: true, objects: true, places: true, grid: true, squads: true, contacts: true, orders: true, labels: true, flip: false, dim: 0.8 };
+const LAYER_DEFAULTS = { image: true, roads: true, buildings: true, objects: true, places: true, grid: true, objectives: true, squads: true, contacts: true, orders: true, labels: true, flip: false, dim: 0.8 };
 function loadLayers() {
   try { return { ...LAYER_DEFAULTS, ...JSON.parse(localStorage.getItem(LAYER_KEY) ?? "{}") }; } catch { return { ...LAYER_DEFAULTS }; }
 }
@@ -586,7 +740,7 @@ function HQ({ st }) {
   return html`<main>
     <div class="toolbar">
       <div class="seg">${["all", ...names].map((n) => html`<button class=${faction === n ? "on" : ""} onClick=${() => setFaction(n)}>${n}</button>`)}</div>
-      <div class="toggles">${["grid", "squads", "contacts", "orders", "labels"].map(tog)}</div>
+      <div class="toggles">${["grid", "objectives", "squads", "contacts", "orders", "labels"].map(tog)}</div>
       <div class="toggles" title="Map background: toggles, image opacity; flip = image y axis inverted (calibration)">
         ${["image", "roads", "buildings", "objects", "places", "flip"].map(tog)}
         <span class="muted" title="Objects key: diamond = base, triangle over a bar = airport, ring = port. Buildings: grey = house, large = bigger than 250 m2, orange = military / industrial">◆ base ▲ airport ◎ port</span>
@@ -594,8 +748,8 @@ function HQ({ st }) {
       </div>
     </div>
     <div class="grid">
-      <div class="col"><${MapPanel} st=${st} faction=${faction} rows=${rows} sel=${sel} onSel=${setSel} layers=${layers} world=${world} /><${SquadsTable} rows=${rows} sel=${sel} onSel=${setSel} /></div>
-      <div class="col"><${Sitrep} st=${st} faction=${faction} /><${Log} st=${st} faction=${faction} /></div>
+      <div class="col"><${WarStrip} st=${st} faction=${faction} /><${MapPanel} st=${st} faction=${faction} rows=${rows} sel=${sel} onSel=${setSel} layers=${layers} world=${world} /><${SquadsTable} rows=${rows} sel=${sel} onSel=${setSel} /></div>
+      <div class="col"><${ObjectivesPanel} st=${st} /><${Sitrep} st=${st} faction=${faction} /><${EventsPanel} st=${st} faction=${faction} /><${Log} st=${st} faction=${faction} /></div>
     </div></main>`;
 }
 
@@ -716,6 +870,8 @@ function Config({ st, toast, refresh }) {
       <div class="pair">${gsw("triggers", "objectiveReached", "Objective reached (within 50 m, or squad idle)")}${gsw("triggers", "squadChange", "Squad appeared / player-led changed")}</div>
       <div class="pair">${gnum("triggers", "contactNearSquadM", "Contact near a squad (m, 0 = off)", 0, 5000)}${gnum("triggers", "casualties", "Casualties since last call (agents, 0 = off)", 0, 1000)}</div>
       <div class="pair">${gnum("triggers", "strengthDropPct", "Squad strength drop (% of start, 0 = off)", 0, 100)}${gnum("triggers", "cooldownSec", "Cooldown between trigger calls (s)", 0, 600)}</div>
+      <div class="pair">${gsw("triggers", "objectiveChanged", "Objective changed owner (v2)")}${gsw("triggers", "unitSpawned", "New unit spawned (v2)")}</div>
+      <div class="pair">${gsw("triggers", "missionEvent", "Mission offered / accepted / done (v2)")}${gnum("triggers", "ticketsDropPct", "Own tickets dropped since last call (%, 0 = off, v2)", 0, 100)}</div>
       <small class="muted">Compared with the situation at the last LLM call. Triggered calls also respect the min interval above. Use "wake now" in the status strip to force a call.</small>
       ${f.provider === "openrouter" && html`<label class="switch"><input type="checkbox" checked=${f.stopAtLimit} onChange=${(e) => set("stopAtLimit", e.target.checked)} />
         <span>Stop provider calls at the key's spending limit <span class="muted">(the game then runs on its rule commander; LLM resumes automatically when budget is available again)</span></span></label>`}

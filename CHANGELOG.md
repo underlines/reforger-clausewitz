@@ -5,6 +5,15 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 
 ## [Unreleased]
 
+### Added
+- LLM sidecar protocol v2 (`"v":2`): objectives, bases, war economy (tickets, supplies, caps), buy catalog and unit kinds in the situation; validated replies with `orders` (objective `target` or `pos`, commands MOVE/ATTACK/DEFEND/RECON/FALL_BACK), `buy` and mission `missions` offers for human-led squads. Protocol v1 keeps working.
+- Sidecar wake triggers `objectiveChanged`, `ticketsDropPct`, `unitSpawned`, `missionEvent` (Configuration view); an objective owner change or a material war-number change is never "unchanged".
+- Dashboard: objectives on the map (radius circle, owner colour, contested hatch/blink, progress ring), bases, per-faction war strip, unit kind / vehicle / mounted state, objectives and recent-events panels, purchases and mission offers in the exchange log.
+
+### Changed
+- Sidecar system prompt rewritten for protocol v2 (war doctrine, combined arms, field reference, reply schema); fake provider has a simple v2 doctrine (buy, attack nearest foreign objective, defend threatened, offers for human squads).
+- Dashboard faction colours are derived from the faction keys instead of fixed US/USSR names.
+
 ## [0.2.0] - 2026-10-12
 
 ### Added
