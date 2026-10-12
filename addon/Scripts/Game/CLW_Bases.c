@@ -5,6 +5,7 @@ class CLW_Bases
 	protected ref array<string> m_aKeys = {};
 	protected ref array<vector> m_aPos = {};
 	protected ref array<SCR_SpawnPoint> m_aOwnSpawns = {};	// our own spawned points (same order as m_aKeys, may hold null)
+	protected ref array<ref CLW_BasePlacement> m_aPlace = {};	// placement state per base (same order as m_aKeys)
 	protected bool m_bStarted;
 
 	void Init(notnull CLW_ScenarioConfig scenario)
@@ -18,27 +19,39 @@ class CLW_Bases
 		{
 			vector pos = setup.m_vBasePos;
 			pos[1] = world.GetSurfaceY(pos[0], pos[2]);
-			if (IsWater(world, pos))
+			int nav;
+			float roadDist;
+			float score = EvaluateBase(setup.m_sKey, pos, nav, roadDist);
+			bool water = IsWater(world, pos);
+			if (water || nav == 0 || roadDist < 0 || roadDist > CLW_WarConfig.PLACE_BASE_ROAD_WARN_M)
 			{
-				Print(string.Format("CLW: bases WARNING %1 base %2 is water/unsuitable (surfaceY=%3 ocean=%4)", setup.m_sKey, pos, pos[1], world.GetOceanHeight(pos[0], pos[2])), LogLevel.WARNING);
+				Print(string.Format("CLW: bases WARNING %1 base %2 is not usable (water=%3 navmesh=%4 nearestRoad=%5 m; surfaceY=%6 ocean=%7)", setup.m_sKey, pos, water, nav, roadDist, pos[1], world.GetOceanHeight(pos[0], pos[2])), LogLevel.WARNING);
 				if (setup.m_vBaseFallbackPos != vector.Zero)
 				{
 					vector alt = setup.m_vBaseFallbackPos;
 					alt[1] = world.GetSurfaceY(alt[0], alt[2]);
+					int altNav;
+					float altRoad;
+					float altScore = EvaluateBase(setup.m_sKey + " fallback", alt, altNav, altRoad);
 					if (IsWater(world, alt))
 						Print(string.Format("CLW: bases WARNING %1 fallback base %2 is water too, keeping the main one", setup.m_sKey, alt), LogLevel.WARNING);
-					else
+					else if (water || altScore < score)
 					{
 						pos = alt;
-						Print(string.Format("CLW: bases %1 using fallback base %2", setup.m_sKey, pos), LogLevel.NORMAL);
+						nav = altNav;
+						roadDist = altRoad;
+						Print(string.Format("CLW: bases %1 using fallback base %2 (score %3 < %4)", setup.m_sKey, pos, altScore, score), LogLevel.NORMAL);
 					}
+					else
+						Print(string.Format("CLW: bases %1 fallback base %2 is not better (score %3 >= %4), keeping the main one", setup.m_sKey, alt, altScore, score), LogLevel.NORMAL);
 				}
 			}
 
 			m_aKeys.Insert(setup.m_sKey);
 			m_aPos.Insert(pos);
 			m_aOwnSpawns.Insert(null);
-			Print(string.Format("CLW: bases %1 base at %2 (%3)", setup.m_sKey, pos, setup.m_sBaseLabel), LogLevel.NORMAL);
+			m_aPlace.Insert(new CLW_BasePlacement(setup, pos));
+			Print(string.Format("CLW: bases %1 base at %2: navmesh=%3 nearestRoad=%4 (%5)", setup.m_sKey, pos, nav, roadDist, setup.m_sBaseLabel), LogLevel.NORMAL);
 		}
 
 		DisableSceneSpawns();
@@ -49,6 +62,39 @@ class CLW_Bases
 
 		// scene entities may finish initialising after us: second pass
 		GetGame().GetCallqueue().CallLater(DisableSceneSpawns, CLW_WarConfig.SCENE_SPAWN_RECHECK_MS);
+		// AI agents (needed to ask the navmesh) may not exist yet at Init: validate once more, log only
+		GetGame().GetCallqueue().CallLater(RecheckBases, CLW_WarConfig.SCENE_SPAWN_RECHECK_MS * 2);
+	}
+
+	// Navmesh/road facts of a base position; returns a badness score (lower = better): 1000 off navmesh, + road distance
+	// (unknown navmesh counts as fine, no road as 500). Logs nothing.
+	protected float EvaluateBase(string label, vector pos, out int nav, out float roadDist)
+	{
+		vector snapped;
+		nav = CLW_Placement.NavmeshCheck(pos, CLW_WarConfig.PLACE_BASE_NAVMESH_TOL_M, snapped);
+		roadDist = CLW_Placement.NearestRoadDistance(pos);
+		float score = 0;
+		if (nav == 0)
+			score += 1000;
+		if (roadDist < 0)
+			score += 500;
+		else
+			score += roadDist;
+
+		return score;
+	}
+
+	protected void RecheckBases()
+	{
+		foreach (int i, string key : m_aKeys)
+		{
+			int nav;
+			float roadDist;
+			EvaluateBase(key, m_aPos[i], nav, roadDist);
+			Print(string.Format("CLW: bases %1 base at %2: navmesh=%3 nearestRoad=%4 (recheck, navmesh -1 = unknown)", key, m_aPos[i], nav, roadDist), LogLevel.NORMAL);
+			if (nav == 0 || roadDist < 0 || roadDist > CLW_WarConfig.PLACE_BASE_ROAD_WARN_M)
+				Print(string.Format("CLW: bases WARNING %1 base %2 is not usable (navmesh=%3 nearestRoad=%4 m): vehicles will use fallback ground", key, m_aPos[i], nav, roadDist), LogLevel.WARNING);
+		}
 	}
 
 	// The scenario sides were assigned other factions (CLW_Sides.Apply): the base positions stay with the side slots,
@@ -93,42 +139,38 @@ class CLW_Bases
 		return m_aPos[i];
 	}
 
-	// A free spot within radius of the faction's base: cylinder test via SCR_WorldTools, surface Y, never water.
-	// Falls back to a spread random point when the helper finds nothing. Returns false if the base is unknown.
+	// Kept for other callers: an infantry spot (slot or free navmesh ground) within radius of the faction's base.
+	// cylinderRadius/cylinderHeight are used when a vehicle-sized spot is wanted (>= 1.5 m radius) -> vehicle finder without yaw.
 	bool FindSpawnSpot(string factionKey, float radius, out vector spot, float cylinderRadius = 0.5, float cylinderHeight = 2)
 	{
-		vector center = GetBasePos(factionKey);
-		if (center == vector.Zero)
+		string via;
+		if (cylinderRadius >= 1.5)
+		{
+			float yaw;
+			return FindVehicleSpot(factionKey, radius, cylinderRadius, cylinderHeight, spot, yaw, via);
+		}
+
+		return FindInfantrySpot(factionKey, radius, spot, via);
+	}
+
+	// Vehicle parking spot: scenario slot -> road spot (aligned) -> navmesh ground. yaw in degrees. via: slot|road|navmesh|fallback.
+	bool FindVehicleSpot(string factionKey, float radius, float cylinderRadius, float cylinderHeight, out vector spot, out float yaw, out string via)
+	{
+		int i = m_aKeys.Find(factionKey);
+		if (i < 0 || i >= m_aPlace.Count())
 			return false;
 
-		BaseWorld world = GetGame().GetWorld();
-		vector found;
-		if (SCR_WorldTools.FindEmptyTerrainPosition(found, center, radius, cylinderRadius, cylinderHeight))
-		{
-			found[1] = world.GetSurfaceY(found[0], found[2]);
-			if (!IsWater(world, found))
-			{
-				spot = found;
-				return true;
-			}
-		}
+		return m_aPlace[i].FindVehicleSpot(radius, cylinderRadius, cylinderHeight, spot, yaw, via);
+	}
 
-		for (int attempt = 0; attempt < 8; attempt++)
-		{
-			float angle = Math.RandomFloat(0, Math.PI2);
-			float dist = Math.RandomFloat(0, radius);
-			vector candidate = center + Vector(Math.Cos(angle) * dist, 0, Math.Sin(angle) * dist);
-			candidate[1] = world.GetSurfaceY(candidate[0], candidate[2]);
-			if (!IsWater(world, candidate))
-			{
-				spot = candidate;
-				return true;
-			}
-		}
+	// Infantry spot: scenario slot -> free dry navmesh ground within radius of the base. via: slot|navmesh|fallback.
+	bool FindInfantrySpot(string factionKey, float radius, out vector spot, out string via)
+	{
+		int i = m_aKeys.Find(factionKey);
+		if (i < 0 || i >= m_aPlace.Count())
+			return false;
 
-		Print("CLW: bases no free spot near " + factionKey + " base, using the center", LogLevel.WARNING);
-		spot = center;
-		return true;
+		return m_aPlace[i].FindInfantrySpot(radius, spot, via);
 	}
 
 	// Our spawn point entity of a faction (null when none was spawned).

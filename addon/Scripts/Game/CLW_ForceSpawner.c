@@ -17,6 +17,8 @@ class CLW_SpawnJob
 	bool m_bFree;
 	bool m_bCharged;
 	vector m_vPos;
+	float m_fYaw;				// heading of a vehicle (degrees), from the placement
+	string m_sVia;				// how the spot was found: slot | road | navmesh | fallback
 	float m_fAge;
 	float m_fStateAge;
 	CLW_ESpawnState m_eState;
@@ -234,19 +236,27 @@ class CLW_ForceSpawner
 
 		CLW_Bases bases = CLW_GameMode.GetBases();
 		vector spot;
-		float cylinderR = 0.5;
-		float cylinderH = 2;
-		if (source.HasVehicle())
+		float spotYaw;
+		string via;
+		bool placed;
+		string kindLabel = "infantry";
+		if (bases)
 		{
-			cylinderR = CLW_WarConfig.SPAWN_VEHICLE_CYLINDER_R;
-			cylinderH = CLW_WarConfig.SPAWN_VEHICLE_CYLINDER_H;
+			if (source.HasVehicle())
+			{
+				kindLabel = "vehicle";
+				placed = bases.FindVehicleSpot(factionKey, CLW_WarConfig.SPAWN_RADIUS_M, CLW_WarConfig.SPAWN_VEHICLE_CYLINDER_R, CLW_WarConfig.SPAWN_VEHICLE_CYLINDER_H, spot, spotYaw, via);
+			}
+			else
+				placed = bases.FindInfantrySpot(factionKey, CLW_WarConfig.SPAWN_RADIUS_M, spot, via);
 		}
-		if (!bases || !bases.FindSpawnSpot(factionKey, CLW_WarConfig.SPAWN_RADIUS_M, spot, cylinderR, cylinderH))
+		if (!placed)
 		{
 			error = "no spawn spot at the base";
 			Print(string.Format("CLW: spawn %1 %2 %3 refused: %4", label, factionKey, typeId, error), LogLevel.ERROR);
 			return false;
 		}
+		Print(string.Format("CLW: spawn place %1 at %2 yaw=%3 via %4", kindLabel, spot, Math.Round(spotYaw), via), LogLevel.NORMAL);
 
 		CLW_SpawnJob job = new CLW_SpawnJob();
 		job.m_sFaction = factionKey;
@@ -254,6 +264,8 @@ class CLW_ForceSpawner
 		job.m_sReason = reason;
 		job.m_bFree = free;
 		job.m_vPos = spot;
+		job.m_fYaw = spotYaw;
+		job.m_sVia = via;
 		if (!free)
 		{
 			if (!war.TrySpend(factionKey, source.m_iCost))
@@ -420,6 +432,11 @@ class CLW_ForceSpawner
 		pos[1] = GetGame().GetWorld().GetSurfaceY(pos[0], pos[2]);
 		EntitySpawnParams params = new EntitySpawnParams();
 		params.TransformMode = ETransformMode.WORLD;
+		vector mat[4];
+		Math3D.AnglesToMatrix(Vector(job.m_fYaw, 0, 0), mat); // yaw, pitch, roll in degrees
+		params.Transform[0] = mat[0];
+		params.Transform[1] = mat[1];
+		params.Transform[2] = mat[2];
 		params.Transform[3] = pos;
 		IEntity vehicle = GetGame().SpawnEntityPrefab(resource, GetGame().GetWorld(), params);
 		if (!vehicle)
@@ -550,7 +567,11 @@ class CLW_ForceSpawner
 			return;
 		}
 
-		vector offset = job.m_Vehicle.GetOrigin() + Vector(CLW_WarConfig.SPAWN_CARGO_OFFSET_M, 0, 0);
+		// beside the vehicle, on free navmesh ground (not on the road lane in front of it)
+		vector offset;
+		string cargoVia;
+		CLW_Placement.FindGround(job.m_Vehicle.GetOrigin(), CLW_WarConfig.PLACE_CARGO_MIN_M, CLW_WarConfig.PLACE_CARGO_MAX_M, 0.5, 2, CLW_WarConfig.PLACE_CHAR_CLEAR_M, offset, cargoVia);
+		Print(string.Format("CLW: spawn place cargo at %1 yaw=0 via %2", offset, cargoVia), LogLevel.NORMAL);
 		SCR_AIGroup cargo = SpawnGroup(entry.m_CargoGroupPrefab, offset);
 		if (!cargo)
 		{

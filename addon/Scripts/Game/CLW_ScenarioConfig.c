@@ -1,6 +1,17 @@
 // Scenario data (spec 0a): everything content-specific about one battlefield. Loaded from a .conf resource
 // (Configs/CLW/Scenarios/<World>.conf) chosen by the CLW_GameMode prefab. Code never hard-wires factions or coordinates.
 
+// One hand-placed spawn spot (vehicle parking spot or infantry assembly spot) at a base.
+[BaseContainerProps()]
+class CLW_SpawnSlot
+{
+	[Attribute("0 0 0", UIWidgets.EditBox, "Position (x y z, y is replaced by the surface height)")]
+	vector m_vPos;
+
+	[Attribute("-1", UIWidgets.EditBox, "Heading in degrees (Enforce yaw: 0 = +Z/north, 90 = +X/east). Negative = automatic: along the nearest road, pointing away from the base")]
+	float m_fYaw;
+}
+
 [BaseContainerProps()]
 class CLW_FactionSetup
 {
@@ -36,6 +47,12 @@ class CLW_FactionSetup
 
 	[Attribute()]
 	ref array<string> m_aStartForces;	// force type ids (from the profile) spawned free at the base when the war starts
+
+	[Attribute("", UIWidgets.Object, "Optional vehicle parking spots at the base, used in order (round-robin, occupied ones skipped). Empty = automatic: nearest road, spaced spots")]
+	ref array<ref CLW_SpawnSlot> m_aVehicleSlots;
+
+	[Attribute("", UIWidgets.Object, "Optional infantry assembly spots at the base (round-robin). Empty = free navmesh ground within the spawn radius")]
+	ref array<ref CLW_SpawnSlot> m_aInfantrySlots;
 
 	EMilitarySymbolIdentity GetIdentity()
 	{

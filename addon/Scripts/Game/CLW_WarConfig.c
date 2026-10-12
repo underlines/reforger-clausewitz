@@ -42,6 +42,23 @@ class CLW_WarConfig
 	static const float SPAWN_MEMBERS_TIMEOUT_SEC = 20;	// wait for the members of a spawned group
 	static const float SPAWN_JOB_TIMEOUT_SEC = 120;		// whole purchase
 
+	// ---- Placement (CLW_Placement / CLW_BasePlacement) ----
+	static const float PLACE_SLOT_CLEAR_M = 6;			// a slot is occupied when a vehicle or character is within this distance
+	static const float PLACE_ROAD_SPACING_M = 15;		// automatic road spots are at least this far apart
+	static const float PLACE_ROAD_SEARCH_M = 200;		// roads further than this from the base are not used
+	static const float PLACE_ROAD_STEP_M = 5;			// road polyline resampling step
+	static const float PLACE_ROAD_MIN_WIDTH_M = 3;		// narrower roads are trails, not for vehicles
+	static const float PLACE_ROAD_OFF_PENALTY_M = 60;	// roads other than the nearest one count this much further away
+	static const int PLACE_ROAD_MAX_SPOTS = 16;
+	static const float PLACE_MAX_SLOPE_TAN = 0.466;		// tan(25 deg)
+	static const float PLACE_NAVMESH_TOL_M = 2.5;		// a spot counts as on the navmesh when it snaps within this distance
+	static const float PLACE_BASE_NAVMESH_TOL_M = 12;	// base validation tolerance
+	static const float PLACE_BASE_ROAD_WARN_M = 120;	// base further than this from any road is reported as unusable for vehicles
+	static const int PLACE_GROUND_ATTEMPTS = 40;
+	static const float PLACE_CHAR_CLEAR_M = 1.5;		// infantry spot: no other character closer than this
+	static const float PLACE_CARGO_MIN_M = 5;			// cargo group ring around its vehicle
+	static const float PLACE_CARGO_MAX_M = 14;
+
 	// ---- Catalog auto-discovery (P2) ----
 	static const float DISCOVER_COST_SCALE = 0.15;		// catalog supply cost -> our economy
 	static const int DISCOVER_MIN_COST_VEHICLE = 60;
