@@ -410,6 +410,28 @@ class CLW_Bases
 		return m_aOwnSpawns[i];
 	}
 
+	// Round 3 (compact base): moves the base spawn point of a faction next to the placed command post and gives it a small spawn radius, so
+	// players appear beside the HQ building. The base position (GetBasePos) stays. Returns false when the faction has no spawn point.
+	bool MoveBasePoint(string factionKey, vector pos, float radius)
+	{
+		SCR_SpawnPoint point = GetSpawnPoint(factionKey);
+		if (!point)
+		{
+			Print(string.Format("CLW: bases %1 spawn point not moved: none exists", factionKey), LogLevel.NORMAL);
+			return false;
+		}
+
+		vector old = point.GetOrigin();
+		CLW_Placement.SurfaceAt(pos);
+		point.SetOrigin(pos);	// [verify] spawn point transform replicates to clients (same as MoveBase)
+		float oldRadius = point.GetSpawnRadius();
+		if (radius > 0)
+			point.SetSpawnRadius(radius);
+
+		Print(string.Format("CLW: bases %1 spawn point moved %2 -> %3 (%4 m), radius %5 -> %6", factionKey, old, pos, Math.Round(vector.DistanceXZ(old, pos)), oldRadius, point.GetSpawnRadius()), LogLevel.NORMAL);
+		return true;
+	}
+
 	// Spawn point of a FOB: same prefab and radius as the faction's base spawn point (respawn there costs tickets like at the base).
 	// Null when the faction setup has no spawn point prefab.
 	SCR_SpawnPoint SpawnFobPoint(string factionKey, vector pos, string name = "")

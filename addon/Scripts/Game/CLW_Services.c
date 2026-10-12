@@ -21,6 +21,10 @@ class CLW_ServiceInstance
 	IEntity m_Entity;
 	vector m_vPos;
 	float m_fRadius;
+	vector m_vRectCenter;	// centre of the placed footprint (position + footprint offset), round 3
+	float m_fHalfX;			// footprint half extents (m) and heading, for distances to the building edge
+	float m_fHalfZ;
+	float m_fYaw;
 }
 
 // Placement distances of one service (built by CLW_Services.TuningFor from the constants and the profile entry).
@@ -36,7 +40,16 @@ class CLW_PlaceTuning
 	float m_fCompactMax;	// logging limit
 	float m_fRingMin;		// profile ring (distance of the centre from the anchor), 0 = automatic
 	float m_fRingMax;
-	bool m_bTouch;			// command post: starts right next to the spawn point (tent) at the anchor
+	bool m_bTouch;			// command post: as close to the base point as the checks allow (ring from 0)
+	// Round 3 cluster mode (arsenal, supply): the search runs around the PLACED command post, the clearance to its building is the object margin
+	bool m_bAroundCp;
+	vector m_vCpPos;		// command post entity position
+	vector m_vCpCenter;		// command post footprint centre (search centre)
+	float m_fCpHalfX;
+	float m_fCpHalfZ;
+	float m_fCpYaw;
+	bool m_bTent;			// the base spawn point was moved next to the command post: keep clear of it
+	vector m_vTent;
 }
 
 class CLW_Services
@@ -57,8 +70,11 @@ class CLW_Services
 	static const float PLACE_RING_GROW_M = 12;		// full: every further ring is this much wider
 	static const float PLACE_PIN_SLACK_M = 8;		// full: an authored offset may shift this far to reach clear ground before the ring search starts
 	static const float PLACE_COMPACT_MAX_M = 35;	// full: farther than this from the anchor is logged with the reason
-	static const float PLACE_TENT_RADIUS_M = 2;		// the spawn point (tent) at the anchor: the command post edge starts this far from the anchor
-	static const float PLACE_TENT_GAP_M = 0.75;		// gap between the tent and the command post (owner: 0.5-1 m)
+	static const float PLACE_TENT_GAP_M = 0.75;		// gap between the command post building edge and the spawn point (owner: 0.5-1 m)
+	static const float PLACE_TENT_SPAWN_RADIUS_M = 4;	// spawn radius of the base spawn point once it sits next to the command post (was the scenario's 30)
+	static const float PLACE_TENT_OUT_M = 1.5;		// the spawn point sits this far outside the gap (players appear around it)
+	static const float PLACE_WARN_ARSENAL_M = 6;	// warn when an arsenal is farther than this from the command post building edge
+	static const float PLACE_WARN_SUPPLY_M = 10;	// same for the supply cache
 	static const float PLACE_GAP_ARSENAL_M = 2.5;	// arsenal: free space to the command post / other services (owner: 2-4 m)
 	static const float PLACE_GAP_SUPPLY_M = 5.5;	// supply cache: free space to the others (owner: 5-8 m)
 	static const int SUPPLY_CHECK_MS = 10000;		// depot / arsenal supply check (the consumers see the linked stock only after the first poll)
@@ -72,6 +88,9 @@ class CLW_Services
 
 	protected static ref array<ref CLW_ServiceInstance> s_aInst = {};
 	protected static string s_sPlaceWhy;	// reject summary of the strict passes that failed (why a service had to go farther)
+	protected static string s_sPlaceRejects;	// reject histogram of the search that succeeded (what the nearer candidates failed on)
+	protected static string s_sTentKey;		// side + base whose spawn point was moved next to the command post
+	protected static vector s_vTent;
 	protected static bool s_bPolling;
 
 	// ---- lifecycle ----
@@ -81,6 +100,7 @@ class CLW_Services
 	{
 		s_aInst.Clear();
 		s_bPolling = false;
+		s_sTentKey = "";
 		CLW_SupplyLink.Reset();
 		CLW_ArsenalPool.Reset();
 		CLW_RequestTerminals.Reset();
@@ -444,11 +464,13 @@ class CLW_Services
 		Print(string.Format("CLW: place %1 %2 %3 footprint half %4 x %5 (offset %6 %7) height %8 from %9", sideKey, baseId, entry.m_sKind, Math.Round(foot.m_fHalfX * 10) / 10, Math.Round(foot.m_fHalfZ * 10) / 10, Math.Round(foot.m_fOffsetX), Math.Round(foot.m_fOffsetZ), foot.m_fHeight, foot.m_sSource), LogLevel.NORMAL);
 
 		CLW_PlaceTuning tune = TuningFor(entry);
+		SetupCluster(tune, sideKey, baseId, entry);
 		vector spot;
 		string via;
 		float yaw = entry.m_fYaw;
 		string placeLabel = sideKey + " " + baseId + " " + entry.m_sKind;
 		s_sPlaceWhy = "";
+		s_sPlaceRejects = "";
 		bool pinned;
 		if (entry.m_vOffset[0] != 0 || entry.m_vOffset[2] != 0)
 		{
@@ -477,8 +499,8 @@ class CLW_Services
 			via = FindSpot(placeLabel, anchor, keepClear, foot, tune, entry.m_fYaw, placedPos, placedRad, spot, yaw);
 
 		float anchorDist = vector.DistanceXZ(spot, anchor);
-		if (anchorDist > tune.m_fCompactMax)
-			Print(string.Format("CLW: place %1 went %2 m from the base point (compact limit %3 m) via=%4: %5", placeLabel, Math.Round(anchorDist), Math.Round(tune.m_fCompactMax), via, s_sPlaceWhy), LogLevel.NORMAL);
+		if (anchorDist > tune.m_fCompactMax && !tune.m_bAroundCp)
+			Print(string.Format("CLW: place %1 went %2 m from the base point (compact limit %3 m) via=%4: %5 | rejects on the way: %6", placeLabel, Math.Round(anchorDist), Math.Round(tune.m_fCompactMax), via, s_sPlaceWhy, s_sPlaceRejects), LogLevel.NORMAL);
 
 		EntitySpawnParams params = new EntitySpawnParams();
 		params.TransformMode = ETransformMode.WORLD;
@@ -500,9 +522,20 @@ class CLW_Services
 		inst.m_Entity = entity;
 		inst.m_vPos = spot;
 		inst.m_fRadius = radius;
+		float headRad = yaw * Math.DEG2RAD;
+		float headCos = Math.Cos(headRad);
+		float headSin = Math.Sin(headRad);
+		inst.m_vRectCenter = Vector(spot[0] + foot.m_fOffsetX * headCos + foot.m_fOffsetZ * headSin, spot[1], spot[2] - foot.m_fOffsetX * headSin + foot.m_fOffsetZ * headCos);
+		inst.m_fHalfX = foot.m_fHalfX;
+		inst.m_fHalfZ = foot.m_fHalfZ;
+		inst.m_fYaw = yaw;
 		s_aInst.Insert(inst);
 		placedPos.Insert(spot);
 		placedRad.Insert(radius);
+		if (entry.m_sKind == CLW_ServiceKind.COMMAND_POST && baseId == BASE_HQ)
+			PlaceTent(sideKey, baseId, anchor, inst);
+
+		LogCluster(placeLabel, inst, tune, via);
 
 		array<IEntity> tree = {};
 		CollectHierarchy(entity, tree);
@@ -552,21 +585,167 @@ class CLW_Services
 			p.m_fMargin = 0.3;
 		}
 
-		foreach (int i, vector other : placedPos)
+		if (tune.m_bAroundCp)
 		{
-			p.AddAvoid(other, (footRadius + placedRad[i]) * tune.m_fOverlap + tune.m_fGap);
+			// the clearance to the command post building is the object margin of the pose box (real edge-to-edge gap), not a circle
+			float margin = tune.m_fGap;
+			if (pass == 1)
+				margin = Math.Max(0.3, tune.m_fGap * 0.5);
+			else if (pass >= 2)
+				margin = 0.3;
+
+			p.m_fMargin = margin;
 		}
+
+		AddAvoids(p, footRadius, tune, placedPos, placedRad);
 
 		CLW_SpotResult res = new CLW_SpotResult();
 		if (CLW_FreeSpot.FindFreeSpot(p, res))
 		{
 			spot = res.m_vPos;
 			yaw = res.m_fYaw;
+			s_sPlaceRejects = "pass " + pass.ToString() + " " + res.Summary();
 			return true;
 		}
 
 		why = "pass " + pass.ToString() + " " + res.Summary();
 		return false;
+	}
+
+	// Keep-clear circles of the already placed services (the command post itself is left to the object margin in cluster mode) and of the tent.
+	protected static void AddAvoids(CLW_SpotParams p, float footRadius, CLW_PlaceTuning tune, notnull array<vector> placedPos, notnull array<float> placedRad)
+	{
+		foreach (int i, vector other : placedPos)
+		{
+			if (tune.m_bAroundCp && vector.DistanceXZ(other, tune.m_vCpPos) < 0.5)
+				continue;
+
+			p.AddAvoid(other, (footRadius + placedRad[i]) * tune.m_fOverlap + tune.m_fGap);
+		}
+
+		if (tune.m_bTent)
+			p.AddAvoid(tune.m_vTent, footRadius * tune.m_fOverlap + 2.5);
+	}
+
+	// Cluster mode for the arsenal and the supply cache: when the base already has its command post (and the entry has no authored offset /
+	// ring), the search runs around the command post building. Also hands the tent position over.
+	protected static void SetupCluster(CLW_PlaceTuning tune, string sideKey, string baseId, CLW_ServiceEntry entry)
+	{
+		if (s_sTentKey == sideKey + " " + baseId)
+		{
+			tune.m_bTent = true;
+			tune.m_vTent = s_vTent;
+		}
+
+		if (entry.m_sKind != CLW_ServiceKind.ARSENAL && entry.m_sKind != CLW_ServiceKind.SUPPLY)
+			return;
+
+		if (entry.m_vOffset[0] != 0 || entry.m_vOffset[2] != 0 || tune.m_fRingMin > 0 || tune.m_fRingMax > 0)
+			return;
+
+		foreach (CLW_ServiceInstance inst : s_aInst)
+		{
+			if (inst.m_sSide != sideKey || inst.m_sBase != baseId || inst.m_sKind != CLW_ServiceKind.COMMAND_POST || !inst.m_Entity)
+				continue;
+
+			tune.m_bAroundCp = true;
+			tune.m_vCpPos = inst.m_vPos;
+			tune.m_vCpCenter = inst.m_vRectCenter;
+			tune.m_fCpHalfX = inst.m_fHalfX;
+			tune.m_fCpHalfZ = inst.m_fHalfZ;
+			tune.m_fCpYaw = inst.m_fYaw;
+			return;
+		}
+	}
+
+	// Distance from a point to the edge of an oriented footprint rectangle (0 inside). yaw in degrees, local right = (cos, -sin), forward = (sin, cos).
+	protected static float RectEdgeDist(vector point, vector center, float yawDeg, float halfX, float halfZ)
+	{
+		float rad = yawDeg * Math.DEG2RAD;
+		float c = Math.Cos(rad);
+		float s = Math.Sin(rad);
+		float dx = point[0] - center[0];
+		float dz = point[2] - center[2];
+		float lx = dx * c - dz * s;
+		float lz = dx * s + dz * c;
+		float ox = Math.Max(Math.AbsFloat(lx) - halfX, 0);
+		float oz = Math.Max(Math.AbsFloat(lz) - halfZ, 0);
+		return Math.Sqrt(ox * ox + oz * oz);
+	}
+
+	// Moves the base spawn point next to the placed command post: from the building centre towards the base point, just outside the building
+	// edge (PLACE_TENT_GAP_M + PLACE_TENT_OUT_M), with a small spawn radius. Later services keep clear of it (tent avoid).
+	protected static void PlaceTent(string sideKey, string baseId, vector anchor, CLW_ServiceInstance cp)
+	{
+		CLW_Bases bases = CLW_GameMode.GetBases();
+		if (!bases)
+			return;
+
+		float rad = cp.m_fYaw * Math.DEG2RAD;
+		float c = Math.Cos(rad);
+		float s = Math.Sin(rad);
+		float dx = anchor[0] - cp.m_vRectCenter[0];
+		float dz = anchor[2] - cp.m_vRectCenter[2];
+		float len = Math.Sqrt(dx * dx + dz * dz);
+		if (len < 1)
+		{
+			dx = s;		// the base point is inside the building: out of its front
+			dz = c;
+			len = 1;
+		}
+
+		dx = dx / len;
+		dz = dz / len;
+		float lx = Math.AbsFloat(dx * c - dz * s);
+		float lz = Math.AbsFloat(dx * s + dz * c);
+		float edge = 1000;
+		if (lx > 0.0001)
+			edge = Math.Min(edge, cp.m_fHalfX / lx);
+		if (lz > 0.0001)
+			edge = Math.Min(edge, cp.m_fHalfZ / lz);
+
+		float reach = edge + PLACE_TENT_GAP_M + PLACE_TENT_OUT_M;
+		vector tent = Vector(cp.m_vRectCenter[0] + dx * reach, 0, cp.m_vRectCenter[2] + dz * reach);
+		CLW_Placement.SurfaceAt(tent);
+		if (!bases.MoveBasePoint(sideKey, tent, PLACE_TENT_SPAWN_RADIUS_M))
+			return;
+
+		s_sTentKey = sideKey + " " + baseId;
+		s_vTent = tent;
+		Print(string.Format("CLW: place %1 %2 spawn point next to the command post: %3 m outside the building edge (edge %4 m from its centre), base point was %5 m away, spawn radius %6", sideKey, baseId, Math.Round((PLACE_TENT_GAP_M + PLACE_TENT_OUT_M) * 10) / 10, Math.Round(edge * 10) / 10, Math.Round(len), PLACE_TENT_SPAWN_RADIUS_M), LogLevel.NORMAL);
+	}
+
+	// Distance of a placed service to the command post (centres, and building edge to service edge, approximated with the service's smaller
+	// half extent); a warning when an arsenal / supply cache is too far, with the reject histogram of the search.
+	protected static void LogCluster(string label, CLW_ServiceInstance inst, CLW_PlaceTuning tune, string via)
+	{
+		if (inst.m_sKind == CLW_ServiceKind.COMMAND_POST)
+			return;
+
+		CLW_ServiceInstance cp;
+		foreach (CLW_ServiceInstance other : s_aInst)
+		{
+			if (other.m_sSide == inst.m_sSide && other.m_sBase == inst.m_sBase && other.m_sKind == CLW_ServiceKind.COMMAND_POST && other.m_Entity)
+			{
+				cp = other;
+				break;
+			}
+		}
+
+		if (!cp || cp == inst)
+			return;
+
+		float centres = vector.DistanceXZ(inst.m_vPos, cp.m_vPos);
+		float edge = RectEdgeDist(inst.m_vRectCenter, cp.m_vRectCenter, cp.m_fYaw, cp.m_fHalfX, cp.m_fHalfZ) - Math.Min(inst.m_fHalfX, inst.m_fHalfZ);
+		Print(string.Format("CLW: place %1 dist2cp=%2 m (centres), edge2cp~%3 m (building edge to its edge) via=%4 clusterMode=%5", label, Math.Round(centres), Math.Round(edge * 10) / 10, via, tune.m_bAroundCp), LogLevel.NORMAL);
+		float limit = 0;
+		if (inst.m_sKind == CLW_ServiceKind.ARSENAL)
+			limit = PLACE_WARN_ARSENAL_M;
+		else if (inst.m_sKind == CLW_ServiceKind.SUPPLY)
+			limit = PLACE_WARN_SUPPLY_M;
+
+		if (limit > 0 && edge > limit)
+			Print(string.Format("CLW: place %1 WARNING %2 m from the command post building (limit %3 m): failed passes: %4 | rejects of the successful search: %5", label, Math.Round(edge * 10) / 10, limit, s_sPlaceWhy, s_sPlaceRejects), LogLevel.WARNING);
 	}
 
 	// Free spot around the anchor for a footprint: starts right beside the anchor (footprint radius + PLACE_INNER_M) and grows outward in
@@ -579,20 +758,29 @@ class CLW_Services
 	{
 		float footRadius = foot.Radius();
 		float minDist = footRadius + Math.Min(tune.m_fInner, keepClear);
+		vector centre = anchor;		// search centre and the point the pose faces
 		if (tune.m_bTouch)
-			minDist = Math.Max(foot.m_fHalfX, foot.m_fHalfZ) + PLACE_TENT_RADIUS_M + PLACE_TENT_GAP_M;	// the tent (spawn point) at the anchor, the composition right next to it
+			minDist = 0;			// command post: as close to the base point as the checks allow; the spawn point is moved next to it afterwards
 		if (tune.m_fRingMin > 0)
 			minDist = tune.m_fRingMin;
 
 		float maxDist = minDist + tune.m_fRing + (PLACE_BATCHES - 1) * tune.m_fGrow;
+		if (tune.m_bAroundCp)
+		{
+			// cluster mode: around the command post building; the ring starts inside its smaller half extent (the object checks reject the building itself)
+			centre = tune.m_vCpCenter;
+			minDist = Math.Min(tune.m_fCpHalfX, tune.m_fCpHalfZ);
+			maxDist = Math.Sqrt(tune.m_fCpHalfX * tune.m_fCpHalfX + tune.m_fCpHalfZ * tune.m_fCpHalfZ) + footRadius + tune.m_fGap + tune.m_fRing + 2 * tune.m_fGrow;
+		}
+
 		if (tune.m_fRingMax > 0)
 			maxDist = Math.Max(tune.m_fRingMax, minDist + 3);
 
-		Print(string.Format("CLW: place %1 search ring %2..%3 m from the base point (gap %4, touch=%5, foot %6 x %7)", label, Math.Round(minDist * 10) / 10, Math.Round(maxDist * 10) / 10, tune.m_fGap, tune.m_bTouch, Math.Round(foot.m_fHalfX * 10) / 10, Math.Round(foot.m_fHalfZ * 10) / 10), LogLevel.NORMAL);
+		Print(string.Format("CLW: place %1 search ring %2..%3 m from the %4 (gap %5, touch=%6, foot %7 x %8)", label, Math.Round(minDist * 10) / 10, Math.Round(maxDist * 10) / 10, centre, tune.m_fGap, tune.m_bTouch, Math.Round(foot.m_fHalfX * 10) / 10, Math.Round(foot.m_fHalfZ * 10) / 10) + string.Format(" aroundCp=%1", tune.m_bAroundCp), LogLevel.NORMAL);
 		string why;
 		for (int pass = 0; pass < 3; pass++)
 		{
-			if (SearchPass(label, anchor, anchor, minDist, maxDist, pass, foot, tune, fixedYaw, placedPos, placedRad, spot, yaw, why))
+			if (SearchPass(label, centre, centre, minDist, maxDist, pass, foot, tune, fixedYaw, placedPos, placedRad, spot, yaw, why))
 			{
 				if (pass == 0)
 					return "free";
@@ -610,7 +798,7 @@ class CLW_Services
 		// best effort: only the slope limit is dropped (object + road + water clearance kept), wider ring
 		CLW_SpotParams bp = new CLW_SpotParams();
 		bp.m_sLabel = label + " (slope ignored)";
-		bp.m_vCenter = anchor;
+		bp.m_vCenter = centre;
 		bp.SetFootprint(foot);
 		bp.m_fMinRadius = minDist;
 		bp.m_fMaxRadius = maxDist * 2.2;
@@ -619,10 +807,7 @@ class CLW_Services
 		bp.m_bBlockTrees = false;
 		bp.m_fMargin = 0.3;
 		bp.m_iMaxTries = 1200;
-		foreach (int bi, vector bother : placedPos)
-		{
-			bp.AddAvoid(bother, (footRadius + placedRad[bi]) * tune.m_fOverlap + tune.m_fGap);
-		}
+		AddAvoids(bp, footRadius, tune, placedPos, placedRad);
 
 		CLW_SpotResult bres = new CLW_SpotResult();
 		if (CLW_FreeSpot.FindFreeSpot(bp, bres))
@@ -635,11 +820,12 @@ class CLW_Services
 
 		// forced: a spot on the minimum ring that does not overlap, rotated by the number already placed
 		float forcedAngle = placedPos.Count() * 1.1;
-		spot = anchor + Vector(Math.Cos(forcedAngle) * (minDist + placedPos.Count() * 6), 0, Math.Sin(forcedAngle) * (minDist + placedPos.Count() * 6));
+		float forcedDist = Math.Max(minDist, footRadius) + placedPos.Count() * 6;
+		spot = centre + Vector(Math.Cos(forcedAngle) * forcedDist, 0, Math.Sin(forcedAngle) * forcedDist);
 		CLW_Placement.SurfaceAt(spot);
 		yaw = fixedYaw;
 		if (yaw < 0)
-			yaw = CLW_Placement.YawFromDir(anchor[0] - spot[0], anchor[2] - spot[2]);
+			yaw = CLW_Placement.YawFromDir(centre[0] - spot[0], centre[2] - spot[2]);
 
 		Print(string.Format("CLW: place %1 FORCED at %2 (no clear ground found: the composition may overlap objects)", label, spot), LogLevel.WARNING);
 		return "forced";
@@ -1082,36 +1268,80 @@ class CLW_Services
 			Print(string.Format("CLW: services depot %1 custom list unsupported: %2 friendly faction(s) but none adds a vehicle the faction catalog lacks, the list stays the faction catalog", sideKey, spawner.CLW_GetKinFactions()), LogLevel.NORMAL);
 	}
 
-	// Depot / arsenal supply check, SUPPLY_CHECK_MS after the services were spawned (P7: the 1.8 s read said "consumer sees 0").
+	// Depot / arsenal supply check, SUPPLY_CHECK_MS after the services were spawned. P7 follow-up: the first version read the first
+	// SCR_ResourceComponent found per entity (FindResourceComponent also walks to the parent), which is not necessarily the one the service pays
+	// from. Now: the depot reads the component its spawner pays from (GetSpawnerResourceComponent), the arsenal the component of the entity that
+	// carries the SCR_ArsenalComponent. Per consumer the log gives the consumer class (a military-base / service-point consumer only counts the
+	// containers of a military base: none exist in a Game Master world), the container count it sees, the aggregated and max value, its range,
+	// and the distance to the nearest supply service of the base, so "sees 0" can be told apart from "wrong consumer" or "out of range".
 	protected static void CheckSupplies(string sideKey, string baseId)
 	{
 		CLW_SupplyLink link = CLW_SupplyLink.Find(sideKey, baseId);
+		float stock = -1;
 		string linkInfo = "no supply link";
 		if (link)
-			linkInfo = "link stock " + link.GetStock().ToString();
+		{
+			stock = link.GetStock();
+			linkInfo = "link stock " + stock.ToString() + " in " + link.GetContainerCount().ToString() + " containers";
+		}
 
 		array<CLW_ServiceInstance> insts = {};
 		GetInstances(sideKey, baseId, insts);
 		int checks;
+		array<SCR_ResourceComponent> seen = {};
 		foreach (CLW_ServiceInstance inst : insts)
 		{
 			if (inst.m_sKind != CLW_ServiceKind.VEHICLE_DEPOT && inst.m_sKind != CLW_ServiceKind.ARSENAL)
 				continue;
 
+			float supplyDist = -1;
+			foreach (CLW_ServiceInstance other : insts)
+			{
+				if (other.m_sKind != CLW_ServiceKind.SUPPLY)
+					continue;
+
+				float d = vector.DistanceXZ(inst.m_vPos, other.m_vPos);
+				if (supplyDist < 0 || d < supplyDist)
+					supplyDist = d;
+			}
+
 			array<IEntity> tree = {};
 			CollectHierarchy(inst.m_Entity, tree);
 			foreach (IEntity entity : tree)
 			{
-				SCR_ResourceComponent resources = SCR_ResourceComponent.FindResourceComponent(entity);
-				if (!resources)
+				SCR_ResourceComponent resources = null;
+				string via = "";
+				SCR_CatalogEntitySpawnerComponent spawner = SCR_CatalogEntitySpawnerComponent.Cast(entity.FindComponent(SCR_CatalogEntitySpawnerComponent));
+				if (spawner && inst.m_sKind == CLW_ServiceKind.VEHICLE_DEPOT)
+				{
+					resources = spawner.GetSpawnerResourceComponent();
+					via = "spawner component";
+				}
+				else if (SCR_ArsenalComponent.Cast(entity.FindComponent(SCR_ArsenalComponent)) && inst.m_sKind == CLW_ServiceKind.ARSENAL)
+				{
+					resources = SCR_ResourceComponent.Cast(entity.FindComponent(SCR_ResourceComponent));
+					via = "arsenal entity component";
+				}
+
+				if (!resources || seen.Contains(resources))
 					continue;
 
+				seen.Insert(resources);
 				SCR_ResourceConsumer consumer = resources.GetConsumer(EResourceGeneratorID.DEFAULT, EResourceType.SUPPLIES);
 				if (!consumer)
+				{
+					checks++;
+					Print(string.Format("CLW: services supply check %1 %2 %3: %4 has NO supplies consumer (%5)", sideKey, baseId, inst.m_sKind, via, linkInfo), LogLevel.NORMAL);
 					continue;
+				}
 
 				checks++;
-				Print(string.Format("CLW: services supply check %1 %2 %3: consumer sees %4 (%5)", sideKey, baseId, inst.m_sKind, consumer.GetAggregatedResourceValue(), linkInfo), LogLevel.NORMAL);
+				float seeing = consumer.GetAggregatedResourceValue();
+				string verdict = "ok";
+				if (seeing <= 0 && stock > 0)
+					verdict = "CONSUMER SEES NOTHING although the base has stock (wrong consumer type, or not in range of the supply containers)";
+
+				Print(string.Format("CLW: services supply check %1 %2 %3 (%4): consumer %5 sees %6 / max %7, containers=%8, range=%9", sideKey, baseId, inst.m_sKind, via, consumer.ClassName(), seeing, consumer.GetAggregatedMaxResourceValue(), consumer.GetContainerCount(), consumer.GetResourceRange()) + string.Format(" nearestSupplyService=%1 m (%2): %3", Math.Round(supplyDist), linkInfo, verdict), LogLevel.NORMAL);
 			}
 		}
 
