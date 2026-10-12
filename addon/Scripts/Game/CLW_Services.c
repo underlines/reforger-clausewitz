@@ -817,6 +817,14 @@ class CLW_Services
 					{
 						cost = "fixed";
 					}
+
+					// pack boxes may ship with a zero buy multiplier (RHS arsenal boxes): kits would be free although kit cost is on
+					SCR_ResourceConsumer kitConsumer = resources.GetConsumer(EResourceGeneratorID.DEFAULT, EResourceType.SUPPLIES);
+					if (kitCost && kitConsumer && kitConsumer.GetBuyMultiplier() <= 0)
+					{
+						kitConsumer.SetBuyMultiplier(1);
+						cost += ", buy multiplier 0 -> 1";
+					}
 				}
 
 				Print(string.Format("CLW: services arsenal %1 %2 at %3: kitCost=%4 (%5) saveType=FRIENDLY_AND_FACTION_ITEMS_ONLY", sideKey, baseId, inst.m_vPos, kitCost, cost), LogLevel.NORMAL);
