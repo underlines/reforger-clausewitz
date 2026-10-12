@@ -73,7 +73,7 @@ class CLW_RemoteCommander
 {
 	static bool ENABLED = true;
 	static const string BASE_URL = "http://127.0.0.1:8788/";
-	static const int TIMEOUT_SECONDS = 15;
+	static const int TIMEOUT_SECONDS = 30;		// above the sidecar provider timeout (20 s), or slow LLM replies fall back to rules
 	static const float STUCK_SECONDS = 45;		// a request in flight longer than this is considered lost
 	static const float LOG_INTERVAL = 60;		// s: repeat the same fallback reason at most this often
 	static const float RULES_INTERVAL = 25;		// s: the rule-commander fallback runs at most this often (we are polled every 10 s)
