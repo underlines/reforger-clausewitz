@@ -151,17 +151,17 @@ long intervals in quiet phases and short ones during fights or while an assault 
 
 // Faction SITREP template (real formats: US/NATO SITREP, SMEAC five-paragraph order, SALUTE enemy report; short, player-useful).
 const SITREP_KEYS = ["situation", "enemy", "mission", "execution", "logistics"];
-const SITREP_TITLES = { situation: "Situation", enemy: "Enemy", mission: "Mission", execution: "Execution", logistics: "Logistics" };
+const SITREP_TITLES = { situation: "Situation", enemy: "Intel", mission: "Mission", execution: "Execution", logistics: "Logistics" };
 const SITREP_CAP = 420, SITREP_HEADLINE_CAP = 140, SITREP_FRESH_SEC = 360;
 const SITREP_PROMPT = `
-SITREP: this reply MUST also contain a "sitrep" object: a short situation report of YOUR faction for the soldiers under your command. Only what your faction knows (fog of war). Plain text, \\n for line breaks, no markup. Keys (all strings):
-"headline" (max 120 chars: faction, tickets, objectives held),
-"situation" (max 300: which objectives we hold / contest / lost, ticket trend, how the war goes),
-"enemy" (max 360: SALUTE style per known enemy group: size, kind, activity, location by objective name or grid, age; "none reported" if empty),
-"mission" (max 250: your intent and main effort in plain words),
-"execution" (max 360: what your units do now and in the next ten minutes, one short line each for the main groups; how a player can help),
-"logistics" (max 250: supplies and income, reinforcements, weak units).
-Be concrete and terse, like a real SITREP read aloud. Put "sitrep" last in the JSON object.`;
+SITREP: the reply MUST also contain a "sitrep" object (last key): a natural NATO/US-style situation report of OUR faction, read aloud to our soldiers. Only what we know. Plain text, \\n for line breaks, no markup. String keys: headline, situation, enemy, mission, execution, logistics.
+Style:
+- headline: BLUF, max 110 chars: who is ahead, what matters now.
+- Words, not data: no raw numbers, coordinates, "age 12s", unit ids (US_Inf2) or faction keys. Say "we/our forces/the enemy", "the mechanized platoon", "our AT team", "two elements". At most one number per section, only if it helps (minutes left, a grid).
+- Enemy size from contact "size" (else "vehicles"/"infantry"/"desc"): fire team, squad-, platoon-, company-sized element; single vehicle, vehicle section/platoon, large mechanized force, "with dismounts". Time: just now / last few minutes / earlier. Place: contact "place" (nearest named place or objective) plus rough "grid" if given ("north of Morton, grid 26-28"); objectives as letter + name. Never raw coordinates; no place: "unlocated".
+- Trends in words: tickets bleeding / steady / ahead; supplies healthy / tight / dry; strength good / thin / exhausted.
+- situation: objectives held/contested/lost, ticket trend, tempo. enemy: SALUTE as plain prose, freshest first, 1-3 sentences. mission: SMEAC who/what/where/why, 1-2 sentences. execution: "Main effort: ... Supporting effort: ... Reserve: ..." then one line on what helps players. logistics: supplies, replacements, vehicles, weak elements, in words.
+Example (invented): {"headline":"Holding two of five points; enemy armor massing north, push on Delta now.","situation":"We hold Alpha and Bravo; Charlie is contested. Tickets are bleeding slowly but we remain ahead.","enemy":"Platoon-sized mechanized force with dismounts moving south through Harbor Bridge just now. Squad-sized element at Delta, last few minutes.","mission":"Defeat the enemy at Charlie Mill and secure Delta to deny him the crossing.","execution":"Main effort: mechanized platoon to Charlie. Supporting effort: two rifle elements fix Delta. Reserve: AT team at Bravo. Players: join a squad moving on Charlie.","logistics":"Supplies healthy, income steady, replacements ordered. One element is thin and falling back."}`;
 
 // System prompt incl. the wakeup paragraph. v2 = protocol v2 situation. sitrep = ask for the SITREP object too.
 function systemPrompt(c, v2 = false, sitrep = false) {
@@ -409,7 +409,7 @@ function usageView() {
 const budgetStopped = (c) => c.provider === "openrouter" && c.stopAtLimit && budget()?.level === "reached";
 
 // ---------- faction SITREP ----------
-const clipText = (v, cap) => (typeof v === "string" ? v.replace(/\r/g, "").replace(/\t/g, " ").replace(/\\n/g, "\n").trim().slice(0, cap) : "");
+const clipText = (v, cap) => (typeof v === "string" ? scrubSitrep(v).replace(/\r/g, "").replace(/\t/g, " ").replace(/\\n/g, "\n").trim().slice(0, cap) : "");
 // Normalises a SITREP object from the model or the game: {headline, situation, enemy, mission, execution, logistics} or null.
 function normSitrep(x) {
   if (!x || typeof x !== "object" || Array.isArray(x)) return null;
@@ -427,32 +427,85 @@ function sitrepContract(n, unit, source, generatedAt, warTimeSec) {
 const clock = (sec) => { const t = Math.max(0, Math.round(sec)); return Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); };
 // Template-based SITREP from a protocol v2 situation (fog-limited by construction). Used by the fake provider and as the rules
 // fallback when the game sent none. Mirrors CLW_SitrepBuilder.c in the game, shorter.
+// Plain-words helpers for the SITREP (no raw numbers / ids). Squad "kind"/"type" come from the game; unknown kinds read as "element".
+const unitWord = (q) => {
+  const t = String(q?.type ?? "").toLowerCase(), k = String(q?.kind ?? "").toLowerCase();
+  if (/\bat\b|anti/.test(t)) return "AT team";
+  return ({ infantry: "rifle element", light: "light vehicle section", mech: "mechanized element", armor: "armor element", motorized: "motorized element", air: "air element" })[k] ?? "element";
+};
+// Strips leftover raw "(1234,5678)" coordinate pairs and "age 12s" fragments the model may still emit.
+const scrubSitrep = (s) => s.replace(/\(\s*-?\d{2,6}(?:\.\d+)?\s*,\s*-?\d{2,6}(?:\.\d+)?(?:\s*,\s*-?\d{1,6}(?:\.\d+)?)?\s*\)/g, "").replace(/,?\s*\bage:?\s*\d+\s*s\b/gi, "").replace(/[ \t]{2,}/g, " ").replace(/\s+([,.;])/g, "$1");
+// Nearest named place (world locations the game posted) for contacts that lack "place"; the game's "place"/"grid" always win.
+function annotateContacts(sit) {
+  if (!sit || !Array.isArray(sit.contacts) || !sit.contacts.some((c) => c && typeof c.place !== "string" && okPos(c.pos))) return sit;
+  let locs = null;
+  try { locs = worldState.key ? loadVectors(worldState.key).locations : null; } catch { locs = null; }
+  if (!Array.isArray(locs) || !locs.length) return sit;
+  const contacts = sit.contacts.map((c) => {
+    if (!c || typeof c.place === "string" || !okPos(c.pos)) return c;
+    const p = xz(c.pos);
+    let best = null, bd = 2500;
+    for (const l of locs) { const d = dist2(p, l.pos); if (d < bd) { bd = d; best = l; } }
+    return best ? { ...c, place: best.name } : c;
+  });
+  return { ...sit, contacts };
+}
+const infWord = (n) => (n <= 4 ? "fire team" : n <= 12 ? "squad-sized element" : n <= 40 ? "platoon-sized element" : "company-sized element");
+const vehWord = (n) => (n <= 1 ? "single vehicle" : n <= 3 ? "vehicle section" : n <= 8 ? "vehicle platoon" : "large mechanized force");
+function contactSize(c) {
+  if (typeof c.size === "string" && c.size) return c.size;
+  let v = isNum(c.vehicles) ? c.vehicles : 0, i = isNum(c.infantry) ? c.infantry : 0;
+  if (!v && !i && typeof c.desc === "string") { const m = /(\d+)x\s.*?(vehicle|infantry)/i.exec(c.desc); if (m) { if (m[2].toLowerCase() === "vehicle") v = +m[1]; else i = +m[1]; } }
+  if (v && i) return vehWord(v) + " with dismounts";
+  return v ? vehWord(v) : i ? infWord(i) : "unidentified element";
+}
+const cap1 = (s) => s[0].toUpperCase() + s.slice(1);
 function fakeSitrep(sit, plan = null) {
+  sit = annotateContacts(sit);
   const me = sit.faction, war = sit.war ?? {};
   const objs = (Array.isArray(sit.objectives) ? sit.objectives : []).filter((o) => o && typeof o.id === "string");
   const squads = (Array.isArray(sit.squads) ? sit.squads : []).filter((q) => q && typeof q.id === "string");
   const contacts = (Array.isArray(sit.contacts) ? sit.contacts : []).filter((c) => c && okPos(c.pos));
-  const label = (o) => o.id + " " + (o.name ?? "");
+  const label = (o) => (o.name ? o.id + " (" + o.name + ")" : o.id);
+  const list = (a) => (a.length < 2 ? a.join("") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1]);
   const held = objs.filter((o) => o.owner === me), enemyHeld = objs.filter((o) => o.owner && o.owner !== "none" && o.owner !== me), open = objs.filter((o) => !o.owner || o.owner === "none");
-  const near = (pos) => {
-    let best = null, bd = Infinity;
+  const contested = objs.filter((o) => o.contested);
+  const tk = war.tickets, et = war.enemyTickets;
+  const lead = isNum(tk) && isNum(et) && tk >= 0 && et >= 0 ? (tk > et * 1.15 ? "ahead" : tk * 1.15 < et ? "behind" : "level") : null;
+  const nearObj = (pos) => { // objective label within 400 m of the contact, else ""
+    let best = null, bd = 400;
     for (const o of objs) if (okPos(o.pos)) { const d = dist2(xz(pos), xz(o.pos)); if (d < bd) { bd = d; best = o; } }
-    return best ? (bd < 60 ? "at " : Math.round(bd / 10) * 10 + " m from ") + label(best) : "grid " + Math.floor(pos[0] / 100) + " " + Math.floor((pos[2] ?? pos[1]) / 100);
+    return best ? label(best) : "";
   };
   const n = {};
-  n.headline = `${me} SITREP T+${clock(sit.time ?? 0)} | tickets ${war.tickets ?? "?"} vs ${war.enemyTickets ?? "?"} | points ${held.length}/${objs.length} | ${squads.length} units, ${contacts.length} contacts`;
-  n.situation = `Holding ${held.map(label).join(", ") || "no objective"}.` + (enemyHeld.length ? ` Enemy holds ${enemyHeld.map(label).join(", ")}.` : "") + (open.length ? ` Open: ${open.map(label).join(", ")}.` : "")
-    + (isNum(war.tickets) && war.tickets >= 0 ? `\nTickets ${war.tickets} (enemy ${war.enemyTickets ?? "?"}).` : "");
-  n.enemy = contacts.length ? contacts.slice().sort((a, b) => (a.ageSec ?? 0) - (b.ageSec ?? 0)).slice(0, 4).map((c) => `${c.desc ?? "unknown"}, ${near(c.pos)}, ${(c.ageSec ?? 0) < 15 ? "now" : Math.round(c.ageSec) + " s ago"}`).join("\n") : "No enemy contact reported.";
-  // tasks: the orders just decided (plan) override the units' current objectives
-  const tasked = (plan?.orders?.length ? plan.orders.map((o) => ({ id: o.squad, objective: { command: o.command, target: o.target, pos: o.pos } })) : squads.filter((q) => q.objective && q.objective.status === "active"));
-  const tally = new Map();
-  for (const q of tasked) { const t = q.objective.target ?? (okPos(q.objective.pos) ? near([q.objective.pos[0], 0, q.objective.pos[1]]) : "?"); tally.set(t, (tally.get(t) ?? 0) + 1); }
-  const main = [...tally.entries()].sort((a, b) => b[1] - a[1])[0];
-  n.mission = main ? `Main effort: ${main[0]} (${main[1]} units). Take and hold the objectives, preserve tickets.` : "Consolidate, scout and take or hold the objectives; preserve tickets.";
-  n.execution = tasked.slice(0, 5).map((q) => `${q.id} ${q.objective.command} ${q.objective.target ?? ""}`.trim()).join("\n") || "No units tasked yet.";
+  const bluf = !objs.length ? "no objectives in play" : held.length * 2 > objs.length ? "we hold most of the map" : held.length ? "we hold part of the map" : "we hold no objective";
+  n.headline = `${cap1(bluf)}${lead === "ahead" ? ", tickets in our favor" : lead === "behind" ? ", tickets running against us" : ""}${contested.length ? "; " + contested.map((o) => o.id).join("/") + " contested" : ""}.`;
+  n.situation = (held.length ? `We hold ${list(held.map(label))}.` : "We hold no objective.") + (enemyHeld.length ? ` The enemy holds ${list(enemyHeld.map(label))}.` : "") + (open.length ? ` ${cap1(list(open.map(label)))} still open.` : "")
+    + (contested.length ? ` ${cap1(list(contested.map(label)))} contested.` : "") + (lead ? ` Tickets: we are ${lead === "level" ? "level with the enemy" : lead === "ahead" ? "ahead of the enemy" : "behind the enemy"}.` : "")
+    + (isNum(sit.timeLeftSec) && sit.timeLeftSec > 0 ? ` About ${Math.round(sit.timeLeftSec / 60)} minutes remain.` : "");
+  const when = (a) => (a < 20 ? "just now" : a < 300 ? "in the last few minutes" : "earlier");
+  const cs = contacts.slice().sort((a, b) => (a.ageSec ?? 0) - (b.ageSec ?? 0)).slice(0, 3);
+  n.enemy = cs.length ? cs.map((c) => {
+    const where = (typeof c.place === "string" && c.place) || nearObj(c.pos);
+    return `${cap1(contactSize(c))} ${where ? "near " + where : "unlocated"}${typeof c.grid === "string" && c.grid ? ", grid " + c.grid : ""}, ${when(c.ageSec ?? 0)}.`;
+  }).join(" ") : "No enemy contact at this time.";
+  const tasked = (plan?.orders?.length ? plan.orders.map((o) => ({ q: squads.find((s) => s.id === o.squad), objective: { command: o.command, target: o.target } })) : squads.filter((q) => q.objective && q.objective.status === "active").map((q) => ({ q, objective: q.objective })));
+  const groups = new Map();
+  for (const t of tasked) { const k = t.objective.target ?? "the next position"; (groups.get(k) ?? groups.set(k, []).get(k)).push(t); }
+  const gs = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
+  const tname = (k) => { const o = objs.find((x) => x.id === k); return o ? label(o) : k; };
+  const crew = (arr) => { const u = [...new Set(arr.map((t) => unitWord(t.q)))]; return u.length === 1 ? (arr.length > 1 ? (arr.length === 2 ? "two " : "several ") + u[0] + "s" : "the " + u[0]) : "a mixed force"; };
+  const verb = (arr) => (arr.some((t) => /ATTACK/i.test(t.objective.command)) ? "attacks" : arr.some((t) => /DEFEND/i.test(t.objective.command)) ? "holds" : "moves on");
+  const idle = squads.filter((q) => !tasked.some((t) => t.q === q));
+  n.mission = gs.length ? `Seize and hold ${tname(gs[0][0])}, deny the enemy the initiative and preserve our tickets.` : "Consolidate, scout and take or hold the objectives to preserve our tickets.";
+  n.execution = (gs[0] ? `Main effort: ${crew(gs[0][1])} ${verb(gs[0][1])} ${tname(gs[0][0])}.` : "No main effort assigned yet.")
+    + (gs[1] ? ` Supporting effort: ${crew(gs[1][1])} ${verb(gs[1][1])} ${tname(gs[1][0])}.` : "") + (idle.length ? ` Reserve: ${idle.length > 1 ? "several elements" : "one element"} in position.` : "")
+    + (gs[0] ? ` Players: join a squad moving on ${tname(gs[0][0])}.` : "");
+  const minCost = Math.min(...(Array.isArray(sit.catalog) ? sit.catalog.map((e) => e?.cost).filter(isNum) : []), Infinity);
+  const sup = !isNum(war.supplies) ? "" : war.supplies < minCost ? "Supplies are dry" : war.supplies < minCost * 3 ? "Supplies are tight" : "Supplies are healthy";
+  const str = isNum(war.liveAI) && isNum(war.aiCap) && war.aiCap > 0 ? (war.liveAI / war.aiCap > 0.7 ? "force strength good" : war.liveAI / war.aiCap > 0.35 ? "force strength moderate" : "force strength thin") : "";
   const weak = squads.filter((q) => isNum(q.agents) && isNum(q.startAgents) && q.startAgents > 0 && q.agents < q.startAgents * 0.5);
-  n.logistics = `Supplies ${war.supplies ?? "?"}${isNum(war.income) ? ` (+${war.income}/min)` : ""}. AI ${war.liveAI ?? "?"}/${war.aiCap ?? "?"}, vehicles ${war.vehicles ?? "?"}/${war.vehicleCap ?? "?"}.` + (weak.length ? " Weak: " + weak.slice(0, 4).map((q) => `${q.id} ${q.agents}/${q.startAgents}`).join(", ") + "." : "");
+  n.logistics = [sup && isNum(war.income) && war.income > 0 ? sup + ", income steady" : sup, str].filter(Boolean).join("; ") + (sup || str ? "." : "") + (weak.length ? ` ${weak.length > 1 ? "Several elements are" : "One element is"} badly worn and needs relief.` : " No element needs relief.");
   return n;
 }
 // Per faction: the last model SITREP, the rules cache (generatedAt only moves when the content changes), and when the model last wrote one.
@@ -1024,7 +1077,7 @@ async function handleOrders(req, res) {
       wake = { reason: dec.reason, triggers: dec.triggers, sinceLastSec: lc.ts ? Math.round((now - lc.ts) / 1000) : 0 };
       lc.ts = now;
       if (valid) { sc.manual = false; sc.baseline = sit; sc.lastLlmAt = now; sc.lastWakeReason = wake.reason; sc.lastWakeTriggers = wake.triggers; }
-      const callSit = !valid ? sit : v2 ? { ...sit, events: sc.pendingEvents.slice(-15), wake } : { ...sit, wake };
+      const callSit = !valid ? sit : v2 ? { ...annotateContacts(sit), events: sc.pendingEvents.slice(-15), wake } : { ...sit, wake };
       if (valid) sc.pendingEvents = [];
       const srCfg = snapshot.sitrep, srSt = srFor(faction);
       const wantSitrep = v2 && !!srCfg?.enabled && (!srSt.lastAt || Date.now() - srSt.lastAt >= srCfg.intervalSec * 1000 || dec.reason === "manual" || dec.triggers.some((t) => /objective|tickets|lost/i.test(t)));
