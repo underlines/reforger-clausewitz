@@ -363,6 +363,16 @@ class CLW_WarRuntime
 		Step("commanding manager", SCR_CommandingManagerComponent.GetInstance() != null);
 		ReplaceSpawnLogic();
 		CLW_PlayerSquad.ApplyCommandingLimit();
+
+		// Game Master modes switch supplies off: arsenals then show no prices and kits are free, the supply link has nothing to sync
+		SCR_BaseGameMode hostMode = SCR_BaseGameMode.Cast(m_Owner);
+		if (hostMode && !hostMode.IsResourceTypeEnabled(EResourceType.SUPPLIES))
+		{
+			hostMode.SetResourceTypeEnabled(true, EResourceType.SUPPLIES);
+			Step("supplies", hostMode.IsResourceTypeEnabled(EResourceType.SUPPLIES), "were disabled by the host game mode, enabled");
+		}
+		else
+			Step("supplies", true, "already enabled");
 	}
 
 	// The chat is reached through GetGame().GetChat() (SCR_ChatPanelManager does the same): when the world has none, spawn the
