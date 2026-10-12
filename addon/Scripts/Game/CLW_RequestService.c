@@ -118,6 +118,7 @@ class CLW_RequestService
 		s_aBoxes.Clear();
 		s_aBoxPlayers.Clear();
 		s_iSeq = 0;
+		CLW_VehicleDelivery.Reset();	// M4 WP4
 		CLW_Reports.Reset();
 		CLW_HqChat.Reset();	// M3 phase A: pending /hq messages
 	}
@@ -243,7 +244,7 @@ class CLW_RequestService
 			return null;
 
 		array<CLW_ForceEntry> entries = {};
-		catalog.GetEntries(factionKey, entries);
+		catalog.GetEntries(factionKey, entries, true);	// players drive: crewless vehicles too
 		string wanted = arg;
 		wanted = wanted.Trim();
 		wanted.ToLower();
@@ -680,6 +681,17 @@ class CLW_RequestService
 		if (granted)
 			answer = "HQ: " + reply;
 
+		// M4 WP4: vehicle delivery feedback. The executor tracked the new vehicle (TrackVehicle) just before it returned.
+		if (granted && kind == CLW_RequestKind.VEHICLE && !s_aIssuedVehicles.IsEmpty())
+		{
+			IEntity delivered = s_aIssuedVehicles[s_aIssuedVehicles.Count() - 1];
+			if (delivered)
+			{
+				answer = "HQ: vehicle delivered, grid " + CLW_Places.Grid(delivered.GetOrigin()) + ". " + reply;
+				CLW_VehicleDelivery.Track(playerId, faction, delivered);
+			}
+		}
+
 		Answer(playerId, answer, true);
 		return answer;
 	}
@@ -736,7 +748,7 @@ class CLW_RequestService
 			return;
 
 		array<CLW_ForceEntry> entries = {};
-		catalog.GetEntries(factionKey, entries);
+		catalog.GetEntries(factionKey, entries, true);
 		foreach (CLW_ForceEntry entry : entries)
 		{
 			if (!entry || !entry.m_bEnabled || outTypes.Count() >= 8)

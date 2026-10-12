@@ -18,8 +18,32 @@ class CLW_RandomLayoutSetup
 	[Attribute("0.15", UIWidgets.EditBox, "HQ distance = battle-size distance minus up to this fraction (never above it)")]
 	float m_fDistanceTolerance;
 
-	[Attribute("30", UIWidgets.EditBox, "Random axis / centre attempts before falling back to the fixed layout")]
+	[Attribute("120", UIWidgets.EditBox, "Attempts (one dry HQ A wish checked each) before falling back to the fixed layout")]
 	int m_iMaxAttempts;
+
+	[Attribute("25000", UIWidgets.EditBox, "Wall clock budget (ms) of one HQ search, then it gives up like after the last attempt (0 = unlimited). The search runs on the server main thread")]
+	int m_iTimeBudgetMs;
+
+	[Attribute("300", UIWidgets.EditBox, "Wish samples per attempt to find dry land (wet samples are free, they do not use up an attempt)")]
+	int m_iLandSamples;
+
+	[Attribute("0.45", UIWidgets.EditBox, "Share of HQ A wishes taken near a named map place (villages, towns...)")]
+	float m_fPlaceWishFraction;
+
+	[Attribute("0.35", UIWidgets.EditBox, "Share of HQ A wishes taken near a vehicle road (the rest is uniform land)")]
+	float m_fRoadWishFraction;
+
+	[Attribute("200", UIWidgets.EditBox, "A place wish is moved this far (m, min) from the place, out of the town")]
+	float m_fPlaceOffsetMinM;
+
+	[Attribute("450", UIWidgets.EditBox, "A place wish is moved this far (m, max) from the place")]
+	float m_fPlaceOffsetMaxM;
+
+	[Attribute("40", UIWidgets.EditBox, "A road wish is moved this far (m, min) from the road line")]
+	float m_fRoadOffsetMinM;
+
+	[Attribute("120", UIWidgets.EditBox, "A road wish is moved this far (m, max) from the road line")]
+	float m_fRoadOffsetMaxM;
 
 	[Attribute("200", UIWidgets.EditBox, "An HQ may move this far (m) from its random wish to find clear ground")]
 	float m_fHqSearchRadiusM;
@@ -77,7 +101,15 @@ class CLW_RandomLayoutSetup
 	{
 		m_fEdgeMarginM = 350;
 		m_fDistanceTolerance = 0.15;
-		m_iMaxAttempts = 30;
+		m_iMaxAttempts = 120;
+		m_iLandSamples = 300;
+		m_iTimeBudgetMs = 25000;
+		m_fPlaceWishFraction = 0.45;
+		m_fRoadWishFraction = 0.35;
+		m_fPlaceOffsetMinM = 200;
+		m_fPlaceOffsetMaxM = 450;
+		m_fRoadOffsetMinM = 40;
+		m_fRoadOffsetMaxM = 120;
 		m_fHqSearchRadiusM = 200;
 		m_fHqCoreHalfM = 22;
 		m_fMaxGrade = 0.12;
@@ -99,6 +131,19 @@ class CLW_RandomLayoutSetup
 
 	void FillSnapTypes()
 	{
+		if (m_iLandSamples <= 0)
+		{
+			// a data block written before the land-only wish fields existed: take the built-in values for them
+			m_iLandSamples = 300;
+			m_iTimeBudgetMs = 25000;
+			m_fPlaceWishFraction = 0.45;
+			m_fRoadWishFraction = 0.35;
+			m_fPlaceOffsetMinM = 200;
+			m_fPlaceOffsetMaxM = 450;
+			m_fRoadOffsetMinM = 40;
+			m_fRoadOffsetMaxM = 120;
+		}
+
 		if (m_aSnapTypes && !m_aSnapTypes.IsEmpty())
 			return;
 
@@ -126,6 +171,10 @@ class CLW_RandomLayout
 	protected ref RandomGenerator m_Rng = new RandomGenerator();
 	protected static GenericTerrainEntity s_Terrain;
 	protected static bool s_bTerrainSearched;
+	protected ref map<string, int> m_mRejects = new map<string, int>();
+	protected int m_iDrySkipped;
+	protected ref array<vector> m_aPlaceWishes = {};
+	protected ref array<BaseRoad> m_aRoadWishes = {};
 
 	int m_iSeed;
 	int m_iAttempts;
@@ -163,6 +212,29 @@ class CLW_RandomLayout
 		layout.m_Rng.SetSeed(layout.m_iSeed);
 		Print(string.Format("CLW: layout random seed=%1 (%2)", layout.m_iSeed, source), LogLevel.NORMAL);
 		return layout;
+	}
+
+	// A second, looser search for a map where the strict rules found nothing (CLW_AutoScenario only; the data object stays untouched):
+	// no road needed, towns allowed, a smaller clear core and fewer free ring samples, more attempts and a wider move radius.
+	void Relax()
+	{
+		CLW_RandomLayoutSetup loose = new CLW_RandomLayoutSetup();
+		loose.SetDefaults();
+		loose.m_fEdgeMarginM = m_Cfg.m_fEdgeMarginM;
+		loose.m_fDistanceTolerance = Math.Max(m_Cfg.m_fDistanceTolerance, 0.3);
+		loose.m_iMaxAttempts = m_Cfg.m_iMaxAttempts * 2;
+		loose.m_iLandSamples = m_Cfg.m_iLandSamples;
+		loose.m_iTimeBudgetMs = m_Cfg.m_iTimeBudgetMs;
+		loose.m_fHqSearchRadiusM = m_Cfg.m_fHqSearchRadiusM * 1.5;
+		loose.m_fHqCoreHalfM = Math.Min(m_Cfg.m_fHqCoreHalfM, 8);
+		loose.m_fMaxGrade = m_Cfg.m_fMaxGrade * 1.5;
+		loose.m_bRequireRoad = false;
+		loose.m_iRingMinFree = Math.Min(m_Cfg.m_iRingMinFree, 2);
+		loose.m_iMaxBuildingsNear = -1;
+		loose.m_iMaxWaterSamples = Math.Max(m_Cfg.m_iMaxWaterSamples, 2);
+		loose.m_aSnapTypes = m_Cfg.m_aSnapTypes;
+		m_Cfg = loose;
+		Print("CLW: layout random search relaxed (no road needed, towns allowed, smaller core, double attempts)", LogLevel.WARNING);
 	}
 
 	// ---- playable area ----
@@ -210,24 +282,57 @@ class CLW_RandomLayout
 	// (they define the transform for the objectives). False after m_iMaxAttempts failed attempts. On success m_vHqA / m_vHqB are set.
 	bool Generate(vector authoredA, vector authoredB, float wanted, float minHq)
 	{
+		if (!FindHqPair(wanted, minHq))
+			return false;
+
+		SetTransform(authoredA, authoredB);
+		return true;
+	}
+
+	// The HQ search alone (no authored layout needed; used by CLW_AutoScenario at game start and by Generate): HQ A on valid land, then
+	// HQ B at the wanted distance in up to DIRS directions from A. Wishes for A come from LAND ONLY (a dry wish is sampled within a budget
+	// that does not use up attempts), preferably near map places and roads (they sit on open ground and a road is required anyway).
+	// An attempt = one dry HQ A wish that was checked. The rejection histogram is logged once per search. Sets m_vHqA / m_vHqB / m_vCentre /
+	// m_fAxisDeg / m_iAttempts.
+	bool FindHqPair(float wanted, float minHq)
+	{
+		m_mRejects.Clear();
+		m_iDrySkipped = 0;
 		vector bmin, bmax;
 		GetPlayableBounds(bmin, bmax);
 		float margin = m_Cfg.m_fEdgeMarginM;
 		float floorDist = Math.Min(minHq, wanted);
-		Print(string.Format("CLW: layout random area %1 .. %2 margin %3 m, wanted HQ distance %4 m (floor %5 m, tolerance %6)", bmin, bmax, Math.Round(margin), Math.Round(wanted), Math.Round(floorDist), m_Cfg.m_fDistanceTolerance), LogLevel.NORMAL);
-		// HQ A first on valid land (random wish inside the area), then HQ B at the wanted distance in up to DIRS directions from A:
-		// the first version picked a random centre + axis and lost almost every attempt to the sea or to slopes on Arland
-		// (DS test 2026-10-12: 0 of 30).
+		Print(string.Format("CLW: layout random area %1 .. %2 margin %3 m, wanted HQ distance %4 m (floor %5 m, tolerance %6, max attempts %7)", bmin, bmax, Math.Round(margin), Math.Round(wanted), Math.Round(floorDist), m_Cfg.m_fDistanceTolerance, m_Cfg.m_iMaxAttempts), LogLevel.NORMAL);
+		PrepareWishSources(bmin, bmax, margin);
+		// HQ A first on valid land, then HQ B at the wanted distance in up to DIRS directions from A: the first version picked a random
+		// centre + axis and lost almost every attempt to the sea or to slopes on Arland (DS test 2026-10-12: 0 of 30); the second drew
+		// uniform wishes, 25 of 60 attempts were "water at the wish" and 25 "no clear core ground" (forest).
 		int DIRS = 12;
+		int startTick = System.GetTickCount();
 		for (int attempt = 1; attempt <= m_Cfg.m_iMaxAttempts; attempt++)
 		{
+			if (m_Cfg.m_iTimeBudgetMs > 0 && System.GetTickCount() - startTick > m_Cfg.m_iTimeBudgetMs)
+			{
+				Reject("time budget used up");
+				Print(string.Format("CLW: layout random search stopped after %1 attempts: time budget of %2 ms used up", attempt - 1, m_Cfg.m_iTimeBudgetMs), LogLevel.WARNING);
+				break;
+			}
+
 			m_iAttempts = attempt;
-			vector wishA = Vector(m_Rng.RandFloatXY(bmin[0] + margin, bmax[0] - margin), 0, m_Rng.RandFloatXY(bmin[2] + margin, bmax[2] - margin));
+			vector wishA;
+			string wishSource;
+			if (!SampleLandWish(bmin, bmax, margin, wishA, wishSource))
+			{
+				Reject("no dry wish within budget");
+				Print(string.Format("CLW: layout random attempt %1: no dry wish found in %2 samples", attempt, m_Cfg.m_iLandSamples), LogLevel.NORMAL);
+				continue;
+			}
+
 			string why;
 			vector posA;
 			if (!FindHq("A", wishA, posA, why))
 			{
-				Print(string.Format("CLW: layout random attempt %1: HQ A wish %2 rejected: %3", attempt, wishA, why), LogLevel.NORMAL);
+				Print(string.Format("CLW: layout random attempt %1: HQ A wish %2 (%3) rejected: %4", attempt, wishA, wishSource, why), LogLevel.NORMAL);
 				continue;
 			}
 
@@ -239,12 +344,26 @@ class CLW_RandomLayout
 				float dist = wanted * (1 - m_Rng.RandFloatXY(0, m_Cfg.m_fDistanceTolerance));
 				dist = Math.Max(dist, floorDist);
 				vector wishB = posA + Vector(Math.Sin(heading) * dist, 0, Math.Cos(heading) * dist);
-				if (wishB[0] < bmin[0] + margin || wishB[0] > bmax[0] - margin || wishB[2] < bmin[2] + margin || wishB[2] > bmax[2] - margin)
+				if (!InsideArea(wishB, bmin, bmax, margin))
+				{
+					Reject("B direction outside the area");
 					continue;	// outside the playable area
+				}
 
 				int wet = WaterSamples(posA, wishB);
 				if (wet > m_Cfg.m_iMaxWaterSamples)
+				{
+					Reject("B line crosses water");
 					continue;
+				}
+
+				vector dryB = wishB;
+				CLW_Placement.SurfaceAt(dryB);
+				if (CLW_Placement.IsWater(dryB) || CLW_Placement.NearWater(dryB, 25))
+				{
+					Reject("B wish wet");
+					continue;
+				}
 
 				tried++;
 				vector posB;
@@ -253,22 +372,176 @@ class CLW_RandomLayout
 
 				float actual = vector.DistanceXZ(posA, posB);
 				if (actual > wanted * 1.1 || actual < floorDist * 0.9)
+				{
+					Reject("B distance off");
 					continue;
+				}
 
 				m_vHqA = posA;
 				m_vHqB = posB;
 				m_vCentre = (posA + posB) * 0.5;
 				m_fAxisDeg = heading * Math.RAD2DEG;
-				SetTransform(authoredA, authoredB);
 				Print(string.Format("CLW: layout random seed=%1 axis=%2 centre=%3 hqA=%4 hqB=%5 (attempts %6, direction %7 of %8)", m_iSeed, Math.Round(m_fAxisDeg), m_vCentre, m_vHqA, m_vHqB, m_iAttempts, d + 1, DIRS), LogLevel.NORMAL);
 				Print(string.Format("CLW: layout random HQ distance %1 m (wanted %2 m), grid A %3 B %4", Math.Round(actual), Math.Round(wanted), CLW_Places.Grid(m_vHqA), CLW_Places.Grid(m_vHqB)), LogLevel.NORMAL);
+				LogRejects("found");
 				return true;
 			}
 
+			Reject("HQ A ok, no HQ B");
 			Print(string.Format("CLW: layout random attempt %1: HQ A ok at %2, no HQ B in %3 directions (%4 reached the HQ check, last: %5)", attempt, posA, DIRS, tried, why), LogLevel.NORMAL);
 		}
 
 		Print(string.Format("CLW: layout random seed=%1: no valid HQ pair in %2 attempts", m_iSeed, m_iAttempts), LogLevel.WARNING);
+		LogRejects("failed");
+		return false;
+	}
+
+	protected void Reject(string reason)
+	{
+		int n;
+		m_mRejects.Find(reason, n);
+		m_mRejects.Set(reason, n + 1);
+	}
+
+	// One line per search: how often each rejection reason happened (histogram), plus the wet wish samples skipped for free.
+	protected void LogRejects(string outcome)
+	{
+		string text = "";
+		foreach (string reason, int count : m_mRejects)
+		{
+			if (!text.IsEmpty())
+				text += "; ";
+			text += reason + "=" + count;
+		}
+
+		if (text.IsEmpty())
+			text = "none";
+
+		Print(string.Format("CLW: layout random rejections (%1, %2 attempts, %3 wet wishes resampled for free): %4", outcome, m_iAttempts, m_iDrySkipped, text), LogLevel.NORMAL);
+	}
+
+	// ---- wishes: land only, near places / roads ----
+
+	// Collects the sources for HQ A wishes once per search: typed map places (snap types, else any typed place) and the roads wide
+	// enough for vehicles.
+	protected void PrepareWishSources(vector bmin, vector bmax, float margin)
+	{
+		m_aPlaceWishes.Clear();
+		m_aRoadWishes.Clear();
+		array<ref CLW_Place> places = {};
+		CLW_Places.GetAll(places);
+		array<vector> anyTyped = {};
+		foreach (CLW_Place place : places)
+		{
+			if (place.m_sType.IsEmpty() || !InsideArea(place.m_vPos, bmin, bmax, margin))
+				continue;
+
+			anyTyped.Insert(place.m_vPos);
+			foreach (string part : m_Cfg.m_aSnapTypes)
+			{
+				if (place.m_sType.Contains(part))
+				{
+					m_aPlaceWishes.Insert(place.m_vPos);
+					break;
+				}
+			}
+		}
+
+		if (m_aPlaceWishes.IsEmpty())
+			m_aPlaceWishes.Copy(anyTyped);
+
+		RoadNetworkManager mgr = CLW_Placement.GetRoadManager();
+		if (mgr && m_Cfg.m_fRoadWishFraction > 0)
+		{
+			array<BaseRoad> roads = {};
+			mgr.GetRoadsInAABB(Vector(bmin[0], -10000, bmin[2]), Vector(bmax[0], 10000, bmax[2]), roads);
+			foreach (BaseRoad road : roads)
+			{
+				if (road && road.GetWidth() >= CLW_WarConfig.PLACE_ROAD_MIN_WIDTH_M)
+					m_aRoadWishes.Insert(road);
+			}
+		}
+
+		Print(string.Format("CLW: layout random wish sources: %1 map places, %2 vehicle roads (place wish %3, road wish %4, rest uniform land)", m_aPlaceWishes.Count(), m_aRoadWishes.Count(), m_Cfg.m_fPlaceWishFraction, m_Cfg.m_fRoadWishFraction), LogLevel.NORMAL);
+	}
+
+	protected bool InsideArea(vector pos, vector bmin, vector bmax, float margin)
+	{
+		return pos[0] >= bmin[0] + margin && pos[0] <= bmax[0] - margin && pos[2] >= bmin[2] + margin && pos[2] <= bmax[2] - margin;
+	}
+
+	// One wish for HQ A on dry land. Samples (place / road / uniform by the data fractions) until one is dry and inside the area, at most
+	// m_iLandSamples times; wet samples are only counted (m_iDrySkipped), they do not use up an attempt.
+	protected bool SampleLandWish(vector bmin, vector bmax, float margin, out vector wish, out string source)
+	{
+		for (int i = 0; i < m_Cfg.m_iLandSamples; i++)
+		{
+			float roll = m_Rng.RandFloat01();
+			vector cand;
+			string src = "uniform";
+			bool got;
+			if (roll < m_Cfg.m_fPlaceWishFraction && !m_aPlaceWishes.IsEmpty())
+			{
+				cand = m_aPlaceWishes[m_Rng.RandInt(0, m_aPlaceWishes.Count())];
+				float angle = m_Rng.RandFloatXY(0, Math.PI2);
+				float radius = m_Rng.RandFloatXY(m_Cfg.m_fPlaceOffsetMinM, Math.Max(m_Cfg.m_fPlaceOffsetMinM + 1, m_Cfg.m_fPlaceOffsetMaxM));	// out of the town: it has many buildings
+				cand = cand + Vector(Math.Sin(angle) * radius, 0, Math.Cos(angle) * radius);
+				src = "place";
+				got = true;
+			}
+			else if (roll < m_Cfg.m_fPlaceWishFraction + m_Cfg.m_fRoadWishFraction && !m_aRoadWishes.IsEmpty())
+			{
+				got = RandomRoadPoint(cand);
+				if (got)
+				{
+					float roadAngle = m_Rng.RandFloatXY(0, Math.PI2);
+					float roadRadius = m_Rng.RandFloatXY(m_Cfg.m_fRoadOffsetMinM, Math.Max(m_Cfg.m_fRoadOffsetMinM + 1, m_Cfg.m_fRoadOffsetMaxM));
+					cand = cand + Vector(Math.Sin(roadAngle) * roadRadius, 0, Math.Cos(roadAngle) * roadRadius);
+					src = "road";
+				}
+			}
+
+			if (!got)
+				cand = Vector(m_Rng.RandFloatXY(bmin[0] + margin, bmax[0] - margin), 0, m_Rng.RandFloatXY(bmin[2] + margin, bmax[2] - margin));
+
+			if (!InsideArea(cand, bmin, bmax, margin))
+				continue;
+
+			CLW_Placement.SurfaceAt(cand);
+			if (CLW_Placement.IsWater(cand) || CLW_Placement.NearWater(cand, 25))
+			{
+				m_iDrySkipped++;
+				continue;
+			}
+
+			wish = cand;
+			source = src;
+			return true;
+		}
+
+		return false;
+	}
+
+	// A random point on a random vehicle road (a random point of a random segment of its polyline).
+	protected bool RandomRoadPoint(out vector point)
+	{
+		for (int tries = 0; tries < 8; tries++)
+		{
+			BaseRoad road = m_aRoadWishes[m_Rng.RandInt(0, m_aRoadWishes.Count())];
+			if (!road)
+				continue;
+
+			array<vector> pts = {};
+			road.GetPoints(pts);
+			if (pts.Count() < 2)
+				continue;
+
+			int seg = m_Rng.RandInt(0, pts.Count() - 1);
+			float t = m_Rng.RandFloat01();
+			point = pts[seg] + (pts[seg + 1] - pts[seg]) * t;
+			return true;
+		}
+
 		return false;
 	}
 
@@ -295,6 +568,7 @@ class CLW_RandomLayout
 		if (CLW_Placement.IsWater(probe) || CLW_Placement.NearWater(probe, 25))
 		{
 			why = "water at the wish";
+			Reject("water at the wish");
 			return false;
 		}
 
@@ -315,6 +589,7 @@ class CLW_RandomLayout
 		if (!CLW_FreeSpot.FindFreeSpot(p, res))
 		{
 			why = "no clear core ground (" + res.Summary() + ")";
+			Reject("no clear core ground");
 			return false;
 		}
 
@@ -322,6 +597,7 @@ class CLW_RandomLayout
 		if (CLW_Placement.NearWater(spot, 25))
 		{
 			why = "water near " + spot;
+			Reject("water near the spot");
 			return false;
 		}
 
@@ -329,12 +605,14 @@ class CLW_RandomLayout
 		if (m_Cfg.m_bRequireRoad && (road < 0 || road > m_Cfg.m_fHqRoadMaxM))
 		{
 			why = string.Format("nearest road %1 m at %2", Math.Round(road), spot);
+			Reject("road too far");
 			return false;
 		}
 
 		int free = CountFreeRing(spot);
 		if (free < m_Cfg.m_iRingMinFree)
 		{
+			Reject("service ring too small");
 			why = string.Format("service ring has %1 of %2 clear samples (need %3) at %4", free, m_Cfg.m_iRingSamples, m_Cfg.m_iRingMinFree, spot);
 			return false;
 		}
@@ -345,6 +623,7 @@ class CLW_RandomLayout
 			GetGame().GetWorld().QueryEntitiesBySphere(spot, m_Cfg.m_fTownRadiusM, counter.OnEntity, null, EQueryEntitiesFlags.STATIC);
 			if (counter.m_iCount > m_Cfg.m_iMaxBuildingsNear)
 			{
+				Reject("too many buildings");
 				why = string.Format("%1 buildings within %2 m at %3 (max %4)", counter.m_iCount, Math.Round(m_Cfg.m_fTownRadiusM), spot, m_Cfg.m_iMaxBuildingsNear);
 				return false;
 			}

@@ -92,6 +92,44 @@ class CLW_Action_Buy : CLW_ActionExecutor
 			return false;
 		}
 
+		// spawn on assignment (owner playtest 2026-10-12): an LLM purchase must come with the first order of the new units, so nothing is
+		// bought just to wait at the base. The order is checked here and applied when the unit is ready (CLW_PendingOrders).
+		if (call.m_sSource == "llm" && call.m_sAuthority == CLW_ActionEntry.AUTH_HQ)
+			return ValidateAssignment(call, error);
+
+		return true;
+	}
+
+	// command (MOVE | ATTACK | DEFEND | RECON) + a known objective id (target) or a position (pos).
+	protected bool ValidateAssignment(CLW_ActionCall call, out string error)
+	{
+		string commandName = call.GetString("command");
+		CLW_ECommand command;
+		if (commandName.IsEmpty() || !CLW_Command.FromName(commandName, command) || command == CLW_ECommand.FALL_BACK)
+		{
+			error = "a purchase needs an assignment: command MOVE|ATTACK|DEFEND|RECON for the new unit";
+			return false;
+		}
+
+		string target = call.GetString("target");
+		if (!target.IsEmpty())
+		{
+			CLW_ControlPoints points = CLW_GameMode.GetControlPoints();
+			if (!points || !points.Find(target))
+			{
+				error = "assignment target is not an objective: " + target;
+				return false;
+			}
+
+			return true;
+		}
+
+		if (!call.HasPos("pos"))
+		{
+			error = "a purchase needs an assignment: target (objective id) or pos [x, z]";
+			return false;
+		}
+
 		return true;
 	}
 
@@ -111,12 +149,35 @@ class CLW_Action_Buy : CLW_ActionExecutor
 		if (call.m_sSource != "llm")
 			prefix = call.m_sSource;
 
+		// the assignment of the new units (validated for LLM buys; other sources may buy without one)
+		string commandName = call.GetString("command");
+		CLW_ECommand assignCommand;
+		bool assigned = !commandName.IsEmpty() && CLW_Command.FromName(commandName, assignCommand);
+		if (assigned)
+			commandName = CLW_Command.ToName(assignCommand);
+		string assignTarget = call.GetString("target");
+		vector assignPos = call.GetPos("pos");
+
 		int applied;
 		string summary;
 		for (int n = 0; n < count; n++)
 		{
 			string error;
-			if (!spawner.Buy(call.m_sFaction, type, prefix + ": " + call.m_sReason, error))
+			string tag;
+			bool started;
+			if (assigned)
+			{
+				tag = CLW_PendingOrders.Add(call.m_sFaction, commandName, assignTarget, assignPos, call.m_sReason, CLW_Orders.SOURCE_LLM);
+				started = spawner.BuyTagged(call.m_sFaction, type, prefix + ": " + call.m_sReason, tag, error);
+				if (!started)
+					CLW_PendingOrders.Remove(tag);
+			}
+			else
+			{
+				started = spawner.Buy(call.m_sFaction, type, prefix + ": " + call.m_sReason, error);
+			}
+
+			if (!started)
 			{
 				Print(string.Format("CLW: RemoteCommander %1: buy %2 (%3/%4) refused: %5", call.m_sFaction, type, n + 1, count, error), LogLevel.NORMAL);
 				if (applied == 0)
@@ -128,7 +189,9 @@ class CLW_Action_Buy : CLW_ActionExecutor
 			if (!summary.IsEmpty())
 				summary += ", ";
 			summary += "buy " + type;
-			Print(string.Format("CLW: RemoteCommander %1: BUY %2 (%3/%4): %5", call.m_sFaction, type, n + 1, count, call.m_sReason), LogLevel.NORMAL);
+			if (assigned)
+				summary += " -> " + commandName + " " + assignTarget;
+			Print(string.Format("CLW: RemoteCommander %1: BUY %2 (%3/%4) for %5 %6: %7", call.m_sFaction, type, n + 1, count, commandName, assignTarget, call.m_sReason), LogLevel.NORMAL);
 		}
 
 		call.m_iApplied = applied;

@@ -19,6 +19,9 @@ class CLW_BuyDto
 	string type;
 	int count = 1;
 	string reason;
+	string command;		// spawn on assignment: the first order of every unit of this entry (MOVE | ATTACK | DEFEND | RECON) ...
+	string target;		// ... with an objective id ...
+	ref array<float> pos = {};	// ... or a position [x, z]
 }
 
 class CLW_OfferDto
@@ -152,6 +155,7 @@ class CLW_RemoteCommander
 	{
 		m_sFaction = factionKey;
 		m_Rules.Init(factionKey, book, registry);
+		CLW_BaseWatch.Reset(factionKey);
 	}
 
 	string GetFaction()
@@ -180,6 +184,7 @@ class CLW_RemoteCommander
 			return;
 
 		UpdateSitrep();
+		CLW_BaseWatch.Think(m_Rules, m_sFaction);	// HQ garrison + idle stand-down, independent of who commands (LLM or rules)
 
 		if (!ENABLED)
 		{
@@ -478,6 +483,10 @@ class CLW_RemoteCommander
 			call.SetString("type", buy.type);
 			call.SetInt("count", Math.Clamp(buy.count, 1, 3));
 			call.SetString("reason", buy.reason);
+			call.SetString("command", buy.command);	// spawn on assignment: the first order of the bought units
+			call.SetString("target", buy.target);
+			if (buy.pos && buy.pos.Count() >= 2)
+				call.SetPos("pos", buy.pos[0], buy.pos[1]);
 			string why = "";
 			if (!registry.Validate(call, why))
 			{

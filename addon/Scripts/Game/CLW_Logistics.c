@@ -7,6 +7,9 @@
 //   DELIVERED   within ARRIVE_M of the destination the cargo is added to the destination stock (CLW_SupplyStore); the truck drives home
 // The stock model is in CLW_SupplyStore.c (side ledger = HQ stock, FOBs have their own). Trucks of a convoy are RESERVED (IsReserved):
 // the rule commander and LLM orders skip them. Max convoys in flight per side: mode parameter convoyMax (default 2).
+// M4 WP5: the truck comes from CLW_ForceCatalog.GetEntries(side) (own entries + kin entries of the side pool); a refused purchase is retried,
+// load / unload accept a stopped truck within IDLE_ARRIVE_M, a stalled truck escalates (re-issue, road point, give up with the cargo returned),
+// a kin truck is not "captured" (only the enemy key counts), every refusal to start a convoy is logged with its reason.
 // Server only. Log prefix: "CLW: convoy ...", "CLW: logistics ...".
 
 enum CLW_EConvoyState
@@ -29,6 +32,7 @@ class CLW_Convoy
 	string m_sReason;
 	CLW_EConvoyState m_eState;
 	int m_iCargo;				// supplies on the truck (0 until loaded)
+	int m_iGoneChecks;			// consecutive failed truck checks before loading (a fresh truck can fail one check right after spawn)
 	string m_sTruckId;			// registry id of the truck unit
 	string m_sTag;				// tagged purchase in flight
 	bool m_bLoaded;
@@ -38,6 +42,16 @@ class CLW_Convoy
 	float m_fEndedAt;
 	float m_fLastLogAt;
 	vector m_vLastPos;
+	// ---- M4 WP5 ----
+	float m_fNextBuyAt;			// PLANNED: next purchase attempt (a refused purchase is retried until PLANNED_TIMEOUT_SEC)
+	int m_iBuyTries;
+	string m_sLastBuyError;
+	float m_fBestDist;			// driving: smallest distance to the current target that counted as progress (0 = not set)
+	float m_fBestAt;
+	int m_iStalls;
+	bool m_bLeg;				// driving to an interim road point first (route re-plan)
+	vector m_vLeg;
+	float m_fLegAt;
 
 	bool IsLive()
 	{
@@ -64,6 +78,7 @@ class CLW_Convoys
 {
 	static const int TICK_MS = 3000;
 	static const string ORDER_SOURCE = "convoy";		// CLW_Orders source of the truck orders
+	static const int GONE_CHECKS_MAX = 4;				// failed truck checks in a row before a planned convoy gives up
 	static const float ARRIVE_M = 60;					// truck this close to a base = arrived (load / unload)
 	static const int MIN_CARGO = 40;					// smaller loads are not worth a convoy
 	static const int DEFAULT_MAX = 2;
@@ -72,10 +87,22 @@ class CLW_Convoys
 	static const float SHOW_SEC = 300;					// ended convoys stay in the situation this long
 	static const float LOG_SEC = 60;
 	static const int MAX_ORDER_TRIES = 4;
+	// ---- M4 WP5: robust trucks ----
+	static const float IDLE_ARRIVE_M = 150;				// truck stopped (order ended, vehicle idle) this close = arrived (same radius as CLW_Orders.VEHICLE_STOPPED_DONE_M)
+	static const float STALL_SEC = 120;					// no progress this long = stalled
+	static const float STALL_IMPROVE_M = 20;
+	static const int MAX_STALLS = 4;					// stalls before the convoy gives up (a loaded cargo goes back to the source stock)
+	static const float BUY_RETRY_SEC = 20;				// refused truck purchase (AI limit, supplies): retried this often until PLANNED_TIMEOUT_SEC
+	static const float LEG_MIN_M = 40;
+	static const float LEG_MAX_M = 400;
+	static const float LEG_ARRIVE_M = 50;
+	static const float LEG_MAX_SEC = 150;
+	static const float REFUSAL_LOG_SEC = 60;			// the same refusal text is logged this often at most
 
 	protected static ref array<ref CLW_Convoy> s_aConvoys = {};
 	protected static int s_iNext;
 	protected static bool s_bTicking;
+	protected static ref map<string, float> s_mRefusalLog = new map<string, float>();
 
 	// ---- lifecycle ----
 
@@ -86,6 +113,7 @@ class CLW_Convoys
 		s_bTicking = false;
 		s_aConvoys.Clear();
 		s_iNext = 0;
+		s_mRefusalLog.Clear();
 		CLW_SupplyStore.Reset();
 		CLW_LogisticsDoctrine.Reset();
 	}
@@ -128,12 +156,42 @@ class CLW_Convoys
 			if (!text.IsEmpty())
 				text += "; ";
 			if (entry)
-				text += string.Format("%1 %2 cargo %3 cost %4", key, entry.m_sType, entry.m_iCargo, entry.m_iCost);
+				text += string.Format("%1 %2 cargo %3 cost %4 (entry source %5)", key, entry.m_sType, entry.m_iCargo, entry.m_iCost, entry.m_sSource);
 			else
-				text += key + " NO supply truck in the catalog (no convoys)";
+				text += key + " NO supply truck in the catalog (no convoys): " + ExplainNoTruck(key);
 		}
 
 		return text;
+	}
+
+	// Why a side has no usable supply truck: what its catalog holds (for the logs; the answer to "why does the doctrine not send convoys").
+	static string ExplainNoTruck(string side)
+	{
+		CLW_ForceCatalog catalog = CLW_GameMode.GetForceCatalog();
+		if (!catalog)
+			return "no force catalog";
+
+		array<CLW_ForceEntry> entries = {};
+		catalog.GetEntries(side, entries);
+		int logistics;
+		int noVehicle;
+		int noCargo;
+		int noCrew;
+		foreach (CLW_ForceEntry entry : entries)
+		{
+			if (entry.m_sKind != CLW_ForceKind.LOGISTICS)
+				continue;
+
+			logistics++;
+			if (!entry.HasVehicle())
+				noVehicle++;
+			else if (entry.m_iCargo <= 0)
+				noCargo++;
+			else if (entry.m_bCrewless)
+				noCrew++;
+		}
+
+		return string.Format("%1 catalog entries, %2 of kind logistics (%3 without vehicle, %4 without cargo amount, %5 without a default crew)", entries.Count(), logistics, noVehicle, noCargo, noCrew);
 	}
 
 	static int GetMax()
@@ -147,7 +205,9 @@ class CLW_Convoys
 
 	// ---- data ----
 
-	// The cheapest supply truck of the side's catalog (kind logistics with a vehicle and a cargo amount), null when it has none.
+	// The best supply truck of the side's catalog (CLW_ForceCatalog.GetEntries(side): own entries, plus the kin entries WP3's side pool adds
+	// for roles the side lacks): kind logistics with a vehicle, a cargo amount and not marked crewless (m_bCrewless: "vehicle has
+	// no default crew to spawn"). Most cargo per supply cost wins (ties: bigger cargo). Null when the side has none.
 	static CLW_ForceEntry PickTruckEntry(string side)
 	{
 		CLW_ForceCatalog catalog = CLW_GameMode.GetForceCatalog();
@@ -159,7 +219,18 @@ class CLW_Convoys
 		CLW_ForceEntry pick;
 		foreach (CLW_ForceEntry entry : entries)
 		{
-			if (entry.m_sKind == CLW_ForceKind.LOGISTICS && entry.HasVehicle() && entry.m_iCargo > 0 && (!pick || entry.m_iCost < pick.m_iCost))
+			if (entry.m_sKind != CLW_ForceKind.LOGISTICS || !entry.HasVehicle() || entry.m_iCargo <= 0 || entry.m_bCrewless)
+				continue;
+
+			if (!pick)
+			{
+				pick = entry;
+				continue;
+			}
+
+			// cargo / cost compared by cross-multiplication
+			int better = entry.m_iCargo * Math.Max(1, pick.m_iCost) - pick.m_iCargo * Math.Max(1, entry.m_iCost);
+			if (better > 0 || (better == 0 && entry.m_iCargo > pick.m_iCargo))
 				pick = entry;
 		}
 
@@ -314,7 +385,7 @@ class CLW_Convoys
 
 		if (!HasTruckData(side))
 		{
-			why = "the faction has no supply truck in its catalog";
+			why = "the faction has no supply truck in its catalog (" + ExplainNoTruck(side) + ")";
 			return false;
 		}
 
@@ -339,10 +410,47 @@ class CLW_Convoys
 		return true;
 	}
 
+	// The doctrine wanted a convoy for the FOB but the side has no supply truck: one line per side every 2 minutes.
+	static void LogNoTruck(string side, string fobId)
+	{
+		string key = side + "|notruck";
+		float now = CLW_Orders.Now();
+		float last = -1000;
+		s_mRefusalLog.Find(key, last);
+		if (now < last)
+			last = -1000;
+
+		if (now - last < 2 * REFUSAL_LOG_SEC)
+			return;
+
+		s_mRefusalLog.Set(key, now);
+		Print(string.Format("CLW: convoy NOT started for %1: %2 needs supplies but the side has no usable supply truck: %3", side, fobId, ExplainNoTruck(side)), LogLevel.NORMAL);
+	}
+
+	// "CLW: convoy NOT started ..." for a real start attempt that CanStart refused; the same text per side is logged every REFUSAL_LOG_SEC at most.
+	protected static void LogRefusal(string side, string fromId, string toId, string source, string why)
+	{
+		string key = side + "|" + why;
+		float now = CLW_Orders.Now();
+		float last = -1000;
+		s_mRefusalLog.Find(key, last);
+		if (now < last)
+			last = -1000;	// a new session restarted the clock
+
+		if (now - last < REFUSAL_LOG_SEC)
+			return;
+
+		s_mRefusalLog.Set(key, now);
+		Print(string.Format("CLW: convoy NOT started for %1: %2 -> %3 (source %4): %5 | stock: %6, in flight %7 of %8", side, NormBase(fromId), NormBase(toId), source, why, CLW_SupplyStore.Describe(side), CountLive(side), GetMax()), LogLevel.NORMAL);
+	}
+
 	static bool Start(string side, string fromId, string toId, string source, string reason, out string why)
 	{
 		if (!CanStart(side, fromId, toId, why))
+		{
+			LogRefusal(side, fromId, toId, source, why);
 			return false;
+		}
 
 		s_iNext++;
 		CLW_Convoy convoy = new CLW_Convoy();
@@ -357,6 +465,9 @@ class CLW_Convoys
 		convoy.m_fStateAt = convoy.m_fCreatedAt;
 		s_aConvoys.Insert(convoy);
 		Print(string.Format("CLW: convoy %1 planned for %2: %3 -> %4 (stock %5), source=%6, reason: %7", convoy.m_sId, side, convoy.m_sFrom, convoy.m_sTo, CLW_SupplyStore.Get(side, convoy.m_sFrom), source, reason), LogLevel.NORMAL);
+		CLW_ForceEntry truck = PickTruckEntry(side);
+		if (truck)
+			Print(string.Format("CLW: convoy %1 truck plan: %2 cargo %3 cost %4 (own entry: %5, from kin '%6'); stock %7", convoy.m_sId, truck.m_sType, truck.m_iCargo, truck.m_iCost, truck.m_sKinFrom.IsEmpty(), truck.m_sKinFrom, CLW_SupplyStore.Describe(side)), LogLevel.NORMAL);
 		return true;
 	}
 
@@ -440,7 +551,7 @@ class CLW_Convoys
 			if (!unit || unit.GetKind() != CLW_ForceKind.LOGISTICS)
 				continue;
 
-			if (!registry.Find(id) || CLW_FobManager.IsReserved(id) || orders.UnitAlive(id) <= 0 || !IsFreeUnit(orders, id))
+			if (!registry.Find(id) || CLW_FobManager.IsReserved(id) || orders.UnitAlive(id) <= 0 || orders.IsWeak(id) || !IsFreeUnit(orders, id))
 				continue;
 
 			vector pos;
@@ -470,33 +581,59 @@ class CLW_Convoys
 		if (!unit)
 			return 0;
 
-		CLW_ForceEntry entry = catalog.Find(side, unit.GetTypeId());
-		if (!entry)
+		CLW_ForceEntry entry = catalog.Find(side, unit.GetTypeId(), true);
+		if (entry && entry.m_iCargo > 0)
+			return entry.m_iCargo;
+
+		// the unit's type is not in the side's list (e.g. a pool refresh): the side's truck data is the best guess
+		CLW_ForceEntry fallback = PickTruckEntry(side);
+		if (!fallback)
 			return 0;
 
-		return entry.m_iCargo;
+		Print(string.Format("CLW: convoy truck %1 type '%2' has no cargo amount in the %3 catalog: using %4 (%5)", unitId, unit.GetTypeId(), side, fallback.m_sType, fallback.m_iCargo), LogLevel.WARNING);
+		return fallback.m_iCargo;
 	}
 
-	protected static bool TruckAlive(CLW_Convoy convoy, CLW_Orders orders, out vector pos)
+	protected static bool TruckAlive(CLW_Convoy convoy, CLW_Orders orders, out vector pos, out string why)
 	{
+		why = "";
 		if (convoy.m_sTruckId.IsEmpty() || !orders)
+		{
+			why = "no truck id / orders";
 			return false;
+		}
 
 		CLW_SquadRegistry registry = CLW_GameMode.GetRegistry();
 		if (!registry || !registry.Find(convoy.m_sTruckId))
+		{
+			why = "not in the squad registry";
 			return false;
+		}
 
-		if (orders.UnitAlive(convoy.m_sTruckId) <= 0 || !orders.UnitPos(convoy.m_sTruckId, pos))
+		if (orders.UnitAlive(convoy.m_sTruckId) <= 0)
+		{
+			why = "no crew alive";
 			return false;
+		}
 
-		// captured: the vehicle changed sides
+		if (!orders.UnitPos(convoy.m_sTruckId, pos))
+		{
+			why = "no position";
+			return false;
+		}
+
+		// captured: the vehicle changed to the ENEMY side. (A kin truck from the side pool may carry the kin faction's key, not the side's own:
+		// that is not a capture, so only the enemy key counts.)
 		CLW_VehicleUnit unit = orders.FindVehicleUnit(convoy.m_sTruckId);
 		CLW_WarState war = CLW_GameMode.GetWarState();
 		if (unit && unit.GetVehicle() && war)
 		{
 			string owner = war.GetEntityFactionKey(unit.GetVehicle());
-			if (!owner.IsEmpty() && owner != convoy.m_sSide)
+			if (!owner.IsEmpty() && owner == war.GetEnemyKey(convoy.m_sSide))
+			{
+				why = "captured by " + owner;
 				return false;
+			}
 		}
 
 		return true;
@@ -508,7 +645,11 @@ class CLW_Convoys
 	{
 		if (now - convoy.m_fStateAt > PLANNED_TIMEOUT_SEC)
 		{
-			End(convoy, CLW_EConvoyState.FAILED, "no supply truck after " + Math.Round(PLANNED_TIMEOUT_SEC) + " s");
+			string last = "";
+			if (!convoy.m_sLastBuyError.IsEmpty())
+				last = string.Format(" (%1 purchase attempts, last refusal: %2)", convoy.m_iBuyTries, convoy.m_sLastBuyError);
+
+			End(convoy, CLW_EConvoyState.FAILED, "no supply truck after " + Math.Round(PLANNED_TIMEOUT_SEC) + " s" + last);
 			return;
 		}
 
@@ -537,16 +678,23 @@ class CLW_Convoys
 			return;
 		}
 
-		BuyTruck(convoy);
+		if (now >= convoy.m_fNextBuyAt)
+			BuyTruck(convoy, now);
 	}
 
-	protected static void BuyTruck(CLW_Convoy convoy)
+	// A refused purchase (engine AI limit, supplies, spawn spot) is retried every BUY_RETRY_SEC until PLANNED_TIMEOUT_SEC; a free truck is
+	// looked for on every tick meanwhile. Without truck data or a spawner the convoy fails at once, with the catalog explanation.
+	protected static void BuyTruck(CLW_Convoy convoy, float now)
 	{
 		CLW_ForceSpawner spawner = CLW_GameMode.GetForceSpawner();
 		CLW_ForceEntry pick = PickTruckEntry(convoy.m_sSide);
 		if (!spawner || !pick)
 		{
-			End(convoy, CLW_EConvoyState.FAILED, "no spawner / supply truck data");
+			string cause = "no spawner";
+			if (spawner)
+				cause = "no supply truck in the catalog (" + ExplainNoTruck(convoy.m_sSide) + ")";
+
+			End(convoy, CLW_EConvoyState.FAILED, cause);
 			return;
 		}
 
@@ -554,13 +702,15 @@ class CLW_Convoys
 		string error;
 		if (!spawner.BuyTagged(convoy.m_sSide, pick.m_sType, "convoy " + convoy.m_sId, convoy.m_sTag, error))
 		{
-			if (convoy.m_eState == CLW_EConvoyState.PLANNED && convoy.IsLive())
-				End(convoy, CLW_EConvoyState.FAILED, "cannot buy a supply truck: " + error);
-
+			convoy.m_sTag = "";
+			convoy.m_iBuyTries++;
+			convoy.m_sLastBuyError = error;
+			convoy.m_fNextBuyAt = now + BUY_RETRY_SEC;
+			Print(string.Format("CLW: convoy %1 truck purchase refused (try %2): %3; %4 (%5 cargo, cost %6) retried in %7 s, a free truck is looked for meanwhile", convoy.m_sId, convoy.m_iBuyTries, error, pick.m_sType, pick.m_iCargo, pick.m_iCost, Math.Round(BUY_RETRY_SEC)), LogLevel.NORMAL);
 			return;
 		}
 
-		Print(string.Format("CLW: convoy %1 supply truck bought: %2 (cargo %3, cost %4)", convoy.m_sId, pick.m_sType, pick.m_iCargo, pick.m_iCost), LogLevel.NORMAL);
+		Print(string.Format("CLW: convoy %1 supply truck bought: %2 (cargo %3, cost %4, from kin '%5')", convoy.m_sId, pick.m_sType, pick.m_iCargo, pick.m_iCost, pick.m_sKinFrom), LogLevel.NORMAL);
 	}
 
 	// A tagged purchase of the spawner finished (unitId set) or failed (unitId empty).
@@ -573,8 +723,12 @@ class CLW_Convoys
 
 			if (unitId.IsEmpty())
 			{
-				if (convoy.IsLive() && convoy.m_eState == CLW_EConvoyState.PLANNED)
-					End(convoy, CLW_EConvoyState.FAILED, "the supply truck purchase failed");
+				// the purchase was accepted but the spawn failed: retry like a refusal
+				convoy.m_sTag = "";
+				convoy.m_iBuyTries++;
+				convoy.m_sLastBuyError = "the spawn failed";
+				convoy.m_fNextBuyAt = CLW_Orders.Now() + BUY_RETRY_SEC;
+				Print(string.Format("CLW: convoy %1 supply truck purchase failed after it was accepted (try %2): retried in %3 s until %4 s after planning", convoy.m_sId, convoy.m_iBuyTries, Math.Round(BUY_RETRY_SEC), Math.Round(PLANNED_TIMEOUT_SEC)), LogLevel.NORMAL);
 			}
 			else if (convoy.IsLive())
 			{
@@ -588,26 +742,56 @@ class CLW_Convoys
 
 	// ---- loading ----
 
+	// The truck is stopped (its order ended, vehicle idle) within IDLE_ARRIVE_M of the base: as good as arrived. Trucks cannot always get
+	// to the exact base anchor (buildings, props), the vehicle unit gives up there ("vehicle arrived (<= 150 m)").
+	protected static bool Arrived(CLW_Convoy convoy, CLW_Orders orders, float dist)
+	{
+		if (dist <= ARRIVE_M)
+			return true;
+
+		if (dist > IDLE_ARRIVE_M || !orders)
+			return false;
+
+		CLW_UnitOrder order = orders.GetOrder(convoy.m_sTruckId);
+		if (order && order.m_sStatus == CLW_Orders.STATUS_ACTIVE)
+			return false;
+
+		CLW_VehicleUnit unit = orders.FindVehicleUnit(convoy.m_sTruckId);
+		return unit && unit.GetStateName() == "MOUNTED_IDLE";
+	}
+
 	// The truck is assigned: load when it is at the source, else drive there first.
 	protected static void BeginLoad(CLW_Convoy convoy, vector fromPos)
 	{
 		CLW_Orders orders = OrdersOf(convoy.m_sSide);
 		vector pos;
-		if (!TruckAlive(convoy, orders, pos))
+		string truckWhy;
+		if (!TruckAlive(convoy, orders, pos, truckWhy))
 		{
-			End(convoy, CLW_EConvoyState.FAILED, "the supply truck is gone before loading");
+			convoy.m_iGoneChecks++;
+			if (convoy.m_iGoneChecks < GONE_CHECKS_MAX)
+			{
+				Print(string.Format("CLW: convoy %1 truck %2 not usable yet (%3), check %4 of %5", convoy.m_sId, convoy.m_sTruckId, truckWhy, convoy.m_iGoneChecks, GONE_CHECKS_MAX), LogLevel.NORMAL);
+				return;	// StepPlanned calls again next tick
+			}
+
+			End(convoy, CLW_EConvoyState.FAILED, "the supply truck is gone before loading (" + truckWhy + ")");
 			return;
 		}
+		convoy.m_iGoneChecks = 0;
 
-		if (vector.DistanceXZ(pos, fromPos) <= ARRIVE_M)
+		float dist = vector.DistanceXZ(pos, fromPos);
+		if (Arrived(convoy, orders, dist))
 		{
 			Load(convoy, fromPos);
 			return;
 		}
 
 		string why;
-		bool ordered = IssueMove(convoy.m_sSide, convoy.m_sTruckId, fromPos, "convoy " + convoy.m_sId + " to the source " + convoy.m_sFrom, why);
-		SetState(convoy, CLW_EConvoyState.TO_SOURCE, string.Format("truck %1 drives to %2 (%3 m, ordered=%4 %5)", convoy.m_sTruckId, convoy.m_sFrom, Math.Round(vector.DistanceXZ(pos, fromPos)), ordered, why));
+		bool ordered = TakeMove(convoy, fromPos, "convoy " + convoy.m_sId + " to the source " + convoy.m_sFrom, why);
+		convoy.m_fBestDist = 0;
+		convoy.m_bLeg = false;
+		SetState(convoy, CLW_EConvoyState.TO_SOURCE, string.Format("truck %1 drives to %2 (%3 m, ordered=%4 %5)", convoy.m_sTruckId, convoy.m_sFrom, Math.Round(dist), ordered, why));
 	}
 
 	protected static void StepToSource(CLW_Convoy convoy, float now)
@@ -627,20 +811,21 @@ class CLW_Convoys
 
 		CLW_Orders orders = OrdersOf(convoy.m_sSide);
 		vector pos;
-		if (!TruckAlive(convoy, orders, pos))
+		string truckWhy;
+		if (!TruckAlive(convoy, orders, pos, truckWhy))
 		{
-			End(convoy, CLW_EConvoyState.FAILED, "the supply truck was lost on the way to the source");
+			End(convoy, CLW_EConvoyState.FAILED, "the supply truck was lost on the way to the source (" + truckWhy + ")");
 			return;
 		}
 
 		float dist = vector.DistanceXZ(pos, fromPos);
-		if (dist <= ARRIVE_M)
+		if (Arrived(convoy, orders, dist))
 		{
 			Load(convoy, fromPos);
 			return;
 		}
 
-		ReissueIfIdle(convoy, orders, fromPos, dist, "to the source");
+		Drive(convoy, orders, pos, fromPos, "to the source");
 	}
 
 	// Takes the cargo from the source stock (deducted at departure) and sends the truck off.
@@ -664,8 +849,11 @@ class CLW_Convoys
 
 		convoy.m_iCargo = cargo;
 		convoy.m_bLoaded = true;
+		convoy.m_fBestDist = 0;
+		convoy.m_bLeg = false;
+		convoy.m_iStalls = 0;
 		string why;
-		bool ordered = IssueMove(convoy.m_sSide, convoy.m_sTruckId, toPos, "convoy " + convoy.m_sId + " to " + convoy.m_sTo, why);
+		bool ordered = TakeMove(convoy, toPos, "convoy " + convoy.m_sId + " to " + convoy.m_sTo, why);
 		SetState(convoy, CLW_EConvoyState.EN_ROUTE, string.Format("loaded %1 supplies at %2 (stock now %3), truck %4 drives to %5 %6 m away (ordered=%7 %8)", cargo, convoy.m_sFrom, CLW_SupplyStore.Get(convoy.m_sSide, convoy.m_sFrom), convoy.m_sTruckId, convoy.m_sTo, Math.Round(vector.DistanceXZ(fromPos, toPos)), ordered, why));
 		Print(string.Format("CLW: convoy %1 departs %2 -> %3 with %4 supplies", convoy.m_sId, convoy.m_sFrom, convoy.m_sTo, cargo), LogLevel.NORMAL);
 		CLW_WarState war = CLW_GameMode.GetWarState();
@@ -675,38 +863,133 @@ class CLW_Convoys
 
 	// ---- en route ----
 
-	protected static void ReissueIfIdle(CLW_Convoy convoy, CLW_Orders orders, vector target, float dist, string label)
+	// The truck's move order: it takes over from its previous order (forgotten, so a re-issue of the same target is not swallowed as
+	// "already executing" and a stable-order refusal cannot block it).
+	protected static bool TakeMove(CLW_Convoy convoy, vector pos, string reason, out string why)
+	{
+		CLW_Orders orders = OrdersOf(convoy.m_sSide);
+		if (!orders)
+		{
+			why = "no orders object";
+			return false;
+		}
+
+		orders.ForgetOrder(convoy.m_sTruckId);
+		return orders.Issue(convoy.m_sTruckId, CLW_ECommand.MOVE, "", pos, reason, ORDER_SOURCE, why);
+	}
+
+	// Drives the truck toward a base position: progress watch (STALL_SEC without STALL_IMPROVE_M closer = stall), stall escalation
+	// (re-issue; from the 2nd stall an interim road point first; MAX_STALLS = give up, a loaded cargo goes back to the source stock),
+	// re-issue of an ended order. False when the convoy ended.
+	protected static bool Drive(CLW_Convoy convoy, CLW_Orders orders, vector pos, vector baseTarget, string label)
 	{
 		float now = CLW_Orders.Now();
+		string why;
+		vector target = baseTarget;
+		string targetText = label;
+		if (convoy.m_bLeg)
+		{
+			float legDist = vector.DistanceXZ(pos, convoy.m_vLeg);
+			CLW_UnitOrder legOrder = orders.GetOrder(convoy.m_sTruckId);
+			bool legIdle = !legOrder || legOrder.m_sStatus != CLW_Orders.STATUS_ACTIVE;
+			if (legDist <= LEG_ARRIVE_M || legIdle || now - convoy.m_fLegAt > LEG_MAX_SEC)
+			{
+				convoy.m_bLeg = false;
+				convoy.m_fBestDist = 0;
+				bool resumed = TakeMove(convoy, baseTarget, "convoy " + convoy.m_sId + " " + label, why);
+				Print(string.Format("CLW: convoy %1 road point done (%2 m from it, orderEnded=%3): truck %4 drives on %5, %6 m to go (ordered=%7 %8)", convoy.m_sId, Math.Round(legDist), legIdle, convoy.m_sTruckId, label, Math.Round(vector.DistanceXZ(pos, baseTarget)), resumed, why), LogLevel.NORMAL);
+				return true;
+			}
+
+			target = convoy.m_vLeg;
+			targetText = "road point (" + label + ")";
+		}
+
+		float dist = vector.DistanceXZ(pos, baseTarget);
+		float tdist = vector.DistanceXZ(pos, target);
+		if (convoy.m_fBestDist <= 0 || tdist < convoy.m_fBestDist - STALL_IMPROVE_M)
+		{
+			convoy.m_fBestDist = Math.Max(tdist, 1);
+			convoy.m_fBestAt = now;
+			convoy.m_iOrderTries = 0;
+		}
+		else if (now - convoy.m_fBestAt >= STALL_SEC)
+		{
+			convoy.m_iStalls++;
+			convoy.m_fBestDist = 0;
+			convoy.m_iOrderTries = 0;
+			Print(string.Format("CLW: convoy %1 STALL %2 of %3: truck %4 made no progress for %5 s, %6 m from the target %7", convoy.m_sId, convoy.m_iStalls, MAX_STALLS, convoy.m_sTruckId, Math.Round(now - convoy.m_fBestAt), Math.Round(dist), label), LogLevel.NORMAL);
+			if (convoy.m_iStalls >= MAX_STALLS)
+			{
+				GiveUp(convoy, string.Format("the truck stalled %1 times, %2 m short of the target %3", convoy.m_iStalls, Math.Round(dist), label));
+				return false;
+			}
+
+			if (convoy.m_iStalls >= 2 && !convoy.m_bLeg)
+			{
+				vector leg;
+				if (CLW_RouteLeg.Find(pos, baseTarget, LEG_MIN_M, LEG_MAX_M, leg))
+				{
+					convoy.m_bLeg = true;
+					convoy.m_vLeg = leg;
+					convoy.m_fLegAt = now;
+					bool legOrdered = TakeMove(convoy, leg, "convoy " + convoy.m_sId + " via a road point", why);
+					Print(string.Format("CLW: convoy %1 route re-planned: truck %2 goes to the road point %3 (%4 m away, grid %5) first (ordered=%6 %7)", convoy.m_sId, convoy.m_sTruckId, leg, Math.Round(vector.DistanceXZ(pos, leg)), CLW_Places.Grid(leg), legOrdered, why), LogLevel.NORMAL);
+					return true;
+				}
+			}
+
+			bool again = TakeMove(convoy, baseTarget, "convoy " + convoy.m_sId + " " + label, why);
+			Print(string.Format("CLW: convoy %1 order taken over again, move re-issued (ordered=%2 %3)", convoy.m_sId, again, why), LogLevel.NORMAL);
+			return true;
+		}
+
 		CLW_UnitOrder order = orders.GetOrder(convoy.m_sTruckId);
 		if (!order || order.m_sStatus != CLW_Orders.STATUS_ACTIVE)
 		{
-			if (convoy.m_iOrderTries >= MAX_ORDER_TRIES)
+			// the order ended short of the target: re-issue a few times, then wait for the stall rule (it escalates after STALL_SEC)
+			if (convoy.m_iOrderTries < MAX_ORDER_TRIES)
 			{
-				End(convoy, CLW_EConvoyState.FAILED, "the truck cannot reach the target " + label);
-				return;
+				convoy.m_iOrderTries++;
+				bool ordered = TakeMove(convoy, target, "convoy " + convoy.m_sId + " " + label, why);
+				Print(string.Format("CLW: convoy %1 move re-issued (%2 of %3, %4 m to go, ordered=%5 %6)", convoy.m_sId, convoy.m_iOrderTries, MAX_ORDER_TRIES, Math.Round(tdist), ordered, why), LogLevel.NORMAL);
 			}
-
-			convoy.m_iOrderTries++;
-			string why;
-			bool ordered = IssueMove(convoy.m_sSide, convoy.m_sTruckId, target, "convoy " + convoy.m_sId + " " + label, why);
-			Print(string.Format("CLW: convoy %1 move re-issued (%2 of %3, %4 m to go, ordered=%5 %6)", convoy.m_sId, convoy.m_iOrderTries, MAX_ORDER_TRIES, Math.Round(dist), ordered, why), LogLevel.NORMAL);
 		}
 
 		if (now - convoy.m_fLastLogAt >= LOG_SEC)
 		{
 			convoy.m_fLastLogAt = now;
-			Print(string.Format("CLW: convoy %1 truck %2 en route %3, %4 m to go", convoy.m_sId, convoy.m_sTruckId, label, Math.Round(dist)), LogLevel.NORMAL);
+			string orderText = "none";
+			if (order)
+				orderText = CLW_Command.ToName(order.m_eCommand) + "/" + order.m_sStatus;
+
+			Print(string.Format("CLW: convoy %1 truck %2 en route %3, %4 m to go (%5 m to the %6), best %7 m, order=%8", convoy.m_sId, convoy.m_sTruckId, label, Math.Round(dist), Math.Round(tdist), targetText, Math.Round(convoy.m_fBestDist), orderText), LogLevel.NORMAL);
 		}
+
+		return true;
+	}
+
+	// The convoy cannot go on but the truck is alive: a loaded cargo returns to the source stock, the truck drives home.
+	protected static void GiveUp(CLW_Convoy convoy, string why)
+	{
+		if (convoy.m_bLoaded && convoy.m_iCargo > 0)
+		{
+			TurnBack(convoy, why);
+			return;
+		}
+
+		End(convoy, CLW_EConvoyState.FAILED, why);
+		SendHome(convoy);
 	}
 
 	protected static void StepEnRoute(CLW_Convoy convoy, float now)
 	{
 		CLW_Orders orders = OrdersOf(convoy.m_sSide);
 		vector pos;
-		if (!TruckAlive(convoy, orders, pos))
+		string truckWhy;
+		if (!TruckAlive(convoy, orders, pos, truckWhy))
 		{
-			End(convoy, CLW_EConvoyState.LOST, "the truck was destroyed or captured");
+			End(convoy, CLW_EConvoyState.LOST, "the truck was destroyed or captured (" + truckWhy + ")");
 			return;
 		}
 
@@ -719,7 +1002,7 @@ class CLW_Convoys
 		}
 
 		float dist = vector.DistanceXZ(pos, toPos);
-		if (dist <= ARRIVE_M)
+		if (Arrived(convoy, orders, dist))
 		{
 			Deliver(convoy);
 			return;
@@ -727,11 +1010,11 @@ class CLW_Convoys
 
 		if (now - convoy.m_fStateAt > ROUTE_TIMEOUT_SEC)
 		{
-			End(convoy, CLW_EConvoyState.LOST, "the truck did not arrive in time, cargo written off");
+			GiveUp(convoy, "the truck did not arrive in time (" + Math.Round(dist) + " m short)");
 			return;
 		}
 
-		ReissueIfIdle(convoy, orders, toPos, dist, "to " + convoy.m_sTo);
+		Drive(convoy, orders, pos, toPos, "to " + convoy.m_sTo);
 	}
 
 	protected static void Deliver(CLW_Convoy convoy)
@@ -763,20 +1046,25 @@ class CLW_Convoys
 	// Destination lost / vanished with the cargo on board: the load goes back to the source stock, the truck returns.
 	protected static void TurnBack(CLW_Convoy convoy, string why)
 	{
-		if (convoy.m_bLoaded && convoy.m_iCargo > 0)
-		{
-			vector fromPos;
-			string returnTo = convoy.m_sFrom;
-			if (!BasePos(convoy.m_sSide, returnTo, fromPos))
-				returnTo = CLW_Services.BASE_HQ;
-
-			CLW_SupplyStore.Add(convoy.m_sSide, returnTo, convoy.m_iCargo);
-			Print(string.Format("CLW: convoy %1 turned back: %2; %3 supplies returned to %4", convoy.m_sId, why, convoy.m_iCargo, returnTo), LogLevel.NORMAL);
-			convoy.m_iCargo = 0;
-		}
-
+		ReturnCargo(convoy, why);
 		End(convoy, CLW_EConvoyState.FAILED, why);
 		SendHome(convoy);
+	}
+
+	// The cargo on board goes back into the source stock (HQ when the source base is gone). No-op when nothing is loaded.
+	protected static void ReturnCargo(CLW_Convoy convoy, string why)
+	{
+		if (!convoy.m_bLoaded || convoy.m_iCargo <= 0)
+			return;
+
+		vector fromPos;
+		string returnTo = convoy.m_sFrom;
+		if (!BasePos(convoy.m_sSide, returnTo, fromPos))
+			returnTo = CLW_Services.BASE_HQ;
+
+		CLW_SupplyStore.Add(convoy.m_sSide, returnTo, convoy.m_iCargo);
+		Print(string.Format("CLW: convoy %1 turned back: %2; %3 supplies returned to %4 (stock: %5)", convoy.m_sId, why, convoy.m_iCargo, returnTo, CLW_SupplyStore.Describe(convoy.m_sSide)), LogLevel.NORMAL);
+		convoy.m_iCargo = 0;
 	}
 
 	// Ends the convoy. LOST = the cargo (if loaded) is gone: log + event for the LLM. FAILED = nothing was lost.
@@ -788,6 +1076,8 @@ class CLW_Convoys
 		int lostCargo;
 		if (state == CLW_EConvoyState.LOST)
 			lostCargo = convoy.m_iCargo;
+		else
+			ReturnCargo(convoy, why);	// FAILED with cargo on board (e.g. a stuck truck): nothing is lost silently, the load goes back
 
 		SetState(convoy, state, why);
 		CLW_WarState war = CLW_GameMode.GetWarState();
@@ -918,6 +1208,13 @@ class CLW_LogisticsDoctrine
 
 			if (CLW_SupplyStore.Get(side, fob.m_sId) >= LOW_STOCK)
 				continue;
+
+			if (!CLW_Convoys.HasTruckData(side))
+			{
+				// no supply truck for this side (own catalog + side pool): say so once in a while instead of a refused RESUPPLY every think
+				CLW_Convoys.LogNoTruck(side, fob.m_sId);
+				return;
+			}
 
 			if (war.GetSupplies(side) - CLW_RuleCommander.SUPPLY_RESERVE < CLW_Convoys.MIN_CARGO)
 				return;	// the HQ cannot spare a load

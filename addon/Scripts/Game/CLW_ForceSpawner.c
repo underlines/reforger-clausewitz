@@ -293,6 +293,9 @@ class CLW_ForceSpawner
 		if (!source)
 		{
 			error = "unknown force type " + typeId;
+			if (m_Catalog.Find(factionKey, typeId, true))
+				error = "force type " + typeId + " has a vehicle without default crew (crewless entries are not bought by the AI)";
+
 			Print(string.Format("CLW: spawn %1 %2 refused: %3", label, factionKey, error), LogLevel.WARNING);
 			return false;
 		}
@@ -599,6 +602,7 @@ class CLW_ForceSpawner
 		{
 			compartments.GetOnDoneSpawningDefaultOccupants().Remove(OnOccupantsDone);
 			job.m_sFailure = "vehicle has no default crew to spawn";
+			m_Catalog.MarkCrewless(job.m_sFaction, entry.m_sType, "SpawnDefaultOccupants refused at purchase");	// the AI stops picking it (M4 WP3)
 			return false;
 		}
 
@@ -962,6 +966,11 @@ class CLW_ForceSpawner
 		Print(string.Format("CLW: spawn %1 %2 (%3) READY as %4: %5", job.m_sFaction, entry.m_sType, entry.m_sName, job.m_sUnitId, detail), LogLevel.NORMAL);
 		if (war)
 			war.PushEvent(job.m_sFaction, job.m_sUnitId + " arrived: " + entry.m_sName);
+
+		int charged;
+		if (job.m_bCharged)
+			charged = entry.m_iCost;
+		CLW_BaseWatch.OnUnitReady(job.m_sUnitId, job.m_sFaction, charged);	// purchase ledger of the idle watch (refund when stood down)
 
 		if (!job.m_sTag.IsEmpty() && m_OnTagged)
 			m_OnTagged.Invoke(job.m_sTag, job.m_sUnitId);

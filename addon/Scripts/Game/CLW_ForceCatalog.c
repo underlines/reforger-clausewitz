@@ -6,6 +6,7 @@ class CLW_VehicleProbe
 	int m_iPilot;
 	int m_iTurret;
 	int m_iCrew;		// pilot + turret seats that have a default occupant
+	int m_iPilotCrew;	// pilot seats that have a default occupant (0 = nobody drives it: crewless, SpawnDefaultOccupants fails)
 	bool m_bSpawned;	// counted on a real spawned vehicle (not from the UI info)
 }
 
@@ -18,8 +19,13 @@ class CLW_ForceCatalog
 	protected ref map<string, ref array<ref CLW_ForceEntry>> m_mEntries = new map<string, ref array<ref CLW_ForceEntry>>();
 	protected ref map<string, ref CLW_FactionProfile> m_mProfiles = new map<string, ref CLW_FactionProfile>();	// by resource path
 	protected ref map<string, ref CLW_VehicleProbe> m_mProbes = new map<string, ref CLW_VehicleProbe>();		// by prefab path
+	protected ref map<string, ref array<ref CLW_ForceEntry>> m_mKinPools = new map<string, ref array<ref CLW_ForceEntry>>();	// own entries of kin factions (side pool source), by kin key
+	protected string m_sProbeSide;		// set while a kin faction's pool is built: probes are placed above this side's base
+	protected int m_iCrewProbes;		// spawn probes made for crew checks in the current Build (budget CREW_PROBE_MAX)
 	protected int m_iAutoCounter;
 	protected int m_iProbeSerial;
+	static const int CREW_PROBE_MAX = 80;	// real-spawn crew checks per Build; further vehicles stay unchecked (the spawner's own check refunds)
+	static const int ARMORED_UTILITY_MIN_CARGO = 2;	// armoured, armed, no APC/CAR label, this many cargo seats or more but few enough for a mech = light (armoured gun jeep)
 	static const int PROBE_LIFETIME_MS = 3000;	// probe vehicles live this long so their delayed inits ran before deletion
 
 	// ---- queries ----
@@ -29,27 +35,67 @@ class CLW_ForceCatalog
 		return m_mEntries.Contains(factionKey);
 	}
 
-	// Enabled entries of the faction (builds the catalog on first use).
-	void GetEntries(string factionKey, notnull array<CLW_ForceEntry> entries)
+	// Enabled entries of the faction (builds the catalog on first use). Entries whose vehicle has no default crew are left out
+	// (the AI buy paths cannot field them: "vehicle has no default crew to spawn"); includeCrewless = true lists them too, for the
+	// player vehicle request (the vehicle is spawned empty there).
+	void GetEntries(string factionKey, notnull array<CLW_ForceEntry> entries, bool includeCrewless = false)
 	{
 		array<ref CLW_ForceEntry> list = GetList(factionKey);
 		foreach (CLW_ForceEntry entry : list)
 		{
-			if (entry.m_bEnabled)
+			if (entry.m_bEnabled && (includeCrewless || !entry.m_bCrewless))
 				entries.Insert(entry);
 		}
 	}
 
-	CLW_ForceEntry Find(string factionKey, string typeId)
+	CLW_ForceEntry Find(string factionKey, string typeId, bool includeCrewless = false)
 	{
 		array<ref CLW_ForceEntry> list = GetList(factionKey);
 		foreach (CLW_ForceEntry entry : list)
 		{
-			if (entry.m_bEnabled && entry.m_sType == typeId)
+			if (entry.m_bEnabled && entry.m_sType == typeId && (includeCrewless || !entry.m_bCrewless))
 				return entry;
 		}
 
 		return null;
+	}
+
+	// The supply truck entry convoys use for a side (kind logistics with a vehicle and a cargo amount; the cheapest). Own profile first,
+	// else filled in from a kin faction by the side pool (entry.m_sKinFrom). Null = no convoys for this side.
+	CLW_ForceEntry FindSupplyTruck(string factionKey)
+	{
+		array<ref CLW_ForceEntry> list = GetList(factionKey);
+		CLW_ForceEntry pick;
+		foreach (CLW_ForceEntry entry : list)
+		{
+			if (!entry.m_bEnabled || entry.m_bCrewless || entry.m_sKind != CLW_ForceKind.LOGISTICS || !entry.HasVehicle() || entry.m_iCargo <= 0)
+				continue;
+
+			if (!pick || entry.m_iCost < pick.m_iCost)
+				pick = entry;
+		}
+
+		return pick;
+	}
+
+	// A purchase found out that the vehicle has no default crew: keep the AI away from the entry from now on. True when marked.
+	bool MarkCrewless(string factionKey, string typeId, string why)
+	{
+		array<ref CLW_ForceEntry> list;
+		if (!m_mEntries.Find(factionKey, list) || !list)
+			return false;
+
+		foreach (CLW_ForceEntry entry : list)
+		{
+			if (entry.m_sType != typeId || entry.m_bCrewless)
+				continue;
+
+			entry.m_bCrewless = true;
+			Print(string.Format("CLW: catalog %1 entry %2 marked CREWLESS (%3): the AI will not buy it any more, player vehicle requests still can", factionKey, typeId, why), LogLevel.WARNING);
+			return true;
+		}
+
+		return false;
 	}
 
 	// The infantry entry (no vehicle) whose group prefab is this one (GUID prefix ignored). Null when unknown or not built.
@@ -71,7 +117,7 @@ class CLW_ForceCatalog
 
 	string GetKind(string factionKey, string typeId)
 	{
-		CLW_ForceEntry entry = Find(factionKey, typeId);
+		CLW_ForceEntry entry = Find(factionKey, typeId, true);
 		if (entry)
 			return entry.m_sKind;
 
@@ -80,7 +126,7 @@ class CLW_ForceCatalog
 
 	int GetCost(string factionKey, string typeId)
 	{
-		CLW_ForceEntry entry = Find(factionKey, typeId);
+		CLW_ForceEntry entry = Find(factionKey, typeId, true);
 		if (entry)
 			return entry.m_iCost;
 
@@ -89,7 +135,7 @@ class CLW_ForceCatalog
 
 	string GetDescription(string factionKey, string typeId)
 	{
-		CLW_ForceEntry entry = Find(factionKey, typeId);
+		CLW_ForceEntry entry = Find(factionKey, typeId, true);
 		if (entry)
 			return entry.Describe();
 
@@ -186,10 +232,50 @@ class CLW_ForceCatalog
 	// (Re)build one faction's catalog. Returns the number of enabled entries.
 	int Build(string factionKey)
 	{
+		m_iCrewProbes = 0;
+		m_sProbeSide = "";
 		array<ref CLW_ForceEntry> entries = {};
 		array<string> signatures = {};
 		CLW_FactionProfile profile = FindProfile(factionKey);
 		int fromProfile;
+		int discovered;
+		BuildOwn(factionKey, profile, entries, signatures, fromProfile, discovered);
+
+		// own entries first (overrides applied, so a fixed kind counts), then the kin fill for the roles the faction lacks
+		CLW_CatalogOverrides.Apply(factionKey, entries);
+		CLW_SideRules rules = CLW_AdminOverrides.GetSideRules(factionKey);
+		int blocked = DisableBlocked(factionKey, entries, rules);
+		array<ref CLW_ForceEntry> fromKin = {};
+		FillFromKin(factionKey, profile, rules, entries, fromKin);
+		if (!fromKin.IsEmpty())
+		{
+			CLW_CatalogOverrides.Apply(factionKey, fromKin);	// overrides written for this side apply to the imported entries as well
+			foreach (CLW_ForceEntry imported : fromKin)
+			{
+				entries.Insert(imported);
+			}
+		}
+
+		int crewless;
+		foreach (CLW_ForceEntry counted : entries)
+		{
+			if (counted.m_bCrewless)
+				crewless++;
+		}
+
+		m_mEntries.Set(factionKey, entries);
+		Print(string.Format("CLW: catalog %1 built: %2 entries (%3 from profile, %4 discovered, %5 from kin, %6 crewless, %7 path-excluded)", factionKey, entries.Count(), fromProfile, discovered, fromKin.Count(), crewless, blocked), LogLevel.NORMAL);
+		foreach (CLW_ForceEntry entry : entries)
+		{
+			LogEntry(factionKey, entry);
+		}
+
+		return entries.Count();
+	}
+
+	// Profile entries + auto-discovery of one faction (no overrides, no kin). Used for the side's own entries and for kin pools.
+	protected void BuildOwn(string factionKey, CLW_FactionProfile profile, notnull array<ref CLW_ForceEntry> entries, notnull array<string> signatures, out int fromProfile, out int discovered)
+	{
 		if (profile)
 		{
 			foreach (CLW_ForceEntry source : profile.m_aEntries)
@@ -208,19 +294,178 @@ class CLW_ForceCatalog
 			Print("CLW: catalog " + factionKey + " has no profile, using auto-discovery only", LogLevel.NORMAL);
 		}
 
-		int discovered;
 		if (!profile || profile.m_bIncludeDiscovered)
 			discovered = Discover(factionKey, entries, signatures);
+	}
 
-		CLW_CatalogOverrides.Apply(factionKey, entries);
-		m_mEntries.Set(factionKey, entries);
-		Print(string.Format("CLW: catalog %1 built: %2 entries (%3 from profile, %4 discovered)", factionKey, entries.Count(), fromProfile, discovered), LogLevel.NORMAL);
+	// ---- side pool: kin fill (CLW_SidePool) ----
+
+	// Entries of the enabled list whose prefab path the admin excluded are disabled. Returns how many.
+	protected int DisableBlocked(string factionKey, notnull array<ref CLW_ForceEntry> entries, notnull CLW_SideRules rules)
+	{
+		int blocked;
 		foreach (CLW_ForceEntry entry : entries)
 		{
-			LogEntry(factionKey, entry);
+			string which;
+			if (!entry.m_bEnabled || !rules.BlocksEntry(entry, which))
+				continue;
+
+			entry.m_bEnabled = false;
+			blocked++;
+			Print(string.Format("CLW: sidepool %1: entry %2 disabled, prefab path contains '%3' (overrides.json sides.excludePathContains)", factionKey, entry.m_sType, which), LogLevel.NORMAL);
 		}
 
-		return entries.Count();
+		return blocked;
+	}
+
+	protected string JoinKinds(notnull array<string> kinds)
+	{
+		string text;
+		foreach (string kind : kinds)
+		{
+			if (!text.IsEmpty())
+				text += ",";
+
+			text += kind;
+		}
+
+		return text;
+	}
+
+	// The own (profile + discovered, overrides applied) entries of a kin faction, built once and kept.
+	protected array<ref CLW_ForceEntry> GetKinPool(string sideKey, string kinKey)
+	{
+		array<ref CLW_ForceEntry> pool;
+		if (m_mKinPools.Find(kinKey, pool) && pool)
+			return pool;
+
+		pool = {};
+		array<string> signatures = {};
+		int fromProfile;
+		int discovered;
+		m_sProbeSide = sideKey;
+		BuildOwn(kinKey, FindProfile(kinKey), pool, signatures, fromProfile, discovered);
+		m_sProbeSide = "";
+		CLW_CatalogOverrides.Apply(kinKey, pool);
+		m_mKinPools.Set(kinKey, pool);
+		Print(string.Format("CLW: sidepool kin pool %1 (for %2): %3 entries (%4 from profile, %5 discovered)", kinKey, sideKey, pool.Count(), fromProfile, discovered), LogLevel.NORMAL);
+		return pool;
+	}
+
+	protected string UniqueType(string wanted, notnull array<ref CLW_ForceEntry> entries, notnull array<ref CLW_ForceEntry> imported)
+	{
+		string type = wanted;
+		int n = 1;
+		while (true)
+		{
+			bool taken = false;
+			foreach (CLW_ForceEntry entry : entries)
+			{
+				if (entry.m_sType == type)
+					taken = true;
+			}
+
+			foreach (CLW_ForceEntry other : imported)
+			{
+				if (other.m_sType == type)
+					taken = true;
+			}
+
+			if (!taken)
+				return type;
+
+			n++;
+			type = wanted + "_" + n;
+		}
+
+		return type;
+	}
+
+	// Fills the roles (kinds) the own list lacks from the kin factions in priority order. Own entries stay untouched; imported clones go to
+	// 'imported' (type id "kin_<type>", m_sKinFrom / m_sSource tell the origin). A role is filled by the first kin faction that has it.
+	protected void FillFromKin(string sideKey, CLW_FactionProfile profile, notnull CLW_SideRules rules, notnull array<ref CLW_ForceEntry> entries, notnull array<ref CLW_ForceEntry> imported)
+	{
+		array<string> missing = {};
+		CLW_SidePool.MissingKinds(entries, missing);
+		if (rules.m_bOwnOnly)
+		{
+			Print(string.Format("CLW: sidepool %1: ownOnly (overrides.json), no kin; roles without an entry: %2", sideKey, JoinKinds(missing)), LogLevel.NORMAL);
+			return;
+		}
+
+		if (missing.IsEmpty())
+		{
+			Print(string.Format("CLW: sidepool %1: the own catalog covers every role, no kin needed", sideKey), LogLevel.NORMAL);
+			return;
+		}
+
+		array<string> kinKeys = {};
+		CLW_SidePool.GetKinKeys(sideKey, profile, rules, kinKeys);
+		Print(string.Format("CLW: sidepool %1: roles without an own entry: %2; kin factions: %3", sideKey, JoinKinds(missing), JoinKinds(kinKeys)), LogLevel.NORMAL);
+		if (kinKeys.IsEmpty())
+		{
+			if (missing.Contains(CLW_ForceKind.LOGISTICS))
+				Print(string.Format("CLW: sidepool %1: NO kin faction and no own supply truck: no convoys for this side", sideKey), LogLevel.WARNING);
+
+			return;
+		}
+
+		foreach (string kinKey : kinKeys)
+		{
+			if (missing.IsEmpty())
+				break;
+
+			array<ref CLW_ForceEntry> pool = GetKinPool(sideKey, kinKey);
+			int m = missing.Count() - 1;
+			while (m >= 0)
+			{
+				string kind = missing[m];
+				int added;
+				foreach (CLW_ForceEntry candidate : pool)
+				{
+					if (!candidate.m_bEnabled || candidate.m_sKind != kind || candidate.m_bCrewless)
+						continue;
+
+					if (kind == CLW_ForceKind.LOGISTICS && (!candidate.HasVehicle() || candidate.m_iCargo <= 0))
+						continue;
+
+					string which;
+					if (rules.BlocksEntry(candidate, which))
+					{
+						Print(string.Format("CLW: sidepool %1: kin %2 entry %3 skipped, prefab path contains '%4' (excludePathContains)", sideKey, kinKey, candidate.m_sType, which), LogLevel.NORMAL);
+						continue;
+					}
+
+					if (CLW_SidePool.IsDuplicate(entries, candidate) || CLW_SidePool.IsDuplicate(imported, candidate))
+						continue;
+
+					CLW_ForceEntry copy = candidate.CloneEntry();
+					copy.m_sType = UniqueType("kin_" + candidate.m_sType, entries, imported);
+					copy.m_sKinFrom = kinKey;
+					copy.m_sSource = "kin " + kinKey;
+					imported.Insert(copy);
+					added++;
+					Print(string.Format("CLW: sidepool %1: role %2 filled from %3: %4 (%5) cost=%6 cargo=%7", sideKey, kind, kinKey, copy.m_sType, copy.GetVehicleName(), copy.m_iCost, copy.m_iCargo), LogLevel.NORMAL);
+				}
+
+				if (added > 0)
+					missing.Remove(m);
+
+				added = 0;
+				m--;
+			}
+		}
+
+		if (!missing.IsEmpty())
+		{
+			LogLevel level = LogLevel.NORMAL;
+			if (missing.Contains(CLW_ForceKind.LOGISTICS))
+				level = LogLevel.WARNING;
+
+			Print(string.Format("CLW: sidepool %1: roles still without an entry after the kin fill: %2", sideKey, JoinKinds(missing)), level);
+		}
+
+		Print(string.Format("CLW: sidepool %1: %2 entries imported from kin", sideKey, imported.Count()), LogLevel.NORMAL);
 	}
 
 	protected void LogEntry(string factionKey, CLW_ForceEntry entry)
@@ -399,7 +644,12 @@ class CLW_ForceCatalog
 		CLW_Bases bases = CLW_GameMode.GetBases();
 		if (bases)
 		{
-			pos = bases.GetBasePos(factionKey);
+			// a kin faction's vehicle is probed above the buying side's base (the kin faction has no base)
+			string posKey = factionKey;
+			if (!m_sProbeSide.IsEmpty())
+				posKey = m_sProbeSide;
+
+			pos = bases.GetBasePos(posKey);
 			pos[0] = pos[0] + m_iProbeSerial * 25;
 			pos[1] = pos[1] + 600;
 		}
@@ -437,7 +687,11 @@ class CLW_ForceCatalog
 						probe.m_iTurret++;
 
 					if (!slot.GetDefaultOccupantPrefab().IsEmpty())
+					{
 						probe.m_iCrew++;
+						if (type == ECompartmentType.PILOT)
+							probe.m_iPilotCrew++;
+					}
 				}
 			}
 
@@ -454,7 +708,7 @@ class CLW_ForceCatalog
 			physics.SetActive(ActiveState.INACTIVE);
 
 		GetGame().GetCallqueue().CallLater(DeleteProbeVehicle, PROBE_LIFETIME_MS, false, vehicle);
-		Print(string.Format("CLW: catalog probe %1: ok=%2 pilot=%3 turret=%4 cargo=%5 crewWithOccupant=%6 (spawn deleted in %7 ms)", prefab, probe.m_bOk, probe.m_iPilot, probe.m_iTurret, probe.m_iCargo, probe.m_iCrew, PROBE_LIFETIME_MS), LogLevel.NORMAL);
+		Print(string.Format("CLW: catalog probe %1: ok=%2 pilot=%3 turret=%4 cargo=%5 crewWithOccupant=%6 (pilot %7) (spawn deleted in %8 ms)", prefab, probe.m_bOk, probe.m_iPilot, probe.m_iTurret, probe.m_iCargo, probe.m_iCrew, probe.m_iPilotCrew, PROBE_LIFETIME_MS), LogLevel.NORMAL);
 		return probe;
 	}
 
@@ -758,6 +1012,45 @@ class CLW_ForceCatalog
 		return best;
 	}
 
+	// Crew check of a discovered vehicle (M4 WP3): the UI info of pack vehicles can claim a crew the prefab does not have (seen on RHS_AFRF
+	// APC_K17_unarmed.et and K4386.et: "vehicle has no default crew to spawn", purchase refunded). A real spawn probe reads the pilot /
+	// turret seats with a default occupant; a vehicle nobody drives is marked crewless: kept in the catalog (player vehicle requests, see
+	// GetEntries includeCrewless) but never bought by the AI. Unknown (probe failed or budget used up) stays crewed; the spawner marks it
+	// at the first failed purchase (MarkCrewless).
+	protected void CheckCrew(string factionKey, CLW_ForceEntry entry)
+	{
+		string cacheKey = PathOf(entry.m_VehiclePrefab);
+		CLW_VehicleProbe cached;
+		bool known = m_mProbes.Find(cacheKey, cached) && cached && cached.m_bSpawned;
+		if (!known)
+		{
+			if (m_iCrewProbes >= CREW_PROBE_MAX)
+			{
+				Print(string.Format("CLW: catalog crew check %1: %2 not checked (budget of %3 spawn probes used up)", factionKey, entry.m_VehiclePrefab, CREW_PROBE_MAX), LogLevel.NORMAL);
+				return;
+			}
+
+			m_iCrewProbes++;
+		}
+
+		CLW_VehicleProbe probe = ProbeVehicle(factionKey, entry.m_VehiclePrefab, true);
+		if (!probe || !probe.m_bOk || !probe.m_bSpawned)
+		{
+			Print(string.Format("CLW: catalog crew check %1: %2 unknown (no spawn probe), assumed crewed", factionKey, entry.m_VehiclePrefab), LogLevel.NORMAL);
+			return;
+		}
+
+		entry.m_iCrewSeats = probe.m_iCrew;
+		if (probe.m_iCrew > 0 && probe.m_iPilotCrew > 0)
+		{
+			Print(string.Format("CLW: catalog crew check %1: %2 ok (crew %3, driver %4)", factionKey, entry.m_VehiclePrefab, probe.m_iCrew, probe.m_iPilotCrew), LogLevel.NORMAL);
+			return;
+		}
+
+		entry.m_bCrewless = true;
+		Print(string.Format("CLW: catalog crew check %1: %2 has NO default crew (crew seats with occupant %3, driver %4): marked crewless, excluded from the AI buy mix", factionKey, entry.m_VehiclePrefab, probe.m_iCrew, probe.m_iPilotCrew), LogLevel.WARNING);
+	}
+
 	protected int DiscoverVehicles(string factionKey, SCR_Faction faction, notnull array<ref CLW_ForceEntry> entries, notnull array<string> signatures)
 	{
 		SCR_EntityCatalog catalog = faction.GetFactionEntityCatalogOfType(EEntityCatalogType.VEHICLE, false);
@@ -841,7 +1134,13 @@ class CLW_ForceCatalog
 					kind = CLW_ForceKind.LIGHT;
 					rule = "armed car (even armoured, e.g. a gun jeep)";
 				}
-				else if (traitArmor && !apc && !car)
+				else if (traitArmor && !apc && !car && probed && cargo >= ARMORED_UTILITY_MIN_CARGO && cargo < CLW_WarConfig.DISCOVER_MECH_MIN_CARGO + 2)
+					{
+						// an armoured utility vehicle with a few seats and a gun (M1025 M2, seen: classified mech/armor) is a light vehicle, not a tank
+						kind = CLW_ForceKind.LIGHT;
+						rule = "armoured utility vehicle (armour, no APC/CAR label, " + cargo + " cargo seats)";
+					}
+					else if (traitArmor && !apc && !car)
 				{
 					kind = CLW_ForceKind.ARMOR;
 					rule = "armour, no APC/CAR label";
@@ -899,6 +1198,8 @@ class CLW_ForceCatalog
 			string sig = Signature(fresh);
 			if (signatures.Contains(sig))
 				continue;
+
+			CheckCrew(factionKey, fresh);
 
 			// pair with an infantry group that fits (mech, motorized)
 			if (kind == CLW_ForceKind.MECH || kind == CLW_ForceKind.MOTORIZED)

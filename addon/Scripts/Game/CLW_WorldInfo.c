@@ -329,7 +329,7 @@ class CLW_WorldInfo
 				string name = WidgetManager.Translate(item.GetDisplayName());
 				if (name.IsEmpty())
 					continue;
-				vector pos = item.GetPos();
+				vector pos = CLW_Places.ItemPos(item);
 				string key = name + Num(pos[0]) + "," + Num(pos[2]);
 				if (seen.Contains(key))
 					continue;

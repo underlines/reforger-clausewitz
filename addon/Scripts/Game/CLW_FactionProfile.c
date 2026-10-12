@@ -96,6 +96,8 @@ class CLW_ForceEntry
 	int m_iCargoMembers;		// embarked group size
 	bool m_bChecked;			// prefabs probed
 	int m_iVehicleCost;			// vehicle share of m_iCost (discovered entries), 0 = derive from cost minus embarked soldiers
+	string m_sKinFrom;			// side pool (CLW_SidePool): faction key this entry was taken from, "" = the side's own entry
+	bool m_bCrewless;			// the vehicle prefab has no default crew (spawn probe or a failed purchase): never bought by the AI, see CLW_ForceCatalog.GetEntries
 
 	bool HasVehicle()
 	{
@@ -138,11 +140,15 @@ class CLW_ForceEntry
 				text += ", " + m_iCargoSeats + " seats";
 			if (m_bArmed)
 				text += ", armed";
+			if (m_bCrewless)
+				text += ", NO default crew";
 		}
 		if (m_iGroupMembers > 0)
 			text += ", " + m_iGroupMembers + " infantry";
 		if (m_iCargoMembers > 0)
 			text += ", " + m_iCargoMembers + " embarked";
+		if (!m_sKinFrom.IsEmpty())
+			text += ", kin " + m_sKinFrom;
 
 		return text;
 	}
@@ -170,6 +176,8 @@ class CLW_ForceEntry
 		copy.m_iCargoMembers = m_iCargoMembers;
 		copy.m_bChecked = m_bChecked;
 		copy.m_iVehicleCost = m_iVehicleCost;
+		copy.m_sKinFrom = m_sKinFrom;
+		copy.m_bCrewless = m_bCrewless;
 		return copy;
 	}
 }
@@ -283,6 +291,11 @@ class CLW_FactionProfile
 
 	[Attribute("", UIWidgets.EditBox, "Faction key whose services this faction uses when it has none of its own (e.g. a pack faction naming the vanilla faction it is built on). Empty = automatic friendly faction")]
 	string m_sServiceFallbackFaction;
+
+	// Explicit kin for the side pool (CLW_SidePool): factions whose forces fill the roles this faction lacks, tried before the
+	// friendly factions of the faction data. The enemy side and the admin excludes (overrides.json "sides") still win.
+	[Attribute(desc: "Faction keys used as kin by the side pool, in order, before the friendly factions of the faction data")]
+	ref array<string> m_aKinFactions;
 
 	[Attribute("1", UIWidgets.CheckBox, "Also add entries auto-discovered from the faction's entity catalogs that the list below does not cover (mod packs that extend the vanilla catalogs show up as kind armor, mech, ...)")]
 	bool m_bIncludeDiscovered;

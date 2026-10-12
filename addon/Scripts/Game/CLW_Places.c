@@ -22,6 +22,8 @@ class CLW_Places
 
 	protected static ref array<ref CLW_Place> s_aPlaces;
 	protected static bool s_bBuilt;
+	protected static int s_iEmptyBuilds;	// builds that found no map item (the map entity may not have its items yet, e.g. at game start)
+	static const int EMPTY_RETRIES = 3;
 
 	// Build the place list once (idempotent). Safe to call from every report.
 	static void Ensure()
@@ -31,6 +33,7 @@ class CLW_Places
 
 		s_bBuilt = true;
 		s_aPlaces = {};
+		bool typed;
 		MapEntity mapEnt = SCR_MapEntity.GetMapInstance();
 		if (mapEnt)
 		{
@@ -54,9 +57,17 @@ class CLW_Places
 					if (name.IsEmpty())
 						continue;
 
-					AddPlace(name, item.GetPos(), typeKey);
+					AddPlace(name, ItemPos(item), typeKey);
+					typed = true;
 				}
 			}
+		}
+
+		if (!typed && s_iEmptyBuilds < EMPTY_RETRIES)
+		{
+			// no typed place yet: do not cache this result for good, the next caller builds again (a few times)
+			s_iEmptyBuilds++;
+			s_bBuilt = false;
 		}
 
 		if (s_aPlaces.IsEmpty())
@@ -74,7 +85,35 @@ class CLW_Places
 			}
 		}
 
-		Print("CLW: places: " + s_aPlaces.Count() + " named places cached", LogLevel.NORMAL);
+		string sample;
+		for (int s = 0; s < s_aPlaces.Count() && s < 3; s++)
+		{
+			sample += " '" + s_aPlaces[s].m_sName + "' " + s_aPlaces[s].m_sType + " " + s_aPlaces[s].m_vPos.ToString();
+		}
+		Print("CLW: places: " + s_aPlaces.Count() + " named places cached, e.g." + sample, LogLevel.NORMAL);
+	}
+
+	// World position of a map item. MapItem.GetPos() is (0,0) on a dedicated server (the map is never built headless, seen 2026-10-12:
+	// every location at the origin), so the owner entity's origin is used then. GetPos() is 2D (x, z) packed into a vector [verify order].
+	static vector ItemPos(MapItem item)
+	{
+		if (!item)
+			return vector.Zero;
+
+		vector pos = item.GetPos();
+		if (pos[0] != 0 || pos[1] != 0 || pos[2] != 0)
+		{
+			if (pos[2] == 0 && pos[1] != 0)
+				return Vector(pos[0], 0, pos[1]);	// (x, z, 0)
+
+			return pos;
+		}
+
+		IEntity owner = item.Entity();
+		if (owner)
+			return owner.GetOrigin();
+
+		return pos;
 	}
 
 	protected static void AddPlace(string name, vector pos, string type)
@@ -98,6 +137,16 @@ class CLW_Places
 	{
 		s_bBuilt = false;
 		s_aPlaces = null;
+	}
+
+	// All cached places (builds the list on first use). Auto scenario / random layout read them for wishes and objectives.
+	static void GetAll(notnull array<ref CLW_Place> outPlaces)
+	{
+		Ensure();
+		foreach (CLW_Place place : s_aPlaces)
+		{
+			outPlaces.Insert(place);
+		}
 	}
 
 	// True when at least one place came from a map item (has a descriptor type).

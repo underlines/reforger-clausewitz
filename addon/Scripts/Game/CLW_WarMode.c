@@ -241,6 +241,29 @@ class CLW_WarMode
 		return 0;
 	}
 
+	// Effective start ownership for the scenario: mode "authored" | "nearest" | "none" and the objectives per side (nearest).
+	// The setup choice "startObjectives" wins over the scenario's attributes: none, or 1 / 2 / 3 = nearest with that count.
+	// ("authored" with random start positions is turned into nearest by CLW_ControlPoints.ResolveStartOwners.)
+	void GetStartOwnership(notnull CLW_ScenarioConfig scenario, out string mode, out int perSide)
+	{
+		mode = scenario.m_sStartOwnership;
+		perSide = scenario.m_iStartOwnedPerSide;
+		if (mode.IsEmpty())
+			mode = "authored";
+
+		string choice = GetChoiceParam("startObjectives");
+		if (choice == "none")
+		{
+			mode = "none";
+			perSide = 0;
+		}
+		else if (choice == "1" || choice == "2" || choice == "3")
+		{
+			mode = "nearest";
+			perSide = choice.ToInt();
+		}
+	}
+
 	// Moves the HQs (scaled separation), re-spaces / filters the objectives. Call from OnWarStart BEFORE anything is spawned
 	// at the bases (start forces spawn on GetOnWarStarted, which fires after OnWarStart).
 	protected void ApplyBattleLayout()
@@ -279,6 +302,12 @@ class CLW_WarMode
 			}
 
 			points.ApplyLayout(scenario, GetBattleSizeIndex(), GetBattleSizeName(), mid, factor, hqs, GetHqObjectiveClearM(), GetObjectiveGapM(), randomLayout);
+
+			// start ownership last: it needs the kept objectives at their final positions and the final HQs (slot 0 = A, slot 1 = B)
+			string ownMode;
+			int ownPerSide;
+			GetStartOwnership(scenario, ownMode, ownPerSide);
+			points.ResolveStartOwners(scenario, hqs, ownMode, ownPerSide, randomLayout != null);
 		}
 
 		// the place list may have been built from the objective names (no map items): forget it so it follows the new positions

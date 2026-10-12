@@ -116,6 +116,29 @@ class CLW_SupplyStore
 		return stock;
 	}
 
+	// One-line stock overview for the logs ("HQ 420, FOB1 60"), so a convoy decision can be read without the stock lines.
+	static string Describe(string side)
+	{
+		CLW_WarState war = CLW_GameMode.GetWarState();
+		string text = "HQ ";
+		if (war)
+			text += "" + war.GetSupplies(side);
+		else
+			text += "?";
+
+		if (!CLW_Capabilities.Has("logistics"))
+			return text + " (one pool)";
+
+		array<CLW_Fob> fobs = {};
+		CLW_FobManager.GetFobs(side, fobs, true);
+		foreach (CLW_Fob fob : fobs)
+		{
+			text += ", " + fob.m_sId + " " + Get(side, fob.m_sId);
+		}
+
+		return text;
+	}
+
 	// Side total: HQ ledger plus all FOB stocks (logistics off: just the ledger).
 	static int GetTotal(string side)
 	{

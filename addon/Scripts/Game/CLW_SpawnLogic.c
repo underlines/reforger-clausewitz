@@ -1,5 +1,8 @@
 // Spawn logic of the Clausewitz game mode (set as m_SpawnLogic in CLW_GameMode.et). Own subclass of the vanilla menu logic: a modded
-// SCR_*SpawnLogic made the class unknown to the prefab loader ("Unknown class", 2026-10-12).
+// SCR_*SpawnLogic made the class unknown to the prefab loader ("Unknown class", 2026-10-12; confirmed again for SCR_MenuSpawnLogic in the
+// M4 takeover e2e: NEVER mod a vanilla [BaseContainerProps] class that vanilla prefabs reference, the prefab loses the object).
+// Used by CLW_GameMode.et, and by the takeover of a Game Master game mode: CLW_WarRuntime swaps a new instance into the vanilla respawn
+// system at runtime (CLW_RespawnSwap.c).
 //
 //   SETUP phase : no menu. The player is auto-spawned on the default side at its base (forced faction + a spawnable loadout, never the
 //                 saved-arsenal one), so the war setup dialog of the owner works and nobody sees the deploy menu before the sides exist.

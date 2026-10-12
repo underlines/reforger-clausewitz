@@ -25,7 +25,7 @@ Updated: 2026-10-12. Roadmap: `VISION.md` section 13. Decisions: `notes/`.
 - [x] Squad movement verified in the log (per-squad leader position + waypoint logging): AI-only squads walk their patrol/attack waypoints. A joining player becomes squad LEADER automatically (`playerLeader=1`; the `leaderId=-1` seen right after join was read too early), so the squad follows the player and HQ skips it: it needs the mission path (M2).
 - [ ] Verify later (needs 2 players or a way to join as non-leader): does an AI leader obey HQ waypoints while a player is a plain member? RuleCommander already skips only squads with a human LEADER
 
-## Current milestone: M2 - Real war + mechanized
+## Done: M2 - Real war + mechanized (v0.3.0)
 Design: `notes/m2-design.md` (decided 2026-10-12). Branch `feature/m2-real-war`. Phases P1 war foundation, P2 forces +
 mechanized, P3 commander v1 + protocol v2, P4 missions, S sidecar/dashboard; implemented code-only by subagents, one
 Workbench e2e test at the end. LLM: fake + OpenRouter tested e2e; Anthropic provider deferred.
@@ -84,7 +84,45 @@ Local DS in `D:\GitHub\ReforgerMods\_dedicated\` (junction to `addon/`, no pack 
   tab; real LLM orders move units. Owner verified all green (2026-10-12, build #40).
 - [ ] Fake LLM provider: units seemed not to move (owner, build #40); check the fake orders path.
 
-## Next up
+## Current milestone: M4 - Any map, any pack (released as v1.0.0)
+**Next: round 3, see `notes/m4-round3-plan.md` (handover: owner test results, WP0-WP8, checklist). Work on a new branch from `main`.**
+Design: `notes/m4-design.md` (2026-10-12). Branch `feature/m4-any-map` merged into `main` and tagged v1.0.0 (2026-10-12, owner's call; the
+owner client checklist below is still open). Built by six
+subagents (WP1 maps + auto scenario, WP2 wrapper worlds + generator, WP3 side pools + props, WP4 HQ menu, WP5 FOB/convoys, WP6 GM spike).
+Verified on the dedicated server, unattended (builds #67-#71, packs RHS + WCS + GRS + WCS Loadout Editor, setup preset RHS_USAF vs RHS_AFRF):
+- [x] setup preset auto start (no human), invalid preset never replaced by defaults
+- [x] Arland random start: HQ pair in 2-10 attempts (was 60 of 60 rejected); Arland fixed start unchanged
+- [x] Everon (`CLW_Eden`) and Kolguyev (`CLW_Cain`) wrapper worlds boot, auto scenario fills HQs + 7 objectives (map places), AI moves on the campaign navmesh, war runs without script errors
+- [x] side pools: RHS sides get the kin supply truck (US M923A1 / USSR Ural), RHS_AFRF also recon + BRDM; crewless K-17/K-4386 caught at catalog build
+- [x] FOB1 built by a walking builder (forced move, 45 s to site), first RHS convoy delivered 279 supplies HQ -> FOB1
+- [x] map place positions on the DS (were all 0,0); arsenal pool lookup self-test ok for every faction
+Second round (2026-10-12 evening, builds #72-#79, same packs + preset), verified on the DS without a player:
+- [x] GM takeover (option C): `-server worlds/GameMaster/GM_Eden.ent ... -clwTakeover`: 24 of 24 takeover steps ok (spawn logic swapped to `CLW_SpawnLogic` at runtime, chat present, 2 base spawn points), auto scenario on Everon, war RUNNING, AI moves 150-200 m in 2 min on the GM navmesh; `GM_Arland` picks `Arland.conf` (by world name); without the switch a GM world stays vanilla (one log line). Lesson: a modded `SCR_MenuSpawnLogic` made every vanilla prefab lose its spawn logic ("Unknown class"), replaced by the runtime swap
+- [x] native worlds after the war-runtime refactor: Arland (RHS preset) war RUNNING, no script errors
+- [x] start ownership "nearest" at war start: Takistan / Everon / Arland random: 1 per side, the outermost kept objective on each side, rest neutral
+- [x] generated map wrapper (Takistan, RHS sides): boots, auto scenario, war RUNNING, AI moves (100-150 m in 2 min); bug found + fixed: the generated AIWorld prefab was unregistered (no navmesh), wrappers now reference only registered resources (checked by the generator)
+- [x] RHS prop sets: RHS arsenal boxes at the bases of RHS_USAF / RHS_AFRF; their zero buy multiplier is reset to 1 (`buy multiplier 0 -> 1` in the log)
+
+## Owner checklist (client; everything the DS cannot show)
+Answer per item: OK / not OK + what you saw + about when. Start: sidecar, then `_dedicated\start-server.ps1 -Packs packs-e2e.txt` (Arland) unless the item says otherwise, client via `_dedicated\start-client.ps1` (or the command in `notes/dedicated-server.md`). The preset auto-starts the war 60 s after boot (RHS_USAF vs RHS_AFRF, random start): join within a minute to see the setup menu.
+From M4 round 1 (never clicked):
+- [ ] 1. HQ menu: "Open HQ menu" on a request terminal and `/hqmenu`; every section (Requests, Squad join/leave, Base, Contact report); layout/readability
+- [ ] 2. Vehicle request: "vehicle delivered, grid ..." hint + temporary map marker that disappears when you get in
+- [ ] 3. Arsenal: WCS SPEAR and other pool items show a price, can be taken, cost supplies; GRS items in the Loadout Editor
+- [ ] 4. `/report`, map-marker contacts (place an enemy symbol on the map), FOB respawn (deploy at a FOB)
+- [ ] 5. Everon / Kolguyev wrapper with a client: `-World Worlds/CLW_Eden.ent` / `Worlds/CLW_Cain.ent`: spawn at your HQ, not in the sea; place names on the map/reports
+New in round 2:
+- [ ] 6. RHS arsenal box at your HQ (RHS look): it lists RHS items and a kit COSTS supplies (kit cost on); the FOB kit box too once a FOB stands
+- [ ] 7. Start objectives: on the map at war start your side owns exactly the objective nearest your HQ, the enemy the one nearest theirs, the rest neutral. Setup menu shows "Start objectives" (scenario/none/1/2/3); try "2" once
+- [ ] 8. GM takeover with a client: `start-server.ps1 -World worlds/GameMaster/GM_Eden.ent -Packs packs-e2e.txt -Extra "-clwTakeover"`. Check: setup menu / deploy (you get the CLW sides, spawn at your HQ), HQ squads join, SITREP, map markers, tickets HUD, `/hqmenu`, the arsenal. Note anything Game-Master-like that gets in the way (editor key Y, voting, GM camera). Also `GM_Arland` (authored Arland objectives)
+- [ ] 9. Generated Takistan wrapper with a client: `start-server.ps1 -World Worlds/CLW_Takistan.ent -Packs packs-takistan-rhs.txt` (client: `start-client.ps1 -Packs packs-takistan-rhs.txt`, same packs as the server; for every item the client takes the server's packs file). Spawn, map, objectives on sensible ground, AI moving
+Open / known:
+- [ ] GM takeover: the swapped `CLW_SpawnLogic` uses default attributes (disconnect behaviour, deploy delay); GM persistence not covered (only the `-server <world>` route is possible while unpublished)
+- [ ] "waypoints lost" on some infantry orders on Takistan (4-6 per run, others move); watch on a long run
+- [ ] RHS: no own compositions for command post / supply / depot / medical / sandbags (RHS ships none, vanilla used); no armor role (no kin tank either)
+- [ ] WCS_Armament AI magazine switch throws VM exceptions (third-party, vanilla null weapMgr)
+
+## Done: M3 - Logistics, bases & requests (v0.5.0)
 M3 "Logistics, bases & requests" coded 2026-10-12 on branch `feature/m3-logistics` (phases R, B, Q, F, L, A; design `notes/m3-design.md`).
 All phases compile (Workbench builds #42-#44). Runtime: dedicated server runs without a client (war auto-starts after 180 s), builds #44-#51.
 Verified on the DS (no human needed):
@@ -120,3 +158,4 @@ Open:
 - 2026-10-11: Read-only web panel added to the sidecar (VISION 12a basic): http://127.0.0.1:8788/ with HQ view (map, SITREP, exchange log, status strip) and Configuration view (provider fake|anthropic|openai-compatible, model, base URL, key, timeout, max tokens, enabled switch, Test connection). Files in `dev/tools/dashboard/`; settings persist to `dev/tools/sidecar-config.json` (git-ignored). Verified end-to-end (2026-10-12).
 - 2026-10-12: Dynamic squad sweep: `CLW_SquadRegistry` (AIWorld.GetAIAgents -> parent groups, 5 s sweep) replaces the hardcoded squad names; commanders keep per-squad state by id (`CLW_SquadState`). Verified end-to-end (2026-10-12). See VISION 4b.
 - 2026-10-12: Adaptive HQ wakeup (VISION 1b basic): game polls every 10 s (rule fallback throttled to 25 s), sidecar scheduler per faction (scheduled / trigger / manual wake, `next_check_sec` from the model, budget stretch), config groups `wakeup` and `triggers`, `POST /api/wake`, dashboard countdown chips + Wakeup/Triggers settings. Verified end-to-end (2026-10-12).
+- 2026-10-12: M4 (any map, any pack: auto scenario, wrapper worlds + generator, GM takeover, side pools, prop sets, HQ menu, FOB kit + timing gate, garrison) merged into `main` and released as v1.0.0 (local tag). Round 3 (`notes/m4-round3-plan.md`) and the owner client checklist are next.

@@ -32,6 +32,8 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 		if (startDefault.IsEmpty())
 			startDefault = "fixed";
 		m_aParams.Insert(CLW_ModeParam.CreateChoice("startPositions", "Start positions", "fixed: the scenario's HQs. random: both HQs and the front at random places (checked for ground, water, room and roads), within the battle size distance.", startModes, startDefault));
+		array<string> ownerModes = {"scenario", "none", "1", "2", "3"};
+		m_aParams.Insert(CLW_ModeParam.CreateChoice("startObjectives", "Start objectives", "scenario: the scenario's setting. none: every objective starts neutral. 1 / 2 / 3: each side starts with that many objectives nearest its HQ (one objective always stays neutral).", ownerModes, "scenario"));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("randomSeed", "Random seed", "Random start positions: the same seed gives the same layout. 0 = a new one each war (logged).", CLW_ModeParam.TYPE_INT, 0, 9999999, 1, config.m_iRandomSeed));
 		m_aParams.Insert(CLW_ModeParam.CreateBool("ticketBleed", "Ticket bleed", "The side holding fewer points loses tickets over time.", config.m_bTicketBleed));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("holdAllWinMin", "Hold-all win (min)", "Holding every point this long wins. 0 = off.", CLW_ModeParam.TYPE_INT, 0, 15, 1, config.m_iHoldAllWinMin));
@@ -45,6 +47,10 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 		m_aParams.Insert(CLW_ModeParam.CreateChoice("fobBuild", "FOB build", "instant: the FOB stands as soon as the builder arrives. timed: it is built over the build time while the builder is on site.", fobBuildModes, fobBuildDefault));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("fobCost", "FOB cost (supplies)", "Paid when the FOB is ordered; refunded when it fails before it stands.", CLW_ModeParam.TYPE_INT, 0, 1000, 25, config.m_iFobCost));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("fobBuildSec", "FOB build time (s)", "Timed build: seconds of the builder on site until the FOB stands.", CLW_ModeParam.TYPE_INT, 10, 600, 10, config.m_iFobBuildSec));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("fobEarliestMin", "FOB earliest (min)", "No FOB before this many minutes of war time, and only once the side knows the front (an enemy contact, a contested or lost objective). 0 = no gate.", CLW_ModeParam.TYPE_INT, 0, 60, 1, 6));
+		// spawn on assignment (owner playtest 2026-10-12): few idle AI at the bases, see CLW_BaseWatch
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("garrisonSquads", "HQ garrison (squads)", "Infantry squads per side that defend their HQ for the whole war (never counted as idle, not given other orders).", CLW_ModeParam.TYPE_INT, 0, 4, 1, 1));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("idleDespawnMin", "Idle despawn (min)", "A squad idling at its base without an order this long is removed and its purchase cost refunded. 0 = off.", CLW_ModeParam.TYPE_INT, 0, 60, 1, 6));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("convoyMax", "Max convoys per side", "Supply convoys a side may have on the road at once (logistics only).", CLW_ModeParam.TYPE_INT, 1, 4, 1, 2));
 		m_aParams.Insert(CLW_ModeParam.CreateBool("cap_logistics", "Logistics", "Per-base supplies and convoys. Off: one supply pool per side.", true));
 		m_aParams.Insert(CLW_ModeParam.CreateBool("cap_kitCost", "Kit cost", "Arsenal items cost supplies. Off: kits are free.", true));

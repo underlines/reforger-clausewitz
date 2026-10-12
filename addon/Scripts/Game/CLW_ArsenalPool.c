@@ -5,7 +5,8 @@
 // paths containing Y) also go to faction Z" for packs whose items sit in a faction catalog that is not on the friendly list, and can block
 // prefab paths everywhere. Rules never pull the enemy side (server: the scenario's other side; clients know no scenario, so "*" sources
 // are limited to the friendly factions there).
-// One choke point: SCR_EntityCatalogManagerComponent.GetFactionArsenalItems, which every arsenal and loadout editor ends up in.
+// Two choke points on SCR_EntityCatalogManagerComponent: GetFactionArsenalItems (what every arsenal and loadout editor lists) and
+// GetEntryWithPrefabFromFactionCatalog for ITEM (what the arsenal request / WCS Loadout Editor checks and prices an item by).
 // Clients run the same code (the arsenal contents are computed on every machine), so the rule only uses data that exists on all machines:
 // the faction manager's friendly lists, the rules file and the game mode type. The server additionally drops the enemy side's faction (scenario).
 // Log prefix: "CLW: services arsenal pool" (once per faction and machine, with the unfiltered counts, as soon as the catalogs are filled).
@@ -89,7 +90,7 @@ class CLW_ArsenalPool
 
 	static bool IsActive()
 	{
-		return CLW_GameMode.Cast(GetGame().GetGameMode()) != null;
+		return CLW_WarRuntime.IsActive();	// our game mode, or a Game Master game mode taken over (M4)
 	}
 
 	static void LowerAll(array<string> list)
@@ -290,6 +291,7 @@ modded class SCR_EntityCatalogManagerComponent
 				int fullKin, fullRule, fullBlocked;
 				CLW_ExtendPool(faction, everything, -1, -1, -1, -1, fullDetail, fullKin, fullRule, fullBlocked);
 				CLW_ArsenalPool.LogOnce(factionKey, string.Format("own=%1 kin=%2 rules=%3 blocked=%4 total=%5 |%6", ownCount, fullKin, fullRule, fullBlocked, everything.Count(), fullDetail));
+				CLW_SelfTestLookup(faction, everything, ownCount);
 			}
 		}
 
@@ -297,6 +299,95 @@ modded class SCR_EntityCatalogManagerComponent
 			return result;
 
 		return !arsenalItems.IsEmpty();
+	}
+
+	// One-time self-test per faction (log only): a pool-only item (index >= ownCount, a "spear" item preferred) must resolve through the
+	// per-item lookup the arsenal request uses, else pool items could be listed but not taken. Log "CLW: services arsenal pool lookup".
+	protected void CLW_SelfTestLookup(notnull SCR_Faction faction, notnull array<SCR_ArsenalItem> everything, int ownCount)
+	{
+		SCR_ArsenalItem probe;
+		for (int i = ownCount; i < everything.Count(); i++)
+		{
+			SCR_ArsenalItem candidate = everything[i];
+			if (!candidate)
+				continue;
+
+			if (!probe)
+				probe = candidate;
+
+			string lower = candidate.GetItemResourceName();
+			lower.ToLower();
+			if (lower.Contains("spear"))
+			{
+				probe = candidate;
+				break;
+			}
+		}
+
+		if (!probe)
+			return;
+
+		ResourceName prefab = probe.GetItemResourceName();
+		SCR_EntityCatalogEntry entry = GetEntryWithPrefabFromFactionCatalog(EEntityCatalogType.ITEM, prefab, faction);
+		string result = "NOT FOUND (pool item cannot be taken)";
+		if (entry)
+			result = "ok";
+		Print(string.Format("CLW: services arsenal pool lookup %1: %2 -> %3", faction.GetFactionKey(), prefab, result), LogLevel.NORMAL);
+	}
+
+	// The same pool for the per-item lookup: vanilla RpcAsk_ArsenalRequestItem_ and the WCS Loadout Editor accept an arsenal request (and
+	// price it) only when the item has an entry in the arsenal faction's ITEM catalog. Without this, kin / rule items were listed but
+	// could not be taken and showed cost 0. Order: own catalog, kin, rule sources; blocked paths never resolve.
+	override SCR_EntityCatalogEntry GetEntryWithPrefabFromFactionCatalog(EEntityCatalogType catalogType, ResourceName prefabToFind, notnull SCR_Faction faction)
+	{
+		SCR_EntityCatalogEntry entry = super.GetEntryWithPrefabFromFactionCatalog(catalogType, prefabToFind, faction);
+		if (catalogType != EEntityCatalogType.ITEM || prefabToFind.IsEmpty() || !CLW_ArsenalPool.IsActive())
+			return entry;
+
+		CLW_ArsenalPackRules rules = CLW_ArsenalPool.GetRules();
+		string lowerPath = prefabToFind;
+		lowerPath.ToLower();
+		if (rules && CLW_ArsenalPool.PathHas(lowerPath, rules.m_aBlockedPathContains))
+			return null;
+
+		if (entry)
+			return entry;
+
+		array<SCR_Faction> kin = {};
+		CLW_ArsenalPool.GetKin(faction, kin);
+		foreach (SCR_Faction kinFaction : kin)
+		{
+			entry = super.GetEntryWithPrefabFromFactionCatalog(catalogType, prefabToFind, kinFaction);
+			if (entry)
+				return entry;
+		}
+
+		if (!rules || !rules.m_aRules)
+			return null;
+
+		string factionKey = faction.GetFactionKey();
+		foreach (CLW_ArsenalPackRule rule : rules.m_aRules)
+		{
+			if (!rule || !rule.AppliesTo(factionKey))
+				continue;
+
+			if (rule.m_aPathContains && !rule.m_aPathContains.IsEmpty() && !CLW_ArsenalPool.PathHas(lowerPath, rule.m_aPathContains))
+				continue;
+
+			if (CLW_ArsenalPool.PathHas(lowerPath, rule.m_aPathExcludes))
+				continue;
+
+			array<SCR_Faction> sources = {};
+			CLW_ArsenalPool.GetRuleSources(faction, rule, kin, sources);
+			foreach (SCR_Faction source : sources)
+			{
+				entry = super.GetEntryWithPrefabFromFactionCatalog(catalogType, prefabToFind, source);
+				if (entry)
+					return entry;
+			}
+		}
+
+		return null;
 	}
 
 	// Adds kin and rule items to 'items' (own items already in), then removes blocked paths. Returns true when anything was added or removed.

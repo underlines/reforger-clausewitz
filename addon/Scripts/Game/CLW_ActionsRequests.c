@@ -252,6 +252,11 @@ class CLW_Action_RequestResupply : CLW_Action_RequestBase
 	// The box prefab is the "arsenal" service of the faction data (profile services, kin fallback): nothing is named here.
 	protected ResourceName BoxPrefab(string faction, out string source)
 	{
+		// the role resolver first, so admin "props" overrides and style sets apply to the resupply box too
+		ResourceName resolved = CLW_PropResolver.Resolve(faction, "service.arsenal", source);
+		if (!resolved.IsEmpty())
+			return resolved;
+
 		array<ref CLW_ServiceEntry> entries = {};
 		source = CLW_Services.ResolveEntries(faction, entries);
 		foreach (CLW_ServiceEntry entry : entries)

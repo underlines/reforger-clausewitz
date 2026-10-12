@@ -55,13 +55,16 @@ class CLW_FobSites
 	static const float SEARCH_RADIUS_FRAC = 0.04;	// of the HQ distance
 	static const float LATERAL_FRAC = 0.05;			// computed sites: offset from the HQ line, fraction of the HQ distance
 	static const int MAX_COMPUTED = 6;
+	static const int MIN_SITES_WARN = 4;	// fewer pool sites than this is logged as a warning
 
 	protected static ref array<ref CLW_FobSite> s_aSites = {};
+	protected static ref map<string, string> s_mLastPick = new map<string, string>();	// side -> "<site>@<front>" last logged (one pick line per change)
 	protected static int s_iComputed;
 
 	static void Reset()
 	{
 		s_aSites.Clear();
+		s_mLastPick.Clear();
 		s_iComputed = 0;
 	}
 
@@ -200,19 +203,17 @@ class CLW_FobSites
 			}
 		}
 
-		// 2. computed along the HQ line: fractions of the way, alternating sides of the line, first half = first side
-		array<float> fractions = {0.22, 0.35, 0.65, 0.78, 0.45, 0.55};
+		// 2. computed along the HQ line: fractions of the way, first half = first side. A map without data sites (auto scenario) lives on
+		// these alone: every fraction tries the lateral offsets in turn (alternating sides, then twice as far out) until a site is accepted,
+		// so a fraction whose first spot has no road or is forest does not cost a site.
+		array<float> fractions = {0.22, 0.35, 0.65, 0.78, 0.45, 0.55, 0.15, 0.85};
+		array<float> laterals = {1, -1, 2.5, -2.5, 0};
 		int fromComputed;
 		foreach (int fi, float fraction : fractions)
 		{
 			if (fromComputed >= MAX_COMPUTED)
 				break;
 
-			float offset = hqDist * LATERAL_FRAC;
-			if (fi % 2 == 1)
-				offset = -offset;
-
-			vector computedWish = Vector(hqFirst[0] + dirX * hqDist * fraction + leftX * offset, 0, hqFirst[2] + dirZ * hqDist * fraction + leftZ * offset);
 			int side = 0;
 			if (fraction > 0.5)
 				side = 1;
@@ -222,13 +223,33 @@ class CLW_FobSites
 			vector hqNear = hqFirst;
 			if (side == 1)
 				hqNear = hqSecond;
-			if (!ShiftClear(computedWish, objPos, objNeed, hqNear))
-				continue;
 
-			s_iComputed++;
-			if (TryAdd("FSC" + s_iComputed, "", computedWish, side, "computed", radius, spacing, avoid, avoidDist, points))
-				fromComputed++;
+			float firstSign = 1;
+			if (fi % 2 == 1)
+				firstSign = -1;
+
+			bool added;
+			foreach (float lateralFactor : laterals)
+			{
+				if (added)
+					break;
+
+				float offset = hqDist * LATERAL_FRAC * lateralFactor * firstSign;
+				vector computedWish = Vector(hqFirst[0] + dirX * hqDist * fraction + leftX * offset, 0, hqFirst[2] + dirZ * hqDist * fraction + leftZ * offset);
+				if (!ShiftClear(computedWish, objPos, objNeed, hqNear))
+					continue;
+
+				s_iComputed++;
+				if (TryAdd("FSC" + s_iComputed, "", computedWish, side, "computed", radius, spacing, avoid, avoidDist, points))
+				{
+					fromComputed++;
+					added = true;
+				}
+			}
 		}
+
+		if (s_aSites.Count() < MIN_SITES_WARN)
+			Print(string.Format("CLW: fob site WARNING only %1 sites on this map (roads / clear ground too sparse near the HQ line): FOB builds will be limited", s_aSites.Count()), LogLevel.WARNING);
 
 		Print(string.Format("CLW: fob site pool ready: %1 sites (%2 from data, %3 computed), hq distance %4 m, base clear %5 m, spacing %6 m", s_aSites.Count(), fromData, fromComputed, Math.Round(hqDist), Math.Round(baseClear), Math.Round(spacing)), LogLevel.NORMAL);
 	}
@@ -426,7 +447,68 @@ class CLW_FobSites
 		return vector.Zero;
 	}
 
-	// Up to 'max' currently usable sites for the side, nearest to the contested centre first (the frontline). Returns the count.
+	// The objective the side fights for next (owner playtest 2026-10-12: FOBs go toward the front, not behind the HQ): of the objectives
+	// the side does not hold, the nearest to its HQ that is held by the enemy or contested; else the nearest not held. Null when there is none.
+	static CLW_ControlPoint FrontObjective(string side)
+	{
+		CLW_ControlPoints points = CLW_GameMode.GetControlPoints();
+		CLW_Bases bases = CLW_GameMode.GetBases();
+		if (!points || !bases)
+			return null;
+
+		vector hq = bases.GetBasePos(side);
+		CLW_ControlPoint hot;
+		CLW_ControlPoint any;
+		float hotDist = 1000000;
+		float anyDist = 1000000;
+		for (int i = 0; i < points.Count(); i++)
+		{
+			CLW_ControlPoint point = points.Get(i);
+			if (!point || point.m_sOwner == side)
+				continue;
+
+			float dist = vector.DistanceXZ(point.m_vPos, hq);
+			if ((point.m_bContested || !point.m_sOwner.IsEmpty()) && dist < hotDist)
+			{
+				hotDist = dist;
+				hot = point;
+			}
+
+			if (dist < anyDist)
+			{
+				anyDist = dist;
+				any = point;
+			}
+		}
+
+		if (hot)
+			return hot;
+
+		return any;
+	}
+
+	// Front direction term of a site: distance to the front objective + half the sideways offset from the HQ->front line, plus the HQ->front
+	// distance when the site lies behind or at the HQ (progress along the line below 15 %). Lower = better. detail = log text.
+	static float FrontScore(vector hq, CLW_ControlPoint front, CLW_FobSite site, out string detail)
+	{
+		float dx = front.m_vPos[0] - hq[0];
+		float dz = front.m_vPos[2] - hq[2];
+		float len = Math.Max(1, Math.Sqrt(dx * dx + dz * dz));
+		float rx = site.m_vPos[0] - hq[0];
+		float rz = site.m_vPos[2] - hq[2];
+		float progress = (rx * dx + rz * dz) / (len * len);
+		float lateral = Math.AbsFloat(rx * dz - rz * dx) / len;
+		float toFront = vector.DistanceXZ(site.m_vPos, front.m_vPos);
+		float score = toFront + lateral * 0.5;
+		if (progress < 0.15)
+			score += len;
+
+		detail = string.Format("toFront %1 m, lateral %2 m, progress %3 percent of the way to the front", Math.Round(toFront), Math.Round(lateral), Math.Round(progress * 100));
+		return score;
+	}
+
+	// Up to 'max' currently usable sites for the side, best first: toward the front objective (FrontScore), else nearest to the contested
+	// centre. The top pick is logged when it changes. Returns the count.
 	static int PickSites(string side, int max, notnull array<CLW_FobSite> outSites)
 	{
 		CLW_ScenarioConfig scenario = CLW_ScenarioConfig.Get();
@@ -435,8 +517,14 @@ class CLW_FobSites
 
 		int sideIndex = scenario.GetSideIndex(side);
 		vector centre = Centre();
+		CLW_ControlPoint front = FrontObjective(side);
+		CLW_Bases ownBases = CLW_GameMode.GetBases();
+		vector ownHq;
+		if (ownBases)
+			ownHq = ownBases.GetBasePos(side);
 		array<CLW_FobSite> ranked = {};
 		array<float> distances = {};
+		array<string> details = {};
 		foreach (CLW_FobSite site : s_aSites)
 		{
 			if (site.m_iSide >= 0 && site.m_iSide != sideIndex)
@@ -446,7 +534,16 @@ class CLW_FobSites
 			if (!CLW_FobManager.CheckSite(side, site, why))
 				continue;
 
-			float distance = vector.DistanceXZ(site.m_vPos, centre);
+			string detail;
+			float distance;
+			if (front && ownHq != vector.Zero)
+				distance = FrontScore(ownHq, front, site, detail);
+			else
+			{
+				distance = vector.DistanceXZ(site.m_vPos, centre);
+				detail = "toCentre " + Math.Round(distance) + " m (no front objective)";
+			}
+
 			int at = ranked.Count();
 			for (int k = 0; k < ranked.Count(); k++)
 			{
@@ -459,6 +556,21 @@ class CLW_FobSites
 
 			ranked.InsertAt(site, at);
 			distances.InsertAt(distance, at);
+			details.InsertAt(detail, at);
+		}
+
+		if (!ranked.IsEmpty())
+		{
+			string frontId = "centre";
+			if (front)
+				frontId = front.m_sId;
+			string pickKey = ranked[0].m_sId + "@" + frontId;
+			string lastKey;
+			if (!s_mLastPick.Find(side, lastKey) || lastKey != pickKey)
+			{
+				s_mLastPick.Set(side, pickKey);
+				Print(string.Format("CLW: fob site pick %1: %2 '%3' score %4 (%5), front %6, %7 usable", side, ranked[0].m_sId, ranked[0].m_sName, Math.Round(distances[0]), details[0], frontId, ranked.Count()), LogLevel.NORMAL);
+			}
 		}
 
 		foreach (int n, CLW_FobSite picked : ranked)

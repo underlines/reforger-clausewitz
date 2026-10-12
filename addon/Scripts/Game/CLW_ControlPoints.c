@@ -357,6 +357,140 @@ class CLW_ControlPoints
 		Print(string.Format("CLW: points layout battleSize=%1: %2 objectives (total value %3), scale=%4, closest pair %5 m %6, HQ clearance %7 m, objective gap %8 m, HQ clearance violations %9", sizeName, m_aPoints.Count(), total, factor, Math.Round(minGap), minGapPair, Math.Round(hqClear), Math.Round(objGap), violations), LogLevel.NORMAL);
 	}
 
+	// Start ownership, resolved ONCE at war start after ApplyLayout (kept objectives at their final positions, final HQs; hqs[0] =
+	// side A = slot 0, hqs[1] = side B). mode: "authored" keeps the owners Rekey set (but with random start positions the authored
+	// owners may be on the wrong side: then it becomes "nearest" with as many per side as the scenario authored), "none" = all
+	// neutral, "nearest" = each side takes up to perSide objectives on its half (ratio r = dA / (dA + dB): A below 0.5 ascending,
+	// B above 0.5 descending), at most (count - 1) / 2 per side so one objective stays neutral. Runtime points and the scenario's
+	// m_sStartOwner (written back as the slot's default key, the form Rekey maps) are kept consistent.
+	void ResolveStartOwners(notnull CLW_ScenarioConfig scenario, notnull array<vector> hqs, string mode, int perSide, bool randomLayout)
+	{
+		if (!Replication.IsServer())
+			return;
+
+		string effMode = mode;
+		int effPerSide = perSide;
+		int authoredA;
+		int authoredB;
+		foreach (CLW_ControlPoint authoredPoint : m_aPoints)
+		{
+			if (authoredPoint.m_sOwner == m_sFirst)
+				authoredA++;
+			else if (authoredPoint.m_sOwner == m_sSecond)
+				authoredB++;
+		}
+
+		if (effMode != "nearest" && effMode != "none")
+		{
+			effMode = "authored";
+			if (randomLayout)
+			{
+				// the authored owners belong to the authored HQ line, not to the random one
+				effMode = "nearest";
+				effPerSide = Math.Max(authoredA, authoredB);
+			}
+		}
+
+		if (effMode == "authored" || hqs.Count() < 2)
+		{
+			Print(string.Format("CLW: points start ownership mode=%1 perSide=%2 -> A %3, B %4, neutral %5", effMode, effPerSide, authoredA, authoredB, m_aPoints.Count() - authoredA - authoredB), LogLevel.NORMAL);
+			return;
+		}
+
+		int pointCount = m_aPoints.Count();
+		array<float> ratios = {};
+		array<int> sideOf = {};		// 0 = neutral, 1 = A, 2 = B
+		foreach (CLW_ControlPoint measured : m_aPoints)
+		{
+			float distA = vector.DistanceXZ(measured.m_vPos, hqs[0]);
+			float distB = vector.DistanceXZ(measured.m_vPos, hqs[1]);
+			float ratio = 0.5;
+			if (distA + distB > 0.001)
+				ratio = distA / (distA + distB);
+			ratios.Insert(ratio);
+			sideOf.Insert(0);
+		}
+
+		int cap = Math.Floor((pointCount - 1) * 0.5);
+		if (cap < 0)
+			cap = 0;
+		int take = effPerSide;
+		if (effMode == "none" || take < 0)
+			take = 0;
+		if (take > cap)
+			take = cap;
+
+		for (int slotA = 0; slotA < take; slotA++)
+		{
+			int bestA = -1;
+			for (int ia = 0; ia < pointCount; ia++)
+			{
+				if (sideOf[ia] == 0 && ratios[ia] < 0.5 && (bestA < 0 || ratios[ia] < ratios[bestA]))
+					bestA = ia;
+			}
+
+			if (bestA < 0)
+				break;
+			sideOf[bestA] = 1;
+		}
+
+		for (int slotB = 0; slotB < take; slotB++)
+		{
+			int bestB = -1;
+			for (int ib = 0; ib < pointCount; ib++)
+			{
+				if (sideOf[ib] == 0 && ratios[ib] > 0.5 && (bestB < 0 || ratios[ib] > ratios[bestB]))
+					bestB = ib;
+			}
+
+			if (bestB < 0)
+				break;
+			sideOf[bestB] = 2;
+		}
+
+		string defaultA = scenario.m_aFactions[0].m_sDefaultKey;
+		if (defaultA.IsEmpty())
+			defaultA = scenario.m_aFactions[0].m_sKey;
+		string defaultB = scenario.m_aFactions[1].m_sDefaultKey;
+		if (defaultB.IsEmpty())
+			defaultB = scenario.m_aFactions[1].m_sKey;
+
+		int countA;
+		int countB;
+		for (int ip = 0; ip < pointCount; ip++)
+		{
+			CLW_ControlPoint target = m_aPoints[ip];
+			string newOwner = "";
+			string newDefault = "";
+			float newProgress = 0;
+			if (sideOf[ip] == 1)
+			{
+				newOwner = m_sFirst;
+				newDefault = defaultA;
+				newProgress = 100;
+				countA++;
+			}
+			else if (sideOf[ip] == 2)
+			{
+				newOwner = m_sSecond;
+				newDefault = defaultB;
+				newProgress = -100;
+				countB++;
+			}
+
+			target.m_sOwner = newOwner;
+			target.m_fProgress = newProgress;
+			target.m_bContested = false;
+			target.m_sMarkerOwner = "?";
+			CLW_ObjectiveSetup ownSetup = scenario.FindObjective(target.m_sId);
+			if (ownSetup)
+				ownSetup.m_sStartOwner = newDefault;
+			Print(string.Format("CLW: points start owner %1 -> '%2' (mode %3, r=%4)", target.m_sId, newOwner, effMode, Math.Round(ratios[ip] * 100) / 100), LogLevel.NORMAL);
+		}
+
+		Print(string.Format("CLW: points start ownership mode=%1 perSide=%2 -> A %3, B %4, neutral %5", effMode, take, countA, countB, pointCount - countA - countB), LogLevel.NORMAL);
+	}
+
 	void Stop()
 	{
 		m_bRunning = false;
@@ -618,6 +752,7 @@ class CLW_ControlPoints
 		marker.SetMarkerFactionFlags(factionFlags);
 		marker.SetCustomText(text);
 		manager.InsertStaticMarker(marker, false, true);
+		Print("CLW: points marker '" + text + "' " + CLW_MarkerLog.Describe(marker), LogLevel.NORMAL);
 		return marker;
 	}
 
