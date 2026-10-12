@@ -118,7 +118,7 @@ DOCTRINE
 - Buy when supplies are rich but keep a reserve (~40). Respect the caps (liveAI<aiCap, vehicles<vehicleCap) and the catalog costs.
 - Do not re-order squads that already execute a sensible order (objective.status active, young ageSec).
 SITUATION FIELDS
-war: your tickets, enemyTickets, supplies, income per minute, liveAI/aiCap, vehicles/vehicleCap; timeLeftSec = time limit. objectives: id, name, pos [x,z], radius m, value, owner ("none" or a faction key), contested, progress (-100..100 toward the capturer). bases: base positions per faction. catalog: what you may buy (type, kind, cost, desc). squads: kind (infantry|recon|motorized|light|mech|armor|armored_recon), type, pos [x,y,z], agents/startAgents, vehicle {type,health,mounted,state} or null, humanLed, objective (its current order and status), mission (for human-led squads). contacts: pos, kind, desc, ageSec. events: what happened since your last decision. wake: why you are consulted now.
+war: your tickets, enemyTickets, supplies, income per minute, liveAI/aiCap, vehicles/vehicleCap; timeLeftSec = time limit (absent or -1 = no limit); tickets -1 = not used by this mode. war.mode {id,name,params} holds the rules of the chosen war mode (time limit, start tickets, ...): follow them; war.phase is "running" while you are consulted. objectives: id, name, pos [x,z], radius m, value, owner ("none" or a faction key), contested, progress (-100..100 toward the capturer). bases: base positions per faction. catalog: what you may buy (type, kind, cost, desc). squads: kind (infantry|recon|motorized|light|mech|armor|armored_recon), type, pos [x,y,z], agents/startAgents, vehicle {type,health,mounted,state} or null, humanLed, objective (its current order and status), mission (for human-led squads). contacts: pos, kind, desc, ageSec. events: what happened since your last decision. wake: why you are consulted now.
 COMMANDS (orders, one per squad, only for squads with humanLed=false)
 MOVE (redeploy), ATTACK (assault; on an objective = capture it), DEFEND (hold), RECON (go there and observe, no assault), FALL_BACK (retreat; no target = own base).
 Each order has "target": an objective id from the situation, or "pos": [x, z].
@@ -892,7 +892,12 @@ async function handleOrders(req, res) {
   }
   // a v2 faction without squads can still spend supplies
   const canBuy = v2 && isNum(sit.war?.supplies) && Array.isArray(sit.catalog) && sit.catalog.some((e) => isNum(e?.cost) && e.cost <= sit.war.supplies);
-  if (valid && sit.squads.length === 0 && !canBuy) {
+  const phase = v2 && typeof sit.war?.phase === "string" ? sit.war.phase : "running";
+  if (phase !== "running") {
+    // setup / ended: the game is not fighting yet (or anymore): no LLM call, keep, not an exchange
+    sc.gated++;
+    r = { orders: [], dropped: [], rawReply: null, usage: null, ok: true, reason: "phase " + phase, skipped: true, gated: true, phaseGate: true };
+  } else if (valid && sit.squads.length === 0 && !canBuy) {
     // faction has no squads left: just record the (empty) situation so the dashboard stops showing the last survivors; no LLM call
     r = { orders: [], dropped: [], rawReply: null, usage: null, ok: true, reason: "no squads left", gated: true, rules: true };
   } else if (snapshot.enabled && snapshot.engine !== "llm") {
@@ -966,7 +971,7 @@ async function handleOrders(req, res) {
 
   const nContacts = Array.isArray(sit?.contacts) ? sit.contacts.length : 0;
   if (!r.gated) console.log(`orders faction=${faction} squads=${sit?.squads?.length ?? 0} contacts=${nContacts} orders=${r.orders.length}${v2 ? ` buy=${r.buy?.length ?? 0} missions=${r.missions?.length ?? 0}` : ""} ${latencyMs}ms${r.skipped ? " (" + r.reason + ")" : ""}${wake ? " wake=" + wake.reason + (wake.triggers.length ? " [" + wake.triggers.join("; ") + "]" : "") : ""}${r.nextCheck ? " next=" + r.nextCheck.sec + "s" : ""}`);
-  send(res, 200, r.rules ? { orders: [] } : r.paused ? { orders: [], keep: true } : r.gated && sc.failed ? { orders: [] } : r.skipped || r.keep ? { orders: [], keep: true }
+  send(res, 200, r.rules ? { orders: [] } : r.paused || r.phaseGate ? { orders: [], keep: true } : r.gated && sc.failed ? { orders: [] } : r.skipped || r.keep ? { orders: [], keep: true }
     : v2 ? { orders: r.orders, buy: r.buy ?? [], missions: r.missions ?? [] } : { orders: r.orders });
 }
 

@@ -99,6 +99,8 @@ tr.sel, tr.sel:hover { background: rgba(90,169,255,.16); box-shadow: inset 3px 0
 .warcard .wgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; }
 .warcard .wgrid span.muted:first-child { display: inline-block; min-width: 62px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
 .warcard b { font-variant-numeric: tabular-nums; }
+.warcard .wparams { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 11px; margin-bottom: 4px; }
+.warcard .wparams b { color: var(--fg); font-weight: 600; }
 .tbar { height: 4px; border-radius: 2px; background: rgba(255,255,255,.08); margin-top: 6px; overflow: hidden; }
 .tbar i { display: block; height: 100%; border-radius: 2px; transition: width .4s; }
 

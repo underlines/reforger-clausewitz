@@ -594,11 +594,15 @@ function WarStrip({ st, faction }) {
   const cap = (v, c) => html`<b>${dash(v)}</b>${num(c) ? html`<span class="muted"> / ${c}</span>` : ""}`;
   return html`<div class="warstrip">${names.map((f) => {
     const sit = st.factions[f].situation, w = sit.war, col = colorOf(f);
-    const tl = num(w.tickets) && num(w.enemyTickets) ? w.tickets / Math.max(1, w.tickets + w.enemyTickets) : null;
+    const tUsed = num(w.tickets) && w.tickets >= 0, mode = w.mode && typeof w.mode === "object" ? w.mode : null;
+    const tl = tUsed && num(w.enemyTickets) && w.enemyTickets >= 0 ? w.tickets / Math.max(1, w.tickets + w.enemyTickets) : null;
+    const params = mode?.params && typeof mode.params === "object" ? Object.entries(mode.params) : [];
     return html`<div class="warcard" style=${{ borderTopColor: col }} key=${f}>
-      <div class="wname"><b class=${facClass(f)}>${f}</b><span class="muted">time left ${fmtTime(sit.timeLeftSec)}</span></div>
+      <div class="wname"><b class=${facClass(f)}>${f}</b>
+        <span>${mode ? html`<span class="muted" title=${mode.id ?? ""}>${dash(mode.name ?? mode.id)}</span> ` : ""}${w.phase ? html`<span class=${"badge " + (w.phase === "running" ? "ok" : w.phase === "setup" ? "warn" : "info")}>${w.phase}</span> ` : ""}<span class="muted">${num(sit.timeLeftSec) && sit.timeLeftSec >= 0 ? "time left " + fmtTime(sit.timeLeftSec) : "no time limit"}</span></span></div>
+      ${params.length > 0 && html`<div class="wparams muted" title="War mode parameters">${params.map(([k, v]) => html`<span>${k} <b>${typeof v === "object" ? JSON.stringify(v) : String(v)}</b></span>`)}</div>`}
       <div class="wgrid">
-        <div title="War will: 0 = defeat. Enemy in brackets"><span class="muted">tickets</span>${cap(w.tickets)}${num(w.enemyTickets) ? html`<span class="muted"> (enemy ${w.enemyTickets})</span>` : ""}</div>
+        <div title="War will: 0 = defeat. Enemy in brackets"><span class="muted">tickets</span>${tUsed ? cap(w.tickets) : html`<span class="dim">n/a</span>`}${tUsed && num(w.enemyTickets) && w.enemyTickets >= 0 ? html`<span class="muted"> (enemy ${w.enemyTickets})</span>` : ""}</div>
         <div title="Purchasing power; income per minute"><span class="muted">supplies</span><b>${dash(w.supplies)}</b>${num(w.income) ? html`<span class="muted"> +${w.income}/min</span>` : ""}</div>
         <div title="Live AI soldiers / cap"><span class="muted">AI</span>${cap(w.liveAI, w.aiCap)}</div>
         <div title="Vehicles / cap"><span class="muted">vehicles</span>${cap(w.vehicles, w.vehicleCap)}</div>
