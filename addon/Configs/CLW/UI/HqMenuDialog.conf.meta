@@ -1,0 +1,17 @@
+MetaFileClass {
+ Name "{5A97D0E4C1B2683F}Configs/CLW/UI/HqMenuDialog.conf"
+ Configurations {
+  ConfigurationClass PC {
+  }
+  ConfigurationClass XBOX_ONE : PC {
+  }
+  ConfigurationClass XBOX_SERIES : PC {
+  }
+  ConfigurationClass PS4 : PC {
+  }
+  ConfigurationClass PS5 : PC {
+  }
+  ConfigurationClass HEADLESS : PC {
+  }
+ }
+}

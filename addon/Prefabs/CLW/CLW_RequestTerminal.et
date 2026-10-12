@@ -21,6 +21,14 @@ GenericEntity {
     }
    }
    additionalActions {
+    CLW_RequestMenuAction "{6C2B9E04F71AD358}" {
+     ParentContextList {
+      "default"
+     }
+     UIInfo UIInfo "{3E90B5C17A4D2F86}" {
+      Name "Open HQ menu"
+     }
+    }
     CLW_RequestSquadAction "{0103BCCA017D7615}" {
      ParentContextList {
       "default"

@@ -67,6 +67,32 @@ class CLW_RequestResupplyAction : CLW_RequestActionBase
 	}
 }
 
+// M4 WP4: "Open HQ menu" opens the dialog (CLW_HqMenuDialog) with requests, squad, base and contact report; the terminal position
+// is sent along, so requests made in the menu are bound to this terminal's side and base like the plain actions above.
+class CLW_RequestMenuAction : CLW_RequestActionBase
+{
+	protected override string KindName()
+	{
+		return "menu";
+	}
+
+	override bool GetActionNameScript(out string outName)
+	{
+		outName = "Open HQ menu";
+		return true;
+	}
+
+	override void PerformAction(IEntity pOwnerEntity, IEntity pUserEntity)
+	{
+		SCR_PlayerController controller = SCR_PlayerController.Cast(GetGame().GetPlayerController());
+		if (!controller)
+			return;
+
+		Print("CLW: request terminal action menu", LogLevel.NORMAL);
+		controller.CLW_HqMenuOpen(pOwnerEntity.GetOrigin());
+	}
+}
+
 // One spawned terminal: the entity plus the side and base it was bound to at spawn (M3 phase L fix A).
 class CLW_TerminalInfo
 {

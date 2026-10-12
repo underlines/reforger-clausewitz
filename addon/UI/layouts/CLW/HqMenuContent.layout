@@ -1,0 +1,101 @@
+VerticalLayoutWidgetClass {
+ Name "HqRoot"
+ Slot OverlayWidgetSlot "{B3F0A21D7C580001}" {
+  HorizontalAlign 3
+  VerticalAlign 3
+ }
+ {
+  SizeLayoutWidgetClass "{B3F0A21D7C580002}" {
+   Name "ScrollSize"
+   Slot LayoutSlot "{B3F0A21D7C580003}" {
+    HorizontalAlign 3
+   }
+   AllowMinDesiredHeight 1
+   MinDesiredHeight 640
+   AllowMaxDesiredHeight 1
+   MaxDesiredHeight 640
+   {
+    ScrollLayoutWidgetClass "{B3F0A21D7C580004}" {
+     Name "Scroll"
+     Slot AlignableSlot "{B3F0A21D7C580005}" {
+      HorizontalAlign 3
+      VerticalAlign 3
+     }
+     Color 0.88 0.451 0.084 1
+     components {
+      SCR_GamepadScrollComponent "{B3F0A21D7C580006}" {
+      }
+     }
+     style Small
+     {
+      VerticalLayoutWidgetClass "{B3F0A21D7C580007}" {
+       Name "List"
+       Slot AlignableSlot "{B3F0A21D7C580008}" {
+        HorizontalAlign 3
+        Padding 0 0 14 0
+       }
+       {
+        RichTextWidgetClass "{B3F0A21D7C580009}" : "{3FF33FC224E0C76C}UI/layouts/WidgetLibrary/RichTextWidgets/RichText_BodySmall.layout" {
+         Name "RequestHeader"
+         Slot LayoutSlot "{B3F0A21D7C58000A}" {
+          Padding 0 8 0 4
+         }
+         Color 0.88 0.451 0.084 1
+         Text "REQUESTS"
+        }
+        VerticalLayoutWidgetClass "{B3F0A21D7C58000B}" {
+         Name "RequestBox"
+         Slot LayoutSlot "{B3F0A21D7C58000C}" {
+          HorizontalAlign 3
+         }
+        }
+        RichTextWidgetClass "{B3F0A21D7C58000D}" : "{3FF33FC224E0C76C}UI/layouts/WidgetLibrary/RichTextWidgets/RichText_BodySmall.layout" {
+         Name "SquadHeader"
+         Slot LayoutSlot "{B3F0A21D7C58000E}" {
+          Padding 0 18 0 4
+         }
+         Color 0.88 0.451 0.084 1
+         Text "SQUAD"
+        }
+        VerticalLayoutWidgetClass "{B3F0A21D7C58000F}" {
+         Name "SquadBox"
+         Slot LayoutSlot "{B3F0A21D7C580010}" {
+          HorizontalAlign 3
+         }
+        }
+        RichTextWidgetClass "{B3F0A21D7C580011}" : "{3FF33FC224E0C76C}UI/layouts/WidgetLibrary/RichTextWidgets/RichText_BodySmall.layout" {
+         Name "BaseHeader"
+         Slot LayoutSlot "{B3F0A21D7C580012}" {
+          Padding 0 18 0 4
+         }
+         Color 0.88 0.451 0.084 1
+         Text "BASE"
+        }
+        VerticalLayoutWidgetClass "{B3F0A21D7C580013}" {
+         Name "BaseBox"
+         Slot LayoutSlot "{B3F0A21D7C580014}" {
+          HorizontalAlign 3
+         }
+        }
+        RichTextWidgetClass "{B3F0A21D7C580015}" : "{3FF33FC224E0C76C}UI/layouts/WidgetLibrary/RichTextWidgets/RichText_BodySmall.layout" {
+         Name "ReportHeader"
+         Slot LayoutSlot "{B3F0A21D7C580016}" {
+          Padding 0 18 0 4
+         }
+         Color 0.88 0.451 0.084 1
+         Text "CONTACT REPORT"
+        }
+        VerticalLayoutWidgetClass "{B3F0A21D7C580017}" {
+         Name "ReportBox"
+         Slot LayoutSlot "{B3F0A21D7C580018}" {
+          HorizontalAlign 3
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+}
