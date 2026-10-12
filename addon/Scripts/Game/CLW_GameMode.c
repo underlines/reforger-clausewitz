@@ -8,7 +8,7 @@ class CLW_GameModeClass : SCR_BaseGameModeClass
 class CLW_GameMode : SCR_BaseGameMode
 {
 	protected static const bool RUN_ORDER_SPIKE = false;
-	protected static const bool RUN_REST_SPIKE = true;
+	protected static const bool RUN_REST_SPIKE = false;	// M1 test (needs dev/tools/echo_server), off for normal play
 	protected static const int SQUAD_RETRY_MS = 5000;		// player squad search interval
 	protected static const int SQUAD_RETRY_MAX = 24;		// 2 min, then a free infantry squad is spawned
 	protected static const int SQUAD_RETRY_EXTRA = 12;		// further tries for that squad to appear
