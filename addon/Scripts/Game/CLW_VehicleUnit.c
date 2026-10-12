@@ -1226,10 +1226,13 @@ class CLW_VehicleManager
 		if (!compartments)
 			return false;
 
-		array<IEntity> occupants = {};
-		compartments.GetOccupants(occupants);	// [verify] signature GetOccupants(out notnull array<IEntity>)
-		foreach (IEntity occupant : occupants)
+		array<BaseCompartmentSlot> slots = {};
+		compartments.GetCompartments(slots);
+		foreach (BaseCompartmentSlot slot : slots)
 		{
+			IEntity occupant;
+			if (slot)
+				occupant = slot.GetOccupant();
 			if (occupant && CLW_VehicleUnit.IsAlive(occupant))
 				return true;
 		}
