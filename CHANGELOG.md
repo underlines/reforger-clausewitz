@@ -5,6 +5,8 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-12
+
 ### Added
 - Ticket counter HUD for all players (`CLW_WarStatus` server broadcast every 2 s and on changes, `CLW_WarHud` client panel, `UI/layouts/CLW/WarStatusHud.layout`): per side the localised faction name in the side colour (map identity: BLUFOR blue, OPFOR red, INDFOR green), tickets (red below 25 %, "-" without tickets), objectives held (count and value), time left, "Setup..." in SETUP and the winner after the end; hidden while the map is open.
 - Situation v2 carries `side` / `identity` (and `war.sides`, side A first); the sidecar exposes them per faction in `/api/state` and sorts `activeFactions` by side; the dashboard orders factions side A first and colours them by identity, and the Overview objective bar is laid out side A | neutral | side B with contested value hatched in the owner segment.
