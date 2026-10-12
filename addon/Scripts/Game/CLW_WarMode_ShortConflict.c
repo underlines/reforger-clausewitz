@@ -26,7 +26,7 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("startTickets", "Start tickets", "War will of each side; at 0 the side loses.", CLW_ModeParam.TYPE_INT, 100, 2000, 50, config.m_iStartTickets));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("startSupplies", "Start supplies", "Purchasing power of each side at the start.", CLW_ModeParam.TYPE_INT, 0, 2000, 50, config.m_iStartSupplies));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("incomeMultiplier", "Income multiplier", "Scales the supplies income.", CLW_ModeParam.TYPE_FLOAT, 0.25, 3, 0.25, config.m_fIncomeMultiplier));
-		m_aParams.Insert(CLW_ModeParam.CreateChoice("battleSize", "Battle size", "Caps for live AI and vehicles per side.", sizes, config.m_sBattleSize));
+		m_aParams.Insert(CLW_ModeParam.CreateChoice("battleSize", "Battle size", "Caps for live AI and vehicles per side; bigger battles also get more income.", sizes, config.m_sBattleSize));
 		m_aParams.Insert(CLW_ModeParam.CreateBool("ticketBleed", "Ticket bleed", "The side holding fewer points loses tickets over time.", config.m_bTicketBleed));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("holdAllWinMin", "Hold-all win (min)", "Holding every point this long wins. 0 = off.", CLW_ModeParam.TYPE_INT, 0, 15, 1, config.m_iHoldAllWinMin));
 	}
@@ -162,7 +162,7 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 	{
 		CLW_EconomySetup economy = war.GetEconomy();
 		float raw = economy.m_iIncomeBase + economy.m_iIncomePerValue * war.GetHeldValue(factionKey);
-		return Math.Round(raw * Param("incomeMultiplier").m_fValue);
+		return Math.Round(raw * Param("incomeMultiplier").m_fValue * IncomeScale());
 	}
 
 	override int GetAICap(string factionKey)
@@ -238,5 +238,18 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 		if (index < 0 || index >= caps.Count())
 			index = caps.Count() - 1;
 		return caps[index];
+	}
+
+	// Income scale of the chosen battle size (1 when the scenario gives none).
+	protected float IncomeScale()
+	{
+		array<float> scales = m_Config.m_aIncomeScales;
+		if (!scales || scales.IsEmpty())
+			return 1;
+
+		int index = Param("battleSize").GetInt();
+		if (index < 0 || index >= scales.Count())
+			index = scales.Count() - 1;
+		return scales[index];
 	}
 }

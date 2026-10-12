@@ -302,7 +302,7 @@ class CLW_SetupDialog : SCR_ConfigurableDialogUi
 				spin.SetLabel(param.m_sLabel);
 				foreach (string choice : param.m_aChoices)
 				{
-					spin.AddItem(choice);
+					spin.AddItem(WidgetManager.Translate(choice));	// faction names are localisation keys (#AR-Faction_US)
 				}
 				spin.SetCurrentItem(Math.Round(param.m_fValue), false, false, false);
 				spin.m_OnChanged.Insert(OnSpinChanged);

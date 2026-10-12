@@ -270,8 +270,10 @@ class CLW_Sides
 
 // Players join the default side of the scenario (data: m_iDefaultPlayerSide) instead of a fixed faction in the game mode
 // prefab; the loadout is a spawnable one of that faction (never the saved-arsenal entry). Vanilla behaviour when no
-// Clausewitz scenario is active.
-modded class SCR_AutoSpawnLogic
+// Clausewitz scenario is active. Own subclass (set as m_SpawnLogic in CLW_GameMode.et): a modded SCR_AutoSpawnLogic made the
+// class unknown to the prefab loader ("Unknown class 'SCR_AutoSpawnLogic'", 2026-10-12).
+[BaseContainerProps(category: "Respawn")]
+class CLW_AutoSpawnLogic : SCR_AutoSpawnLogic
 {
 	protected override bool GetForcedFaction(out Faction faction)
 	{

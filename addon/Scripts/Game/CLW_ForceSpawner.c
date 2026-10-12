@@ -65,7 +65,7 @@ class CLW_ForceSpawner
 		return Start(factionKey, typeId, reason, false, error);
 	}
 
-	// Same without charging supplies (start forces). Caps still apply.
+	// Same without charging supplies and without the AI/vehicle caps (start forces are part of the scenario).
 	bool SpawnFree(string factionKey, string typeId, string reason, out string error)
 	{
 		return Start(factionKey, typeId, reason, true, error);
@@ -213,14 +213,14 @@ class CLW_ForceSpawner
 		int expected = source.ExpectedAI();
 		int cap = war.GetAiCap(factionKey);
 		int live = GetLiveAI(factionKey) + GetPendingAI(factionKey);
-		if (cap > 0 && live + expected > cap)
+		if (!free && cap > 0 && live + expected > cap)
 		{
 			error = string.Format("AI cap (%1 live + %2 new > %3)", live, expected, cap);
 			Print(string.Format("CLW: spawn %1 %2 %3 refused: %4", label, factionKey, typeId, error), LogLevel.NORMAL);
 			return false;
 		}
 
-		if (source.HasVehicle())
+		if (!free && source.HasVehicle())
 		{
 			int vehicleCap = war.GetVehicleCap(factionKey);
 			int vehicles = GetLiveVehicles(factionKey);
@@ -633,7 +633,26 @@ class CLW_ForceSpawner
 			foreach (IEntity person : people)
 			{
 				if (person && CLW_VehicleUnit.IsInVehicle(person, job.m_Vehicle))
+				{
 					inside++;
+					continue;
+				}
+
+				// diagnostics: why is a seated soldier not counted as inside? (UAZ/BTR showed 0 after "seated", 2026-10-12)
+				if (!person)
+					continue;
+				SCR_CompartmentAccessComponent access = SCR_CompartmentAccessComponent.Cast(person.FindComponent(SCR_CompartmentAccessComponent));
+				IEntity seen;
+				bool inCompartment;
+				if (access)
+				{
+					inCompartment = access.IsInCompartment();
+					seen = access.GetVehicle();
+				}
+				IEntity seenRoot;
+				if (seen)
+					seenRoot = seen.GetRootParent();
+				Print(string.Format("CLW: spawn %1 verify: %2 alive=%3 access=%4 inCompartment=%5 vehicle=%6 root=%7 expected=%8 dist=%9", job.m_sUnitId, person, CLW_VehicleUnit.IsAlive(person), access != null, inCompartment, seen, seenRoot, job.m_Vehicle, Math.Round(vector.Distance(person.GetOrigin(), job.m_Vehicle.GetOrigin()))), LogLevel.WARNING);
 			}
 		}
 

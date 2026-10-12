@@ -39,6 +39,9 @@ class CLW_WarModeConfig_Short : CLW_WarModeConfig
 	[Attribute()]
 	ref array<int> m_aVehicleCaps;		// per battle size
 
+	[Attribute()]
+	ref array<float> m_aIncomeScales;	// per battle size: bigger battles need more income to fill the bigger caps
+
 	[Attribute("1", UIWidgets.CheckBox, "Ticket bleed for the side holding fewer points")]
 	bool m_bTicketBleed;
 

@@ -46,6 +46,8 @@ class CLW_ForceKind
 [BaseContainerProps()]
 class CLW_ForceEntry
 {
+	// No field initializers on [Attribute] members: they override the values loaded from the .conf (seen 2026-10-12).
+	// Config instances get the Attribute default; code that uses `new` sets every field itself.
 	[Attribute("", UIWidgets.EditBox, "Type id, free-form and unique per faction (e.g. rifle_squad, mechanized)")]
 	string m_sType;
 
@@ -56,10 +58,10 @@ class CLW_ForceEntry
 	string m_sVehicleName;
 
 	[Attribute("infantry", UIWidgets.EditBox, "Kind: infantry, recon, motorized, light, mech, armor, armored_recon")]
-	string m_sKind = "infantry";
+	string m_sKind;
 
 	[Attribute("100", UIWidgets.EditBox, "Cost in supplies")]
-	int m_iCost = 100;
+	int m_iCost;
 
 	[Attribute("", UIWidgets.ResourceNamePicker, "Infantry group prefab (infantry kinds)", "et")]
 	ResourceName m_GroupPrefab;
@@ -71,10 +73,10 @@ class CLW_ForceEntry
 	ResourceName m_CargoGroupPrefab;
 
 	[Attribute("10", UIWidgets.EditBox, "Weight in the commander's buy mix")]
-	int m_iWeight = 10;
+	int m_iWeight;
 
 	[Attribute("1", UIWidgets.CheckBox, "Entry can be bought")]
-	bool m_bEnabled = true;
+	bool m_bEnabled;
 
 	[Attribute("0", UIWidgets.CheckBox, "Anti-armour team: the rule commander buys it first when enemy vehicles are known")]
 	bool m_bAntiArmor;
@@ -170,7 +172,7 @@ class CLW_FactionProfile
 	string m_sFactionKey;
 
 	[Attribute("1", UIWidgets.CheckBox, "Also add entries auto-discovered from the faction's entity catalogs that the list below does not cover (mod packs that extend the vanilla catalogs show up as kind armor, mech, ...)")]
-	bool m_bIncludeDiscovered = true;
+	bool m_bIncludeDiscovered;
 
 	[Attribute()]
 	ref array<ref CLW_ForceEntry> m_aEntries;
