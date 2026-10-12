@@ -65,18 +65,24 @@ class CLW_WarHud
 		}
 
 		// Own side's supplies: own centred element below the two side blocks, hidden when unused (-1) or in setup.
-		Widget supplyPanel = null;
-		if (s_wRoot)
-			supplyPanel = s_wRoot.FindAnyWidget("SupplyPanel");
-		if (supplyPanel)
+		bool showSupplies = supplies >= 0 && phase != 0;
+		string supplyLabel = "";
+		string supplyValue = "";
+		if (showSupplies)
 		{
-			bool showSupplies = supplies >= 0 && phase != 0;
-			supplyPanel.SetVisible(showSupplies);
-			if (showSupplies)
-			{
-				SetText("Supply_Label", "Supplies", normal);
-				SetText("Supply_Value", supplies.ToString(), normal);
-			}
+			supplyLabel = "Supplies";
+			supplyValue = supplies.ToString();
+		}
+		SetText("Supply_Label", supplyLabel, normal);
+		SetText("Supply_Value", supplyValue, normal);
+		if (s_wRoot)
+		{
+			Widget wLabel = s_wRoot.FindAnyWidget("Supply_Label");
+			Widget wValue = s_wRoot.FindAnyWidget("Supply_Value");
+			if (wLabel)
+				wLabel.SetVisible(showSupplies);
+			if (wValue)
+				wValue.SetVisible(showSupplies);
 		}
 
 		SetText("Status", status, normal);
