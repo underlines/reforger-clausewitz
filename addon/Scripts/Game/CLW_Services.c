@@ -62,7 +62,7 @@ class CLW_Services
 	// anchor (the base spawn point, "tent"), the arsenal 2-4 m and the supply cache 5-8 m from it (per-kind gaps, overridable in the profile).
 	static const float PLACE_SCALE = 0.7;
 	static const float PLACE_SCALE_DEPOT = 1.0;
-	static const float DEPOT_ROAD_M = 40;			// HQ depot: a road within this distance of the base point is the target (CLW_Services.FindDepotSpot)
+	static const float DEPOT_ROAD_M = 60;			// HQ depot: a road within this distance of the base point is the target (CLW_Services.FindDepotSpot); urban HQs sit 8-30 m off the road (WP11)
 	static const int PLACE_BATCHES = 4;				// search widths, each wider than the last
 	static const float PLACE_GAP_M = 3;				// full: free space between the footprints of two services
 	static const float PLACE_OVERLAP_FACTOR = 0.8;	// full: footprint radius is the circumscribed circle: 80 % of it is enough, CheckPose blocks real overlaps
@@ -93,6 +93,7 @@ class CLW_Services
 	protected static string s_sTentKey;		// side + base whose spawn point was moved next to the command post
 	protected static vector s_vTent;
 	protected static bool s_bPolling;
+	protected static ref array<IEntity> s_aPendingClear = {};	// small objects under the spot the last successful SearchPass chose (deleted by SpawnOne once the spot is final)
 
 	// ---- lifecycle ----
 
@@ -107,6 +108,8 @@ class CLW_Services
 		CLW_RequestTerminals.Reset();
 		CLW_StructureMarkers.Reset();
 		CLW_PropResolver.Reset();
+		CLW_PlaceClear.Reset();
+		s_aPendingClear.Clear();
 	}
 
 	// War SETUP -> RUNNING (CLW_GameMode.OnWarStarted, before the start forces are fielded, after the battle layout moved the HQs).
@@ -394,6 +397,8 @@ class CLW_Services
 				continue;
 			}
 
+			CLW_PlaceClear.Protect(entity);
+
 			float radius = entry.m_fRadius;
 			if (radius <= 0)
 				radius = CLW_ServiceKind.DefaultRadius(entry.m_sKind);
@@ -472,6 +477,7 @@ class CLW_Services
 		string placeLabel = sideKey + " " + baseId + " " + entry.m_sKind;
 		s_sPlaceWhy = "";
 		s_sPlaceRejects = "";
+		s_aPendingClear.Clear();
 		bool pinned;
 		if (entry.m_vOffset[0] != 0 || entry.m_vOffset[2] != 0)
 		{
@@ -519,6 +525,10 @@ class CLW_Services
 		if (anchorDist > tune.m_fCompactMax && !tune.m_bAroundCp)
 			Print(string.Format("CLW: place %1 went %2 m from the base point (compact limit %3 m) via=%4: %5 | rejects on the way: %6", placeLabel, Math.Round(anchorDist), Math.Round(tune.m_fCompactMax), via, s_sPlaceWhy, s_sPlaceRejects), LogLevel.NORMAL);
 
+		// the spot is final: delete the small obstacles (vegetation, fences, clutter, props, by CLW_PlaceClear rules) under the footprint
+		CLW_PlaceClear.ClearAll(placeLabel, s_aPendingClear);
+		s_aPendingClear.Clear();
+
 		EntitySpawnParams params = new EntitySpawnParams();
 		params.TransformMode = ETransformMode.WORLD;
 		Math3D.AnglesToMatrix(Vector(yaw, 0, 0), params.Transform);
@@ -530,6 +540,7 @@ class CLW_Services
 			return false;
 		}
 
+		CLW_PlaceClear.Protect(entity);
 		CLW_ServiceInstance inst = new CLW_ServiceInstance();
 		inst.m_sSide = sideKey;
 		inst.m_sBase = baseId;
@@ -615,12 +626,14 @@ class CLW_Services
 		}
 
 		AddAvoids(p, footRadius, tune, placedPos, placedRad);
+		p.m_bClearSmall = true;	// small obstacles (CLW_PlaceClear rules) do not block, the ones under the chosen pose are deleted by SpawnOne
 
 		CLW_SpotResult res = new CLW_SpotResult();
 		if (CLW_FreeSpot.FindFreeSpot(p, res))
 		{
 			spot = res.m_vPos;
 			yaw = res.m_fYaw;
+			s_aPendingClear.Copy(res.m_aClear);
 			s_sPlaceRejects = "pass " + pass.ToString() + " " + res.Summary();
 			return true;
 		}
@@ -861,10 +874,10 @@ class CLW_Services
 		if (CLW_FreeSpot.NearestRoad(anchor, DEPOT_ROAD_M, CLW_SpotConfig.ROAD_MIN_WIDTH_M, hit))
 		{
 			float roadMax = footRadius + hit.m_fWidth * 0.5 + tune.m_fRing;
-			Print(string.Format("CLW: place %1 depot road search: road point %2 is %3 m from the base point, ring 0..%4 m", label, hit.m_vPoint, Math.Round(hit.m_fDist), Math.Round(roadMax)), LogLevel.NORMAL);
+			Print(string.Format("CLW: place %1 depot road search: road point %2 is %3 m from the base point, ring 0..%4 m, facing the road", label, hit.m_vPoint, Math.Round(hit.m_fDist), Math.Round(roadMax)), LogLevel.NORMAL);
 			for (int roadPass = 0; roadPass < 3; roadPass++)
 			{
-				if (SearchPass(label + " (road)", anchor, hit.m_vPoint, 0, roadMax, roadPass, foot, tune, fixedYaw, placedPos, placedRad, spot, yaw, why))
+				if (SearchPass(label + " (road)", hit.m_vPoint, hit.m_vPoint, 0, roadMax, roadPass, foot, tune, fixedYaw, placedPos, placedRad, spot, yaw, why))
 					return "road";
 			}
 		}
