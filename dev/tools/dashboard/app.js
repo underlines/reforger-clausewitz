@@ -48,22 +48,32 @@ const kindLabel = (k) => (typeof k === "string" && k ? KIND_LABEL[k] ?? k.toUppe
 const fmtTime = (sec) => (num(sec) ? `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}` : "-");
 // public picture (objectives, bases, war) from the freshest v2 situation of any faction
 function publicPicture(st) {
-  let objs = [], bases = [], ts = -1;
-  for (const e of Object.values(st.factions ?? {})) {
+  let objs = [], bases = [], ts = -1, viewer = null; // viewer = the faction whose point of view the objective progress is in
+  for (const [fk, e] of Object.entries(st.factions ?? {})) {
     const sit = e.situation ?? {};
-    if (Array.isArray(sit.objectives) && sit.objectives.length && (e.ts ?? 0) >= ts) { objs = sit.objectives; ts = e.ts ?? 0; }
+    if (Array.isArray(sit.objectives) && sit.objectives.length && (e.ts ?? 0) >= ts) { objs = sit.objectives; ts = e.ts ?? 0; viewer = fk; }
   }
   const seen = new Set();
   for (const e of Object.values(st.factions ?? {})) for (const b of Array.isArray(e.situation?.bases) ? e.situation.bases : []) {
     if (b && typeof b.faction === "string" && Array.isArray(b.pos) && num(b.pos[0]) && num(b.pos[1]) && !seen.has(b.faction)) { seen.add(b.faction); bases.push(b); }
   }
-  return { objs: objs.filter((o) => o && Array.isArray(o.pos) && num(o.pos[0]) && num(o.pos[1])), bases };
+  return { objs: objs.filter((o) => o && Array.isArray(o.pos) && num(o.pos[0]) && num(o.pos[1])), bases, viewer };
 }
 const num = (v) => typeof v === "number" && Number.isFinite(v);
 const okPos = (p) => Array.isArray(p) && p.length >= 3 && num(p[0]) && num(p[2]);
 const gridTxt = (p) => (okPos(p) ? `${Math.round(p[0])}, ${Math.round(p[2])}` : "-");
 const shortId = (id) => String(id).replace(/^CLW_/i, "").replace(/Squad_?/i, "");
 const dash = (v) => (v === undefined || v === null || v === "" ? "-" : v);
+// Activity (AI LOD): a unit is "dormant" when all its agents sit in the engine's max AI LOD (game field squad.dormant). Strong faction colour =
+// active, the same colour at ~40 % alpha (plus a hollow-ish outline) = dormant. Missing field (older game build) = unknown, treated as active.
+const hex2rgb = (h) => { const n = parseInt(String(h).slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+const tint = (col, a) => { const [r, g, b] = hex2rgb(col); return `rgba(${r},${g},${b},${a})`; };
+const DORM_A = 0.4;
+const actOK = (act, dm) => act === "all" || (act === "dormant" ? dm : !dm);
+const accent = (f) => ({ borderTop: `3px solid ${colorOf(f)}` });
+const PARAM_LABEL = { timeLimitMin: "Time limit (min)", startTickets: "Start tickets", startSupplies: "Start supplies", incomeMultiplier: "Income multiplier", battleSize: "Battle size", ticketBleed: "Ticket bleed" };
+const humanKey = (k) => PARAM_LABEL[k] ?? String(k).replace(/([A-Z])/g, " $1").toLowerCase().replace(/^./, (c) => c.toUpperCase());
+const fmtVal = (v) => (typeof v === "boolean" ? (v ? "yes" : "no") : v !== null && typeof v === "object" ? JSON.stringify(v) : v === undefined || v === null || v === "" ? "-" : String(v));
 
 // ---------- icons (inline SVG) ----------
 const P = {
@@ -163,6 +173,7 @@ function buildRows(state, faction) {
         key: f + "/" + s.id, id: String(s.id), faction: f, type: dash(s.type), agents: s.agents, size: num(s.agents) ? `${s.agents}/${s.startAgents}` : "-",
         pct, wounded: num(s.wounded) ? s.wounded : null, health: num(s.health) ? s.health : null, obj, state: state_, move, speed: speed ?? -1,
         human: !!s.humanLed, pos: s.pos, posTxt: gridTxt(s.pos), orderAge: ots ? Math.round((now - ots) / 1000) : null, mode: s.mode,
+        dormant: typeof s.dormant === "boolean" ? s.dormant : null, reason: o?.reason ?? obj?.reason,
         kind: typeof s.kind === "string" ? s.kind : "", vehicle: s.vehicle && typeof s.vehicle === "object" ? s.vehicle : null,
         mission: s.mission && typeof s.mission === "object" && s.mission.state && s.mission.state !== "none" ? s.mission : null,
       });
@@ -242,14 +253,15 @@ function Strip({ st, toast, refresh }) {
 }
 
 // ---------- map (canvas renderer with pan/zoom, tooltips, layers) ----------
-function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall }) {
+// act = all | active | dormant (unit filter); focus = { pos: [x, z], label, nonce } zooms the view onto a point and marks it; compact = small map (Missions).
+function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall, act = "all", focus = null, compact = false }) {
   const box = useRef(), cv = useRef();
   const view = useRef({ s: 0.1, ox: 0, oy: 0, fitted: false });
   const hits = useRef([]);
   const drag = useRef(null);
   const latest = useRef({});
   const [tip, setTip] = useState(null);
-  latest.current = { st, faction, sel, layers, world };
+  latest.current = { st, faction, sel, layers, world, act, focus };
   const imgRef = useRef(null);
   const ext = world.extent ?? DEF_EXT;
   useEffect(() => { // map background: reload when the sidecar (re)resolves the image
@@ -287,10 +299,15 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall }) {
   const draw = useCallback((t) => {
     const c = cv.current;
     if (!c) return;
-    const { st, faction, sel, layers, world } = latest.current, v = view.current;
+    const { st, faction, sel, layers, world, act, focus } = latest.current, v = view.current;
     const E = world.extent ?? DEF_EXT, EW = E.x1 - E.x0, EH = E.z1 - E.z0;
     const r = c.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
     if (!r.width) return;
+    if (v.anim) { // eased pan/zoom towards a focus target
+      const a = v.anim, p = Math.min(1, (performance.now() - a.t0) / 350), e = 1 - Math.pow(1 - p, 3);
+      v.s = a.s0 + (a.s1 - a.s0) * e; v.ox = a.ox0 + (a.ox1 - a.ox0) * e; v.oy = a.oy0 + (a.oy1 - a.oy0) * e;
+      if (p >= 1) v.anim = null;
+    }
     if (c.width !== Math.round(r.width * dpr) || c.height !== Math.round(r.height * dpr)) { c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr); }
     if (!v.fitted) fit(); // refits every frame until the first squad/contact arrives, then once
     const ctx = c.getContext("2d");
@@ -443,7 +460,7 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall }) {
     const shown =Object.keys(st.factions ?? {}).filter((f) => faction === "all" || f === faction);
     for (const f of shown) {
       const e = st.factions[f], sit = e.situation ?? {};
-      const squads = (Array.isArray(sit.squads) ? sit.squads : []).filter((s) => s && okPos(s.pos));
+      const squads = (Array.isArray(sit.squads) ? sit.squads : []).filter((s) => s && okPos(s.pos) && actOK(act, s.dormant === true));
       const byId = new Map(squads.map((s) => [s.id, s]));
       const byOrder = new Map((Array.isArray(e.orders) ? e.orders : []).map((o) => [o.squad, o]));
       if (layers.contacts) for (const ct of Array.isArray(sit.contacts) ? sit.contacts : []) {
@@ -479,7 +496,7 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall }) {
         h.push({ x: x1, y: y1, r: 8, title: `${o.command} order${o.target ? " -> " + o.target : ""}`, lines: [String(o.squad), String(o.reason ?? "")] });
       }
       if (layers.squads) for (const s of squads) {
-        const x = sx(s.pos[0]), y = sy(s.pos[2]), key = f + "/" + s.id, col = colorOf(f);
+        const x = sx(s.pos[0]), y = sy(s.pos[2]), key = f + "/" + s.id, col = colorOf(f), dm = s.dormant === true;
         if (s.humanLed) {
           const ph = ((t / 1200) % 1);
           ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.globalAlpha = 1 - ph;
@@ -493,25 +510,41 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall }) {
           ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ex - 7 * Math.sin(hr - .45), ey + 7 * Math.cos(hr - .45)); ctx.lineTo(ex - 7 * Math.sin(hr + .45), ey + 7 * Math.cos(hr + .45)); ctx.closePath(); ctx.fill();
           ctx.globalAlpha = 1;
         }
-        ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 10;
+        ctx.fillStyle = dm ? tint(col, DORM_A) : col; ctx.shadowColor = col; ctx.shadowBlur = dm ? 0 : 10;
         kindShape(ctx, s.kind, x, y); ctx.fill(); ctx.shadowBlur = 0;
+        if (dm) { ctx.strokeStyle = tint(col, 0.85); ctx.lineWidth = 1.5; ctx.stroke(); } // dormant: pale fill, thin outline
         if (s.humanLed) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke(); }
         const veh = s.vehicle && typeof s.vehicle === "object" ? s.vehicle : null;
         if (veh && veh.mounted === false) { ctx.strokeStyle = "#0a0d12"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - 4, y); ctx.lineTo(x + 4, y); ctx.stroke(); } // dismounted: bar across the symbol
         if (layers.labels) {
-          ctx.fillStyle = "#dde3ec";
+          ctx.fillStyle = dm ? "rgba(221,227,236,.6)" : "#dde3ec";
           ctx.font = "600 11px system-ui, sans-serif"; ctx.fillText(shortId(s.id) + (s.humanLed ? " ★" : ""), x + 9, y - 11);
-          if (s.kind || veh) { ctx.font = "9px system-ui, sans-serif"; ctx.fillStyle = "rgba(221,227,236,.7)"; ctx.fillText([kindLabel(s.kind), veh?.type, veh ? (veh.mounted ? "mounted" : "dismounted") : null].filter(Boolean).join(" "), x + 9, y + 13); }
+          if (s.kind || veh) { ctx.font = "9px system-ui, sans-serif"; ctx.fillStyle = dm ? "rgba(221,227,236,.45)" : "rgba(221,227,236,.7)"; ctx.fillText([kindLabel(s.kind), veh?.type, veh ? (veh.mounted ? "mounted" : "dismounted") : null].filter(Boolean).join(" "), x + 9, y + 13); }
           ctx.font = "11px system-ui, sans-serif";
         }
         const oc = s.objective?.command ?? (byOrder.get(s.id)?.command ?? "-"), ot = s.objective?.target ?? byOrder.get(s.id)?.target;
-        h.push({ x, y, r: 11, key, title: String(s.id), lines: [`${f}, ${s.agents}/${s.startAgents} agents, ${s.mode ?? s.state ?? "-"}`, ...(s.kind ? [`kind ${s.kind}${s.type ? ": " + s.type : ""}`] : []),
+        h.push({ x, y, r: 11, key, title: String(s.id), lines: [`${f}, ${s.agents}/${s.startAgents} agents, ${s.mode ?? s.state ?? "-"}`, `activity: ${typeof s.dormant !== "boolean" ? "unknown (game does not report it)" : dm ? "dormant (engine max AI LOD, barely simulated)" : "active (kept awake)"}`, ...(s.kind ? [`kind ${s.kind}${s.type ? ": " + s.type : ""}`] : []),
           ...(veh ? [`vehicle ${dash(veh.type)}, ${veh.mounted ? "mounted" : "dismounted"}${veh.state ? ", " + veh.state : ""}${num(veh.health) ? ", hp " + Math.round(veh.health * 100) + "%" : ""}`] : []),
           `objective: ${oc}${ot ? " " + ot : ""}`, s.humanLed ? "human-led" + (s.mission?.state && s.mission.state !== "none" ? `, mission ${s.mission.state} ${s.mission.kind ?? ""} ${s.mission.target ?? ""}` : "") : "AI-led", `at ${gridTxt(s.pos)}`] });
       }
     }
+    if (focus && Array.isArray(focus.pos)) { // focus marker (Missions): pulsing dashed ring + label
+      const x = sx(focus.pos[0]), y = sy(focus.pos[1]), pr = 20 + 3 * Math.sin(t / 220);
+      ctx.strokeStyle = "#ffe36e"; ctx.lineWidth = 2.5; ctx.setLineDash([5, 4]); ctx.beginPath(); ctx.arc(x, y, pr, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+      if (focus.label) { ctx.font = "bold 12px system-ui, sans-serif"; ctx.lineJoin = "round"; ctx.lineWidth = 3.5; ctx.strokeStyle = "rgba(8,11,16,.9)"; ctx.strokeText(focus.label, x + pr + 6, y); ctx.fillStyle = "#ffe36e"; ctx.fillText(focus.label, x + pr + 6, y); ctx.lineJoin = "miter"; }
+    }
     hits.current = h;
   }, []);
+
+  useEffect(() => { // focus request: ease the view onto the target
+    const c = cv.current;
+    if (!focus || !Array.isArray(focus.pos) || !c) return;
+    const v = view.current, r = c.getBoundingClientRect(), E = latest.current.world.extent ?? DEF_EXT;
+    if (!r.width) return;
+    const s1 = focus.zoom ?? Math.max(0.3, Math.min(1.2, r.width / 1500));
+    v.anim = { t0: performance.now(), s0: v.s, ox0: v.ox, oy0: v.oy, s1, ox1: r.width / 2 - focus.pos[0] * s1, oy1: r.height / 2 - (E.z1 - focus.pos[1]) * s1 };
+    v.fitted = true; v.user = true;
+  }, [focus?.nonce]);
 
   // animation loop (pulsing rings need continuous redraw)
   useEffect(() => {
@@ -544,7 +577,7 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall }) {
     const c = cv.current;
     const onWheel = (e) => {
       e.preventDefault();
-      const v = view.current, [mx, my] = local(e);
+      const v = view.current, [mx, my] = local(e); v.anim = null;
       const ns = Math.min(5, Math.max(0.02, v.s * (e.deltaY < 0 ? 1.2 : 1 / 1.2))), q = ns / v.s;
       v.ox = mx - (mx - v.ox) * q; v.oy = my - (my - v.oy) * q; v.s = ns; v.user = true;
     };
@@ -552,7 +585,7 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall }) {
     return () => c.removeEventListener("wheel", onWheel);
   }, []);
 
-  const onDown = (e) => { drag.current = { x: e.clientX, y: e.clientY, moved: 0 }; cv.current.classList.add("grabbing"); };
+  const onDown = (e) => { view.current.anim = null; drag.current = { x: e.clientX, y: e.clientY, moved: 0 }; cv.current.classList.add("grabbing"); };
   const onMove = (e) => {
     const d = drag.current, v = view.current;
     if (d) {
@@ -567,8 +600,8 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall }) {
     if (d && d.moved < 4) { const [mx, my] = local(e), h = pick(mx, my, true); onSel(h ? h.key : null); }
   };
 
-  return html`<section class=${"panel" + (tall ? " tall" : "")}>
-    <h2>Map <span class="sub">${Math.round(ext.x1 - ext.x0)} x ${Math.round(ext.z1 - ext.z0)} m, x east / z north${world.map?.status === "resolving" ? ", loading map image..." : ""}</span></h2>
+  return html`<section class=${"panel" + (tall ? " tall" : "") + (compact ? " compact" : "")}>
+    <h2>${compact ? "Mission map" : "Map"} <span class="sub">${Math.round(ext.x1 - ext.x0)} x ${Math.round(ext.z1 - ext.z0)} m, x east / z north${world.map?.status === "resolving" ? ", loading map image..." : ""}</span></h2>
     <div class="mapbox" ref=${box}>
       <canvas ref=${cv} onMouseDown=${onDown} onMouseMove=${onMove} onMouseUp=${onUp}
         onMouseLeave=${() => { setTip(null); drag.current = null; cv.current.classList.remove("grabbing"); }}
@@ -581,75 +614,163 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall }) {
   </section>`;
 }
 
-// ---------- squads table ----------
-const COLS = [["id", "Squad"], ["faction", "Faction"], ["kind", "Kind"], ["type", "Type"], ["vehicle", "Vehicle"], ["size", "Size"], ["strength", "Strength"], ["wounded", "Wnd"], ["objective", "Objective"],
-  ["state", "State"], ["movement", "Movement"], ["leader", "Leader"], ["position", "Position x, z"], ["order", "Last order"]];
-const SORTKEY = { id: (r) => r.id, faction: (r) => r.faction, kind: (r) => r.kind, vehicle: (r) => r.vehicle?.type ?? "", type:(r) => String(r.type), size: (r) => r.agents ?? -1, strength: (r) => r.pct ?? -1, wounded: (r) => r.wounded ?? -1,
-  objective: (r) => r.obj?.command ?? "", state: (r) => r.state, movement: (r) => r.speed, leader: (r) => (r.human ? 1 : 0), position: (r) => (okPos(r.pos) ? r.pos[0] : -1), order: (r) => r.orderAge ?? 1e9 };
-const stateBadge = (s) => ({ dead: "bad", engaged: "bad", moving: "info", defending: "ok" }[s] ?? "");
+// ---------- shared faction-vs-faction components ----------
+// Compare: attributes as rows, factions as side-by-side columns (same table everywhere a faction comparison is shown).
+// rows: { section } | { label, tip, merge, max, cell: (faction) => { txt, v, max, stack, dim } }
+//  - v draws a thin bar under the value on a scale shared by all factions in the row (cell.max overrides, e.g. a cap)
+//  - stack = [[count, alpha], ...] draws a segmented bar in the faction colour (active strong / dormant pale)
+//  - merge: identical string values collapse into one spanning cell (rules that are the same for both sides)
+function CmpCell({ c, mx, f }) {
+  const col = colorOf(f), tot = c.stack ? c.stack.reduce((n, s) => n + s[0], 0) : 0;
+  return html`<div class="cc"><span class=${"cv" + (c.dim ? " dim" : "")}>${c.txt ?? "-"}</span>
+    ${c.stack && tot > 0 ? html`<span class="mbar">${c.stack.filter((s) => s[0] > 0).map((s, i) => html`<i key=${i} style=${{ width: (100 * s[0] / tot) + "%", background: tint(col, s[1]) }}></i>`)}</span>`
+      : num(c.v) && mx > 0 ? html`<span class="mbar"><i style=${{ width: Math.min(100, 100 * c.v / mx) + "%", background: col }}></i></span>` : ""}</div>`;
+}
+function Compare({ names, rows }) {
+  const n = names.length;
+  return html`<table class="cmp"><thead><tr><th></th>${names.map((f) => html`<th key=${f} class="fh" style=${{ borderTopColor: colorOf(f) }}><b class=${facClass(f)}>${f}</b></th>`)}</tr></thead><tbody>
+    ${rows.map((r, i) => {
+      if (r.section) return html`<tr class="sec" key=${i}><th colspan=${n + 1}>${r.section}</th></tr>`;
+      const cells = names.map(r.cell), mx = r.max ?? Math.max(0, ...cells.map((c) => (num(c.v) ? c.v : 0)));
+      const merged = r.merge && n > 1 && cells.every((c) => typeof c.txt === "string" && c.txt === cells[0].txt);
+      return html`<tr key=${i}><td class="rl" title=${r.tip ?? ""}>${r.label}</td>${merged ? html`<td colspan=${n} class="mg">${cells[0].txt}</td>`
+        : cells.map((c, j) => html`<td key=${j}><${CmpCell} c=${c} mx=${c.max ?? mx} f=${names[j]} /></td>`)}</tr>`;
+    })}</tbody></table>`;
+}
+// unit-activity filter (all / active / dormant), shared by the Map and Forces views; counts come from the unfiltered rows
+function ActFilter({ act, setAct, rows }) {
+  const dm = rows.filter((r) => r.dormant === true).length, ac = rows.filter((r) => r.dormant !== true).length, known = rows.some((r) => r.dormant !== null);
+  const opt = [["all", "all", rows.length], ["active", "active", ac], ["dormant", "dormant", dm]];
+  return html`<div class="seg actf" title=${known ? "Dormant = every agent of the unit sits in the engine's max AI LOD (barely simulated); active = kept awake by activity management" : "This game build does not report unit activity (no dormant field)"}>
+    ${opt.map(([k, l, n]) => html`<button key=${k} class=${act === k ? "on" : ""} disabled=${!known && k !== "all"} onClick=${() => setAct(k)}>${l} <span class="muted">${n}</span></button>`)}</div>`;
+}
+// key: strong swatch = active, pale swatch = dormant, per faction
+function ActLegend({ names, rows }) {
+  if (!rows.some((r) => r.dormant !== null)) return null;
+  return html`<div class="actleg">${names.map((f) => html`<span key=${f}><i class="sw" style=${{ background: colorOf(f) }}></i><i class="sw" style=${{ background: tint(colorOf(f), DORM_A), boxShadow: `inset 0 0 0 1px ${tint(colorOf(f), 0.85)}` }}></i> <b class=${facClass(f)}>${f}</b></span>`)}
+    <span class="muted">strong = active, pale = dormant</span></div>`;
+}
 
+// ---------- squads table ----------
+const COLS = [["id", "Squad"], ["faction", "Faction"], ["kind", "Kind"], ["strength", "Strength"], ["objective", "Objective"], ["state", "State"], ["position", "Position x, z"]];
+const SORTKEY = { id: (r) => r.id, faction: (r) => r.faction, kind: (r) => r.kind, strength: (r) => r.pct ?? -1,
+  objective: (r) => r.obj?.command ?? "", state: (r) => r.state, position: (r) => (okPos(r.pos) ? r.pos[0] : -1) };
+const stateBadge = (s) => ({ dead: "bad", engaged: "bad", moving: "info", defending: "ok" }[s] ?? "");
+const DormBadge = ({ r }) => (r.dormant === true ? html`<span class="badge dorm" title="Dormant: engine max AI LOD">dormant</span>` : "");
+
+// Compact table; the secondary fields (type, vehicle, wounded, movement, leader, order age) open as a detail row on the selected squad.
 function SquadsTable({ rows, sel, onSel }) {
-  const [sort, setSort] = useState({ key: "id", dir: 1 });
+  const [sort, setSort] = useState({ key: "faction", dir: 1 });
   const sorted = useMemo(() => {
     const f = SORTKEY[sort.key] ?? SORTKEY.id;
-    return [...rows].sort((a, b) => (f(a) > f(b) ? 1 : f(a) < f(b) ? -1 : 0) * sort.dir);
+    return [...rows].sort((a, b) => (f(a) > f(b) ? 1 : f(a) < f(b) ? -1 : a.id > b.id ? 1 : -1) * sort.dir);
   }, [rows, sort]);
   useEffect(() => { if (sel) document.querySelector(`tr[data-key="${CSS.escape(sel)}"]`)?.scrollIntoView({ block: "nearest" }); }, [sel]);
   return html`<section class="panel squads">
-    <h2>Squads <span class="sub">${rows.length} total, click header to sort, click row to highlight; '-' = not reported</span></h2>
+    <h2>Squads <span class="sub">${rows.length} shown, click header to sort, click a row for details</span></h2>
     <div class="scroll"><table>
       <thead><tr>${COLS.map(([k, t]) => html`<th class="sortable" onClick=${() => setSort((s) => ({ key: k, dir: s.key === k ? -s.dir : 1 }))}>${t}${sort.key === k ? (sort.dir > 0 ? " ▲" : " ▼") : ""}</th>`)}</tr></thead>
       <tbody>${sorted.map((r) => {
-        const col = r.pct === null ? "#5d697c" : r.pct >= 66 ? "var(--ok)" : r.pct >= 33 ? "var(--warn)" : "var(--bad)";
-        const o = r.obj;
-        return html`<tr key=${r.key} data-key=${r.key} class=${"sqrow" + (sel === r.key ? " sel" : "")} onClick=${() => onSel(sel === r.key ? null : r.key)}>
-          <td><b>${r.id}</b></td><td class=${facClass(r.faction)}>${r.faction}</td>
-          <td>${r.kind ? html`<span class=${"badge kind k-" + r.kind}>${kindLabel(r.kind)}</span>` : "-"}</td><td>${r.type}</td>
-          <td>${r.vehicle ? html`${dash(r.vehicle.type)} <span class=${"badge " + (r.vehicle.mounted ? "info" : "warn")}>${r.vehicle.mounted ? "mounted" : "dismounted"}</span>${r.vehicle.state ? html` <span class="muted">${r.vehicle.state}</span>` : ""}${num(r.vehicle.health) ? html` <span class="muted">hp ${Math.round(r.vehicle.health * 100)}%</span>` : ""}` : "-"}</td><td class="mono">${r.size}</td>
-          <td>${r.pct === null ? "-" : html`<span class="bar"><i style=${{ width: Math.min(100, r.pct) + "%", background: col }}></i></span>${r.pct}%${r.health !== null && html` <span class="muted">hp ${Math.round(r.health * 100)}%</span>`}`}</td>
-          <td>${r.wounded === null ? "-" : r.wounded}</td>
-          <td class="wrap">${o ? html`<span class=${"cmd " + o.command}>${o.command}</span> ${o.target ? html`<b>${o.target}</b>` : ""}${!o.target && Array.isArray(o.pos) && num(o.pos[0]) ? html`<span class="mono">${Math.round(o.pos[0])}, ${Math.round(o.pos[1])}</span>` : ""}${o.status ? html` <span class="badge info">${o.status}</span>` : ""} ${o.reason && html`<span class="muted">${o.reason}</span>`}` : "-"}</td>
-          <td><span class=${"badge " + stateBadge(r.state)}>${r.state}</span></td><td class="mono">${r.move}</td>
-          <td>${r.human ? html`<span class="badge human">human</span>${r.mission ? html` <span class="badge warn" title="mission state">${r.mission.state} ${r.mission.kind ?? ""} ${r.mission.target ?? ""}</span>` : ""}` : "AI"}</td><td class="mono">${r.posTxt}</td>
-          <td>${r.orderAge === null ? "-" : r.orderAge + " s"}</td></tr>`;
+        const col = r.pct === null ? "#5d697c" : r.pct >= 66 ? "var(--ok)" : r.pct >= 33 ? "var(--warn)" : "var(--bad)", o = r.obj, on = sel === r.key;
+        const main = html`<tr key=${r.key} data-key=${r.key} class=${"sqrow" + (on ? " sel" : "") + (r.dormant === true ? " dormrow" : "")} onClick=${() => onSel(on ? null : r.key)}>
+          <td style=${{ borderLeft: "3px solid " + colorOf(r.faction) }}><b>${r.id}</b>${r.human ? html` <span class="badge human">human</span>` : ""}</td><td class=${facClass(r.faction)}>${r.faction}</td>
+          <td>${r.kind ? html`<span class=${"badge kind k-" + r.kind}>${kindLabel(r.kind)}</span>` : "-"}</td>
+          <td>${r.pct === null ? "-" : html`<span class="bar"><i style=${{ width: Math.min(100, r.pct) + "%", background: col }}></i></span><span class="mono">${r.size}</span> <span class="muted">${r.pct}%</span>`}</td>
+          <td class="wrap">${o ? html`<span class=${"cmd " + o.command}>${o.command}</span> ${o.target ? html`<b>${o.target}</b>` : ""}${!o.target && Array.isArray(o.pos) && num(o.pos[0]) ? html`<span class="mono">${Math.round(o.pos[0])}, ${Math.round(o.pos[1])}</span>` : ""}${o.status ? html` <span class="muted">${o.status}</span>` : ""}` : "-"}</td>
+          <td><span class=${"badge " + stateBadge(r.state)}>${r.state}</span> <${DormBadge} r=${r} /></td><td class="mono">${r.posTxt}</td></tr>`;
+        if (!on) return main;
+        return [main, html`<tr key=${r.key + "#d"} class="detail"><td colspan=${COLS.length}><dl class="kv">
+          <div><dt>Type</dt><dd>${r.type}</dd></div>
+          <div><dt>Vehicle</dt><dd>${r.vehicle ? html`${dash(r.vehicle.type)} <span class=${"badge " + (r.vehicle.mounted ? "info" : "warn")}>${r.vehicle.mounted ? "mounted" : "dismounted"}</span>${r.vehicle.state ? html` <span class="muted">${r.vehicle.state}</span>` : ""}${num(r.vehicle.health) ? html` <span class="muted">hp ${Math.round(r.vehicle.health * 100)}%</span>` : ""}` : "-"}</dd></div>
+          <div><dt>Wounded</dt><dd>${r.wounded === null ? "-" : r.wounded}${r.health !== null ? html` <span class="muted">avg hp ${Math.round(r.health * 100)}%</span>` : ""}</dd></div>
+          <div><dt>Movement</dt><dd class="mono">${r.move}</dd></div>
+          <div><dt>Leader</dt><dd>${r.human ? html`human${r.mission ? html` <span class="badge warn">${r.mission.state} ${r.mission.kind ?? ""} ${r.mission.target ?? ""}</span>` : ""}` : "AI"}</dd></div>
+          <div><dt>Activity</dt><dd>${r.dormant === true ? "dormant (engine max AI LOD)" : r.dormant === false ? "active (kept awake)" : "-"}</dd></div>
+          <div><dt>Last order</dt><dd>${r.orderAge === null ? "-" : r.orderAge + " s ago"}</dd></div>
+          <div class="wide"><dt>Reason</dt><dd class="muted">${dash(r.reason)}</dd></div></dl></td></tr>`];
       })}</tbody></table>
-      ${!rows.length && html`<div class="empty">No squads reported yet.</div>`}</div>
+      ${!rows.length && html`<div class="empty">No squads to show.</div>`}</div>
   </section>`;
 }
 
-// ---------- war strip (protocol v2): tickets, supplies, caps per faction ----------
-function WarStrip({ st, faction }) {
-  const names = sortedKeys(st.factions).filter((f) => (faction === "all" || f === faction) && st.factions[f].situation?.war);
+// ---------- game mode + live status (Overview): attributes as rows, factions as columns ----------
+function GameModePanel({ st, names }) {
+  const sit = (f) => st.factions[f]?.situation ?? {}, war = (f) => sit(f).war ?? null;
+  if (!names.some((f) => war(f))) return null;
+  const mode = names.map((f) => war(f)?.mode).find((m) => m && (m.name || m.id)), phase = names.map((f) => war(f)?.phase).find((p) => p);
+  const keys = [...new Set(names.flatMap((f) => Object.keys(war(f)?.mode?.params ?? {})))];
+  const cap = (v, c) => (num(c) && c > 0 ? { txt: html`${dash(v)}<span class="muted"> / ${c}</span>`, v: num(v) ? v : 0, max: c } : { txt: dash(v) });
+  const rows = [
+    { section: "Rules" },
+    ...keys.map((k) => ({ label: humanKey(k), tip: k, merge: true, cell: (f) => ({ txt: fmtVal(war(f)?.mode?.params?.[k]) }) })),
+    { label: "Time left", merge: true, cell: (f) => ({ txt: num(sit(f).timeLeftSec) && sit(f).timeLeftSec >= 0 ? fmtTime(sit(f).timeLeftSec) : "no limit" }) },
+    { section: "Live" },
+    { label: "Tickets", tip: "0 = defeat; -1 = not used by this mode", cell: (f) => { const t = war(f)?.tickets; return num(t) && t >= 0 ? { txt: String(t), v: t } : { txt: "n/a", dim: true }; } },
+    { label: "Supplies", tip: "Purchasing power, income per minute", cell: (f) => { const w = war(f); return w ? { txt: html`${dash(w.supplies)}${num(w.income) ? html`<span class="muted"> +${w.income}/min</span>` : ""}`, v: num(w.supplies) ? w.supplies : 0 } : { txt: "-" }; } },
+    { label: "AI soldiers", tip: "Live AI / cap", cell: (f) => cap(war(f)?.liveAI, war(f)?.aiCap) },
+    { label: "Vehicles", tip: "Live vehicles / cap", cell: (f) => cap(war(f)?.vehicles, war(f)?.vehicleCap) },
+  ];
+  return html`<section class="panel"><h2>Game mode <span class="sub">${mode ? html`<b>${mode.name || mode.id}</b> ` : ""}${phase ? html`<span class=${"badge " + (phase === "running" ? "ok" : phase === "setup" ? "warn" : "info")}>${phase}</span>` : ""}</span></h2>
+    <div class="scroll"><${Compare} names=${names} rows=${rows} /></div></section>`;
+}
+
+// ---------- per-faction SITREP (generated elsewhere: st.factions[f].sitrep = { text, sections:[{title, body}], generatedAt, source, warTimeSec }) ----------
+function SitrepCard({ f, e, now }) {
+  const s = e?.sitrep && typeof e.sitrep === "object" ? e.sitrep : null, secs = Array.isArray(s?.sections) ? s.sections.filter((x) => x && (x.title || x.body)) : [];
+  const has = s && (s.text || secs.length), age = num(s?.generatedAt) ? Math.max(0, Math.round(((now ?? Date.now()) - s.generatedAt) / 1000)) : null;
+  return html`<section class="panel sitrep" style=${accent(f)}><h2><span class=${facClass(f)}>${f}</span> SITREP
+    ${has && html`<span class="sub">${s.source ? html`<span class=${"badge " + (s.source === "llm" ? "info" : "")} title=${s.source === "llm" ? "written by the LLM" : "generated by rules"}>${s.source}</span> ` : ""}${num(s.warTimeSec) ? "war time " + fmtTime(s.warTimeSec) + ", " : ""}${age === null ? "" : age < 90 ? age + " s ago" : Math.round(age / 60) + " min ago"}${age !== null && age > 600 ? html` <span class="badge warn">stale</span>` : ""}</span>`}</h2>
+    ${has ? html`<div class="sitbody">${s.text && html`<p class="sittext">${s.text}</p>`}
+      ${secs.length > 0 && html`<dl class="sitsecs">${secs.map((x, i) => html`<div key=${i}><dt>${dash(x.title)}</dt><dd>${x.body}</dd></div>`)}</dl>`}</div>`
+      : html`<div class="empty sitempty">No SITREP yet. The HQ report appears here when the SITREP generator has produced one.</div>`}</section>`;
+}
+
+// ---------- force comparison (Overview and Forces): same table, Forces adds rows ----------
+function forceStats(st, rows, f) {
+  const mine = rows.filter((r) => r.faction === f), sit = st.factions[f]?.situation ?? {}, kinds = new Map();
+  for (const r of mine) kinds.set(r.kind || "?", (kinds.get(r.kind || "?") ?? 0) + 1);
+  const alive = mine.reduce((n, r) => n + (num(r.agents) ? r.agents : 0), 0);
+  const start = mine.reduce((n, r) => n + (num(r.agents) ? (num(r.pct) && r.pct > 0 ? Math.round(r.agents * 100 / r.pct) : r.agents) : 0), 0);
+  const dorm = mine.filter((r) => r.dormant === true).length;
+  return { mine, kinds, alive, start: Math.max(start, alive), dorm, act: mine.length - dorm, known: mine.some((r) => r.dormant !== null), contacts: Array.isArray(sit.contacts) ? sit.contacts.length : 0,
+    vehicles: mine.filter((r) => r.vehicle).length, human: mine.filter((r) => r.human).length, wounded: mine.reduce((n, r) => n + (num(r.wounded) ? r.wounded : 0), 0),
+    engaged: mine.filter((r) => r.state === "engaged").length, moving: mine.filter((r) => r.state === "moving").length };
+}
+function ForcesCompare({ st, rows, names, full, title = "Forces" }) {
   if (!names.length) return null;
-  const cap = (v, c) => html`<b>${dash(v)}</b>${num(c) ? html`<span class="muted"> / ${c}</span>` : ""}`;
-  return html`<div class="warstrip">${names.map((f) => {
-    const sit = st.factions[f].situation, w = sit.war, col = colorOf(f);
-    const tUsed = num(w.tickets) && w.tickets >= 0, mode = w.mode && typeof w.mode === "object" ? w.mode : null;
-    const tl = tUsed && num(w.enemyTickets) && w.enemyTickets >= 0 ? w.tickets / Math.max(1, w.tickets + w.enemyTickets) : null;
-    const params = mode?.params && typeof mode.params === "object" ? Object.entries(mode.params) : [];
-    return html`<div class="warcard" style=${{ borderTopColor: col }} key=${f}>
-      <div class="wname"><b class=${facClass(f)}>${f}</b>
-        <span>${mode ? html`<span class="muted" title=${mode.id ?? ""}>${dash(mode.name ?? mode.id)}</span> ` : ""}${w.phase ? html`<span class=${"badge " + (w.phase === "running" ? "ok" : w.phase === "setup" ? "warn" : "info")}>${w.phase}</span> ` : ""}<span class="muted">${num(sit.timeLeftSec) && sit.timeLeftSec >= 0 ? "time left " + fmtTime(sit.timeLeftSec) : "no time limit"}</span></span></div>
-      ${params.length > 0 && html`<div class="wparams muted" title="War mode parameters">${params.map(([k, v]) => html`<span>${k} <b>${typeof v === "object" ? JSON.stringify(v) : String(v)}</b></span>`)}</div>`}
-      <div class="wgrid">
-        <div title="War will: 0 = defeat. Enemy in brackets"><span class="muted">tickets</span>${tUsed ? cap(w.tickets) : html`<span class="dim">n/a</span>`}${tUsed && num(w.enemyTickets) && w.enemyTickets >= 0 ? html`<span class="muted"> (enemy ${w.enemyTickets})</span>` : ""}</div>
-        <div title="Purchasing power; income per minute"><span class="muted">supplies</span><b>${dash(w.supplies)}</b>${num(w.income) ? html`<span class="muted"> +${w.income}/min</span>` : ""}</div>
-        <div title="Live AI soldiers / cap"><span class="muted">AI</span>${cap(w.liveAI, w.aiCap)}</div>
-        <div title="Vehicles / cap"><span class="muted">vehicles</span>${cap(w.vehicles, w.vehicleCap)}</div>
-      </div>
-      ${tl !== null && html`<div class="tbar" title="Share of the combined tickets"><i style=${{ width: Math.round(tl * 100) + "%", background: col }}></i></div>`}</div>`;
-  })}</div>`;
+  const S = new Map(names.map((f) => [f, forceStats(st, rows, f)]));
+  const g = (f) => S.get(f);
+  const out = [
+    { label: "Squads", tip: "Commandable units. Bar: strong = active, pale = dormant", cell: (f) => ({ txt: String(g(f).mine.length), stack: g(f).known ? [[g(f).act, 1], [g(f).dorm, DORM_A]] : null, v: g(f).mine.length }) },
+    ...(rows.some((r) => r.dormant !== null) ? [{ label: "Active / dormant", tip: "Dormant = all agents in the engine's max AI LOD", cell: (f) => (g(f).known ? { txt: html`${g(f).act} <span class="muted">/</span> ${g(f).dorm}` } : { txt: "-", dim: true }) }] : []),
+    { label: "Soldiers", tip: "Alive / at start. Bar: share still alive", cell: (f) => ({ txt: html`${g(f).alive}${g(f).start > g(f).alive ? html`<span class="muted"> / ${g(f).start}</span>` : ""}`, v: g(f).alive, max: g(f).start || 1 }) },
+    { label: "Vehicle units", cell: (f) => ({ txt: String(g(f).vehicles) }) },
+    { label: "Human-led", cell: (f) => ({ txt: String(g(f).human) }) },
+    { label: "Contacts known", cell: (f) => ({ txt: String(g(f).contacts) }) },
+    { label: "By kind", cell: (f) => ({ txt: html`<span class="kinds">${g(f).kinds.size ? [...g(f).kinds.entries()].map(([k, n]) => html`<span class=${"badge kind k-" + k} key=${k}>${kindLabel(k)} ${n}</span>`) : "-"}</span>` }) },
+    ...(full ? [
+      { label: "Engaged", cell: (f) => ({ txt: String(g(f).engaged) }) },
+      { label: "Moving", cell: (f) => ({ txt: String(g(f).moving) }) },
+      { label: "Wounded", cell: (f) => ({ txt: String(g(f).wounded) }) },
+    ] : []),
+    { label: "Updated", cell: (f) => ({ txt: ago(st, st.factions[f]?.ts), dim: true }) },
+  ];
+  return html`<section class="panel"><h2>${title} <span class="sub">per side</span></h2><div class="scroll"><${Compare} names=${names} rows=${out} /></div></section>`;
 }
 
 // ---------- objectives + recent events ----------
 function ObjectivesPanel({ st }) {
-  const { objs } = publicPicture(st);
+  const { objs, viewer } = publicPicture(st);
   if (!objs.length) return null;
+  // progress is signed from the viewer's side (+100 = viewer's, -100 = enemy's): show who it favours, in that faction's colour
+  const other = FACTIONS.find((x) => x !== viewer);
+  const prog = (o) => { if (!num(o.progress) || o.progress === 0) return html`<span class="dim">0 %</span>`; const to = o.progress > 0 ? viewer : other, c = to ? colorOf(to) : NEUTRAL;
+    return html`<span class="pbar" title=${"toward " + (to ?? "?")}><i style=${{ width: Math.min(100, Math.abs(o.progress)) + "%", background: c }}></i></span><span class="mono">${Math.abs(o.progress)} %</span>`; };
   return html`<section class="panel side"><h2>Objectives <span class="sub">${objs.length} points</span></h2><div class="scroll"><table>
     <thead><tr><th>Id</th><th>Name</th><th>Value</th><th>Owner</th><th>Progress</th><th>Position x, z</th></tr></thead><tbody>
     ${objs.map((o) => html`<tr key=${o.id}><td><b>${o.id}</b></td><td>${dash(o.name)}</td><td>${dash(o.value)}</td>
       <td>${o.owner && o.owner !== "none" ? html`<b class=${facClass(o.owner)}>${o.owner}</b>` : html`<span class="dim">neutral</span>`}${o.contested ? html` <span class="badge warn">contested</span>` : ""}</td>
-      <td class="mono">${num(o.progress) ? o.progress + " %" : "-"}</td><td class="mono">${Math.round(o.pos[0])}, ${Math.round(o.pos[1])}</td></tr>`)}
+      <td>${prog(o)}</td><td class="mono">${Math.round(o.pos[0])}, ${Math.round(o.pos[1])}</td></tr>`)}
     </tbody></table></div></section>`;
 }
 function EventsPanel({ st, faction }) {
@@ -665,7 +786,7 @@ function EventsPanel({ st, faction }) {
 // ---------- sitrep ----------
 function Sitrep({ st, faction }) {
   const names = sortedKeys(st.factions).filter((f) => faction === "all" || f === faction);
-  return html`<section class="panel side"><h2>SITREP / contacts</h2><div class="scroll">
+  return html`<section class="panel side"><h2>Known contacts <span class="sub">per HQ</span></h2><div class="scroll">
     ${names.map((f) => {
       const e = st.factions[f], sit = e.situation ?? {}, ct = Array.isArray(sit.contacts) ? sit.contacts : [];
       return html`<div class="facblock"><div class="hd"><b class=${facClass(f)}>${f}</b>
@@ -791,27 +912,16 @@ function OwnerBar({ st }) {
     <div class="ownbar">${keys.map((k) => html`<i key=${k} style=${{ width: (100 * (by.get(k) ?? 0) / tot) + "%", background: k ? colorOf(k) : NEUTRAL }} title=${(k || "neutral") + ": " + (by.get(k) ?? 0) + " / " + tot + (hatch.get(k) ? ", contested " + hatch.get(k) : "")}>${hatch.get(k) ? html`<b class="hatch" style=${{ width: (100 * hatch.get(k) / by.get(k)) + "%" }}></b>` : ""}</i>`)}</div>
     <div class="ownleg">${keys.map((k) => html`<span key=${k}><b class=${k ? facClass(k) : "f-none"}>${k || "neutral"}</b> <span class="muted">${by.get(k) ?? 0} / ${tot}</span></span>`)}</div></div></section>`;
 }
-function ForceSummary({ st, rows }) {
-  const names = sortedKeys(st.factions);
-  if (!names.length) return null;
-  return html`<section class="panel"><h2>Forces <span class="sub">per side</span></h2><div class="scroll"><table>
-    <thead><tr><th>Faction</th><th>Squads</th><th>Soldiers</th><th>By kind</th><th>Human-led</th><th>Contacts</th><th>Updated</th></tr></thead><tbody>
-    ${names.map((f) => {
-      const e = st.factions[f], sit = e.situation ?? {}, mine = rows.filter((r) => r.faction === f), kinds = new Map();
-      for (const r of mine) kinds.set(r.kind || "?", (kinds.get(r.kind || "?") ?? 0) + 1);
-      const ag = mine.reduce((n, r) => n + (num(r.agents) ? r.agents : 0), 0), st0 = mine.reduce((n, r) => n + (num(r.agents) ? (num(r.pct) && r.pct > 0 ? Math.round(r.agents * 100 / r.pct) : r.agents) : 0), 0);
-      return html`<tr key=${f}><td class=${facClass(f)}>${f}</td><td>${mine.length}</td><td class="mono">${ag}${st0 > ag ? html`<span class="muted"> / ${st0}</span>` : ""}</td>
-        <td>${[...kinds.entries()].map(([k, n]) => html`<span class=${"badge kind k-" + k} key=${k}>${kindLabel(k)} ${n}</span> `)}</td>
-        <td>${mine.filter((r) => r.human).length}</td><td>${Array.isArray(sit.contacts) ? sit.contacts.length : 0}</td><td class="muted">${ago(st, e.ts)}</td></tr>`;
-    })}</tbody></table></div></section>`;
-}
 function Overview({ st, faction, rows }) {
+  const names = sortedKeys(st.factions).filter((f) => faction === "all" || f === faction);
   return html`<main class="view">
-    <${WarStrip} st=${st} faction=${faction} />
-    <div class="grid" style=${{ marginTop: "12px" }}>
-      <div class="col"><${OwnerBar} st=${st} /><${ObjectivesPanel} st=${st} /></div>
-      <div class="col"><${ForceSummary} st=${st} rows=${rows} /><${EventsPanel} st=${st} faction=${faction} /></div>
+    <${OwnerBar} st=${st} />
+    <div class="grid2 gap">
+      <${GameModePanel} st=${st} names=${names} />
+      <${ForcesCompare} st=${st} rows=${rows} names=${names} />
     </div>
+    <div class="grid2 gap">${names.map((f) => html`<${SitrepCard} key=${f} f=${f} e=${st.factions[f]} now=${st.now} />`)}</div>
+    <div class="grid2 gap"><${ObjectivesPanel} st=${st} /><${EventsPanel} st=${st} faction=${faction} /></div>
     ${!Object.keys(st.factions ?? {}).length && html`<div class="empty">No data yet: waiting for the game to post a situation.</div>`}</main>`;
 }
 
@@ -820,14 +930,16 @@ function SelCard({ rows, sel }) {
   const r = sel ? rows.find((x) => x.key === sel) : null;
   if (!r) return html`<div class="muted selcard">Click a squad on the map to see its details.</div>`;
   const o = r.obj;
-  return html`<div class="selcard"><b class=${facClass(r.faction)}>${r.id}</b> ${r.kind ? html`<span class=${"badge kind k-" + r.kind}>${kindLabel(r.kind)}</span>` : ""} <span class=${"badge " + stateBadge(r.state)}>${r.state}</span>
+  return html`<div class="selcard"><b class=${facClass(r.faction)}>${r.id}</b> ${r.kind ? html`<span class=${"badge kind k-" + r.kind}>${kindLabel(r.kind)}</span>` : ""} <span class=${"badge " + stateBadge(r.state)}>${r.state}</span> <${DormBadge} r=${r} />${r.dormant === false ? html`<span class="badge actv">active</span>` : ""}
     <span class="muted">${r.size} soldiers${r.pct !== null ? ", " + r.pct + "%" : ""}${r.vehicle ? ", " + dash(r.vehicle.type) + (r.vehicle.mounted ? " (mounted)" : " (dismounted)") : ""}, ${r.move}, at ${r.posTxt}</span>
     ${o ? html` <span class=${"cmd " + o.command}>${o.command}</span> ${o.target ?? ""} <span class="muted">${o.reason ?? ""}</span>` : ""}${r.human ? html` <span class="badge human">human</span>` : ""}</div>`;
 }
-function MapView({ st, faction, rows, sel, onSel, layers, setLayers, world }) {
+function MapView({ st, faction, rows, sel, onSel, layers, setLayers, world, act, setAct }) {
+  const names = sortedKeys(st.factions).filter((f) => faction === "all" || f === faction);
   const tog = (k) => html`<label key=${k}><input type="checkbox" checked=${layers[k]} onChange=${() => setLayers((l) => ({ ...l, [k]: !l[k] }))} /> ${k}</label>`;
   return html`<main class="view">
     <div class="toolbar">
+      <${ActFilter} act=${act} setAct=${setAct} rows=${rows} /><${ActLegend} names=${names} rows=${rows} />
       <div class="toggles nomargin">${["grid", "objectives", "squads", "contacts", "orders", "labels"].map(tog)}</div>
       <div class="toggles" title="Map background: toggles, image opacity; flip = image y axis inverted (calibration)">
         ${["image", "roads", "buildings", "objects", "places", "flip"].map(tog)}
@@ -835,7 +947,7 @@ function MapView({ st, faction, rows, sel, onSel, layers, setLayers, world }) {
         <label>dim <input type="range" min="0.1" max="1" step="0.05" value=${layers.dim} onInput=${(e) => setLayers((l) => ({ ...l, dim: Number(e.target.value) }))} style=${{ width: "80px", verticalAlign: "middle" }} /></label>
       </div>
     </div>
-    <${MapPanel} st=${st} faction=${faction} rows=${rows} sel=${sel} onSel=${onSel} layers=${layers} world=${world} tall=${true} />
+    <${MapPanel} st=${st} faction=${faction} rows=${rows} sel=${sel} onSel=${onSel} layers=${layers} world=${world} tall=${true} act=${act} />
     <${SelCard} rows=${rows} sel=${sel} /></main>`;
 }
 
@@ -843,7 +955,7 @@ function MapView({ st, faction, rows, sel, onSel, layers, setLayers, world }) {
 function CatalogPanel({ st, f }) {
   const e = st.factions[f], sit = e.situation ?? {}, sup = sit.war?.supplies;
   const cat = (Array.isArray(sit.catalog) ? sit.catalog : []).filter((c) => c && typeof c.type === "string").sort((a, b) => (num(a.cost) ? a.cost : 1e9) - (num(b.cost) ? b.cost : 1e9));
-  return html`<section class="panel"><h2><span class=${facClass(f)}>${f}</span> buy list <span class="sub">supplies ${dash(sup)}${num(sit.war?.income) ? ` (+${sit.war.income}/min)` : ""}, AI ${dash(sit.war?.liveAI)}/${dash(sit.war?.aiCap)}, vehicles ${dash(sit.war?.vehicles)}/${dash(sit.war?.vehicleCap)}</span></h2><div class="scroll"><table>
+  return html`<section class="panel" style=${accent(f)}><h2><span class=${facClass(f)}>${f}</span> buy list <span class="sub">supplies ${dash(sup)}${num(sit.war?.income) ? ` (+${sit.war.income}/min)` : ""}</span></h2><div class="scroll"><table>
     <thead><tr><th>Type</th><th>Kind</th><th>Cost</th><th>Affordable</th><th>Description</th></tr></thead><tbody>
     ${cat.map((c) => html`<tr key=${c.type}><td><b>${c.type}</b></td><td>${c.kind ? html`<span class=${"badge kind k-" + c.kind}>${kindLabel(c.kind)}</span>` : "-"}</td><td class="mono">${dash(c.cost)}</td>
       <td>${num(c.cost) && num(sup) ? html`<span class=${"badge " + (c.cost <= sup ? "ok" : "bad")}>${c.cost <= sup ? "yes" : "short " + (c.cost - sup)}</span>` : "-"}</td><td class="wrap muted">${dash(c.desc)}</td></tr>`)}
@@ -857,12 +969,14 @@ function PurchasesPanel({ st, faction }) {
     ${list.slice(0, 60).map((b, i) => html`<tr key=${i}><td class="mono muted">${new Date(b.ts).toLocaleTimeString()}</td><td class=${facClass(b.faction)}>${b.faction}</td><td><b>${b.count}x ${b.type}</b></td><td class="wrap muted">${dash(b.reason)}</td></tr>`)}
     </tbody></table>${!list.length && html`<div class="empty">No purchases yet.</div>`}</div></section>`;
 }
-function ForcesView({ st, faction, rows, sel, onSel }) {
+function ForcesView({ st, faction, rows, sel, onSel, act, setAct }) {
   const names = sortedKeys(st.factions).filter((f) => faction === "all" || f === faction);
+  const mine = rows.filter((r) => faction === "all" || r.faction === faction), vis = mine.filter((r) => actOK(act, r.dormant === true));
   return html`<main class="view forces">
-    <${ForceSummary} st=${st} rows=${rows.filter((r) => faction === "all" || r.faction === faction)} />
-    <${SquadsTable} rows=${rows} sel=${sel} onSel=${onSel} />
-    <div class="grid2">${names.map((f) => html`<${CatalogPanel} key=${f} st=${st} f=${f} />`)}</div>
+    <${ForcesCompare} st=${st} rows=${mine} names=${names} full=${true} />
+    <div class="toolbar"><${ActFilter} act=${act} setAct=${setAct} rows=${mine} /><${ActLegend} names=${names} rows=${mine} /></div>
+    <${SquadsTable} rows=${vis} sel=${sel} onSel=${onSel} />
+    <div class="grid2 gap">${names.map((f) => html`<${CatalogPanel} key=${f} st=${st} f=${f} />`)}</div>
     <${PurchasesPanel} st=${st} faction=${faction} /></main>`;
 }
 
@@ -873,7 +987,7 @@ function Decision({ st, f }) {
   const sc = st.scheduler?.[f];
   const e = st.factions[f];
   const dropLabel = (d) => { const k = Object.keys(d).find((q) => q !== "reason"); return k ? `${k}: ${J(d[k])}` : ""; };
-  return html`<section class="panel"><h2><span class=${facClass(f)}>${f}</span> HQ decision <span class="sub">${x ? new Date(x.ts).toLocaleTimeString() : "no exchange yet"}</span></h2><div class="cfgbody">
+  return html`<section class="panel" style=${accent(f)}><h2><span class=${facClass(f)}>${f}</span> HQ decision <span class="sub">${x ? new Date(x.ts).toLocaleTimeString() : "no exchange yet"}</span></h2><div class="cfgbody">
     ${sc && html`<div class="muted" title=${(sc.lastWakeTriggers ?? []).join("\n")}>Scheduler: next call ${sc.manual ? "pending (wake)" : sc.nextDueInSec > 0 ? "in " + sc.nextDueInSec + " s" : "due"}, interval ${dash(sc.intervalSec)} s (chosen ${dash(sc.chosenSec)} s${sc.chosenReason ? ": " + sc.chosenReason : ""}), budget stretch x${(sc.stretch ?? 1).toFixed(2)},
       last wake ${sc.lastWakeReason ?? "-"}${sc.lastWakeTriggers?.length ? " (" + sc.lastWakeTriggers.join("; ") + ")" : ""}, last LLM call ${sc.lastLlmAgoSec === null || sc.lastLlmAgoSec === undefined ? "never" : sc.lastLlmAgoSec + " s ago"}, gated polls ${sc.gated ?? 0}${sc.failed ? ", last call FAILED (rule fallback)" : ""}</div>`}
     ${!x ? html`<div class="empty">No exchange for this faction yet.</div>` : html`
@@ -900,8 +1014,9 @@ function HqView({ st, faction }) {
 }
 
 // ---- Missions (human squad leaders) ----
-function MissionsView({ st, faction, rows }) {
-  const humans = rows.filter((r) => r.human);
+function MissionsView({ st, faction, rows, sel, onSel, layers, world, act }) {
+  const [focus, setFocus] = useState(null);
+  const humans = rows.filter((r) => r.human), { objs } = publicPicture(st), objById = new Map(objs.map((o) => [o.id, o]));
   const offers = [];
   for (const f of Object.keys(st.factions ?? {})) if (faction === "all" || f === faction) for (const m of st.factions[f].missions ?? []) for (const o of m.offers ?? []) offers.push({ faction: f, squad: m.squad, ...o });
   const hist = [];
@@ -910,26 +1025,41 @@ function MissionsView({ st, faction, rows }) {
   for (const f of Object.keys(st.factions ?? {})) if (faction === "all" || f === faction) for (const e of st.factions[f].eventLog ?? []) if (/mission/i.test(e.text)) evs.push({ ...e, faction: f });
   evs.sort((a, b) => b.ts - a.ts);
   const stBadge = (s) => (s === "accepted" ? "ok" : s === "offered" ? "warn" : s === "completed" ? "info" : "");
+  // where an offer / mission points: objective id -> objective centre, else explicit [x, z], else (fallback) the squad
+  const aim = (o, squadKey) => {
+    const ob = o.target ? objById.get(o.target) : null;
+    if (ob) return { pos: ob.pos, label: ob.id + (ob.name ? " " + ob.name : "") };
+    if (Array.isArray(o.pos) && num(o.pos[0]) && num(o.pos[1])) return { pos: [o.pos[0], o.pos[1]], label: "target" };
+    const r = rows.find((x) => x.key === squadKey);
+    return r && okPos(r.pos) ? { pos: [r.pos[0], r.pos[2]], label: r.id } : null;
+  };
+  const go = (key, a, squadKey) => { if (!a) return; if (squadKey) onSel(squadKey); setFocus({ key, pos: a.pos, label: a.label, nonce: Date.now() }); };
+  const mapLayers = { ...layers, grid: false, buildings: false, labels: true };
+  const tgt = (o) => o.target ?? gridTxt(Array.isArray(o.pos) ? [o.pos[0], 0, o.pos[1]] : null);
   return html`<main class="view">
-    <section class="panel"><h2>Human-led squads <span class="sub">${humans.length}</span></h2><div class="scroll"><table>
-      <thead><tr><th>Squad</th><th>Faction</th><th>Mission</th><th>Kind</th><th>Target</th><th>State</th><th>Position x, z</th></tr></thead><tbody>
-      ${humans.map((r) => html`<tr key=${r.key}><td><b>${r.id}</b></td><td class=${facClass(r.faction)}>${r.faction}</td>
-        <td>${r.mission ? html`<span class=${"badge " + stBadge(r.mission.state)}>${r.mission.state}</span>` : html`<span class="dim">none</span>`}</td><td>${dash(r.mission?.kind)}</td><td>${dash(r.mission?.target)}</td>
-        <td><span class=${"badge " + stateBadge(r.state)}>${r.state}</span></td><td class="mono">${r.posTxt}</td></tr>`)}</tbody></table>
-      ${!humans.length && html`<div class="empty">No human-led squads right now.</div>`}</div></section>
-    <div class="grid2" style=${{ marginTop: "12px" }}>
-      <section class="panel"><h2>Current offers <span class="sub">latest HQ reply</span></h2><div class="scroll"><table>
+    <div class="grid2">
+      <section class="panel"><h2>Human-led squads <span class="sub">${humans.length}, click a row to show it on the map</span></h2><div class="scroll"><table>
+        <thead><tr><th>Squad</th><th>Faction</th><th>Mission</th><th>Kind</th><th>Target</th><th>State</th></tr></thead><tbody>
+        ${humans.map((r) => { const key = "h:" + r.key;
+          return html`<tr key=${r.key} class=${"sqrow" + (focus?.key === key ? " sel" : "")} onClick=${() => go(key, aim(r.mission ?? {}, r.key), r.key)}><td style=${{ borderLeft: "3px solid " + colorOf(r.faction) }}><b>${r.id}</b></td><td class=${facClass(r.faction)}>${r.faction}</td>
+          <td>${r.mission ? html`<span class=${"badge " + stBadge(r.mission.state)}>${r.mission.state}</span>` : html`<span class="dim">none</span>`}</td><td>${dash(r.mission?.kind)}</td><td>${dash(r.mission?.target)}</td>
+          <td><span class=${"badge " + stateBadge(r.state)}>${r.state}</span></td></tr>`; })}</tbody></table>
+        ${!humans.length && html`<div class="empty">No human-led squads right now.</div>`}</div></section>
+      <section class="panel"><h2>Current offers <span class="sub">latest HQ reply, click to show the target</span></h2><div class="scroll"><table>
         <thead><tr><th>Faction</th><th>Squad</th><th>Kind</th><th>Target</th><th>Brief</th></tr></thead><tbody>
-        ${offers.map((o, i) => html`<tr key=${i}><td class=${facClass(o.faction)}>${o.faction}</td><td><b>${o.squad}</b></td><td>${o.kind}</td><td class="mono">${o.target ?? gridTxt(Array.isArray(o.pos) ? [o.pos[0], 0, o.pos[1]] : null)}</td><td class="wrap muted">${dash(o.brief)}</td></tr>`)}</tbody></table>
+        ${offers.map((o, i) => { const key = "o:" + i; return html`<tr key=${i} class=${"sqrow" + (focus?.key === key ? " sel" : "")} onClick=${() => go(key, aim(o, o.faction + "/" + o.squad), o.faction + "/" + o.squad)}><td style=${{ borderLeft: "3px solid " + colorOf(o.faction) }} class=${facClass(o.faction)}>${o.faction}</td><td><b>${o.squad}</b></td><td>${o.kind}</td><td class="mono">${tgt(o)}</td><td class="wrap muted">${dash(o.brief)}</td></tr>`; })}</tbody></table>
         ${!offers.length && html`<div class="empty">No LLM offers pending (without them the game plans offers itself).</div>`}</div></section>
+    </div>
+    <${MapPanel} st=${st} faction=${faction} rows=${rows} sel=${sel} onSel=${onSel} layers=${mapLayers} world=${world} act=${act} focus=${focus} compact=${true} />
+    <div class="grid2" style=${{ marginTop: "12px" }}>
       <section class="panel"><h2>Mission events <span class="sub">offered / accepted / completed / failed</span></h2><div class="scroll"><table><tbody>
         ${evs.slice(0, 40).map((e, i) => html`<tr key=${i}><td class="mono muted">${new Date(e.ts).toLocaleTimeString()}</td><td class=${facClass(e.faction)}>${e.faction}</td><td class="wrap">${e.text}</td></tr>`)}</tbody></table>
         ${!evs.length && html`<div class="empty">No mission events yet.</div>`}</div></section>
-    </div>
-    <section class="panel" style=${{ marginTop: "12px" }}><h2>Offer history <span class="sub">from HQ replies this session</span></h2><div class="scroll"><table>
-      <thead><tr><th>Time</th><th>Faction</th><th>Squad</th><th>Kind</th><th>Target</th><th>Brief</th></tr></thead><tbody>
-      ${hist.slice(0, 60).map((o, i) => html`<tr key=${i}><td class="mono muted">${new Date(o.ts).toLocaleTimeString()}</td><td class=${facClass(o.faction)}>${o.faction}</td><td><b>${o.squad}</b></td><td>${o.kind}</td><td class="mono">${o.target ?? gridTxt(Array.isArray(o.pos) ? [o.pos[0], 0, o.pos[1]] : null)}</td><td class="wrap muted">${dash(o.brief)}</td></tr>`)}</tbody></table>
-      ${!hist.length && html`<div class="empty">No offers yet.</div>`}</div></section></main>`;
+      <section class="panel"><h2>Offer history <span class="sub">from HQ replies this session, click to show the target</span></h2><div class="scroll"><table>
+        <thead><tr><th>Time</th><th>Faction</th><th>Squad</th><th>Kind</th><th>Target</th><th>Brief</th></tr></thead><tbody>
+        ${hist.slice(0, 60).map((o, i) => { const key = "x:" + i; return html`<tr key=${i} class=${"sqrow" + (focus?.key === key ? " sel" : "")} onClick=${() => go(key, aim(o, o.faction + "/" + o.squad), null)}><td class="mono muted">${new Date(o.ts).toLocaleTimeString()}</td><td class=${facClass(o.faction)}>${o.faction}</td><td><b>${o.squad}</b></td><td>${o.kind}</td><td class="mono">${tgt(o)}</td><td class="wrap muted">${dash(o.brief)}</td></tr>`; })}</tbody></table>
+        ${!hist.length && html`<div class="empty">No offers yet.</div>`}</div></section>
+    </div></main>`;
 }
 
 // ---- tabs ----
@@ -1144,6 +1274,7 @@ function App() {
   const [tab, setTab] = useState(loadTab);
   const [faction, setFaction] = useState("all");
   const [sel, setSel] = useState(null);
+  const [act, setAct] = useState("all");
   const [layers, setLayers] = useState(loadLayers);
   const [toasts, toast] = useToasts();
   const world = useWorld();
@@ -1155,7 +1286,7 @@ function App() {
   const fac = faction === "all" || names.includes(faction) ? faction : "all"; // a selected faction that became inactive falls back to all
   const rows = useMemo(() => buildRows(st, fac), [st, fac]);
   const go = (id) => (e) => { e.preventDefault(); setTab(id); try { history.replaceState(null, "", "#" + id); } catch { location.hash = id; } };
-  const common = { st, faction: fac, rows, sel, onSel: setSel };
+  const common = { st, faction: fac, rows, sel, onSel: setSel, act, setAct };
   return html`<div>
     <header class="topbar">
       <div class="brand"><span class="logo"><${Icon} n="logo" /></span>Clausewitz HQ</div>
@@ -1167,7 +1298,7 @@ function App() {
     ${tab === "map" && html`<${MapView} ...${common} layers=${layers} setLayers=${setLayers} world=${world} />`}
     ${tab === "forces" && html`<${ForcesView} ...${common} />`}
     ${tab === "hq" && html`<${HqView} ...${common} />`}
-    ${tab === "missions" && html`<${MissionsView} ...${common} />`}
+    ${tab === "missions" && html`<${MissionsView} ...${common} layers=${layers} world=${world} />`}
     ${tab === "usage" && html`<${Config} st=${st} toast=${toast} refresh=${refresh} />`}
     <div class="toasts">${toasts.map((t) => html`<div class=${"toast " + t.kind} key=${t.id}>${t.text}</div>`)}</div>
   </div>`;

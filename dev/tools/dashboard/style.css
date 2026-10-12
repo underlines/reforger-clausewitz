@@ -204,3 +204,53 @@ main.view .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax
 .cfgbody table { margin-top: 2px; }
 details > summary { cursor: pointer; padding: 2px 0; }
 @media (max-width: 1100px) { .panel.tall .mapbox { height: 60vh; } main.view .grid2 { grid-template-columns: 1fr; } }
+
+/* shared faction comparison (Compare): attributes as rows, factions as columns */
+main.view > .grid2.gap, main.view > .grid2 { margin-top: 12px; }
+main.view > .grid2:first-child, main.view > section:first-child { margin-top: 0; }
+table.cmp { table-layout: fixed; }
+table.cmp th { position: static; }
+table.cmp th.fh { border-top: 3px solid var(--line-strong); font-size: 12px; letter-spacing: .03em; text-transform: none; }
+table.cmp th:first-child { width: 34%; }
+table.cmp tr.sec th { background: transparent; color: var(--dim); padding-top: 12px; border-bottom: 1px solid var(--line-strong); }
+table.cmp td { white-space: normal; vertical-align: middle; padding: 6px 10px; }
+table.cmp td.rl { color: var(--mut); }
+table.cmp td.mg { color: var(--fg); text-align: center; font-variant-numeric: tabular-nums; background: rgba(255,255,255,.025); }
+.cc { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cv { font-variant-numeric: tabular-nums; font-weight: 600; } .cv.dim { color: var(--mut); font-weight: 400; }
+.cv .muted { font-weight: 400; }
+.cv .kinds { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.mbar { display: flex; height: 5px; border-radius: 3px; overflow: hidden; background: rgba(255,255,255,.07); }
+.mbar i { display: block; height: 100%; transition: width .4s; }
+.mbar i + i { margin-left: 2px; }
+
+/* activity: dormant = pale */
+.badge.dorm { background: rgba(135,147,166,.14); color: var(--mut); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.badge.actv { background: rgba(63,207,142,.12); color: var(--ok); }
+tr.dormrow td:not(:first-child) { color: var(--mut); }
+.actf button:disabled { opacity: .4; cursor: default; }
+.actleg { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+.actleg .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 2px; }
+
+/* squads table detail row */
+tr.detail td { background: rgba(255,255,255,.03); white-space: normal; padding: 8px 14px; }
+dl.kv { margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px 18px; }
+dl.kv > div { display: flex; flex-direction: column; min-width: 0; } dl.kv > div.wide { grid-column: 1 / -1; }
+dl.kv dt { color: var(--dim); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; } dl.kv dd { margin: 0; }
+.bar { width: 48px; }
+
+/* SITREP card */
+.sitbody { padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 10px; }
+.sittext { margin: 0; line-height: 1.5; white-space: pre-wrap; }
+dl.sitsecs { margin: 0; display: grid; gap: 8px; }
+dl.sitsecs dt { color: var(--mut); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
+dl.sitsecs dd { margin: 1px 0 0; white-space: pre-wrap; line-height: 1.45; }
+.sitempty { font-style: italic; }
+.panel > h2 .sub .badge { margin-right: 2px; }
+
+/* compact (Missions) map */
+.panel.compact .mapbox { height: 340px; }
+.toolbar .actleg { margin-right: 6px; }
+@media (max-width: 1100px) { table.cmp th:first-child { width: 40%; } .panel.compact .mapbox { height: 300px; } }
+.pbar { display: inline-block; width: 48px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.08); vertical-align: middle; margin-right: 6px; overflow: hidden; }
+.pbar i { display: block; height: 100%; }

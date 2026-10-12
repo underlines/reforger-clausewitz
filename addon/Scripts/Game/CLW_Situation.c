@@ -346,6 +346,20 @@ class CLW_Situation
 				objectiveJson += ",\"pos\":[" + Math.Round(order.m_vPos[0]) + "," + Math.Round(order.m_vPos[2]) + "],\"reason\":\"" + Escape(order.m_sReason) + "\",\"ageSec\":" + Math.Round(Math.Max(0, now - order.m_fIssuedAt)) + ",\"status\":\"" + order.m_sStatus + "\"}";
 			}
 
+			// dormant = every agent of the unit (crew + linked cargo) sits in the engine's max AI LOD (not kept active by CLW_Activity)
+			int lodTotal;
+			int lodMax;
+			CLW_SquadInfo.LodCounts(group, lodTotal, lodMax);
+			if (unit && unit.GetCargoGroup())
+			{
+				int cargoTotal;
+				int cargoMax;
+				CLW_SquadInfo.LodCounts(unit.GetCargoGroup(), cargoTotal, cargoMax);
+				lodTotal += cargoTotal;
+				lodMax += cargoMax;
+			}
+			bool dormant = lodTotal > 0 && lodMax == lodTotal;
+
 			string missionJson = "null";
 			if (human)
 			{
@@ -358,7 +372,7 @@ class CLW_Situation
 				text += ",";
 			text += "{\"id\":\"" + Escape(id) + "\",\"kind\":\"" + Escape(kind) + "\",\"type\":\"" + Escape(CLW_SquadInfo.TypeName(group)) + "\",\"pos\":[" + Math.Round(pos[0]) + "," + Math.Round(pos[1]) + "," + Math.Round(pos[2]) + "]";
 			text += ",\"agents\":" + alive + ",\"startAgents\":" + start + ",\"vehicle\":" + vehicleJson + ",\"humanLed\":" + BoolText(human);
-			text += ",\"wounded\":" + wounded + ",\"health\":" + avgHealth.ToString(-1, 2) + ",\"speed\":" + speed.ToString(-1, 1) + ",\"heading\":" + headingDeg + ",\"state\":\"" + stateText + "\"";
+			text += ",\"wounded\":" + wounded + ",\"health\":" + avgHealth.ToString(-1, 2) + ",\"speed\":" + speed.ToString(-1, 1) + ",\"heading\":" + headingDeg + ",\"state\":\"" + stateText + "\",\"dormant\":" + BoolText(dormant);
 			text += ",\"objective\":" + objectiveJson + ",\"mission\":" + missionJson + "}";
 			squadCount++;
 		}
