@@ -1,0 +1,87 @@
+VerticalLayoutWidgetClass {
+ Name "SetupRoot"
+ Slot OverlayWidgetSlot "{7D3A91C45E200001}" {
+  HorizontalAlign 3
+  VerticalAlign 3
+ }
+ {
+  SizeLayoutWidgetClass "{7D3A91C45E200002}" {
+   Name "ScrollSize"
+   Slot LayoutSlot "{7D3A91C45E200003}" {
+    HorizontalAlign 3
+   }
+   AllowMinDesiredHeight 1
+   MinDesiredHeight 640
+   AllowMaxDesiredHeight 1
+   MaxDesiredHeight 640
+   {
+    ScrollLayoutWidgetClass "{7D3A91C45E200004}" {
+     Name "Scroll"
+     Slot AlignableSlot "{7D3A91C45E200005}" {
+      HorizontalAlign 3
+      VerticalAlign 3
+     }
+     Color 0.88 0.451 0.084 1
+     components {
+      SCR_GamepadScrollComponent "{7D3A91C45E200006}" {
+      }
+     }
+     style Small
+     {
+      VerticalLayoutWidgetClass "{7D3A91C45E200007}" {
+       Name "List"
+       Slot AlignableSlot "{7D3A91C45E200008}" {
+        HorizontalAlign 3
+        Padding 0 0 14 0
+       }
+       {
+        RichTextWidgetClass "{7D3A91C45E200009}" : "{3FF33FC224E0C76C}UI/layouts/WidgetLibrary/RichTextWidgets/RichText_BodySmall.layout" {
+         Name "BattleHeader"
+         Slot LayoutSlot "{7D3A91C45E20000A}" {
+          Padding 0 8 0 4
+         }
+         Color 0.88 0.451 0.084 1
+         Text "BATTLE"
+        }
+        VerticalLayoutWidgetClass "{7D3A91C45E20000B}" {
+         Name "BattleParams"
+         Slot LayoutSlot "{7D3A91C45E20000C}" {
+          HorizontalAlign 3
+         }
+        }
+        RichTextWidgetClass "{7D3A91C45E20000D}" : "{3FF33FC224E0C76C}UI/layouts/WidgetLibrary/RichTextWidgets/RichText_BodySmall.layout" {
+         Name "ModeHeader"
+         Slot LayoutSlot "{7D3A91C45E20000E}" {
+          Padding 0 18 0 4
+         }
+         Color 0.88 0.451 0.084 1
+         Text "WAR MODE"
+        }
+        VerticalLayoutWidgetClass "{7D3A91C45E20000F}" {
+         Name "ModeBox"
+         Slot LayoutSlot "{7D3A91C45E200010}" {
+          HorizontalAlign 3
+         }
+        }
+        RichTextWidgetClass "{7D3A91C45E200011}" : "{3FF33FC224E0C76C}UI/layouts/WidgetLibrary/RichTextWidgets/RichText_BodySmall.layout" {
+         Name "ModeDesc"
+         Slot LayoutSlot "{7D3A91C45E200012}" {
+          Padding 4 2 4 10
+         }
+         Color 0.65 0.65 0.65 1
+         Text ""
+        }
+        VerticalLayoutWidgetClass "{7D3A91C45E200013}" {
+         Name "ModeParams"
+         Slot LayoutSlot "{7D3A91C45E200014}" {
+          HorizontalAlign 3
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+}

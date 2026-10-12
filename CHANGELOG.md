@@ -6,6 +6,7 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 ## [Unreleased]
 
 ### Added
+- War setup menu: the first player to join opens a generated dialog (Battle group with the two factions, War mode group with the mode selector and its parameters as sliders / spin boxes / checkboxes, Start war / Defaults); other players see "Waiting for <name>"; owner handover when the owner leaves; chat fallback `/war setup` and `/war start [mode] [key=value ...]`; auto start after 180 s.
 - Control points: own capture logic (progress, contested, neutralise-then-capture), public map markers for points and bases.
 - War state with pluggable war modes: "short conflict" (tickets, bleed for the side holding fewer points, win by tickets / holding all points / time limit). The war waits in a SETUP phase until started (auto start after N s from the scenario).
 - Supplies ledger with income from held points (TrySpend / Refund / AddSupplies API for later phases).
