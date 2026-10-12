@@ -21,7 +21,21 @@ class CLW_Action_EstablishFob : CLW_ActionExecutor
 			return false;
 		}
 
-		return CLW_FobManager.CanEstablish(call.m_sFaction, site, error);
+		if (!CLW_FobManager.CanEstablish(call.m_sFaction, site, error))
+			return false;
+
+		// AI callers only (the LLM and the doctrine reach this action; players do not): the HQ keeps its reserve
+		string reserveWhy;
+		if (!CLW_EconomyGuard.CanAiSpend(call.m_sFaction, CLW_FobManager.GetCost(), reserveWhy))
+		{
+			error = reserveWhy;
+			if (CLW_EconomyGuard.LogChanged("fobreserve", call.m_sFaction, reserveWhy))
+				Print(string.Format("CLW: fob %1 ESTABLISH_FOB refused: %2", call.m_sFaction, reserveWhy), LogLevel.NORMAL);
+
+			return false;
+		}
+
+		return true;
 	}
 
 	override bool Execute(CLW_ActionCall call, out string result)
@@ -106,7 +120,7 @@ class CLW_FobDoctrine
 		string result;
 		if (CLW_FobManager.CountLive(side) < CLW_FobManager.GetMax())
 		{
-			int needed = CLW_FobManager.GetCost() + CLW_RuleCommander.SUPPLY_RESERVE;
+			int needed = CLW_FobManager.GetCost() + Math.Max(CLW_RuleCommander.SUPPLY_RESERVE, CLW_EconomyGuard.HqReserve());
 			if (war.GetSupplies(side) < needed)
 				return;
 
@@ -151,7 +165,7 @@ class CLW_FobDoctrine
 
 		// logistics off: the one pool must be plentiful; logistics on: the upgrade is paid from the FOB's own stock (checked per FOB below)
 		bool perBase = CLW_Capabilities.Has("logistics");
-		if (!perBase && war.GetSupplies(side) < CLW_FobManager.GetUpgradeCost() + CLW_RuleCommander.SUPPLY_RESERVE + UPGRADE_EXTRA_SUPPLIES)
+		if (!perBase && war.GetSupplies(side) < CLW_FobManager.GetUpgradeCost() + Math.Max(CLW_RuleCommander.SUPPLY_RESERVE, CLW_EconomyGuard.HqReserve()) + UPGRADE_EXTRA_SUPPLIES)
 			return;
 
 		array<CLW_Fob> own = {};

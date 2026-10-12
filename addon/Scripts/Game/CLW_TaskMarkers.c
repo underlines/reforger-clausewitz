@@ -195,7 +195,14 @@ class CLW_TaskMarkers
 	// Unit label. WP1 display names: replace the body with the display name getter (the id is the fallback).
 	protected static string UnitName(CLW_SquadRegistry registry, string id)
 	{
-		return id;
+		if (!registry)
+			return id;
+
+		string name = registry.GetName(id);
+		if (name.IsEmpty())
+			return id;
+
+		return name;
 	}
 
 	// "builder of FOB1" / "escort of FOB1" -> "FOB1"; "convoy CV1 HQ -> FOB1" -> "FOB1". "" when not understood.
