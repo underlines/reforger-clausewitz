@@ -76,13 +76,21 @@ class CLW_SupplyLink
 			if (!container || container.GetMaxResourceValue() <= 0 || m_aContainers.Contains(container))
 				continue;
 
+			// a virtual container is a view over other containers (HQ storage over its crates, DS run 2026-10-12):
+			// writing it fills the real ones and the sum counts them twice
+			if (SCR_ResourceContainerVirtual.Cast(container))
+			{
+				Print(string.Format("CLW: services supply link %1 %2: skipped virtual container %3/%4", m_sSide, m_sBase, container.GetResourceValue(), container.GetMaxResourceValue()), LogLevel.NORMAL);
+				continue;
+			}
+
 			m_aContainers.Insert(container);
 			m_fCapacity += container.GetMaxResourceValue();
 			string prefabName = "?";
 			EntityPrefabData prefabData = entity.GetPrefabData();
 			if (prefabData)
 				prefabName = prefabData.GetPrefabName();
-			Print(string.Format("CLW: services supply link %1 %2: container %3 %4/%5 (%6)", m_sSide, m_sBase, m_aContainers.Count(), container.GetResourceValue(), container.GetMaxResourceValue(), prefabName), LogLevel.NORMAL);
+			Print(string.Format("CLW: services supply link %1 %2: container %3 %4/%5 (%6 %7)", m_sSide, m_sBase, m_aContainers.Count(), container.GetResourceValue(), container.GetMaxResourceValue(), container.ClassName(), prefabName), LogLevel.NORMAL);
 		}
 
 		return m_aContainers.Count();
@@ -148,17 +156,33 @@ class CLW_SupplyLink
 	}
 
 	// Fills the containers in order up to their capacity with 'total'; returns the stock actually in them afterwards.
+	// A container that ignores SetResourceValue (DS run 2026-10-12: all 15 HQ containers stayed 0, e.g. ones managed by
+	// a vanilla encapsulator) is dropped from the link, so the stock lands in containers that take it.
 	protected float Write(float total)
 	{
 		float remaining = Math.Max(0, total);
-		foreach (SCR_ResourceContainer container : m_aContainers)
+		for (int i = m_aContainers.Count() - 1; i >= 0; i--)
 		{
-			if (!container)
-				continue;
+			if (!m_aContainers[i])
+				m_aContainers.Remove(i);
+		}
 
+		int index = 0;
+		while (index < m_aContainers.Count())
+		{
+			SCR_ResourceContainer container = m_aContainers[index];
 			float part = Math.Min(container.GetMaxResourceValue(), remaining);
 			container.SetResourceValue(part);
+			if (Math.AbsFloat(container.GetResourceValue() - part) >= 1)
+			{
+				Print(string.Format("CLW: services supply link %1 %2: container %3 ignores writes (wanted %4, has %5): dropped", m_sSide, m_sBase, index + 1, part, container.GetResourceValue()), LogLevel.WARNING);
+				m_fCapacity -= container.GetMaxResourceValue();
+				m_aContainers.Remove(index);
+				continue;
+			}
+
 			remaining -= part;
+			index++;
 		}
 
 		m_fLast = GetStock();

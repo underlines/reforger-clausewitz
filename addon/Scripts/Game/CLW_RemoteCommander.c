@@ -205,26 +205,26 @@ class CLW_RemoteCommander
 		// the rules SITREP rides along (the sidecar shows it on the dashboard when no LLM SITREP is current)
 		string sitrepJson = CLW_SitrepStore.GetRulesJson(m_sFaction);
 		if (!sitrepJson.IsEmpty() && body.Length() > 2 && body.Length() + sitrepJson.Length() < 58000)
-			body = body.Substring(0, body.Length() - 1) + ",\"sitrep\":" + sitrepJson + "}";
+			body = CLW_Str.DropLast(body) + ",\"sitrep\":" + sitrepJson + "}";
 
 		// recent debug lines (CLW_Debug ring) for the dashboard debug log; every line goes with both factions' posts, the sidecar dedupes
 		int debugLast;
 		string debugJson = CLW_Debug.GetJsonSince(m_iDebugSeq, debugLast);
 		if (!debugJson.IsEmpty() && body.Length() > 2 && body.Length() + debugJson.Length() < 58000)
 		{
-			body = body.Substring(0, body.Length() - 1) + ",\"debug\":" + debugJson + "}";
+			body = CLW_Str.DropLast(body) + ",\"debug\":" + debugJson + "}";
 			m_iDebugSeq = debugLast;
 		}
 
 		// protocol v3: the hash of the action manifest this situation was built for (the manifest itself goes to POST /manifest)
 		string manifestHash = SyncManifest(now);
 		if (!manifestHash.IsEmpty() && body.Length() > 2)
-			body = body.Substring(0, body.Length() - 1) + ",\"manifest\":\"" + manifestHash + "\"}";
+			body = CLW_Str.DropLast(body) + ",\"manifest\":\"" + manifestHash + "\"}";
 
 		// M3 phase A: pending HQ chat messages of this faction (/hq <text>) for the sidecar's agent turn
 		string hqJson = CLW_HqChat.GetJson(m_sFaction);
 		if (!hqJson.IsEmpty() && body.Length() > 2)
-			body = body.Substring(0, body.Length() - 1) + ",\"hq\":" + hqJson + "}";
+			body = CLW_Str.DropLast(body) + ",\"hq\":" + hqJson + "}";
 
 		if (squads <= 0)
 			ThinkRules();	// still POST the situation below: the sidecar/dashboard must learn the faction has no squads left (it may still buy)
@@ -363,14 +363,16 @@ class CLW_RemoteCommander
 
 		string summary = "";
 		int applied = 0;
+		// FOB/logistics first: they reserve their supplies and units before buys spend the rest and orders take the units
+		// (DS run 2026-10-12: buys in the same reply left 100 of 300 and the ESTABLISH_FOB was refused)
+		if (hasFobs)
+			applied += ApplyFobs(reply.fobs, summary);
 		if (hasOrders)
 			applied += ApplyOrders(reply.orders, summary);
 		if (hasBuy)
 			applied += ApplyBuys(reply.buy, summary);
 		if (hasMissions)
 			applied += ApplyMissions(reply.missions, summary);
-		if (hasFobs)
-			applied += ApplyFobs(reply.fobs, summary);
 
 		if (applied == 0)
 		{

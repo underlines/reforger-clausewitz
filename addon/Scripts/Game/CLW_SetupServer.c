@@ -538,7 +538,7 @@ class CLW_SetupServer
 		string json = m_War.GetModesJson();
 		array<ref CLW_ModeParam> battle = {};
 		BuildBattleParams(battle);
-		json = json.Substring(0, json.Length() - 1) + ",\"battle\":[";
+		json = CLW_Str.DropLast(json) + ",\"battle\":[";
 		foreach (int i, CLW_ModeParam param : battle)
 		{
 			if (i > 0)

@@ -834,19 +834,6 @@ function validateV2(obj, sit, dropped = [], manifest = DEFAULT_MANIFEST) {
 
   const catalog = new Map((Array.isArray(sit.catalog) ? sit.catalog : []).filter((e) => e && typeof e.type === "string" && isNum(e.cost)).map((e) => [e.type, e]));
   let left = isNum(sit.war?.supplies) ? sit.war.supplies : 0;
-  for (const b of Array.isArray(obj.buy) ? obj.buy : []) {
-    const e = b && typeof b === "object" ? catalog.get(b.type) : null;
-    const cost = e ? e.cost * b.count : 0;
-    const why = !b || typeof b !== "object" ? "not an object"
-      : !buyOk ? "buy is not available in this war mode"
-      : res.buy.length >= 3 ? "more than 3 buy entries"
-      : !e ? `unknown catalog type ${b.type}`
-      : !Number.isInteger(b.count) || b.count < 1 || b.count > 3 ? "count must be an integer 1..3"
-      : cost > left ? `cost ${cost} exceeds remaining supplies ${left}` : null;
-    if (why) { drop("buy", b, why); continue; }
-    left -= cost;
-    res.buy.push({ type: b.type, count: b.count, reason: typeof b.reason === "string" ? b.reason.slice(0, 120) : "" });
-  }
 
   // FOB intents (channel "fob"): at most 1 per reply; the game validates again (cap, one in progress, site, supplies)
   const fobNames = new Set(channelOf(manifest, "fob").map((e) => e.name));
@@ -882,6 +869,21 @@ function validateV2(obj, sit, dropped = [], manifest = DEFAULT_MANIFEST) {
     else if (cmd === "RESUPPLY" || (cmd === "CONVOY" && f.origin === "HQ")) left -= Math.min(isNum(lr.truckCargo) ? lr.truckCargo : 0, Math.max(0, left)); // the load leaves the HQ stock (approximation for CONVOY from a FOB)
     const out = cmd === "ESTABLISH_FOB" ? { site: f.site } : cmd === "CONVOY" ? { origin: f.origin, dest: f.dest } : { fob: f.fob };
     res.fobs.push({ command: cmd, ...out, reason: typeof f.reason === "string" ? f.reason.slice(0, 120) : "" });
+  }
+
+  // buys after the FOB/logistics entries: the game applies them in that order too (a FOB is not starved by buys in the same reply)
+  for (const b of Array.isArray(obj.buy) ? obj.buy : []) {
+    const e = b && typeof b === "object" ? catalog.get(b.type) : null;
+    const cost = e ? e.cost * b.count : 0;
+    const why = !b || typeof b !== "object" ? "not an object"
+      : !buyOk ? "buy is not available in this war mode"
+      : res.buy.length >= 3 ? "more than 3 buy entries"
+      : !e ? `unknown catalog type ${b.type}`
+      : !Number.isInteger(b.count) || b.count < 1 || b.count > 3 ? "count must be an integer 1..3"
+      : cost > left ? `cost ${cost} exceeds remaining supplies ${left}` : null;
+    if (why) { drop("buy", b, why); continue; }
+    left -= cost;
+    res.buy.push({ type: b.type, count: b.count, reason: typeof b.reason === "string" ? b.reason.slice(0, 120) : "" });
   }
 
   const offered = new Set();
@@ -1300,7 +1302,12 @@ function readBody(req, limit = 2_000_000) {
 // ---------- handlers ----------
 async function handleOrders(req, res) {
   let sit;
-  try { sit = JSON.parse(await readBody(req)); } catch { return send(res, 400, { error: "invalid JSON" }); }
+  let rawBody = "";
+  try { rawBody = await readBody(req); sit = JSON.parse(rawBody); } catch (e) {
+    const at = Number(/position (\d+)/.exec(e.message)?.[1]) || 0; // show where the game's JSON broke
+    console.log("  orders: invalid JSON (" + e.message + "): " + rawBody.slice(Math.max(0, at - 200), at + 200));
+    return send(res, 400, { error: "invalid JSON" });
+  }
   let gameSitrep = null; // the game's rules SITREP rides along; it never goes to the model
   if (sit && typeof sit === "object" && "sitrep" in sit) { gameSitrep = sit.sitrep; delete sit.sitrep; }
   if (sit && typeof sit === "object" && "debug" in sit) { addDebugLines(sit.debug); delete sit.debug; } // game debug lines: dashboard only, never the model

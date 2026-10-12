@@ -98,7 +98,7 @@ class CLW_Situation
 		if (json.Length() < 2 || !CLW_Capabilities.Has("requests"))
 			return;
 
-		json = json.Substring(0, json.Length() - 1) + ",\"requests\":" + CLW_RequestService.GetJson(m_sFaction) + "}";
+		json = CLW_Str.DropLast(json) + ",\"requests\":" + CLW_RequestService.GetJson(m_sFaction) + "}";
 	}
 
 	// M3 phase L: convoys[] and logisticsRules (only with the `logistics` capability and a supply truck in the catalog). Appended after the trim.
@@ -108,7 +108,7 @@ class CLW_Situation
 			return;
 
 		string extra = ",\"convoys\":[" + CLW_Convoys.ConvoysJson(m_sFaction) + "],\"logisticsRules\":" + CLW_Convoys.RulesJson(m_sFaction);
-		json = json.Substring(0, json.Length() - 1) + extra + "}";
+		json = CLW_Str.DropLast(json) + extra + "}";
 	}
 
 	// M3 phase F: own FOBs, candidate sites and the FOB rules (only with the `fob` capability and at least one FOB allowed).
@@ -121,7 +121,7 @@ class CLW_Situation
 		string fobsJson = CLW_FobManager.FobsJson(m_sFaction);
 		string sitesJson = CLW_FobManager.SitesJson(m_sFaction);
 		string extra = ",\"fobs\":[" + fobsJson + "],\"fobSites\":[" + sitesJson + "],\"fobRules\":" + CLW_FobManager.RulesJson(m_sFaction);
-		json = json.Substring(0, json.Length() - 1) + extra + "}";
+		json = CLW_Str.DropLast(json) + extra + "}";
 	}
 
 	// ---- parts ----

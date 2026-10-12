@@ -719,9 +719,22 @@ class CLW_FobManager
 		string error;
 		if (!spawner.BuyTagged(fob.m_sSide, pick.m_sType, "build " + fob.m_sId, fob.m_sTagBuilder, error))
 		{
-			if (fob.m_eState == CLW_EFobState.PLANNED)
-				Fail(fob, "cannot buy a builder: " + error);
+			fob.m_sTagBuilder = "";
+			if (fob.m_eState != CLW_EFobState.PLANNED)
+				return;
 
+			// no purchase possible (supplies, caps, engine AI limit): a free infantry group walks the build there
+			// (DS run 2026-10-12: at 120/128 active AI the FOB failed although infantry stood idle)
+			string walker = FindFreeInfantry(fob.m_sSide, fob.m_vPos, true);	// an HQ build order outranks the group's current order
+			if (walker.IsEmpty())
+			{
+				Fail(fob, "cannot buy a builder (" + error + ") and no free infantry");
+				return;
+			}
+
+			fob.m_sBuilderId = walker;
+			Print(string.Format("CLW: fob %1 builder: %2 walks (purchase refused: %3)", fob.m_sId, walker, error), LogLevel.NORMAL);
+			BeginMove(fob);
 			return;
 		}
 
@@ -848,7 +861,7 @@ class CLW_FobManager
 		return best;
 	}
 
-	protected static string FindFreeInfantry(string side, vector site)
+	protected static string FindFreeInfantry(string side, vector site, bool busyOk = false)
 	{
 		CLW_SquadRegistry registry = CLW_GameMode.GetRegistry();
 		CLW_Orders orders = OrdersOf(side);
@@ -868,7 +881,7 @@ class CLW_FobManager
 			if (!group || CLW_RuleCommander.HasHumanLeader(group) || IsReserved(id))
 				continue;
 
-			if (orders.UnitAlive(id) <= 0 || orders.IsWeak(id) || !IsFreeUnit(orders, id))
+			if (orders.UnitAlive(id) <= 0 || orders.IsWeak(id) || (!busyOk && !IsFreeUnit(orders, id)))
 				continue;
 
 			vector pos;
