@@ -1248,15 +1248,16 @@ class CLW_Services
 			}
 		}
 
+		int pad = spawner.CLW_GetPad();	// leading dummy entries (see CLW_FitToActions) are not listed vehicles
 		int total, inPool;
-		SCR_EntityCatalogEntry listed = spawner.GetEntryAtIndex(total);
+		SCR_EntityCatalogEntry listed = spawner.GetEntryAtIndex(pad);
 		while (listed)
 		{
 			if (poolPaths.Contains(CLW_ForceCatalog.PathOf(listed.GetPrefab())))
 				inPool++;
 
 			total++;
-			listed = spawner.GetEntryAtIndex(total);
+			listed = spawner.GetEntryAtIndex(pad + total);
 		}
 
 		string source = "faction " + usedKey;
@@ -1401,18 +1402,103 @@ modded class SCR_CatalogEntitySpawnerComponent
 	protected int m_iCLWKinAdded;		// entries added from kin catalogs by the last build
 	protected int m_iCLWKinFactions;	// friendly factions that were looked at
 
+	protected int m_iCLWPad;			// dummy entries in front of the list (one per non-catalog action ahead of the catalog actions)
+	protected int m_iCLWActions;		// user actions on the depot's action manager
+	protected int m_iCLWCut;			// entries dropped because the depot has fewer actions than the list
+	protected string m_sCLWFitLog;		// last fit line (logged again only when it changes)
+
 	protected override void SetCurrentFactionCatalog()
 	{
 		super.SetCurrentFactionCatalog();
 		CLW_ExtendDepotList();
+		CLW_FitToActions();
 	}
 
 	// Rebuilds the list now (server: after the depot was affiliated with its side). Returns the number of entries; info = what was merged.
 	int CLW_RebuildDepotList(out string info)
 	{
 		SetCurrentFactionCatalog();
-		info = string.Format("[own %1 + kin %2 from %3 friendly faction(s)]", m_aAssetList.Count() - m_iCLWKinAdded, m_iCLWKinAdded, m_iCLWKinFactions);
-		return m_aAssetList.Count();
+		info = string.Format("[own %1 + kin %2 from %3 friendly faction(s)]", m_aAssetList.Count() - m_iCLWPad - m_iCLWKinAdded, m_iCLWKinAdded, m_iCLWKinFactions);
+		return m_aAssetList.Count() - m_iCLWPad;
+	}
+
+	// Number of leading dummy entries (not listed, not buyable); the visible entry k sits at list index k + pad.
+	int CLW_GetPad()
+	{
+		return m_iCLWPad;
+	}
+
+	// The vanilla AssignUserActions gives list entry i to the i-th action of the manager, and the purchase RPC sends GetActionID() as the index.
+	// A depot prefab that has other actions ahead of its SCR_CatalogSpawnerUserAction ones (the vanilla build action of VehicleService_*) would
+	// lose the entry at that index, so the list is padded with copies of the first entry up to the first catalog action (the padding sits on a
+	// non-catalog action: never shown, never bought). Entries beyond the number of actions cannot be shown at all (vanilla prints "not enough
+	// of SCR_CatalogSpawnerUserAction"): they are cut off the end of the list (own entries come first, so the kin tail goes first). The action
+	// list is prefab data and the faction catalogs are replicated data: server and client compute the same list and the same indices.
+	protected void CLW_FitToActions()
+	{
+		m_iCLWPad = 0;
+		m_iCLWActions = 0;
+		m_iCLWCut = 0;
+		if (!CLW_IsVehicleSpawner() || !m_ActionManager || m_aAssetList.IsEmpty())
+			return;
+
+		array<BaseUserAction> userActions = {};
+		m_ActionManager.GetActionsList(userActions);
+		m_iCLWActions = userActions.Count();
+
+		int firstCatalog = -1;
+		foreach (int actionIdx, BaseUserAction userAction : userActions)
+		{
+			if (SCR_CatalogSpawnerUserAction.Cast(userAction))
+			{
+				firstCatalog = actionIdx;
+				break;
+			}
+		}
+
+		string sideKey = "?";
+		Faction ownerFaction = GetFaction();
+		if (ownerFaction)
+			sideKey = ownerFaction.GetFactionKey();
+
+		if (firstCatalog < 0)
+		{
+			CLW_LogFit(sideKey, "NO SCR_CatalogSpawnerUserAction on this depot prefab, nothing can be requested at it");
+			return;
+		}
+
+		SCR_EntityCatalogEntry first = m_aAssetList[0];
+		for (int p = 0; p < firstCatalog; p++)
+		{
+			m_aAssetList.InsertAt(first, 0);
+		}
+
+		m_iCLWPad = firstCatalog;
+		while (m_aAssetList.Count() > m_iCLWActions)
+		{
+			m_aAssetList.Remove(m_aAssetList.Count() - 1);
+			m_iCLWCut++;
+		}
+
+		AssignUserActions();	// the lists above changed after the base call assigned them
+		CLW_LogFit(sideKey, "");
+	}
+
+	protected void CLW_LogFit(string sideKey, string problem)
+	{
+		int listed = Math.Max(m_aAssetList.Count() - m_iCLWPad, 0);
+		string line = string.Format("CLW: services depot %1 actions=%2 listed=%3 cut=%4", sideKey, m_iCLWActions, listed, m_iCLWCut);
+		if (m_iCLWPad > 0)
+			line += string.Format(" pad=%1", m_iCLWPad);
+
+		if (problem != "")
+			line += " " + problem;
+
+		if (line == m_sCLWFitLog)
+			return;
+
+		m_sCLWFitLog = line;
+		Print(line, LogLevel.NORMAL);
 	}
 
 	int CLW_GetKinCount()
@@ -1513,11 +1599,11 @@ modded class SCR_CatalogEntitySpawnerComponent
 	int CLW_ClientRefresh(bool force)
 	{
 		if (!force && m_iCLWKinAdded > 0)
-			return m_aAssetList.Count();
+			return m_aAssetList.Count() - m_iCLWPad;
 
 		SetCurrentFactionCatalog();
-		Print(string.Format("CLW: services depot list (client refresh) entries=%1 merged=%2 (friendly factions %3, war active %4)", m_aAssetList.Count(), m_iCLWKinAdded, m_iCLWKinFactions, CLW_ArsenalPool.IsActive()), LogLevel.NORMAL);
-		return m_aAssetList.Count();
+		Print(string.Format("CLW: services depot list (client refresh) entries=%1 merged=%2 (friendly factions %3, war active %4)", m_aAssetList.Count() - m_iCLWPad, m_iCLWKinAdded, m_iCLWKinFactions, CLW_ArsenalPool.IsActive()), LogLevel.NORMAL);
+		return m_aAssetList.Count() - m_iCLWPad;
 	}
 
 	protected override void OnPostInit(IEntity owner)

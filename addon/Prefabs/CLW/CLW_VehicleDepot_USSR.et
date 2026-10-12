@@ -1,0 +1,1409 @@
+GenericEntity : "{DBD178AE8D6F0075}Prefabs/Props/Military/Compositions/USSR/VehicleService_USSR.et" {
+ ID "AC3F9B2FB9F01AAA"
+ components {
+  ActionsManagerComponent "{5CB6952C9693C41C}" {
+   additionalActions {
+    SCR_CatalogSpawnerUserAction "{7DE4F3B879C52E73}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{EEC2CE6AFDDE0802}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{43B544C5EB06E31A}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{8BB563719DD08AF7}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{B801A1AA17A8ED7D}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{33549543C6DAD02F}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{B2B99A635D3AC2B6}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{E18D56BFFF6871C0}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{2087F124D158B179}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{3CB44353E913EEC1}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{8660511903E94DB7}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{4491DF3580AC04A6}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{6EEA1968A9CA8421}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{9DCDD29643253BFD}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{8F97BD8326DC3F05}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{7B1FAD861996FB67}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{2FD815F4F097290F}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{1574A83213F28BF8}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{BB4371BB04D8FA97}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{44739993A1311D15}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{6CBF207E079D0CC7}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{4BAF1B90EE894FF3}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{B457906DB027D31E}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{70E1A790714CC532}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{FAC43F2891F1AD06}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{1632F8D151E555F0}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{0674EE3633257C1C}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{5AC3DA7F029ABC9F}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{2A6F8425A6BBB8DB}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{A7FECF9BC3C39B33}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{243384CACB3E62FA}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{9619CA1C1676FD03}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{F0D0AFA8334707A6}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{02A599D702632BED}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{A5FA3C33234E71D4}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{6E9BA0F87DFB1E28}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{284208B8BC41465E}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{9D9C968A3F7C9646}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{1BCFF5E7DA7084AE}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{F167A6A889576006}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{9213E1628C289BD1}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{E7FBDD1E43D8AEFC}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{B5E0F5B2A6FD8878}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{7521456D4B56D7B2}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{A27B60D87C03D85F}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{07B522C6468E4104}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{92FBB47374AE16D5}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{2079011BCCF79267}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{1FB3619B9D849138}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{7C7973647A446632}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{88A5A2A39E3E2B25}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{F6B3F07E3A9A76BB}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{16AD3C8035AA8874}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{6A7317D37931AB33}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{BCA966641CF4FD70}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{9268928841792D08}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{BE9F5A29A08BA4CE}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{8DA387C4499734DC}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{B26836B92BEFB978}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{84199C7D1A75F58B}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{98AC237BED7E72E8}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{F8449EF225B4DED9}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{1075374D0912640B}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{1D0B22DF6E1C835C}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{BD05DBA6B1C0FC50}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{6E367634B2BEF23E}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{662F8801C3348C8B}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{EFD71DD75FA4B387}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{A4A800C728DC5994}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{3436F629182A3249}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{E593BE3AD63E9A1D}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{7F28AD78339760F2}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{851206B5D440DF9E}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{4F799E66CCAF5243}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{C95CCA14A8F5C56A}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{999BC4A5514D8FEF}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{8B9F063BDBC0391E}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{FEF0D820B7C234F5}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{C6850E507110DD89}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{8464DF5BD0B2C9EF}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{2E2D777AA04142DD}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{A14BCE7DE8162247}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{A6726315B0500EFA}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{683F51B0E65E0434}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{47CFA428C0E01F3E}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{1D32B44A251E2BCA}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{45CDD9FB52F3E48B}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{E301E7CCDED72474}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{030C0EBCBD114C2D}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{68B43EB7B88D4116}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{0832F4751006C36B}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{DED709A6D313F6EE}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{D0005EDE25FB232F}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{CDF3278F0CCF34C4}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{6779267B2F673266}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{CEA52856ACC4062B}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{8FA738513130ED86}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{F17E428A2993F879}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{D3ABF5792798352F}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{DD63C9D02ECD3875}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{3CD0A2FD70089D01}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{27C4CC8BC853B296}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{AB33C44CC58C9820}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{EAB2C9F70653AB3A}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{37441F20DA33EE26}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{2D0E94909366A652}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{AB857C252EC3F068}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{D623C47227DC2CA5}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{B950964A358B0F43}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{14A73502CBA535D6}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{523B8337D6004EBB}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{EC9A2251187A8076}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{4C4186B74247D5C4}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{79F71C717719765B}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{281B347C81582CEB}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{D44EA7A0088B0223}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{E37136C0740B09DB}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{6165EE1146ED607C}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{846F25DB4B45A34D}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{0C8806CE11C89754}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{0AD9257CE605707A}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{4DE38BF7651014D1}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{0619C07B8C957D66}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{81F987E3B929C090}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{314457684CC9E825}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{8A9C2C1A141FB09C}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{4C681E7D6396787A}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{D3B36419EE612926}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{0D9FE8BB7FA241D0}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{8B1D6329DAA512E3}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{E8EC6E99A1CCFED0}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{C44868BFBDC81732}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{E4658094CD1433E6}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{E26C92E4F4014319}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{9621817C46F1B932}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{DCDF77B5034C9B87}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{78684DC77EF759E4}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{A9C0764A7EE61637}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{8E98F59680F168A5}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{598C5F727075AE5B}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{FF51D840F0CE0F56}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{71F529097B05E6A7}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{4C368C9CB477D660}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{F501AFD2D16C0E83}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{FF5CE22E8FD7DF18}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{BDB930662A3C31F2}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{9B4DCC2585F62FB3}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{2113ABF96986DE31}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{54B47ACD8C3D7839}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{F1DB067883D2CEBD}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{096C945BEC139224}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{D4D743A47E113766}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{9592ADA418F7A840}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{5D2610363A93E95A}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{59F75871ABD3EC9A}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{23146DC018DC13CA}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{C8B7D1FDCA3603E4}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{CDE608DC98469D0C}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{3EFB8DA5A460CE6A}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{3A84C33185DE401E}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{5119AA4FC62EA84B}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{F311678CD4AC1A74}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{A465E0949EB904C7}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{9902D9FF2F301322}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{1E83C9C0E2617C21}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{6BF4913A9B2143AC}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{B5C7AC2D9B1A6C6A}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{67440DC66063A5AF}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{FDDC2DB27AAFFBDF}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{C5F048D0835D19AD}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{40F556B5D875E569}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{9C3B9FD8F426FA51}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{E4E06CB73150F68A}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{63E82EE5A42444FA}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{683CB869E3EC2722}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{E09BAEDFC1AA1515}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{E2C573A27F704A5E}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{4BA283DF6C77A177}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{3AE973111C17B382}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{1BA88E4EAE1D68E2}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{8CCA8DD50170B552}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{190EE572F0AFC8E2}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{7A0FDB161BBA5B5B}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{2CF39FE9F00DABBE}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{C52891ED15E42E11}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{4DCCA2759739CE4B}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{E4ADF7DB3BBFABC8}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{876E85850E600CA7}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{22E67BD27BE41A3A}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{4D96B13E9E942FDE}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{8B67247E5C215654}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{C10846AC46D82FCB}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{9E7AF9A2C75ED75F}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{EC1E2122A06155F6}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{1999EC3B47C403F5}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{F001AF6FE94BB2E2}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{260361C9BE1C0983}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{BDB32561665CF82A}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{A7165107B6499A72}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+    SCR_CatalogSpawnerUserAction "{1BB7A0326BC6858A}" {
+     ParentContextList {
+      "SCR_CatalogSpawnerUserAction"
+     }
+     VisibilityRange 10
+     Duration 1
+    }
+   }
+  }
+ }
+}
