@@ -32,6 +32,7 @@ class CLW_WarState
 	protected string m_sStartedParams;
 	protected ref ScriptInvoker m_OnWarStarted;
 	protected ref CLW_WarStatus m_Status;		// HUD broadcast
+	protected ref CLW_SetupPreset m_Preset;		// overrides.json "setup" (null = none)
 
 	void Init(notnull CLW_ScenarioConfig scenario, CLW_ControlPoints points)
 	{
@@ -59,9 +60,18 @@ class CLW_WarState
 		if (m_Points)
 			m_Points.GetOnOwnerChanged().Insert(OnPointOwnerChanged);
 
-		Print(string.Format("CLW: war SETUP phase: %1 modes, default '%2', autoStartSec=%3", m_aModes.Count(), scenario.m_sDefaultMode, scenario.m_iAutoStartSec), LogLevel.NORMAL);
-		if (scenario.m_iAutoStartSec > 0)
-			GetGame().GetCallqueue().CallLater(AutoStart, scenario.m_iAutoStartSec * 1000);
+		// Server file preset (CLW_SetupPreset.c): pre-fills the menu and replaces the scenario's auto start delay.
+		int autoStartSec = scenario.m_iAutoStartSec;
+		m_Preset = CLW_SetupPreset.Load();
+		if (m_Preset)
+		{
+			PrefillFromPreset();
+			autoStartSec = m_Preset.m_iAutoStartSec;
+		}
+
+		Print(string.Format("CLW: war SETUP phase: %1 modes, default '%2', autoStartSec=%3", m_aModes.Count(), GetDefaultModeId(), autoStartSec), LogLevel.NORMAL);
+		if (autoStartSec > 0)
+			GetGame().GetCallqueue().CallLater(AutoStart, autoStartSec * 1000);
 
 		m_Status = new CLW_WarStatus();
 		m_Status.Init(this);
@@ -233,8 +243,53 @@ class CLW_WarState
 		if (m_ePhase != CLW_EWarPhase.SETUP)
 			return;
 
-		Print("CLW: war auto start (no setup happened)", LogLevel.NORMAL);
-		StartWar("", "", -1);
+		if (!m_Preset)
+		{
+			Print("CLW: war auto start (no setup happened)", LogLevel.NORMAL);
+			StartWar("", "", -1);
+			return;
+		}
+
+		Print("CLW: war auto start from the setup preset: " + m_Preset.m_sText, LogLevel.NORMAL);
+		if (StartWar(GetDefaultModeId(), m_Preset.m_sValuesJson, -1, m_Preset.m_sFactionA, m_Preset.m_sFactionB))
+			return;
+
+		// never fall back to defaults silently: the owner asked for these settings; the setup menu stays open
+		Print("CLW: ERROR setup preset REFUSED (see the line above), waiting for the setup menu", LogLevel.ERROR);
+		CLW_Debug.Announce("server setup preset was refused, use the setup menu (/war setup)");
+	}
+
+	// The preset's values become the menu defaults (mode params) so a human sees and can adjust them before the auto start.
+	protected void PrefillFromPreset()
+	{
+		CLW_WarMode mode = FindMode(GetDefaultModeId());
+		if (!mode)
+		{
+			Print("CLW: ERROR setup preset: unknown mode '" + m_Preset.m_sMode + "'", LogLevel.ERROR);
+			return;
+		}
+
+		string error;
+		if (!mode.ApplyParamsJson(m_Preset.m_sValuesJson, error))
+			Print("CLW: ERROR setup preset: " + error, LogLevel.ERROR);
+	}
+
+	// Mode the menu pre-selects and the auto start uses: preset mode, else the scenario default.
+	string GetDefaultModeId()
+	{
+		if (m_Preset && !m_Preset.m_sMode.IsEmpty())
+			return m_Preset.m_sMode;
+
+		if (m_Scenario)
+			return m_Scenario.m_sDefaultMode;
+
+		return "";
+	}
+
+	// Server file preset (null = none).
+	CLW_SetupPreset GetPreset()
+	{
+		return m_Preset;
 	}
 
 	// Called by the game mode for every spawned player: the first human during SETUP becomes the setup owner.

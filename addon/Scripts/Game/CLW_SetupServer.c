@@ -304,7 +304,7 @@ class CLW_SetupServer
 		string keyB;
 		ParseBattle(battleJson, keyA, keyB, error);
 		if (modeId.IsEmpty())
-			modeId = m_Scenario.m_sDefaultMode;
+			modeId = m_War.GetDefaultModeId();
 
 		// StartWar validates the sides again and re-keys the whole war (CLW_Sides.Apply) before the mode starts.
 		if (!m_War.StartWar(modeId, modeJson, playerId, keyA, keyB))
@@ -335,7 +335,7 @@ class CLW_SetupServer
 			return error;
 
 		if (modeId.IsEmpty())
-			modeId = m_Scenario.m_sDefaultMode;
+			modeId = m_War.GetDefaultModeId();
 
 		CLW_WarMode mode = FindMode(modeId);
 		if (!mode)
@@ -527,8 +527,17 @@ class CLW_SetupServer
 			list += key + " = " + names[i];
 		}
 
-		outParams.Insert(CLW_ModeParam.CreateChoice(PARAM_FACTION_A, "Side A", "First faction. Available: " + list, keys, m_Scenario.GetFactionKey(0)));
-		outParams.Insert(CLW_ModeParam.CreateChoice(PARAM_FACTION_B, "Side B", "Second faction, must differ from side A.", keys, m_Scenario.GetFactionKey(1)));
+		// defaults: the server preset's sides when they exist here (CLW_SetupPreset.c), else the scenario sides
+		string defaultA = m_Scenario.GetFactionKey(0);
+		string defaultB = m_Scenario.GetFactionKey(1);
+		CLW_SetupPreset preset = m_War.GetPreset();
+		if (preset && keys.Contains(preset.m_sFactionA))
+			defaultA = preset.m_sFactionA;
+		if (preset && keys.Contains(preset.m_sFactionB))
+			defaultB = preset.m_sFactionB;
+
+		outParams.Insert(CLW_ModeParam.CreateChoice(PARAM_FACTION_A, "Side A", "First faction. Available: " + list, keys, defaultA));
+		outParams.Insert(CLW_ModeParam.CreateChoice(PARAM_FACTION_B, "Side B", "Second faction, must differ from side A.", keys, defaultB));
 	}
 
 	// ---- payloads ----
@@ -580,7 +589,7 @@ class CLW_SetupServer
 	// The client has no verified reader for mixed-type JSON, so the display data is flat text; the SUBMIT stays JSON (CLW_ModeParam.ValuesToJson).
 	protected string BuildWire()
 	{
-		string wire = "H\t" + Clean(m_Scenario.m_sDefaultMode) + "\n";
+		string wire = "H\t" + Clean(m_War.GetDefaultModeId()) + "\n";
 		array<ref CLW_ModeParam> battle = {};
 		BuildBattleParams(battle);
 		foreach (CLW_ModeParam param : battle)

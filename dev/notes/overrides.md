@@ -40,3 +40,24 @@ Top-level key of the same file: `{"debugChat":true,"entries":[...]}`. Default `f
 - `true`: the lines also appear in every player's chat as before.
 Player-facing messages (setup menu, `/war` and `/sitrep` replies, mission popups, SITREP hints, war over, hold-all countdown) are never gated
 (`CLW_Debug.Show` / `CLW_Debug.Announce`).
+
+## War setup preset (`setup`)
+Top-level key of the same file. It lets a dedicated server start the war unattended with chosen settings, without a human in the setup menu.
+Without it, the scenario's auto start (`m_iAutoStartSec`, 180 s on Arland) uses the defaults. Read once when the setup phase begins
+(restart the server/mission to change it). Code: `CLW_SetupPreset.c`.
+```json
+{"setup":{"autoStartSec":10,"mode":"short","factionA":"RHS_USAF","factionB":"RHS_AFRF",
+          "startPositions":"random","randomSeed":0,"battleSize":"large","timeLimitMin":90}}
+```
+The object is flat and uses the same keys and values as the menu and `/war start key=value`:
+| key | meaning |
+|---|---|
+| `autoStartSec` | seconds after game start to start the war with the preset. Default 10, minimum 5. `-1` = no auto start: the preset only pre-fills the menu, and the scenario's auto start is off as well |
+| `mode` | war mode id (missing = scenario default) |
+| `factionA`, `factionB` | faction keys of side A / B (missing = scenario sides) |
+| anything else | a parameter of that mode (missing = mode default), e.g. `startPositions`, `battleSize`, `startTickets`, `fobMax`, `cap_logistics` |
+
+- The preset values are also the menu defaults, so a human who joins before the auto start sees them and can still change them and start earlier.
+- An invalid preset (unknown mode, faction or parameter, bad value) is NOT replaced by defaults. The war stays in setup, and the log shows
+  `CLW: ERROR setup preset ...` plus the `StartWar refused` reason. Players get a chat line pointing them to `/war setup`.
+- Log: `CLW: setup preset from overrides.json: ...` at load and `CLW: war auto start from the setup preset: ...` at start.
