@@ -44,7 +44,7 @@ class CLW_Fob
 	int m_iCost;				// paid at the start, refunded when the FOB fails before it stands
 	float m_fBuild;				// 0..100
 	int m_iLoggedStep;			// last build percentage step that was logged
-	int m_iTier;				// 0 = none yet, 1 = command post + arsenal, 2 = + depot, medical
+	int m_iTier;				// 0 = none yet, 1 = command post + arsenal, 2 = + depot
 	float m_fCreatedAt;
 	float m_fStateAt;
 	float m_fEndedAt;
@@ -428,7 +428,7 @@ class CLW_FobManager
 		return BuildModeName() == "instant";
 	}
 
-	// Tier 2 (vehicle depot, medical) costs half of the FOB.
+	// Tier 2 (vehicle depot) costs half of the FOB.
 	static int GetUpgradeCost()
 	{
 		return Math.Max(25, GetCost() / 2);
@@ -715,7 +715,7 @@ class CLW_FobManager
 		return true;
 	}
 
-	// Tier 2 services (vehicle depot, medical) for an active FOB at tier 1.
+	// Tier 2 services (vehicle depot) for an active FOB at tier 1.
 	static bool Upgrade(string side, string fobId, string source, out string why)
 	{
 		CLW_Fob fob = Find(fobId);

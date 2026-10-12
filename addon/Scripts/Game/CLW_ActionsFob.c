@@ -40,7 +40,7 @@ class CLW_Action_EstablishFob : CLW_ActionExecutor
 	}
 }
 
-// UPGRADE_FOB: fob (id of an active FOB at tier 1). Adds the vehicle depot and medical services for half the FOB cost.
+// UPGRADE_FOB: fob (id of an active FOB at tier 1). Adds the vehicle depot service for half the FOB cost.
 class CLW_Action_UpgradeFob : CLW_ActionExecutor
 {
 	override bool IsAvailable(string factionKey)

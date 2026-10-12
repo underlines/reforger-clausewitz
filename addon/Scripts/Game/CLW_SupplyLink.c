@@ -7,6 +7,7 @@
 // Log prefix: "CLW: services supply".
 class CLW_SupplyLink
 {
+	static const float KIT_RANGE_M = 40;	// a kit / depot request is attributed to the nearest human of the side within this range of the service
 	protected static ref array<ref CLW_SupplyLink> s_aLinks = {};
 
 	string m_sSide;
@@ -144,6 +145,9 @@ class CLW_SupplyLink
 			int after = CLW_SupplyStore.Get(m_sSide, m_sBase);
 			Print(string.Format("CLW: services supply sync %1 %2: containers %3 -> %4 (delta %5): ledger %6 -> %7", m_sSide, m_sBase, m_fLast, observed, whole, ledger, after), LogLevel.NORMAL);
 			m_fLast += whole;	// the fractional rest stays for the next step
+			if (whole < 0)
+				LogTaken(-whole, ledger, after);
+
 			ledger = after;
 		}
 
@@ -153,6 +157,64 @@ class CLW_SupplyLink
 			float written = Write(wanted);
 			Print(string.Format("CLW: services supply sync %1 %2: ledger %3 -> containers %4 (was %5, capacity %6)", m_sSide, m_sBase, ledger, written, observed, m_fCapacity), LogLevel.NORMAL);
 		}
+	}
+
+	// P11 (owner round 3: kit purchases were not attributable): a drop of the container stock that the ledger just took over is a vanilla
+	// consumer (arsenal kit, depot request). The consumer is the human of this side standing nearest to a service of this base within
+	// KIT_RANGE_M; if that service is an arsenal it is a kit: "CLW: kit <player> <side> took kit cost <n> at <base> (stock a -> b)".
+	// Other drops are logged as "CLW: services supply taken ..." with the nearest service kind. Log only, no state.
+	protected void LogTaken(int amount, int stockBefore, int stockAfter)
+	{
+		array<CLW_ServiceInstance> insts = {};
+		CLW_Services.GetInstances(m_sSide, m_sBase, insts);
+		PlayerManager players = GetGame().GetPlayerManager();
+		if (!players || insts.IsEmpty())
+		{
+			Print(string.Format("CLW: services supply taken %1 %2: %3 (stock %4 -> %5), consumer unknown (no services / players)", m_sSide, m_sBase, amount, stockBefore, stockAfter), LogLevel.NORMAL);
+			return;
+		}
+
+		array<int> ids = {};
+		players.GetPlayers(ids);
+		string bestName;
+		string bestKind;
+		float bestDist = KIT_RANGE_M;
+		foreach (int id : ids)
+		{
+			IEntity body = players.GetPlayerControlledEntity(id);
+			if (!body)
+				continue;
+
+			FactionAffiliationComponent affiliation = FactionAffiliationComponent.Cast(body.FindComponent(FactionAffiliationComponent));
+			if (!affiliation || !affiliation.GetAffiliatedFaction() || affiliation.GetAffiliatedFaction().GetFactionKey() != m_sSide)
+				continue;
+
+			vector at = body.GetOrigin();
+			foreach (CLW_ServiceInstance inst : insts)
+			{
+				if (inst.m_sKind != CLW_ServiceKind.ARSENAL && inst.m_sKind != CLW_ServiceKind.VEHICLE_DEPOT)
+					continue;
+
+				float dist = vector.DistanceXZ(at, inst.m_vPos);
+				if (dist < bestDist)
+				{
+					bestDist = dist;
+					bestName = players.GetPlayerName(id);
+					bestKind = inst.m_sKind;
+				}
+			}
+		}
+
+		if (bestName.IsEmpty())
+		{
+			Print(string.Format("CLW: services supply taken %1 %2: %3 (stock %4 -> %5), no player of the side within %6 m of an arsenal / depot (script or third-party consumer)", m_sSide, m_sBase, amount, stockBefore, stockAfter, KIT_RANGE_M), LogLevel.NORMAL);
+			return;
+		}
+
+		if (bestKind == CLW_ServiceKind.ARSENAL)
+			Print(string.Format("CLW: kit %1 %2 took kit cost %3 at %4 (stock %5 -> %6)", bestName, m_sSide, amount, m_sBase, stockBefore, stockAfter), LogLevel.NORMAL);
+		else
+			Print(string.Format("CLW: services supply taken %1 %2: %3 by %4 at the %5 (stock %6 -> %7)", m_sSide, m_sBase, amount, bestName, bestKind, stockBefore, stockAfter), LogLevel.NORMAL);
 	}
 
 	// Fills the containers in order up to their capacity with 'total'; returns the stock actually in them afterwards.

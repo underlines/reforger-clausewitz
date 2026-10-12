@@ -188,18 +188,17 @@ class CLW_ServiceKind
 	static const string COMMAND_POST = "command_post";	// HQ composition: base logic, spawn, radio
 	static const string VEHICLE_DEPOT = "vehicle_depot";
 	static const string ARSENAL = "arsenal";
-	static const string MEDICAL = "medical";
 	static const string REPAIR = "repair";
 	static const string SUPPLY = "supply";				// supply cache (stock the arsenal draws from)
 	static const string FORTIFICATION = "fortification";	// FOB kit only: sandbags etc., no stock, no marker, no request terminal
 
 	static bool IsKnown(string kind)
 	{
-		return kind == COMMAND_POST || kind == VEHICLE_DEPOT || kind == ARSENAL || kind == MEDICAL || kind == REPAIR || kind == SUPPLY || kind == FORTIFICATION;
+		return kind == COMMAND_POST || kind == VEHICLE_DEPOT || kind == ARSENAL || kind == REPAIR || kind == SUPPLY || kind == FORTIFICATION;
 	}
 
 	// The important structures of a base that get a map marker by default (command post, arsenal, vehicle depot / requests, supply cache).
-	// Field hospital and repair bay stay off the map unless the service entry says m_iMapMarker = 1.
+	// The repair bay stays off the map unless the service entry says m_iMapMarker = 1.
 	static bool DefaultMapMarker(string kind)
 	{
 		return kind == COMMAND_POST || kind == ARSENAL || kind == VEHICLE_DEPOT || kind == SUPPLY;
@@ -210,8 +209,6 @@ class CLW_ServiceKind
 	{
 		if (kind == COMMAND_POST)
 			return 10;
-		if (kind == MEDICAL)
-			return 13;
 		if (kind == VEHICLE_DEPOT || kind == REPAIR)
 			return 9;
 		if (kind == SUPPLY)
@@ -228,7 +225,7 @@ class CLW_ServiceKind
 [BaseContainerProps()]
 class CLW_ServiceEntry
 {
-	[Attribute("", UIWidgets.EditBox, "Kind: command_post, vehicle_depot, arsenal, medical, repair, supply, fortification (FOB kit)")]
+	[Attribute("", UIWidgets.EditBox, "Kind: command_post, vehicle_depot, arsenal, repair, supply, fortification (FOB kit)")]
 	string m_sKind;
 
 	[Attribute("", UIWidgets.ResourceNamePicker, "Composition prefab spawned for this service", "et")]
@@ -249,8 +246,18 @@ class CLW_ServiceEntry
 	[Attribute("1", UIWidgets.CheckBox, "Service is spawned")]
 	bool m_bEnabled;
 
-	[Attribute("-1", UIWidgets.EditBox, "Own-side map marker: -1 = by kind (command_post, arsenal, vehicle_depot, supply yes; medical, repair no), 0 = none, 1 = marker")]
+	[Attribute("-1", UIWidgets.EditBox, "Own-side map marker: -1 = by kind (command_post, arsenal, vehicle_depot, supply yes; repair no), 0 = none, 1 = marker")]
 	int m_iMapMarker;
+
+	// Compact base layout (round 3). Optional per-kind data, used by CLW_Services.TuningFor before the automatic ring search.
+	[Attribute("-1", UIWidgets.EditBox, "Free space (m) between this service and the others. -1 = default of the kind (command post/other 2.1, arsenal 2.5, supply 5.5, vehicle depot 3)")]
+	float m_fGapM;
+
+	[Attribute("0", UIWidgets.EditBox, "Search ring (m, distance of the service centre from the base anchor): from. 0 = automatic (command post right next to the spawn point, others beyond their footprint)")]
+	float m_fRingMinM;
+
+	[Attribute("0", UIWidgets.EditBox, "Search ring (m): to. 0 = automatic (grows in batches until clear ground is found)")]
+	float m_fRingMaxM;
 
 	[Attribute("", UIWidgets.EditBox, "Role id (CLW_PropResolver): fob.arsenal_box, fob.supply_box, fort.sandbag_long, ... Empty = 'service.' + kind. Data for the kit entries; the prefab is the current candidate for the role")]
 	string m_sRole;
