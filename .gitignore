@@ -35,3 +35,7 @@ dev/tools/.cache/
 
 # Sidecar npm dependencies (AI SDK, agent turn)
 dev/tools/node_modules/
+
+# sidecar started as a detached process (pid file + stderr log)
+dev/tools/sidecar.pid
+*.log.err
