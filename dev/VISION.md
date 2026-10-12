@@ -137,6 +137,17 @@ A lobby UI shown to the first (admin) player before the war starts. Dedicated-se
 
 Generated scenario = a data object (`ScenarioConfig`) that is saved/loaded, so a setup can be repeated, shared or run headless.
 
+### 3b. War modes (pluggable, chosen in the setup menu)
+
+The host picks a war mode and its parameters in the setup menu when the first player joins (architecture: `notes/m2-design.md` section 2a; new modes are a subclass + config entry).
+
+| Mode | Rules | Status |
+|---|---|---|
+| **Short conflict** | Configurable time limit, tickets, supplies, income, battle size; tickets to 0, hold all points or time limit ends it | M2 |
+| **Long conflict** | No time limit; tickets/resources can run out, and a side that loses all its units (and cannot buy more) loses: total VICTORY for the other | later |
+| **True endless conflict** | Never ends: tickets never reach 0 (refilled over time), no time limit, HQ respawns new units even when everything was destroyed; a persistent front that ebbs and flows | later |
+| Ideas | Attack/defend (one side holds, the other has a ticket pool and a deadline), king of the hill (one moving objective), campaign (chain of battles with carried-over losses), story mode (3a) | vision |
+
 ### 3a. Story mode (far-future idea)
 
 An optional mode in the initial scenario setup (section 3), next to the usual settings (force strengths of BLUFOR/REDFOR, mechanization level, location). Besides the sandbox "realistic war", the host can pick or generate a **story and a plan for each side**, and the two HQs then play *loosely along that storyline* instead of purely optimising.

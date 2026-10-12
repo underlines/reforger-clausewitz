@@ -92,6 +92,27 @@ agent list, alive = not DEAD). Capture rules:
 - `CLW_WarState` exposes getters for the situation and the dashboard, and logs a one-line summary every 60 s:
   `CLW: war US tickets=.. supplies=.. points=.. | USSR ...`.
 
+## 2a. War modes and the setup phase (added 2026-10-12, user request)
+The rules of section 2 are **one war mode**. Modes are pluggable; the host picks one and its parameters at startup.
+- **Mechanism vs rules:** `CLW_WarState` owns mechanisms (ticket + supply ledgers, kill accounting, events, EndGameMode,
+  spawn gate, TrySpend/Refund/AddSupplies). The active `CLW_WarMode` subclass decides (income, bleed, caps, refill,
+  end conditions, time left, player spawn allowed). New mode = new subclass + `CLW_WarModeRegistry` line + config entry in
+  the scenario `.conf` (`ref array<ref CLW_WarModeConfig> m_aModes`, defaults per mode).
+- **Parameters:** each mode publishes `CLW_ModeParam`s (id, label, description, INT/FLOAT/BOOL/CHOICE, min/max/step,
+  default, choices), rendered generically by the setup menu (and later the dashboard); values travel as compact JSON.
+- **Phases:** `SETUP -> RUNNING -> ENDED`. In SETUP bases/points exist, but no economy, no purchases, no end checks.
+  `StartWar(modeId, paramsJson, byPlayerId)` validates and starts. Scenario `m_iAutoStartSec` (0 = wait) auto-starts the
+  default mode for headless/AI-vs-AI runs. Optional admin chat fallback `/war start [mode] [key=value ...]`.
+- **Setup menu (phase P5):** the first human player who joins during SETUP is the setup owner and gets a menu: mode list
+  with descriptions, then that mode's parameters (generated from `CLW_ModeParam`), Start button. Others see "waiting for
+  <name> to set up the war". Server validates the owner. Implemented with vanilla UI (e.g. `SCR_ConfigurableDialogUi` with
+  a content layout or a registered menu; research in P5). Client <-> server through owner/server RPCs on `SCR_PlayerController`.
+- **Mode 1 (M2): Short conflict** (`short`): section 2 rules; params timeLimitMin (15-180, 60), startTickets (100-2000, 400),
+  startSupplies (0-2000, 400), incomeMultiplier (0.25-3, 1), battleSize small/medium/large (AI cap per faction 30/50/80,
+  vehicle cap 3/6/10), ticketBleed (on), holdAllWinMin (0-15, 5; 0 = off).
+- **Vision (later modes):** see VISION section 3b (endless conflict, long conflict).
+- Situation v2 `war` gets `"mode":{"id","name","params":{...}}` and `"phase"`; `timeLeftSec` -1 / tickets -1 = not used by the mode.
+
 ## 3. Bases and respawn (`CLW_Bases`)
 At game start (server): spawn `SpawnPoint_US {5A2220DD0C16958B}` / `SpawnPoint_USSR {4FEA25583D0975F7}`
 (`Prefabs/MP/Spawning/...` path: confirm via game_read) at the base positions (surface Y) and disable the scene-placed
@@ -253,5 +274,6 @@ Difficulty knobs (consts): think interval, reserve size, max units per target.
 | **P2 Forces + mechanized** | `CLW_FactionProfile.c` (+ `Configs/CLW/Factions/US/USSR/FIA.conf`), `CLW_ForceCatalog.c` (profile + auto-discovery + classifier), `CLW_ForceSpawner.c`, `CLW_VehicleUnit.c`, `CLW_SquadRegistry.c` (edit: kind/link/hide), `CLW_SquadInfo.c` (edit: display type from data) | P1 |
 | **P3 Commander v1 + protocol v2** | `CLW_Orders.c` (executor), `CLW_RuleCommander.c`, `CLW_RemoteCommander.c`, `CLW_Contact.c` (kind) | P1, P2 |
 | **P4 Missions** | `CLW_MissionBoard.c`, `CLW_MissionPopup` (RPC on `SCR_PlayerController`, new file) | P3 |
+| **P5 Setup menu** | setup menu UI (layout + script), RPCs on `SCR_PlayerController` (new file), waiting hint for other players | P1 |
 | **S Sidecar + dashboard** | `dev/tools/llm_sidecar.mjs`, `dev/tools/dashboard/*` | this spec only (parallel) |
 | **E2E** | one Workbench run of everything, fixes, PROGRESS/skills update | all |
