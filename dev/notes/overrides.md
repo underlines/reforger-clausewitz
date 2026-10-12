@@ -163,3 +163,28 @@ Top-level keys of the same file, read again at every war end (SERVER only). What
 | `rematchDelaySec` | number, default 60, minimum 5 | seconds the results (HUD winner label, `WAR OVER` + countdown announcements) stay before the reset. |
 Without `EndGameMode` there is no vanilla end screen; the results are the HUD (phase ENDED shows "<faction> wins"), the announcements and the log.
 Log lines: `CLW: rematch: choice ...`, `war over, results for <n> s`, `reset <manager> (<n> entities)`, `census before/after`, `back to setup (round <k>)`. Code: `CLW_Rematch.c`.
+
+## Kin fill mode (`kinFill`, `kinWeight`, `sidesDefault`) - wp9
+By default (`"kinFill":"missing"`) kin entries are imported only for roles the own faction lacks. With the vehicle packs (M1 Abrams, M2 Bradley, JLTV in the
+vanilla US catalog) a pack faction such as RHS_USAF already has an armor / light entry, so the other modern vehicles never reach the AI buy pool,
+`/request vehicle` or the LLM manifest. `"kinFill":"all"` also imports the kin entries for roles the own faction already has:
+own entries first. For roles the side already has, ONLY kin entries with a vehicle are imported (no kin infantry / recon foot teams / cargo-only groups: the side keeps its own infantry identity) unless `"kinAllInfantry": true` is set. Roles the side lacks are filled with any entry. Kin entries are deduped by vehicle model / group prefab as before (so an Abrams the side already owns is not added twice), the kin
+entries' weight scaled by `kinWeight` (default 0.5, minimum weight 1). Catalog overrides (`overrides.json` `overrides` list) apply to the imported
+entries afterwards, so an explicit `weight` there wins. `ownOnly`, `excludeFactions` and `excludePathContains` still apply.
+
+| key | meaning |
+|---|---|
+| `kinFill` | `missing` (default) or `all`, per side key, `*` or in `sidesDefault` |
+| `kinWeight` | number > 0, weight factor of kin entries imported for a role the side already has (default 0.5) |
+| `kinAllInfantry` | `true`: kinFill all also imports foot entries for roles the side already has (default false) |
+| `sidesDefault` | `{"kinFill":..., "kinWeight":...}`: default for every side; a `*` or per-faction `sides` value overrides it |
+
+Enable `all` for every side:
+```json
+{"sidesDefault": {"kinFill": "all"}}
+```
+or equivalently `{"sides": {"*": {"kinFill": "all", "kinWeight": 0.5}}}`.
+Log: `CLW: overrides sidesDefault: ...`, `CLW: overrides sides '<key>': ... kinFill='all' kinWeight=...`,
+`CLW: sidepool <side>: role <kind> added (own role present, kinFill all) from <kin>: kin_<type> (<vehicle>) cost=.. cargo=.. weight=..` (one line per
+imported entry; roles the side lacked keep `filled from <kin>`). `/request vehicle`, the HQ menu, the AI buy pool and the LLM catalog manifest all read
+`CLW_ForceCatalog.GetEntries`, so imported entries appear everywhere.
