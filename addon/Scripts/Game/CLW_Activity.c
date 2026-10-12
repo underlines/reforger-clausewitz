@@ -15,6 +15,7 @@ class CLW_ActivityState
 	float m_fLastRelevant = -100000;
 	bool m_bPrevented;
 	int m_iScore;
+	float m_fFirstSeen;
 }
 
 class CLW_ActivityUnit
@@ -26,6 +27,8 @@ class CLW_ActivityUnit
 	int m_iScore;
 	int m_iAgents;
 	bool m_bRelevant;
+	bool m_bNew;
+	float m_fAge;
 }
 
 class CLW_Activity
@@ -225,6 +228,7 @@ class CLW_Activity
 				if (!m_mStates.Find(unit2.m_sId, state) || !state)
 				{
 					state = new CLW_ActivityState();
+					state.m_fFirstSeen = now;
 					m_mStates.Set(unit2.m_sId, state);
 				}
 
@@ -238,6 +242,15 @@ class CLW_Activity
 				{
 					unit2.m_iScore = CLW_WarConfig.ACTIVITY_SCORE_HELD;
 					unit2.m_bRelevant = true;
+				}
+
+				// a fresh group (HQ purchase, start force) is exempt from the budget for a grace period: always kept active
+				unit2.m_fAge = now - state.m_fFirstSeen;
+				if (unit2.m_fAge <= CLW_WarConfig.ACTIVITY_NEW_GRACE_SEC)
+				{
+					unit2.m_bNew = true;
+					unit2.m_bRelevant = true;
+					unit2.m_iScore = Math.Max(unit2.m_iScore, CLW_WarConfig.ACTIVITY_SCORE_NEW);
 				}
 
 				state.m_iScore = unit2.m_iScore;
@@ -280,10 +293,30 @@ class CLW_Activity
 
 		// best first (selection sort on score: the list is small)
 		array<CLW_ActivityUnit> order = {};
+		int newUnits;
+		int newAgents;
 		foreach (CLW_ActivityUnit unit : units)
 		{
-			if (unit.m_bRelevant)
-				order.Insert(unit);
+			if (!unit.m_bRelevant)
+				continue;
+
+			if (unit.m_bNew)
+			{
+				// exempt: kept active and does not use up the budget (HQ reinforcements are never starved by the cap)
+				SetPrevented(unit.m_Group, true);
+				newUnits++;
+				newAgents += unit.m_iAgents;
+				CLW_ActivityState newState = m_mStates.Get(unit.m_sId);
+				if (newState && !newState.m_bPrevented)
+				{
+					newState.m_bPrevented = true;
+					Print(string.Format("CLW: activity %1 %2 new group exempt (age %3 s, %4 agents, grace %5 s)", factionKey, unit.m_sId, Math.Round(unit.m_fAge), unit.m_iAgents, CLW_WarConfig.ACTIVITY_NEW_GRACE_SEC), LogLevel.NORMAL);
+				}
+
+				continue;
+			}
+
+			order.Insert(unit);
 		}
 
 		for (int i = 0; i < order.Count(); i++)
@@ -304,8 +337,8 @@ class CLW_Activity
 		}
 
 		int budget = cap;
-		int prevented;
-		int relevant = order.Count();
+		int prevented = newAgents;
+		int relevant = order.Count() + newUnits;
 		foreach (CLW_ActivityUnit chosen : order)
 		{
 			CLW_ActivityState state = m_mStates.Get(chosen.m_sId);
@@ -361,7 +394,7 @@ class CLW_Activity
 		}
 
 		if (log)
-			Print(string.Format("CLW: activity %1: units relevant %2/%3, prevented agents %4, cap %5, agents %6, at max LOD %7", factionKey, relevant, units.Count(), prevented, cap, agentsTotal, atMax), LogLevel.NORMAL);
+			Print(string.Format("CLW: activity %1: units relevant %2/%3 (new %8), prevented agents %4, cap %5, agents %6, at max LOD %7", factionKey, relevant, units.Count(), prevented, cap, agentsTotal, atMax, newUnits), LogLevel.NORMAL);
 	}
 
 	// 0 = not relevant, else the relevance score (max over the reasons).

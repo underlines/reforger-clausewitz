@@ -48,6 +48,8 @@ class CLW_WarConfig
 	static const int SPAWN_STAGGER_SEC = 3;				// start forces are spawned this many seconds apart
 	static const float SPAWN_CREW_TIMEOUT_SEC = 30;
 	static const float SPAWN_MEMBERS_TIMEOUT_SEC = 20;	// wait for the members of a spawned group
+	static const int SPAWN_MEMBERS_RETRIES = 2;			// group still has 0 members after the timeout (engine dropped the spawn request, typically the active-AI limit): re-request this often before giving up
+	static const int ENGINE_AI_MARGIN = 6;				// purchases keep this many AI free below the engine's active-AI limit (other spawns, crews, rounding)
 	static const float SPAWN_JOB_TIMEOUT_SEC = 120;		// whole purchase
 
 	// ---- Placement (CLW_Placement / CLW_BasePlacement) ----
@@ -163,4 +165,6 @@ class CLW_WarConfig
 	static const int ACTIVITY_SCORE_CONTESTED = 50;
 	static const int ACTIVITY_SCORE_ORDER = 40;
 	static const int ACTIVITY_SCORE_HELD = 10;
+	static const int ACTIVITY_SCORE_NEW = 20;			// score shown for a new group inside its grace period
+	static const float ACTIVITY_NEW_GRACE_SEC = 60;		// a newly adopted group is exempt from the budget (kept active) this long
 }

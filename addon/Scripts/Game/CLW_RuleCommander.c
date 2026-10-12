@@ -268,6 +268,20 @@ class CLW_RuleCommander
 			m_fCapBlockTime = -1;
 		}
 
+		// the engine's active-AI limit has no room for a purchase: do not even pick (buys would be refused anyway)
+		if (spawner.GetEngineHeadroom() <= 0)
+		{
+			if (now - m_fLastCapLog >= 60)
+			{
+				m_fLastCapLog = now;
+				int engineActive;
+				int engineLimit;
+				CLW_ForceSpawner.GetEngineAI(engineActive, engineLimit);
+				Print(string.Format("CLW: RuleCommander %1: no buys, engine AI limit (active %2/%3, margin %4)", m_sFaction, engineActive, engineLimit, CLW_WarConfig.ENGINE_AI_MARGIN), LogLevel.NORMAL);
+			}
+			return;
+		}
+
 		// composition: living units by category plus purchases still on their way
 		array<int> counts = {0, 0, 0, 0};
 		foreach (string id : m_aSquads)
@@ -359,6 +373,12 @@ class CLW_RuleCommander
 			}
 			else
 			{
+				if (error.IndexOf("engine AI limit") == 0)
+				{
+					Print(string.Format("CLW: RuleCommander %1: buy %2 refused: %3", m_sFaction, pick.m_sType, error), LogLevel.NORMAL);
+					return;
+				}
+
 				if (error.IndexOf("AI cap") == 0)
 				{
 					m_fCapBlockTime = now;

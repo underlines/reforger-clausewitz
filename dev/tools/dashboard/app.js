@@ -1064,8 +1064,22 @@ function MissionsView({ st, faction, rows, sel, onSel, layers, world, act }) {
     </div></main>`;
 }
 
+// ---- debug log: the game's CLW_Debug lines (not shown in game chat by default), newest first ----
+function DebugView({ st }) {
+  const [q, setQ] = useState("");
+  const all = Array.isArray(st.debugLog) ? st.debugLog : [];
+  const needle = q.trim().toLowerCase();
+  const rows = (needle ? all.filter((d) => String(d.msg).toLowerCase().includes(needle)) : all).slice(0, 300);
+  const clock = (sec) => { const s = Math.max(0, Math.round(sec)), p = (v) => String(v).padStart(2, "0"); return `${p(Math.floor(s / 3600))}:${p(Math.floor((s % 3600) / 60))}:${p(s % 60)}`; };
+  return html`<main class="view"><section class="panel"><h2>Debug log <span class="sub">game debug lines, newest first, ${rows.length} of ${all.length}</span></h2>
+    <div class="cfgbody"><label class="field"><span>Filter</span><input type="text" value=${q} placeholder="e.g. mission, spawn, captured" onInput=${(e) => setQ(e.target.value)} /></label></div>
+    <div class="scroll"><table><tbody>
+      ${rows.map((d, i) => html`<tr key=${i}><td class="mono muted">${new Date(d.ts).toLocaleTimeString()}</td><td class="mono muted">${clock(d.t)}</td><td class="wrap">${d.msg}</td></tr>`)}</tbody></table>
+      ${!rows.length && html`<div class="empty">${all.length ? "No line matches the filter." : "No debug lines yet. They arrive with the game's situation posts while a war runs."}</div>`}</div></section></main>`;
+}
+
 // ---- tabs ----
-const TABS = [["overview", "Overview"], ["map", "Map"], ["forces", "Forces"], ["hq", "HQ / LLM"], ["missions", "Missions"], ["usage", "Usage & Config"]];
+const TABS = [["overview", "Overview"], ["map", "Map"], ["forces", "Forces"], ["hq", "HQ / LLM"], ["missions", "Missions"], ["debug", "Debug log"], ["usage", "Usage & Config"]];
 const TAB_KEY = "clw.tab", INACT_KEY = "clw.showInactive";
 const tabOf = (s) => { const k = String(s ?? "").replace(/^#/, ""), t = k === "config" ? "usage" : k; return TABS.some(([id]) => id === t) ? t : null; };
 function loadTab() {
@@ -1295,12 +1309,13 @@ function App() {
       <nav>${TABS.map(([id, label]) => html`<a key=${id} href=${"#" + id} class=${tab === id ? "active" : ""} onClick=${go(id)}>${label}</a>`)}</nav>
       <${Strip} st=${st} toast=${toast} refresh=${refresh} />
     </header>
-    ${tab !== "usage" && html`<div class="subwrap"><${FactionBar} names=${names} faction=${fac} setFaction=${setFaction} hidden=${st.hidden ?? []} showInactive=${showInactive} setShowInactive=${setShowInactive} /></div>`}
+    ${tab !== "usage" && tab !== "debug" && html`<div class="subwrap"><${FactionBar} names=${names} faction=${fac} setFaction=${setFaction} hidden=${st.hidden ?? []} showInactive=${showInactive} setShowInactive=${setShowInactive} /></div>`}
     ${tab === "overview" && html`<${Overview} ...${common} />`}
     ${tab === "map" && html`<${MapView} ...${common} layers=${layers} setLayers=${setLayers} world=${world} />`}
     ${tab === "forces" && html`<${ForcesView} ...${common} />`}
     ${tab === "hq" && html`<${HqView} ...${common} />`}
     ${tab === "missions" && html`<${MissionsView} ...${common} layers=${layers} world=${world} />`}
+    ${tab === "debug" && html`<${DebugView} st=${st} />`}
     ${tab === "usage" && html`<${Config} st=${st} toast=${toast} refresh=${refresh} />`}
     <div class="toasts">${toasts.map((t) => html`<div class=${"toast " + t.kind} key=${t.id}>${t.text}</div>`)}</div>
   </div>`;

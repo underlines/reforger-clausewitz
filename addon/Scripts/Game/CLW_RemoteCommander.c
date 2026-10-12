@@ -91,6 +91,7 @@ class CLW_RemoteCommander
 	protected float m_fLastReasonAt = -1000;
 	protected float m_fLastKeepAt = -1000;
 	protected float m_fLastRulesAt = -1000;
+	protected int m_iDebugSeq;		// last CLW_Debug line already sent with this faction's POST
 	protected bool m_bSitrepRunning;	// war phase seen by the last SITREP refresh (a phase change forces a rebuild)
 
 	void Init(string factionKey, CLW_ContactBook book, CLW_SquadRegistry registry)
@@ -141,6 +142,15 @@ class CLW_RemoteCommander
 		string sitrepJson = CLW_SitrepStore.GetRulesJson(m_sFaction);
 		if (!sitrepJson.IsEmpty() && body.Length() > 2 && body.Length() + sitrepJson.Length() < 58000)
 			body = body.Substring(0, body.Length() - 1) + ",\"sitrep\":" + sitrepJson + "}";
+
+		// recent debug lines (CLW_Debug ring) for the dashboard debug log; every line goes with both factions' posts, the sidecar dedupes
+		int debugLast;
+		string debugJson = CLW_Debug.GetJsonSince(m_iDebugSeq, debugLast);
+		if (!debugJson.IsEmpty() && body.Length() > 2 && body.Length() + debugJson.Length() < 58000)
+		{
+			body = body.Substring(0, body.Length() - 1) + ",\"debug\":" + debugJson + "}";
+			m_iDebugSeq = debugLast;
+		}
 
 		if (squads <= 0)
 			ThinkRules();	// still POST the situation below: the sidecar/dashboard must learn the faction has no squads left (it may still buy)

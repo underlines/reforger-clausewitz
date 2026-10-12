@@ -116,6 +116,16 @@ class CLW_Situation
 		string text = "{\"tickets\":" + war.GetTickets(m_sFaction) + ",\"enemyTickets\":" + war.GetTickets(enemy) + ",\"supplies\":" + war.GetSupplies(m_sFaction);
 		text += ",\"income\":" + incomePerMinute + ",\"liveAI\":" + liveAI + ",\"aiCap\":" + war.GetAiCap(m_sFaction);
 		text += ",\"vehicles\":" + vehicles + ",\"vehicleCap\":" + war.GetVehicleCap(m_sFaction);
+		int engineActive;
+		int engineLimit;
+		if (CLW_ForceSpawner.GetEngineAI(engineActive, engineLimit))
+		{
+			int headroom = engineLimit - engineActive - CLW_WarConfig.ENGINE_AI_MARGIN;
+			if (spawner)
+				headroom = spawner.GetEngineHeadroom();
+			text += ",\"engineAI\":{\"active\":" + engineActive + ",\"limit\":" + engineLimit + ",\"headroom\":" + Math.Max(0, headroom) + "}";
+		}
+
 		text += ",\"mode\":" + modeJson + ",\"phase\":\"" + phase + "\",\"sides\":[" + BuildSides(war) + "]}";
 		return text;
 	}

@@ -125,7 +125,7 @@ DOCTRINE
 - Combined arms: motorized/mech/light/armor units (fast, firepower) cover distance and support; infantry takes and holds objectives. Send recon first to unknown or fogged objectives.
 - Concentrate force: 2-3 units per target, never split into penny packets. Prefer one clear plan over many small moves. Keep a small reserve at the base.
 - AT teams (or armed vehicles) when enemy vehicles are in contacts. Weak squads (agents well below startAgents or vehicle.health below 0.4) FALL_BACK, do not attack. health and vehicle.health are fractions 0..1: 1 = undamaged / full health, 0 = destroyed.
-- Buy when supplies are rich but keep a reserve (~40). Respect the caps (liveAI<aiCap, vehicles<vehicleCap) and the catalog costs.
+- Buy when supplies are rich but keep a reserve (~40). Respect the caps (liveAI<aiCap, vehicles<vehicleCap) and the catalog costs. Do not buy when war.engineAI.headroom is below the unit size (engine AI near its limit): the buy is refused.
 - Do not re-order squads that already execute a sensible order (objective.status active, young ageSec).
 SITUATION FIELDS
 war: your tickets, enemyTickets, supplies, income per minute, liveAI/aiCap, vehicles/vehicleCap; timeLeftSec = time limit (absent or -1 = no limit); tickets -1 = not used by this mode. war.mode {id,name,params} holds the rules of the chosen war mode (time limit, start tickets, ...): follow them; war.phase is "running" while you are consulted. objectives: id, name, pos [x,z], radius m, value, owner ("none" or a faction key), contested, progress (-100..100 toward the capturer). bases: base positions per faction. catalog: what you may buy (type, kind, cost, desc). squads: kind (infantry|recon|motorized|light|mech|armor|armored_recon), type, pos [x,y,z], agents/startAgents, vehicle {type,health,mounted,state} or null, humanLed, objective (its current order and status), mission (for human-led squads). contacts: pos, kind, desc, ageSec. events: what happened since your last decision. wake: why you are consulted now.
@@ -310,7 +310,22 @@ const state = {
   exchanges: [],  // newest first, max RING_MAX
   counters: { requests: 0, gated: 0, skipped: 0, errors: 0, fallbacks: 0, inputTokens: 0, outputTokens: 0 },
   lastRequestTs: 0,
+  debugLog: [],   // game debug lines (CLW_Debug), newest first, max DEBUG_MAX, deduped across the factions' posts
 };
+const DEBUG_MAX = 300;
+const debugSeen = new Set();
+function addDebugLines(lines) {
+  if (!Array.isArray(lines)) return;
+  for (const l of lines.slice(0, 50)) {
+    if (!l || typeof l.msg !== "string") continue;
+    const msg = l.msg.slice(0, 200), t = isNum(l.t) ? l.t : 0, key = `${l.id}|${t}|${msg}`;
+    if (debugSeen.has(key)) continue;
+    debugSeen.add(key);
+    state.debugLog.unshift({ ts: Date.now(), t, msg });
+  }
+  if (state.debugLog.length > DEBUG_MAX) state.debugLog.length = DEBUG_MAX;
+  if (debugSeen.size > DEBUG_MAX * 4) { debugSeen.clear(); for (const d of state.debugLog) debugSeen.add(`|${d.t}|${d.msg}`); }
+}
 
 // ---------- OpenRouter usage / budget ----------
 const POLL_MS = 10 * 60 * 1000, POLL_REACHED_MS = 60 * 1000;
@@ -561,7 +576,7 @@ function fakeV2(sit) {
 
   // buy: the cheapest entry of every kind, rotated by game time; keep a 100 reserve
   const catalog = (Array.isArray(sit.catalog) ? sit.catalog : []).filter((e) => e && typeof e.type === "string" && isNum(e.cost) && e.cost > 0);
-  if (supplies > 200 && catalog.length && !(isNum(war.aiCap) && isNum(war.liveAI) && war.liveAI >= war.aiCap)) {
+  if (supplies > 200 && catalog.length && !(isNum(war.aiCap) && isNum(war.liveAI) && war.liveAI >= war.aiCap) && !(war.engineAI && isNum(war.engineAI.headroom) && war.engineAI.headroom < 3)) {
     const cheapest = new Map();
     for (const e of catalog) if (!cheapest.has(e.kind) || e.cost < cheapest.get(e.kind).cost) cheapest.set(e.kind, e);
     const list = [...cheapest.values()].sort((a, b) => a.cost - b.cost);
@@ -1032,6 +1047,7 @@ async function handleOrders(req, res) {
   try { sit = JSON.parse(await readBody(req)); } catch { return send(res, 400, { error: "invalid JSON" }); }
   let gameSitrep = null; // the game's rules SITREP rides along; it never goes to the model
   if (sit && typeof sit === "object" && "sitrep" in sit) { gameSitrep = sit.sitrep; delete sit.sitrep; }
+  if (sit && typeof sit === "object" && "debug" in sit) { addDebugLines(sit.debug); delete sit.debug; } // game debug lines: dashboard only, never the model
   const t0 = Date.now();
   const snapshot = { ...cfg };
   const faction = typeof sit?.faction === "string" ? sit.faction : "?";
@@ -1348,7 +1364,7 @@ async function handleApi(req, res, url) {
     return send(res, 200, {
       now: Date.now(), startedAt: state.startedAt, lastRequestTs: state.lastRequestTs,
       factions: state.factions, activeFactions: activeFactions(), staleAfterSec: STALE_FACTION_MS / 1000,
-      exchanges: state.exchanges, counters: state.counters, config: publicConfig(), usage: usageView(), scheduler: schedulerView(), paused,
+      exchanges: state.exchanges, debugLog: state.debugLog, counters: state.counters, config: publicConfig(), usage: usageView(), scheduler: schedulerView(), paused,
     });
   }
   if (req.method === "POST" && url === "/api/pause") {

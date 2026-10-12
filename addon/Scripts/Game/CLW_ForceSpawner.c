@@ -34,6 +34,7 @@ class CLW_SpawnJob
 	int m_iMounted;
 	int m_iVerifyPass;			// 0: first check (then retry with explicit slots), 1: final check
 	int m_iRetried;
+	int m_iMemberRetries;		// spawn re-requests for a group that stayed empty (active-AI limit dropped the request)
 }
 
 // Spawns forces at the base: purchases (supplies) and start forces (free). Server only. Vehicles get a crew from
@@ -188,6 +189,36 @@ class CLW_ForceSpawner
 		return total;
 	}
 
+	// Engine-wide active AI count and limit (false when there is no AI world).
+	static bool GetEngineAI(out int active, out int limit)
+	{
+		ChimeraAIWorld aiWorld = ChimeraAIWorld.Cast(GetGame().GetAIWorld());
+		if (!aiWorld)
+			return false;
+
+		active = aiWorld.GetCurrentNumOfActiveAIs();
+		limit = aiWorld.GetLimitOfActiveAIs();
+		return limit > 0;
+	}
+
+	// AI the engine can still activate for new purchases: limit - active - margin - AI of purchases still spawning (all sides).
+	// A large number when the limit is unknown.
+	int GetEngineHeadroom()
+	{
+		int active;
+		int limit;
+		if (!GetEngineAI(active, limit))
+			return 100000;
+
+		int pending;
+		foreach (CLW_SpawnJob job : m_aJobs)
+		{
+			pending += job.m_Entry.ExpectedAI();
+		}
+
+		return limit - active - CLW_WarConfig.ENGINE_AI_MARGIN - pending;
+	}
+
 	int GetPendingCount()
 	{
 		return m_aJobs.Count();
@@ -236,6 +267,16 @@ class CLW_ForceSpawner
 		if (!free && cap > 0 && live + expected > cap)
 		{
 			error = string.Format("AI cap (%1 live + %2 new > %3)", live, expected, cap);
+			Print(string.Format("CLW: spawn %1 %2 %3 refused: %4", label, factionKey, typeId, error), LogLevel.NORMAL);
+			return false;
+		}
+
+		if (!free && GetEngineHeadroom() < expected)
+		{
+			int engineActive;
+			int engineLimit;
+			GetEngineAI(engineActive, engineLimit);
+			error = string.Format("engine AI limit (active %1/%2, needs %3, margin %4)", engineActive, engineLimit, expected, CLW_WarConfig.ENGINE_AI_MARGIN);
 			Print(string.Format("CLW: spawn %1 %2 %3 refused: %4", label, factionKey, typeId, error), LogLevel.NORMAL);
 			return false;
 		}
@@ -361,7 +402,34 @@ class CLW_ForceSpawner
 		}
 
 		group.SetDeleteWhenEmpty(true);
+		// The engine's spawn queue admits a group only while the active AI count is below a share of the global limit that
+		// depends on the group importance (LOW 50 %, NORMAL 70 %, HIGH 90 %, CRITICAL 100 %); a refused request is DROPPED and
+		// the group stays empty. HQ purchases must not lose against ambient AI, so they get the full limit.
+		group.SetImportance(SCR_EAISpawnImportance.CRITICAL);
 		return group;
+	}
+
+	// "active AI 90/128" of the engine's global limit, for the spawn logs.
+	protected static string ActiveAINote()
+	{
+		ChimeraAIWorld aiWorld = ChimeraAIWorld.Cast(GetGame().GetAIWorld());
+		if (!aiWorld)
+			return "active AI n/a";
+
+		return string.Format("active AI %1/%2", aiWorld.GetCurrentNumOfActiveAIs(), aiWorld.GetLimitOfActiveAIs());
+	}
+
+	// Group still empty after the timeout: ask the spawn queue again. True = re-requested (keep waiting).
+	protected bool RetryMembers(CLW_SpawnJob job, SCR_AIGroup group, int slots)
+	{
+		if (job.m_iMemberRetries >= CLW_WarConfig.SPAWN_MEMBERS_RETRIES)
+			return false;
+
+		job.m_iMemberRetries++;
+		job.m_fStateAge = 0;
+		Print(string.Format("CLW: spawn %1 group %2 still empty after %3 s (%4): re-requesting members (retry %5/%6, dormant alive %7)", job.m_sFaction, job.m_sUnitId, CLW_WarConfig.SPAWN_MEMBERS_TIMEOUT_SEC, ActiveAINote(), job.m_iMemberRetries, CLW_WarConfig.SPAWN_MEMBERS_RETRIES, group.GetDormantAliveCount()), LogLevel.WARNING);
+		group.RequestSpawn(slots);
+		return true;
 	}
 
 	// Name a group (so its registry id is the name) and tell the registry what it is. If the registry already adopted
@@ -425,13 +493,13 @@ class CLW_ForceSpawner
 
 		if (!complete)
 		{
-			if (job.m_fStateAge >= CLW_WarConfig.SPAWN_MEMBERS_TIMEOUT_SEC)
-				Fail(job, "no members arrived");
+			if (job.m_fStateAge >= CLW_WarConfig.SPAWN_MEMBERS_TIMEOUT_SEC && !RetryMembers(job, job.m_Group, job.m_Entry.m_iGroupMembers))
+				Fail(job, "no members arrived (" + ActiveAINote() + ")");
 
 			return;
 		}
 
-		Finish(job, string.Format("%1 members", members));
+		Finish(job, string.Format("%1 members (%2)", members, ActiveAINote()));
 	}
 
 	// ---- vehicles ----
@@ -618,6 +686,7 @@ class CLW_ForceSpawner
 		CLW_ForceEntry entry = job.m_Entry;
 		job.m_Group = crew;
 		crew.SetDeleteWhenEmpty(true);
+		crew.SetImportance(SCR_EAISpawnImportance.CRITICAL);
 		ReaffiliateCrew(job, crew);
 		job.m_sUnitId = NameAndTag(crew, NextName(job.m_sFaction, entry.m_sKind), entry.m_sKind, entry.m_sName, entry.m_sType, false);
 		Print(string.Format("CLW: spawn %1 crew group %2 has %3 agents (%4 occupants)", job.m_sFaction, job.m_sUnitId, crew.GetAgentsCount(), job.m_aCrew.Count()), LogLevel.NORMAL);
@@ -666,6 +735,9 @@ class CLW_ForceSpawner
 
 		int members = job.m_Cargo.GetAgentsCount();
 		bool complete = members >= job.m_Entry.m_iCargoMembers;
+		if (!complete && members <= 0 && job.m_fStateAge >= CLW_WarConfig.SPAWN_MEMBERS_TIMEOUT_SEC && RetryMembers(job, job.m_Cargo, job.m_Entry.m_iCargoMembers))
+			return;
+
 		if (!complete && job.m_fStateAge >= CLW_WarConfig.SPAWN_MEMBERS_TIMEOUT_SEC)
 		{
 			Print(string.Format("CLW: spawn %1 embarked members timeout: %2/%3 present, continuing", job.m_sUnitId, members, job.m_Entry.m_iCargoMembers), LogLevel.WARNING);

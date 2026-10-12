@@ -261,7 +261,7 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 		if (holder != m_sHoldFaction)
 		{
 			if (!holder.IsEmpty() && Param("holdAllWinMin").GetInt() > 0)
-				CLW_Debug.Say(holder + " holds every point: wins in " + Param("holdAllWinMin").GetInt() + " min if kept");
+				CLW_Debug.Announce(holder + " holds every point: wins in " + Param("holdAllWinMin").GetInt() + " min if kept");
 			else if (!m_sHoldFaction.IsEmpty())
 				Print("CLW: war hold-all by " + m_sHoldFaction + " broken", LogLevel.NORMAL);
 			m_sHoldFaction = holder;
