@@ -90,7 +90,7 @@ class CLW_ArsenalPool
 
 	static bool IsActive()
 	{
-		return CLW_GameMode.Cast(GetGame().GetGameMode()) != null;
+		return CLW_WarRuntime.IsActive();	// our game mode, or a Game Master game mode taken over (M4)
 	}
 
 	static void LowerAll(array<string> list)

@@ -40,7 +40,7 @@ class CLW_WarStatus
 		if (!m_War)
 			return;
 
-		CLW_GameMode gameMode = CLW_GameMode.Cast(GetGame().GetGameMode());
+		SCR_BaseGameMode gameMode = SCR_BaseGameMode.Cast(GetGame().GetGameMode());	// CLW_GameMode or a taken-over one (CLW_GameModeHooks.c)
 		if (gameMode)
 			gameMode.CLW_BroadcastWarStatus(Build());
 	}

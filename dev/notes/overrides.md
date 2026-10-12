@@ -134,3 +134,11 @@ and the chain continues with the next source. Per side + role one line: `CLW: pr
 Shipped: `vanilla_us`, `vanilla_ussr`, `vanilla_fia` (all `m_bVanilla`, the prefabs of the three vanilla profiles). Pack sets: add a `CLW_PropSet`
 with `m_bVanilla 0` and `m_aFactions { "RHS_USAF" }` and the pack's prefabs (candidates in order, the first that loads is used; a missing pack
 just falls through). None is shipped yet: no pack GUID could be verified (the enfusion asset index has vanilla only).
+
+## Takeover switch (`takeover`) - M4 option C
+Top-level key of the same file: `{"takeover":true}`. Default `false` (absent = off). Read once at the game start, SERVER only. When on, Clausewitz takes
+over a game mode entity that is not our `CLW_GameMode` (e.g. the `SCR_GameModeEditor` of the vanilla Game Master worlds `worlds/GameMaster/GM_*.ent`) and
+runs the war inside it; `CLW_GameMode` worlds are unaffected either way. The command line `-clwTakeover` has the same effect and wins in the log
+(`CLW: takeover of <class> in <world> (switch: cli|overrides)`). The scenario of a taken-over world: command line `-clwScenario <name>`
+(`Configs/CLW/Scenarios/<name>.conf`), else the world file name without a leading `GM_` (`GM_Arland` -> `Arland.conf`), else by-world / by-listing / auto.
+Recipe: `dev/notes/maps.md` ("Run a Game Master world with takeover"). Code: `CLW_WarRuntime.TakeoverSwitch`.
