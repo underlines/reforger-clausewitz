@@ -53,6 +53,9 @@ class CLW_Fob
 	int m_iBuilderTries;
 	int m_iOrderTries;
 	float m_fLastMoveLogAt;
+	float m_fBestDist;			// MOVING: smallest builder distance to the site that counted as progress (0 = not set yet)
+	float m_fBestAt;			// when m_fBestDist last improved by FOB_STALL_IMPROVE_M
+	int m_iStalls;
 	float m_fLastPauseLogAt;
 	float m_fEnemyHoldSec;
 	bool m_bUnderAttack;
@@ -128,6 +131,7 @@ class CLW_FobManager
 {
 	static const int TICK_MS = 3000;
 	static const string ORDER_SOURCE = "fob";			// CLW_Orders source of the builder / escort orders
+	static const float FOB_BUILDER_CONTACT_M = 300;		// a busy group this close to an enemy contact is fighting: not taken as walking builder
 	static const float ARRIVE_M = 60;					// builder this close to the site = arrived / present
 	static const float ZONE_M = 80;						// FOB zone for the presence test
 	static const float HOLD_LOST_SEC = 45;				// enemy alone in the zone this long = FOB lost
@@ -780,6 +784,7 @@ class CLW_FobManager
 	protected static void BeginMove(CLW_Fob fob)
 	{
 		fob.m_iOrderTries = 0;
+		fob.m_fBestDist = 0;
 		SetState(fob, CLW_EFobState.MOVING, "builder " + fob.m_sBuilderId + " heads for " + fob.m_vPos);
 		string why;
 		if (!IssueMove(fob.m_sSide, fob.m_sBuilderId, fob.m_vPos, "build " + fob.m_sId, why))
@@ -870,12 +875,40 @@ class CLW_FobManager
 
 		array<string> ids = {};
 		registry.GetCommandableIds(side, ids);
+
+		// busy groups only when they are not in a fight: AI in contact ignores move waypoints
+		// (DS run 2026-10-12: two walking builders held their objective for 6 min and the FOBs failed)
+		array<CLW_Contact> contacts = {};
+		CLW_RemoteCommander commander = CLW_GameMode.GetCommander(side);
+		if (busyOk && commander && commander.GetRules() && commander.GetRules().GetBook())
+			commander.GetRules().GetBook().GetContacts(contacts);
+
 		string best;
 		float bestDist = 1000000000;
 		foreach (string id : ids)
 		{
 			if (orders.FindVehicleUnit(id) || registry.GetKind(id) != CLW_ForceKind.INFANTRY)
 				continue;
+
+			if (busyOk && !contacts.IsEmpty())
+			{
+				vector unitPos;
+				if (!orders.UnitPos(id, unitPos))
+					continue;
+
+				bool engaged = false;
+				foreach (CLW_Contact contact : contacts)
+				{
+					if (contact && vector.DistanceXZ(contact.m_vPos, unitPos) < FOB_BUILDER_CONTACT_M)
+					{
+						engaged = true;
+						break;
+					}
+				}
+
+				if (engaged)
+					continue;
+			}
 
 			SCR_AIGroup group = registry.Find(id);
 			if (!group || CLW_RuleCommander.HasHumanLeader(group) || IsReserved(id))
@@ -1025,6 +1058,18 @@ class CLW_FobManager
 			return;
 		}
 
+		// stall rule: no progress (FOB_STALL_IMPROVE_M closer) for FOB_STALL_SEC
+		if (fob.m_fBestDist <= 0 || dist < fob.m_fBestDist - CLW_WarConfig.FOB_STALL_IMPROVE_M)
+		{
+			fob.m_fBestDist = Math.Max(dist, 1);
+			fob.m_fBestAt = now;
+		}
+		else if (now - fob.m_fBestAt >= CLW_WarConfig.FOB_STALL_SEC)
+		{
+			if (HandleStall(fob, now, pos, dist))
+				return;
+		}
+
 		CLW_UnitOrder order = orders.GetOrder(fob.m_sBuilderId);
 		if (!order || order.m_sStatus != CLW_Orders.STATUS_ACTIVE)
 		{
@@ -1047,6 +1092,62 @@ class CLW_FobManager
 		}
 	}
 
+	// The builder made no progress for FOB_STALL_SEC. Close enough (FOB_RELOCATE_MAX_M): the FOB moves to valid ground near the builder
+	// and goes straight to BUILDING. Otherwise the move order is re-issued; after FOB_MAX_STALLS stalls the FOB fails.
+	// True when the state changed (relocated / failed), the caller returns.
+	protected static bool HandleStall(CLW_Fob fob, float now, vector builderPos, float dist)
+	{
+		fob.m_iStalls++;
+		float stalledSec = now - fob.m_fBestAt;
+		if (dist <= CLW_WarConfig.FOB_RELOCATE_MAX_M)
+		{
+			array<vector> extra = {};
+			array<float> extraDist = {};
+			float spacing = SPACING_FLOOR_M;
+			CLW_Bases bases = CLW_GameMode.GetBases();
+			if (bases)
+				spacing = Math.Max(SPACING_FLOOR_M, bases.ScaleDistance(SPACING_M));
+
+			foreach (CLW_Fob other : s_aFobs)
+			{
+				if (other == fob || !other.IsLive())
+					continue;
+
+				extra.Insert(other.m_vPos);
+				extraDist.Insert(spacing);
+			}
+
+			vector site;
+			if (CLW_FobSites.FindNear(builderPos, CLW_WarConfig.FOB_RELOCATE_SEARCH_M, extra, extraDist, site))
+			{
+				fob.m_vPos = site;
+				fob.m_fBestDist = 0;
+				Print(string.Format("CLW: fob %1 stalled %2 s at %3 m: relocated to %4 grid %5", fob.m_sId, Math.Round(stalledSec), Math.Round(dist), site, CLW_Places.Grid(site)), LogLevel.NORMAL);
+				string moveWhy;
+				IssueMove(fob.m_sSide, fob.m_sBuilderId, site, "build " + fob.m_sId, moveWhy);
+				if (!fob.m_sEscortId.IsEmpty())
+					IssueMove(fob.m_sSide, fob.m_sEscortId, site, "escort " + fob.m_sId, moveWhy);
+
+				SetState(fob, CLW_EFobState.BUILDING, "relocated near the stalled builder");
+				return true;
+			}
+
+			Print(string.Format("CLW: fob %1 stalled %2 s at %3 m: no valid ground near the builder", fob.m_sId, Math.Round(stalledSec), Math.Round(dist)), LogLevel.NORMAL);
+		}
+
+		if (fob.m_iStalls >= CLW_WarConfig.FOB_MAX_STALLS)
+		{
+			Fail(fob, string.Format("the builder stalled %1 times (%2 m short)", fob.m_iStalls, Math.Round(dist)));
+			return true;
+		}
+
+		string why;
+		bool ordered = IssueMove(fob.m_sSide, fob.m_sBuilderId, fob.m_vPos, "build " + fob.m_sId, why);
+		fob.m_fBestDist = 0;
+		Print(string.Format("CLW: fob %1 stalled %2 s at %3 m (stall %4 of %5): move re-issued (ordered=%6 %7)", fob.m_sId, Math.Round(stalledSec), Math.Round(dist), fob.m_iStalls, CLW_WarConfig.FOB_MAX_STALLS, ordered, why), LogLevel.NORMAL);
+		return false;
+	}
+
 	protected static void StepBuilding(CLW_Fob fob, float now, float dt)
 	{
 		bool present = true;
@@ -1064,6 +1165,16 @@ class CLW_FobManager
 
 			vector pos;
 			present = orders.UnitPos(fob.m_sBuilderId, pos) && vector.DistanceXZ(pos, fob.m_vPos) <= ARRIVE_M;
+
+			// the builder holds the site while it builds: once its MOVE is done it has no waypoint and drifts off
+			// (DS run 2026-10-12: build paused at 30 % for minutes after "MOVE -> done: arrived")
+			CLW_UnitOrder order = orders.GetOrder(fob.m_sBuilderId);
+			if (!order || order.m_sStatus != CLW_Orders.STATUS_ACTIVE)
+			{
+				string why;
+				if (orders.Issue(fob.m_sBuilderId, CLW_ECommand.DEFEND, "", fob.m_vPos, "hold the build site " + fob.m_sId, ORDER_SOURCE, why))
+					Print(string.Format("CLW: fob %1 builder %2 holds the site while building", fob.m_sId, fob.m_sBuilderId), LogLevel.NORMAL);
+			}
 		}
 
 		CLW_BuildExecutor.Step(fob, dt, present);

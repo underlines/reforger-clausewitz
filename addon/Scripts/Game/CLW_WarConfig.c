@@ -65,6 +65,12 @@ class CLW_WarConfig
 	static const float PLACE_BASE_NAVMESH_TOL_M = 12;	// base validation tolerance
 	static const float PLACE_BASE_ROAD_WARN_M = 120;	// base further than this from any road is reported as unusable for vehicles
 	static const int PLACE_GROUND_ATTEMPTS = 40;
+	static const float FOB_MIN_OBJECTIVE_DIST_M = 250;	// a FOB site keeps this far from an objective's capture radius edge (fights happen there)
+	static const float FOB_STALL_SEC = 120;				// builder made no progress (>= FOB_STALL_IMPROVE_M closer) this long = stalled
+	static const float FOB_STALL_IMPROVE_M = 15;
+	static const float FOB_RELOCATE_MAX_M = 300;		// stalled builder this close to the site: build near the builder instead
+	static const float FOB_RELOCATE_SEARCH_M = 250;		// free-ground search radius around the stalled builder
+	static const int FOB_MAX_STALLS = 3;				// stalls before the FOB fails
 	static const float PLACE_CHAR_CLEAR_M = 1.5;		// infantry spot: no other character closer than this
 	static const float PLACE_SLOT_CHAR_CLEAR_M = 2.5;	// a character this close to a vehicle slot blocks it
 	static const float PLACE_CARGO_MIN_M = 5;			// cargo group ring around its vehicle

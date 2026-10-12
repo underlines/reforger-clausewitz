@@ -48,7 +48,7 @@ class CLW_FobSites
 	static const float ROAD_MAX_M = 60;				// a site must have a road this close (the builder truck has to reach it)
 	static const float BASE_CLEAR_M = 250;			// authored distance from an HQ, scaled with the battle size
 	static const float BASE_CLEAR_FLOOR_M = 150;
-	static const float OBJECTIVE_CLEAR_M = 100;		// beyond the capture radius
+	// objective clearance: CLW_WarConfig.FOB_MIN_OBJECTIVE_DIST_M beyond the capture radius
 	static const float SPACING_M = 220;				// authored distance between two sites, scaled
 	static const float SPACING_FLOOR_M = 120;
 	static const float SEARCH_RADIUS_MIN_M = 80;
@@ -134,6 +134,8 @@ class CLW_FobSites
 
 		array<vector> avoid = {};
 		array<float> avoidDist = {};
+		array<vector> objPos = {};
+		array<float> objNeed = {};
 		avoid.Insert(hqFirst);
 		avoidDist.Insert(baseClear);
 		avoid.Insert(hqSecond);
@@ -146,8 +148,11 @@ class CLW_FobSites
 				if (!point)
 					continue;
 
+				float need = point.m_fRadius + CLW_WarConfig.FOB_MIN_OBJECTIVE_DIST_M;
 				avoid.Insert(point.m_vPos);
-				avoidDist.Insert(point.m_fRadius + OBJECTIVE_CLEAR_M);
+				avoidDist.Insert(need);
+				objPos.Insert(point.m_vPos);
+				objNeed.Insert(need);
 			}
 		}
 
@@ -176,6 +181,20 @@ class CLW_FobSites
 					wish = Vector(hqFirst[0] + dirX * hqDist * setup.m_fAlong + leftX * lateral, 0, hqFirst[2] + dirZ * hqDist * setup.m_fAlong + leftZ * lateral);
 				}
 
+				vector hqOwn = hqFirst;
+				if (setup.m_iSide == 1 || (setup.m_iSide < 0 && vector.DistanceXZ(wish, hqSecond) < vector.DistanceXZ(wish, hqFirst)))
+					hqOwn = hqSecond;
+
+				vector before = wish;
+				if (!ShiftClear(wish, objPos, objNeed, hqOwn))
+				{
+					Print(string.Format("CLW: fob site %1 (data) dropped: no position %2 m clear of the objectives found from wish %3", setup.m_sId, Math.Round(CLW_WarConfig.FOB_MIN_OBJECTIVE_DIST_M), before), LogLevel.NORMAL);
+					continue;
+				}
+
+				if (vector.DistanceXZ(wish, before) > 1)
+					Print(string.Format("CLW: fob site %1 (data) shifted from %2 to %3: too close to an objective (min %4 m clear)", setup.m_sId, before, wish, Math.Round(CLW_WarConfig.FOB_MIN_OBJECTIVE_DIST_M)), LogLevel.NORMAL);
+
 				if (TryAdd(setup.m_sId, setup.m_sName, wish, setup.m_iSide, "data", radius, spacing, avoid, avoidDist, points))
 					fromData++;
 			}
@@ -200,12 +219,107 @@ class CLW_FobSites
 			if (fraction == 0.5)
 				side = -1;
 
+			vector hqNear = hqFirst;
+			if (side == 1)
+				hqNear = hqSecond;
+			if (!ShiftClear(computedWish, objPos, objNeed, hqNear))
+				continue;
+
 			s_iComputed++;
 			if (TryAdd("FSC" + s_iComputed, "", computedWish, side, "computed", radius, spacing, avoid, avoidDist, points))
 				fromComputed++;
 		}
 
 		Print(string.Format("CLW: fob site pool ready: %1 sites (%2 from data, %3 computed), hq distance %4 m, base clear %5 m, spacing %6 m", s_aSites.Count(), fromData, fromComputed, Math.Round(hqDist), Math.Round(baseClear), Math.Round(spacing)), LogLevel.NORMAL);
+	}
+
+	// Moves 'wish' straight away from the objective it violates most until every objective is 'objNeed' clear (+5 m). Degenerate
+	// direction (wish on the objective): toward 'hq'. False when no clear position is found in a few steps.
+	protected static bool ShiftClear(inout vector wish, notnull array<vector> objPos, notnull array<float> objNeed, vector hq)
+	{
+		for (int iter = 0; iter < 12; iter++)
+		{
+			int worst = -1;
+			float worstGap = 0;
+			for (int i = 0; i < objPos.Count(); i++)
+			{
+				float gap = objNeed[i] - vector.DistanceXZ(wish, objPos[i]);
+				if (gap > worstGap)
+				{
+					worstGap = gap;
+					worst = i;
+				}
+			}
+
+			if (worst < 0)
+				return true;
+
+			vector obj = objPos[worst];
+			float dx = wish[0] - obj[0];
+			float dz = wish[2] - obj[2];
+			float len = Math.Sqrt(dx * dx + dz * dz);
+			if (len < 1)
+			{
+				dx = hq[0] - obj[0];
+				dz = hq[2] - obj[2];
+				len = Math.Sqrt(dx * dx + dz * dz);
+				if (len < 1)
+					return false;
+			}
+
+			float push = objNeed[worst] + 5;
+			wish[0] = obj[0] + dx / len * push;
+			wish[2] = obj[2] + dz / len * push;
+		}
+
+		return false;
+	}
+
+	// A valid free site near 'around' (builder relocation): dry, flat, clear of the HQs, the objectives (FOB_MIN_OBJECTIVE_DIST_M) and the
+	// extra positions. No road needed. False when there is none within the search radius.
+	static bool FindNear(vector around, float searchRadius, notnull array<vector> extraAvoid, notnull array<float> extraDist, out vector site)
+	{
+		CLW_ScenarioConfig scenario = CLW_ScenarioConfig.Get();
+		CLW_Bases bases = CLW_GameMode.GetBases();
+		CLW_ControlPoints points = CLW_GameMode.GetControlPoints();
+		array<vector> avoid = {};
+		array<float> avoidDist = {};
+		if (scenario && bases && scenario.m_aFactions && scenario.m_aFactions.Count() == 2)
+		{
+			float baseClear = Math.Max(BASE_CLEAR_FLOOR_M, bases.ScaleDistance(BASE_CLEAR_M));
+			for (int b = 0; b < 2; b++)
+			{
+				vector hq = bases.GetBasePos(scenario.GetFactionKey(b));
+				if (hq != vector.Zero)
+				{
+					avoid.Insert(hq);
+					avoidDist.Insert(baseClear);
+				}
+			}
+		}
+
+		if (points)
+		{
+			for (int pi = 0; pi < points.Count(); pi++)
+			{
+				CLW_ControlPoint point = points.Get(pi);
+				if (!point)
+					continue;
+
+				avoid.Insert(point.m_vPos);
+				avoidDist.Insert(point.m_fRadius + CLW_WarConfig.FOB_MIN_OBJECTIVE_DIST_M);
+			}
+		}
+
+		for (int xi = 0; xi < extraAvoid.Count(); xi++)
+		{
+			avoid.Insert(extraAvoid[xi]);
+			avoidDist.Insert(extraDist[xi]);
+		}
+
+		float roadDist;
+		float score;
+		return CLW_Placement.FindSiteEx(around, searchRadius, avoid, avoidDist, site, roadDist, score);
 	}
 
 	protected static bool TryAdd(string id, string name, vector wish, int side, string source, float radius, float spacing, notnull array<vector> avoid, notnull array<float> avoidDist, CLW_ControlPoints points)
