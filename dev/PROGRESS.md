@@ -25,7 +25,7 @@ Updated: 2026-10-12. Roadmap: `VISION.md` section 13. Decisions: `notes/`.
 - [x] Squad movement verified in the log (per-squad leader position + waypoint logging): AI-only squads walk their patrol/attack waypoints. A joining player becomes squad LEADER automatically (`playerLeader=1`; the `leaderId=-1` seen right after join was read too early), so the squad follows the player and HQ skips it: it needs the mission path (M2).
 - [ ] Verify later (needs 2 players or a way to join as non-leader): does an AI leader obey HQ waypoints while a player is a plain member? RuleCommander already skips only squads with a human LEADER
 
-## Current milestone: M2 - Real war + mechanized
+## Done: M2 - Real war + mechanized (v0.3.0)
 Design: `notes/m2-design.md` (decided 2026-10-12). Branch `feature/m2-real-war`. Phases P1 war foundation, P2 forces +
 mechanized, P3 commander v1 + protocol v2, P4 missions, S sidecar/dashboard; implemented code-only by subagents, one
 Workbench e2e test at the end. LLM: fake + OpenRouter tested e2e; Anthropic provider deferred.
@@ -84,7 +84,28 @@ Local DS in `D:\GitHub\ReforgerMods\_dedicated\` (junction to `addon/`, no pack 
   tab; real LLM orders move units. Owner verified all green (2026-10-12, build #40).
 - [ ] Fake LLM provider: units seemed not to move (owner, build #40); check the fake orders path.
 
-## Next up
+## Current milestone: M4 - Any map, any pack
+Design: `notes/m4-design.md` (2026-10-12). Branch `feature/m4-any-map` (not merged yet: HQ menu needs a client test). Built by six
+subagents (WP1 maps + auto scenario, WP2 wrapper worlds + generator, WP3 side pools + props, WP4 HQ menu, WP5 FOB/convoys, WP6 GM spike).
+Verified on the dedicated server, unattended (builds #67-#71, packs RHS + WCS + GRS + WCS Loadout Editor, setup preset RHS_USAF vs RHS_AFRF):
+- [x] setup preset auto start (no human), invalid preset never replaced by defaults
+- [x] Arland random start: HQ pair in 2-10 attempts (was 60 of 60 rejected); Arland fixed start unchanged
+- [x] Everon (`CLW_Eden`) and Kolguyev (`CLW_Cain`) wrapper worlds boot, auto scenario fills HQs + 7 objectives (map places), AI moves on the campaign navmesh, war runs without script errors
+- [x] side pools: RHS sides get the kin supply truck (US M923A1 / USSR Ural), RHS_AFRF also recon + BRDM; crewless K-17/K-4386 caught at catalog build
+- [x] FOB1 built by a walking builder (forced move, 45 s to site), first RHS convoy delivered 279 supplies HQ -> FOB1
+- [x] map place positions on the DS (were all 0,0); arsenal pool lookup self-test ok for every faction
+Needs the owner (client):
+- [ ] HQ menu (terminal action + `/hqmenu`): layout, buttons, every section; vehicle delivery hint + marker
+- [ ] arsenal: WCS SPEAR and other pool items can be taken and cost supplies; GRS in the Loadout Editor
+- [ ] `/report`, map-marker contacts, FOB respawn (carried over from the M3 list)
+Open / known:
+- [ ] GM takeover (option C): research says "needs a test, leaning go" (`research/gm-takeover-spike.md`); not run yet
+- [ ] auto scenario objective owners: the side-owned start objectives are not always the outermost kept ones (Everon: C owned by US while B is further out)
+- [ ] map mod wrapper generator only dry-run tested (Takistan, Kadykchan); no wrapper booted on the DS yet
+- [ ] no pack prop style sets shipped (RHS GUIDs unverified); RHS has no armor role (no kin tank either)
+- [ ] WCS_Armament AI magazine switch throws VM exceptions (third-party, vanilla null weapMgr)
+
+## Done: M3 - Logistics, bases & requests (v0.5.0)
 M3 "Logistics, bases & requests" coded 2026-10-12 on branch `feature/m3-logistics` (phases R, B, Q, F, L, A; design `notes/m3-design.md`).
 All phases compile (Workbench builds #42-#44). Runtime: dedicated server runs without a client (war auto-starts after 180 s), builds #44-#51.
 Verified on the DS (no human needed):
