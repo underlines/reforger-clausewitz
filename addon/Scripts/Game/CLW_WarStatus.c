@@ -3,7 +3,8 @@
 // whenever tickets / point owners / the phase change. Server only. Nothing here names a faction: keys and identities come from the scenario.
 //
 // Wire format: phase|timeLeftSec|winnerKey|side0|side1   (phase 0 SETUP, 1 RUNNING, 2 ENDED; timeLeftSec -1 = no limit)
-//   side = key,identity,tickets,maxTickets,heldCount,heldValue   (tickets -1 = the mode does not use tickets)
+//   side = key,identity,tickets,maxTickets,heldCount,heldValue,supplies   (tickets -1 = the mode does not use tickets;
+//          supplies = the side's supply stock from CLW_WarState.GetSupplies, -1 during SETUP; the HUD shows only the local player's side)
 class CLW_WarStatus
 {
 	static const int STATUS_PERIOD_MS = 2000;
@@ -91,6 +92,10 @@ class CLW_WarStatus
 		string identity = CLW_ScenarioConfig.GetIdentityText(key);
 		string line = key + "," + identity + "," + tickets.ToString() + "," + maxTickets.ToString();
 		line += "," + m_War.GetHeldCount(key).ToString() + "," + m_War.GetHeldValue(key).ToString();
+		int supplies = -1;
+		if (phase != 0)
+			supplies = m_War.GetSupplies(key);
+		line += "," + supplies.ToString();
 		return line;
 	}
 }

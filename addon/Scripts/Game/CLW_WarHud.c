@@ -68,7 +68,7 @@ class CLW_WarHud
 			s_wRoot.SetVisible(!s_bMapOpen);
 	}
 
-	// side = key,identity,tickets,maxTickets,heldCount,heldValue
+	// side = key,identity,tickets,maxTickets,heldCount,heldValue,supplies (supplies shown for the local side only)
 	protected static void FillSide(string side, int index, int phase, out string name, out string info, out int color, out bool low)
 	{
 		array<string> f = {};
@@ -95,6 +95,19 @@ class CLW_WarHud
 		}
 
 		info = ticketText + "  |  " + f[4] + " (" + f[5] + ")";
+		if (f.Count() >= 7 && IsLocalSide(f[0]))
+		{
+			int supplies = f[6].ToInt();
+			if (supplies >= 0)
+				info += "  |  Supplies " + supplies.ToString();
+		}
+	}
+
+	// True when the key is the faction of the local player (the HUD shows supplies of the own side only).
+	protected static bool IsLocalSide(string key)
+	{
+		Faction local = SCR_FactionManager.SGetLocalPlayerFaction();
+		return local && local.GetFactionKey() == key;
 	}
 
 	// Side colours come from the scenario's map identity; unknown identities fall back to side A blue / side B red.

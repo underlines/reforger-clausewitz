@@ -12,6 +12,11 @@ class CLW_SquadRecord
 	string m_sTypeId;		// force type id from the faction profile, "" when unknown
 	bool m_bHidden;			// linked cargo group of a vehicle unit: adopted and polled, but not commandable
 	bool m_bTagged;			// kind/type were set explicitly (spawner), never overwritten by the lazy resolve
+	string m_sRole;			// naming role that overrides the kind (CLW_SquadRegistry.ROLE_*), "" = named by kind
+	string m_sName;			// readable display name ("1st Rifle Squad"), "" = not assigned yet
+	string m_sNameKey;		// kind / role the name was built from (a changed key re-names the squad)
+	string m_sNamePattern;	// pattern of the name (ordinals are unique per faction + pattern)
+	int m_iOrdinal;			// ordinal in the name
 }
 
 // Kind / type set by the force spawner for a group it created, keyed by the group's entity name. Applied at adoption.
@@ -32,6 +37,9 @@ class CLW_SquadTag
 //        and (ADOPT_RUNTIME_GROUPS or it has an entity name).
 // Release: entity gone, or no living member for EMPTY_SWEEPS_TO_RELEASE consecutive sweeps. The commanders drop their
 //          state for ids that are no longer listed; a lost squad is simply absent from the next situation report.
+// Names: every commandable squad gets a readable display name once ("1st Rifle Squad", "Recon Team 1", "HQ Garrison"), see NamePattern
+//        (the single kind -> pattern table). The ordinal is the lowest free one per faction and pattern; a living squad is never
+//        renumbered. The id stays the internal / LLM key. The name feeds the vanilla group lists (CLW_SquadGroups.ApplyName).
 // Enumeration: AIWorld.GetAIAgents (every spawned agent: scene-placed, Game Master and script-spawned) -> parent group.
 class CLW_SquadRegistry
 {
@@ -39,6 +47,8 @@ class CLW_SquadRegistry
 	static const string IGNORE_PREFIX = "CLW_IGNORE_";
 	static const int SWEEP_MS = 5000;
 	static const int EMPTY_SWEEPS_TO_RELEASE = 2;
+	static const string ROLE_GARRISON = "garrison";	// naming roles (override the kind, set by the owner of the role via SetRole)
+	static const string ROLE_FOB_TEAM = "fob_team";
 
 	protected ref array<ref CLW_SquadRecord> m_aRecords = {};
 	protected ref map<string, int> m_mCounters = new map<string, int>();	// generated id counter per faction
@@ -111,6 +121,7 @@ class CLW_SquadRegistry
 		if (record)
 		{
 			ApplyTag(record, tag);
+			EnsureName(record);
 			m_iVersion++;
 		}
 
@@ -128,6 +139,8 @@ class CLW_SquadRegistry
 		if (record && record.m_bHidden != hidden)
 		{
 			record.m_bHidden = hidden;
+			if (!hidden)
+				EnsureName(record);
 			m_iVersion++;
 			Print(string.Format("CLW: registry %1 hidden=%2", id, hidden), LogLevel.NORMAL);
 		}
@@ -143,8 +156,153 @@ class CLW_SquadRegistry
 		record.m_sKind = kind;
 		record.m_sDisplayType = displayType;
 		record.m_bTagged = true;
+		EnsureName(record);
 		m_iVersion++;
 		Print(string.Format("CLW: registry %1 kind=%2 type='%3'", id, kind, displayType), LogLevel.NORMAL);
+	}
+
+	// ---- readable names ----
+
+	// THE kind -> name pattern table (data of the naming, keyed by the CLW kind enum / naming role, never by faction text).
+	// Tokens: {ord} = English ordinal (1st, 2nd, 3rd, 11th, 21st), {n} = number, {n2} = "" for 1 and " <n>" otherwise.
+	static string NamePattern(string key)
+	{
+		if (key == ROLE_GARRISON)
+			return "HQ Garrison{n2}";
+		if (key == ROLE_FOB_TEAM)
+			return "FOB Team {n}";
+		if (key == CLW_ForceKind.INFANTRY)
+			return "{ord} Rifle Squad";
+		if (key == CLW_ForceKind.RECON)
+			return "Recon Team {n}";
+		if (key == CLW_ForceKind.MOTORIZED)
+			return "Motorized Squad {n}";
+		if (key == CLW_ForceKind.LIGHT)
+			return "Light Vehicle {n}";
+		if (key == CLW_ForceKind.MECH)
+			return "Mechanized Squad {n}";
+		if (key == CLW_ForceKind.ARMOR)
+			return "Armor {n}";
+		if (key == CLW_ForceKind.ARMORED_RECON)
+			return "Armored Recon {n}";
+		if (key == CLW_ForceKind.LOGISTICS)
+			return "Supply Truck {n}";
+
+		return "Squad {n}";
+	}
+
+	// English ordinal: 1st 2nd 3rd 4th ... 11th 12th 13th ... 21st.
+	static string Ordinal(int n)
+	{
+		string suffix = "th";
+		int mod100 = n % 100;
+		if (mod100 < 11 || mod100 > 13)
+		{
+			int mod10 = n % 10;
+			if (mod10 == 1)
+				suffix = "st";
+			else if (mod10 == 2)
+				suffix = "nd";
+			else if (mod10 == 3)
+				suffix = "rd";
+		}
+
+		return n.ToString() + suffix;
+	}
+
+	static string FormatName(string pattern, int n)
+	{
+		string name = pattern;
+		string n2 = "";
+		if (n > 1)
+			n2 = " " + n.ToString();
+		name.Replace("{ord}", Ordinal(n));
+		name.Replace("{n2}", n2);
+		name.Replace("{n}", n.ToString());
+		return name;
+	}
+
+	// Readable name of a squad ("" for an unknown id). Linked cargo groups (hidden, unnamed) fall back to their display type.
+	string GetName(string id)
+	{
+		CLW_SquadRecord record = FindRecord(id);
+		if (!record)
+			return "";
+
+		EnsureName(record);
+		if (record.m_sName.IsEmpty())
+		{
+			Resolve(record);
+			return record.m_sDisplayType;
+		}
+
+		return record.m_sName;
+	}
+
+	// Give the squad a naming role (garrison, FOB team): it is re-named from the role's pattern with the next free ordinal.
+	// Role "" returns to the kind name. Server only.
+	void SetRole(string id, string role)
+	{
+		CLW_SquadRecord record = FindRecord(id);
+		if (!record || record.m_sRole == role)
+			return;
+
+		record.m_sRole = role;
+		EnsureName(record);
+		m_iVersion++;
+	}
+
+	// Assign (or, when the kind / role changed, re-assign) the display name. Hidden cargo groups stay unnamed.
+	protected void EnsureName(CLW_SquadRecord record)
+	{
+		if (record.m_bHidden)
+			return;
+
+		Resolve(record);
+		string key = record.m_sRole;
+		if (key.IsEmpty())
+			key = record.m_sKind;
+		if (!record.m_sName.IsEmpty() && record.m_sNameKey == key)
+			return;
+
+		string pattern = NamePattern(key);
+		int ordinal = FreeOrdinal(record, pattern);
+		string old = record.m_sName;
+		record.m_sNameKey = key;
+		record.m_sNamePattern = pattern;
+		record.m_iOrdinal = ordinal;
+		record.m_sName = FormatName(pattern, ordinal);
+		Print(string.Format("CLW: squad name %1 -> \"%2\" (side %3, kind %4)", record.m_sId, record.m_sName, record.m_sFaction, key), LogLevel.NORMAL);
+		if (!old.IsEmpty() && old != record.m_sName)
+			Print(string.Format("CLW: squad name %1 renamed from \"%2\" (kind/role changed)", record.m_sId, old), LogLevel.NORMAL);
+
+		if (record.m_Group && CLW_SquadGroups.IsRegistered(record.m_Group))
+			CLW_SquadGroups.ApplyName(record.m_Group);
+	}
+
+	// Lowest ordinal not used by another living squad of the same faction and pattern.
+	protected int FreeOrdinal(CLW_SquadRecord self, string pattern)
+	{
+		int n = 1;
+		while (n < 1000)
+		{
+			bool used = false;
+			foreach (CLW_SquadRecord other : m_aRecords)
+			{
+				if (other != self && other.m_sFaction == self.m_sFaction && other.m_sNamePattern == pattern && other.m_iOrdinal == n && !other.m_sName.IsEmpty())
+				{
+					used = true;
+					break;
+				}
+			}
+
+			if (!used)
+				return n;
+
+			n++;
+		}
+
+		return n;
 	}
 
 	string GetKind(string id)
@@ -496,6 +654,7 @@ class CLW_SquadRegistry
 		if (m_mTags.Find(id, tag) && tag)
 			ApplyTag(record, tag);
 		m_aRecords.Insert(record);
+		EnsureName(record);
 
 		string source = "runtime";
 		if (!entityName.IsEmpty())

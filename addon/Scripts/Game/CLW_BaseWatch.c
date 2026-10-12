@@ -279,6 +279,7 @@ class CLW_BaseWatch
 				break;
 
 			s_mGarrison.Set(pick, faction);
+			NameGarrison(registry, pick);
 			s_mNoOrderSince.Remove(pick);
 			have++;
 			Print(string.Format("CLW: garrison %1: %2 assigned to the HQ (%3 of %4, %5 m from it)", faction, pick, have, wanted, Math.Round(best)), LogLevel.NORMAL);
@@ -305,6 +306,13 @@ class CLW_BaseWatch
 			if (!orders.Issue(garrisonId, CLW_ECommand.DEFEND, "", hq, "garrison: defend the HQ", CLW_Orders.SOURCE_RULES, why))
 				Print(string.Format("CLW: garrison %1: DEFEND the HQ for %2 refused: %3", faction, garrisonId, why), LogLevel.WARNING);
 		}
+	}
+
+	// WP1 (readable names): a squad picked as garrison is named "HQ Garrison" ("HQ Garrison 2" for a second one of the side).
+	protected static void NameGarrison(CLW_SquadRegistry registry, string unitId)
+	{
+		registry.SetRole(unitId, CLW_SquadRegistry.ROLE_GARRISON);
+		Print(string.Format("CLW: garrison %1 named \"%2\"", unitId, registry.GetName(unitId)), LogLevel.NORMAL);
 	}
 
 	// A unit that stands at the base without anything to do and that this watch may touch: no human, no active order, not reserved

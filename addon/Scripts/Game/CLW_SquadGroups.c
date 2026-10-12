@@ -39,18 +39,23 @@ class CLW_SquadGroups
 		return count;
 	}
 
-	// "<id> - <display type>", e.g. "CLW_Squad_US_1 - Rifle squad".
+	// Readable squad name from the registry ("1st Rifle Squad", "HQ Garrison"); the id stays internal. A group the registry does not
+	// know gets its display type.
 	static string DisplayName(notnull SCR_AIGroup group)
 	{
 		CLW_SquadRegistry registry = CLW_GameMode.GetRegistry();
-		string id;
 		if (registry)
-			id = registry.GetId(group);
-		string type = CLW_SquadInfo.TypeName(group);
-		if (id.IsEmpty())
-			return type;
+		{
+			string id = registry.GetId(group);
+			if (!id.IsEmpty())
+			{
+				string name = registry.GetName(id);
+				if (!name.IsEmpty())
+					return name;
+			}
+		}
 
-		return id + " - " + type;
+		return CLW_SquadInfo.TypeName(group);
 	}
 
 	// ---- server ----
