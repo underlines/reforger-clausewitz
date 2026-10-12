@@ -311,6 +311,17 @@ Large AI wars die on entity counts. The mod needs an explicit **population manag
 - **Delete vs. pause policy** is a scenario setting: *preserve* (collapse and keep strength), *attrit* (delete when far from action and mark as lost/reserve), *aggressive* (delete after N minutes out of contact).
 - Safe-guards: never delete a unit while it is in an active command, only after the command is reassigned; keep counts consistent with the faction's resource ledger.
 
+### Activity tiers (relevance-based simulation detail)
+
+The engine drops AI far from any observer to its lowest LOD (almost no thinking), so an AI-vs-AI front with no human nearby stalls. Seen in play (M2, 2026-10-12): enemy vehicles only acted when the Game Master camera came close.
+
+- **Now (M2, simple):** every 10 s each commanded unit gets a relevance check: enemy within ~800 m (ground truth), executing an unfinished HQ order (every driving vehicle), at a contested objective, or human-led. Relevant units stay at full detail (`PreventMaxLOD`), the rest are released to the engine (`AllowMaxLOD`) with 60 s hysteresis. A per-side budget of active agents (by battle size) ranks units by relevance score. Bases/FOBs keep operating because the economy is our own script, not AI; a garrison wakes when enemies approach.
+- **Later (smarter):**
+  - **Four tiers:** *full* (combat, humans near) / *reduced* (in transit: lower update rate, simpler pathing) / *dormant* (live, engine max LOD) / *virtualized* (despawned to a record, see below).
+  - **Adaptive budget** from server FPS and player count instead of fixed caps; HQ is told which units are "slow" so plans account for it.
+  - **Predictive relevance:** wake units whose route will cross an enemy or an objective within N minutes, not only when contact already happened.
+  - **Commander-side LOD:** HQ plans detailed only for the active front; quiet sectors are summarised (ties into 4b "caps and prioritisation").
+
 ### Experimental (far future): virtual battlefield
 
 An ALiVE-style layer (see research section 8a). Admin toggle, **off by default**; all radii and timers configurable.
