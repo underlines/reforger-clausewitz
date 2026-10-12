@@ -60,6 +60,10 @@ class CLW_RuleCommander
 	protected ref array<float> m_aBuyTime = {};
 	protected float m_fLastSetupLog = -1000;
 	protected float m_fLastNoCatalogLog = -1000;
+	protected float m_fCapBlockTime = -1;			// time of the last AI-cap refusal (-1 = not blocked)
+	protected int m_iCapBlockLive;					// live + pending AI at that refusal
+	protected float m_fLastCapLog = -1000;
+	static const float CAP_BLOCK_SEC = 60;
 	protected static int s_iMissionCounter;			// unique task IDs (a deleted task's ID may linger in the task system for a moment)
 	protected SCR_Task m_MissionTask;				// the one vanilla task (J menu + map) of this faction's human squad (legacy path)
 	protected string m_sMissionSquad;				// squad id the task belongs to ("" = none)
@@ -253,6 +257,17 @@ class CLW_RuleCommander
 			return;
 		}
 
+		// a buy was refused for the AI cap: wait until the live AI count drops or CAP_BLOCK_SEC passed
+		if (m_fCapBlockTime >= 0)
+		{
+			int liveNow = spawner.GetLiveAI(m_sFaction) + spawner.GetPendingAI(m_sFaction);
+			if (now - m_fCapBlockTime < CAP_BLOCK_SEC && liveNow >= m_iCapBlockLive)
+				return;
+
+			Print(string.Format("CLW: RuleCommander %1: AI cap block lifted (live %2 was %3, %4 s)", m_sFaction, liveNow, m_iCapBlockLive, Math.Round(now - m_fCapBlockTime)), LogLevel.NORMAL);
+			m_fCapBlockTime = -1;
+		}
+
 		// composition: living units by category plus purchases still on their way
 		array<int> counts = {0, 0, 0, 0};
 		foreach (string id : m_aSquads)
@@ -344,9 +359,19 @@ class CLW_RuleCommander
 			}
 			else
 			{
-				Print(string.Format("CLW: RuleCommander %1: buy %2 refused: %3", m_sFaction, pick.m_sType, error), LogLevel.NORMAL);
 				if (error.IndexOf("AI cap") == 0)
+				{
+					m_fCapBlockTime = now;
+					m_iCapBlockLive = spawner.GetLiveAI(m_sFaction) + spawner.GetPendingAI(m_sFaction);
+					if (now - m_fLastCapLog >= 60)
+					{
+						m_fLastCapLog = now;
+						Print(string.Format("CLW: RuleCommander %1: buy %2 refused: %3; no further buys until the AI count drops or %4 s", m_sFaction, pick.m_sType, error, CAP_BLOCK_SEC), LogLevel.NORMAL);
+					}
 					return;
+				}
+
+				Print(string.Format("CLW: RuleCommander %1: buy %2 refused: %3", m_sFaction, pick.m_sType, error), LogLevel.NORMAL);
 				if (error.IndexOf("vehicle cap") == 0)
 				{
 					foreach (CLW_ForceEntry vehicleEntry : entries)

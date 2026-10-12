@@ -18,6 +18,8 @@ class CLW_ForceCatalog
 	protected ref map<string, ref CLW_FactionProfile> m_mProfiles = new map<string, ref CLW_FactionProfile>();	// by resource path
 	protected ref map<string, ref CLW_VehicleProbe> m_mProbes = new map<string, ref CLW_VehicleProbe>();		// by prefab path
 	protected int m_iAutoCounter;
+	protected int m_iProbeSerial;
+	static const int PROBE_LIFETIME_MS = 3000;	// probe vehicles live this long so their delayed inits ran before deletion
 
 	// ---- queries ----
 
@@ -157,6 +159,12 @@ class CLW_ForceCatalog
 		scenario.GetFactionKeys(keys);
 		foreach (string key : keys)
 		{
+			if (m_mEntries.Contains(key))
+			{
+				Print("CLW: catalog " + key + " already built, not rebuilding", LogLevel.NORMAL);
+				continue;
+			}
+
 			Build(key);
 		}
 	}
@@ -369,6 +377,13 @@ class CLW_ForceCatalog
 		CLW_VehicleProbe probe = new CLW_VehicleProbe();
 		m_mProbes.Set(cacheKey, probe);
 
+		// no spawn needed when the editable-entity UI info carries the default crew / passenger counts
+		if (ReadSeatsFromInfo(prefab, probe))
+		{
+			Print(string.Format("CLW: catalog probe %1: from UI info (no spawn) pilot+turret crew=%2 cargo=%3 armed=%4", prefab, probe.m_iCrew, probe.m_iCargo, probe.m_iTurret > 0), LogLevel.NORMAL);
+			return probe;
+		}
+
 		Resource resource = Resource.Load(prefab);
 		if (!resource || !resource.IsValid())
 		{
@@ -376,12 +391,15 @@ class CLW_ForceCatalog
 			return probe;
 		}
 
-		vector pos = Vector(0, 300, 0);
+		// far above the base, inactive, and kept alive until its delayed inits ran (see DeleteProbeVehicle)
+		m_iProbeSerial++;
+		vector pos = Vector(m_iProbeSerial * 25, 600, 0);
 		CLW_Bases bases = CLW_GameMode.GetBases();
 		if (bases)
 		{
 			pos = bases.GetBasePos(factionKey);
-			pos[1] = pos[1] + 100;
+			pos[0] = pos[0] + m_iProbeSerial * 25;
+			pos[1] = pos[1] + 600;
 		}
 
 		EntitySpawnParams params = new EntitySpawnParams();
@@ -428,9 +446,58 @@ class CLW_ForceCatalog
 			Print("CLW: catalog probe: no compartment manager on " + prefab, LogLevel.WARNING);
 		}
 
-		SCR_EntityHelper.DeleteEntityAndChildren(vehicle);
-		Print(string.Format("CLW: catalog probe %1: ok=%2 pilot=%3 turret=%4 cargo=%5 crewWithOccupant=%6", prefab, probe.m_bOk, probe.m_iPilot, probe.m_iTurret, probe.m_iCargo, probe.m_iCrew), LogLevel.NORMAL);
+		Physics physics = vehicle.GetPhysics();
+		if (physics)
+			physics.SetActive(ActiveState.INACTIVE);
+
+		GetGame().GetCallqueue().CallLater(DeleteProbeVehicle, PROBE_LIFETIME_MS, false, vehicle);
+		Print(string.Format("CLW: catalog probe %1: ok=%2 pilot=%3 turret=%4 cargo=%5 crewWithOccupant=%6 (spawn deleted in %7 ms)", prefab, probe.m_bOk, probe.m_iPilot, probe.m_iTurret, probe.m_iCargo, probe.m_iCrew, PROBE_LIFETIME_MS), LogLevel.NORMAL);
 		return probe;
+	}
+
+	protected void DeleteProbeVehicle(IEntity vehicle)
+	{
+		if (vehicle)
+			SCR_EntityHelper.DeleteEntityAndChildren(vehicle);
+	}
+
+	// Default crew / passenger counts from the prefab's editable UI info (AI budget of the fill costs). False when the data is
+	// missing, then the caller spawns a probe.
+	protected bool ReadSeatsFromInfo(ResourceName prefab, CLW_VehicleProbe probe)
+	{
+		SCR_EditableVehicleUIInfo info = SCR_EditableVehicleUIInfo.Cast(SCR_EditableEntityUIInfo.ExtractEditableUIInfoFromPrefab(prefab));
+		if (!info)
+			return false;
+
+		array<ref SCR_EntityBudgetValue> crewBudgets = {};
+		array<ref SCR_EntityBudgetValue> passengerBudgets = {};
+		info.GetFillBudgetCostsOfCrew(crewBudgets);
+		info.GetFillBudgetCostsOfPassengers(passengerBudgets);
+		int crew = -1;
+		int passengers;
+		foreach (SCR_EntityBudgetValue crewBudget : crewBudgets)
+		{
+			if (crewBudget && crewBudget.GetBudgetType() == EEditableEntityBudget.AI)
+				crew = crewBudget.GetBudgetValue();
+		}
+
+		foreach (SCR_EntityBudgetValue passengerBudget : passengerBudgets)
+		{
+			if (passengerBudget && passengerBudget.GetBudgetType() == EEditableEntityBudget.AI)
+				passengers = passengerBudget.GetBudgetValue();
+		}
+
+		if (crew <= 0)
+			return false;
+
+		probe.m_iCrew = crew;
+		probe.m_iCargo = passengers;
+		probe.m_iPilot = 1;
+		if (info.HasEntityLabel(EEditableEntityLabel.TRAIT_ARMED))
+			probe.m_iTurret = 1;
+
+		probe.m_bOk = true;
+		return true;
 	}
 
 	// Member character prefabs of a group prefab (SCR_AIGroup.m_aUnitPrefabSlots). False when unreadable.
@@ -623,9 +690,7 @@ class CLW_ForceCatalog
 			if (!slots.IsEmpty() && scouts >= CLW_WarConfig.DISCOVER_RECON_SHARE * slots.Count())
 				kind = CLW_ForceKind.RECON;
 
-			int cost = ScaleCost(SupplyCostOf(entry), CLW_WarConfig.DISCOVER_MIN_COST_GROUP);
-			if (SupplyCostOf(entry) <= 1)
-				cost = Math.Max(CLW_WarConfig.DISCOVER_MIN_COST_GROUP, members * CLW_WarConfig.DISCOVER_COST_PER_MEMBER);
+			int cost = CLW_WarConfig.DiscoveredGroupCost(members);
 
 			CLW_ForceEntry fresh = new CLW_ForceEntry();
 			m_iAutoCounter++;
@@ -739,43 +804,54 @@ class CLW_ForceCatalog
 
 			bool armed = turrets > 0 || labels.Contains(EEditableEntityLabel.TRAIT_ARMED);
 			bool apc = labels.Contains(EEditableEntityLabel.VEHICLE_APC);
-			bool armored = apc || (labels.Contains(EEditableEntityLabel.TRAIT_ARMOR) && !labels.Contains(EEditableEntityLabel.VEHICLE_CAR));
+			bool car = labels.Contains(EEditableEntityLabel.VEHICLE_CAR);
+			bool truck = labels.Contains(EEditableEntityLabel.VEHICLE_TRUCK);
+			bool traitArmor = labels.Contains(EEditableEntityLabel.TRAIT_ARMOR);
+			bool armored = apc || traitArmor;
 			bool largeLabel = labels.Contains(EEditableEntityLabel.TRAIT_PASSENGERS_LARGE);
 			int capacity = cargo;
 			if (capacity < 3 && largeLabel)
 				capacity = CLW_WarConfig.DISCOVER_LARGE_CARGO_GUESS;
 
+			// armed truck / unarmoured armed vehicle with a large cargo = motorized; tank (armour, no APC/CAR) = armor whatever its
+			// rider seats; armed APC/CAR with <= 2 cargo = armored_recon; mech needs armour or APC
 			string kind = "";
+			string rule = "";
 			if (armed)
 			{
-				if (cargo >= CLW_WarConfig.DISCOVER_MECH_MIN_CARGO)
-					kind = CLW_ForceKind.MECH;
-				else if (cargo > CLW_WarConfig.DISCOVER_LIGHT_MAX_CARGO)
+				if (truck || (!armored && (largeLabel || cargo >= CLW_WarConfig.DISCOVER_MOTORIZED_MIN_CARGO)))
 				{
-					if (apc)
-						kind = CLW_ForceKind.MECH;
-					else
-						kind = CLW_ForceKind.LIGHT;
+					kind = CLW_ForceKind.MOTORIZED;
+					rule = "armed truck / unarmoured with large cargo";
 				}
-				else if (cargo >= 1)
+				else if (traitArmor && !apc && !car)
 				{
-					if (armored)
-						kind = CLW_ForceKind.ARMORED_RECON;
-					else
-						kind = CLW_ForceKind.LIGHT;
+					kind = CLW_ForceKind.ARMOR;
+					rule = "armour, no APC/CAR label";
+				}
+				else if (armored && cargo <= CLW_WarConfig.DISCOVER_LIGHT_MAX_CARGO)
+				{
+					kind = CLW_ForceKind.ARMORED_RECON;
+					rule = "armoured APC/CAR, small cargo";
+				}
+				else if (armored)
+				{
+					kind = CLW_ForceKind.MECH;
+					rule = "armoured with cargo";
 				}
 				else
 				{
-					if (armored)
-						kind = CLW_ForceKind.ARMOR;
-					else
-						kind = CLW_ForceKind.LIGHT;
+					kind = CLW_ForceKind.LIGHT;
+					rule = "armed, unarmoured";
 				}
 			}
-			else if (labels.Contains(EEditableEntityLabel.VEHICLE_TRUCK) || largeLabel || cargo >= CLW_WarConfig.DISCOVER_MOTORIZED_MIN_CARGO)
+			else if (truck || largeLabel || cargo >= CLW_WarConfig.DISCOVER_MOTORIZED_MIN_CARGO)
 			{
 				kind = CLW_ForceKind.MOTORIZED;
+				rule = "unarmed transport";
 			}
+
+			Print(string.Format("CLW: catalog discovery %1: %2 kind=%3 (%4) armed=%5 apc=%6 car=%7 truck=%8 armor=%9", factionKey, "" + prefab + " cargo=" + cargo, kind, rule, armed, apc, car, truck, traitArmor), LogLevel.NORMAL);
 
 			if (kind.IsEmpty())
 				continue;
@@ -799,9 +875,7 @@ class CLW_ForceCatalog
 				fresh.m_iCrewSeats = crew;
 			}
 
-			int vehicleCost = ScaleCost(SupplyCostOf(entry), CLW_WarConfig.DISCOVER_MIN_COST_VEHICLE);
-			if (SupplyCostOf(entry) <= 0)
-				vehicleCost = CLW_WarConfig.DISCOVER_COST_VEHICLE_FALLBACK;
+			int vehicleCost = CLW_WarConfig.DiscoveredVehicleCost(kind, armed);
 			fresh.m_iCost = vehicleCost;
 
 			string sig = Signature(fresh);

@@ -32,6 +32,8 @@ class CLW_SpawnJob
 	ref array<IEntity> m_aCrew;	// occupants reported by the callback (weak entity pointers)
 	string m_sFailure;
 	int m_iMounted;
+	int m_iVerifyPass;			// 0: first check (then retry with explicit slots), 1: final check
+	int m_iRetried;
 }
 
 // Spawns forces at the base: purchases (supplies) and start forces (free). Server only. Vehicles get a crew from
@@ -518,6 +520,49 @@ class CLW_ForceSpawner
 		return SCR_AIGroup.Cast(agent.GetParentGroup());
 	}
 
+	// Default occupants of a pack vehicle can be vanilla US/USSR crew: move the crew group, its characters and the vehicle to the
+	// buying faction so the registry adopts the group and the AI treats the crew as friendly.
+	protected void ReaffiliateCrew(CLW_SpawnJob job, SCR_AIGroup crew)
+	{
+		FactionManager factions = GetGame().GetFactionManager();
+		if (!factions)
+			return;
+
+		Faction target = factions.GetFactionByKey(job.m_sFaction);
+		if (!target)
+			return;
+
+		string oldKey = CLW_SquadRegistry.GetFactionKey(crew);
+		if (oldKey == job.m_sFaction)
+			return;
+
+		if (!crew.SetFaction(target))
+			Print(string.Format("CLW: spawn %1 crew group SetFaction refused (group faction stays %2)", job.m_sUnitId, oldKey), LogLevel.WARNING);
+
+		int changed;
+		foreach (IEntity member : job.m_aCrew)
+		{
+			if (!member)
+				continue;
+
+			FactionAffiliationComponent affiliation = FactionAffiliationComponent.Cast(member.FindComponent(FactionAffiliationComponent));
+			if (!affiliation)
+				continue;
+
+			affiliation.SetAffiliatedFaction(target);
+			changed++;
+		}
+
+		if (job.m_Vehicle)
+		{
+			FactionAffiliationComponent vehicleAffiliation = FactionAffiliationComponent.Cast(job.m_Vehicle.FindComponent(FactionAffiliationComponent));
+			if (vehicleAffiliation)
+				vehicleAffiliation.SetAffiliatedFaction(target);
+		}
+
+		Print(string.Format("CLW: spawn %1 crew re-affiliated %2 -> %3 (%4 characters, group now %5)", job.m_sUnitId, oldKey, job.m_sFaction, changed, CLW_SquadRegistry.GetFactionKey(crew)), LogLevel.NORMAL);
+	}
+
 	protected void TickCrew(CLW_SpawnJob job)
 	{
 		if (!job.m_Vehicle)
@@ -557,6 +602,7 @@ class CLW_ForceSpawner
 		CLW_ForceEntry entry = job.m_Entry;
 		job.m_Group = crew;
 		crew.SetDeleteWhenEmpty(true);
+		ReaffiliateCrew(job, crew);
 		job.m_sUnitId = NameAndTag(crew, NextName(job.m_sFaction, entry.m_sKind), entry.m_sKind, entry.m_sName, entry.m_sType, false);
 		Print(string.Format("CLW: spawn %1 crew group %2 has %3 agents (%4 occupants)", job.m_sFaction, job.m_sUnitId, crew.GetAgentsCount(), job.m_aCrew.Count()), LogLevel.NORMAL);
 
@@ -645,36 +691,80 @@ class CLW_ForceSpawner
 		job.m_fStateAge = 0;
 	}
 
+	// Cargo slots of the vehicle that have no occupant (and are not taken by an entity already reserved for them).
+	protected void FreeCargoSlots(IEntity vehicle, out array<BaseCompartmentSlot> slots)
+	{
+		slots = {};
+		BaseCompartmentManagerComponent manager = BaseCompartmentManagerComponent.Cast(vehicle.FindComponent(BaseCompartmentManagerComponent));
+		if (!manager)
+			return;
+
+		array<BaseCompartmentSlot> all = {};
+		manager.GetCompartments(all);
+		foreach (BaseCompartmentSlot slot : all)
+		{
+			if (!CargoCompartmentSlot.Cast(slot))
+				continue;
+
+			if (slot.GetOccupant())
+				continue;
+
+			slots.Insert(slot);
+		}
+	}
+
+	// First pass: whoever is not inside gets an explicit free cargo slot (teleport). Second pass: final count; the ones still
+	// outside get a Get-In waypoint and are treated as walking (the vehicle unit's remount logic).
 	protected void TickVerify(CLW_SpawnJob job)
 	{
+		array<IEntity> outside = {};
 		int inside;
 		if (job.m_Cargo && job.m_Vehicle)
 		{
 			array<IEntity> people = CLW_SquadInfo.Members(job.m_Cargo);
 			foreach (IEntity person : people)
 			{
-				if (person && CLW_VehicleUnit.IsInVehicle(person, job.m_Vehicle))
-				{
-					inside++;
+				if (!person || !CLW_VehicleUnit.IsAlive(person))
 					continue;
-				}
 
-				// diagnostics: why is a seated soldier not counted as inside? (UAZ/BTR showed 0 after "seated", 2026-10-12)
-				if (!person)
-					continue;
-				SCR_CompartmentAccessComponent access = SCR_CompartmentAccessComponent.Cast(person.FindComponent(SCR_CompartmentAccessComponent));
-				IEntity seen;
-				bool inCompartment;
-				if (access)
-				{
-					inCompartment = access.IsInCompartment();
-					seen = access.GetVehicle();
-				}
-				IEntity seenRoot;
-				if (seen)
-					seenRoot = seen.GetRootParent();
-				Print(string.Format("CLW: spawn %1 verify: %2 alive=%3 access=%4 inCompartment=%5 vehicle=%6 root=%7 expected=%8 dist=%9", job.m_sUnitId, person, CLW_VehicleUnit.IsAlive(person), access != null, inCompartment, seen, seenRoot, job.m_Vehicle, Math.Round(vector.Distance(person.GetOrigin(), job.m_Vehicle.GetOrigin()))), LogLevel.WARNING);
+				if (CLW_VehicleUnit.IsInVehicle(person, job.m_Vehicle))
+					inside++;
+				else
+					outside.Insert(person);
 			}
+		}
+
+		if (!outside.IsEmpty() && job.m_iVerifyPass == 0)
+		{
+			array<BaseCompartmentSlot> slots;
+			FreeCargoSlots(job.m_Vehicle, slots);
+			int tried;
+			foreach (IEntity stray : outside)
+			{
+				if (slots.IsEmpty())
+					break;
+
+				SCR_CompartmentAccessComponent access = SCR_CompartmentAccessComponent.Cast(stray.FindComponent(SCR_CompartmentAccessComponent));
+				if (!access)
+					continue;
+
+				BaseCompartmentSlot slot = slots[0];
+				slots.Remove(0);
+				access.GetInVehicle(job.m_Vehicle, slot, true, -1, ECloseDoorAfterActions.INVALID, false);
+				tried++;
+			}
+
+			job.m_iVerifyPass = 1;
+			job.m_iRetried = tried;
+			job.m_fStateAge = 0;
+			Print(string.Format("CLW: spawn %1 verify: %2 seated, %3 outside -> retry with explicit cargo slots for %4", job.m_sUnitId, inside, outside.Count(), tried), LogLevel.NORMAL);
+			return;
+		}
+
+		if (!outside.IsEmpty() && job.m_Cargo && job.m_Vehicle)
+		{
+			CLW_Waypoints.AddGetIn(job.m_Cargo, job.m_Vehicle);
+			Print(string.Format("CLW: spawn %1 verify: %2 still outside after retry, cargo group gets a Get-In waypoint", job.m_sUnitId, outside.Count()), LogLevel.WARNING);
 		}
 
 		job.m_iMounted = inside;

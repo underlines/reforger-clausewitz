@@ -56,6 +56,7 @@ class CLW_WarConfig
 	static const float PLACE_BASE_ROAD_WARN_M = 120;	// base further than this from any road is reported as unusable for vehicles
 	static const int PLACE_GROUND_ATTEMPTS = 40;
 	static const float PLACE_CHAR_CLEAR_M = 1.5;		// infantry spot: no other character closer than this
+	static const float PLACE_SLOT_CHAR_CLEAR_M = 2.5;	// a character this close to a vehicle slot blocks it
 	static const float PLACE_CARGO_MIN_M = 5;			// cargo group ring around its vehicle
 	static const float PLACE_CARGO_MAX_M = 14;
 
@@ -65,6 +66,9 @@ class CLW_WarConfig
 	static const int DISCOVER_MIN_COST_GROUP = 30;
 	static const int DISCOVER_COST_PER_MEMBER = 12;		// group cost when the catalog gives none (or a placeholder below the group floor)
 	static const int DISCOVER_COST_VEHICLE_FALLBACK = 100;
+	// Normalized costs of discovered entries (pack supply costs are inconsistent): soldiers x per-soldier, vehicle base by kind.
+	static const int DISCOVER_SOLDIER_COST = 11;
+	static const int DISCOVER_ARMED_BONUS = 15;			// armed vehicle of a kind whose base assumes no weapon (motorized)
 	static const int DISCOVER_WEIGHT = 5;				// buy-mix weight of discovered entries
 	static const int DISCOVER_MECH_MIN_CARGO = 5;
 	static const int DISCOVER_LIGHT_MAX_CARGO = 2;		// armed + armoured/APC label with at most this many cargo seats = armored_recon
@@ -74,6 +78,33 @@ class CLW_WarConfig
 	static const int DISCOVER_AT_TEAM_MAX_MEMBERS = 4;	// fallback anti-armour detection (armour-piercing group trait) only for groups this small
 	static const float DISCOVER_NONCOMBAT_SHARE = 0.5;	// groups with this share of medic/sapper/radio members are not buyable infantry
 	static const float DISCOVER_RECON_SHARE = 0.5;		// share of scout/sharpshooter members that makes a recon group
+
+	// Cost of a discovered infantry group.
+	static int DiscoveredGroupCost(int members)
+	{
+		return Math.Max(DISCOVER_MIN_COST_GROUP, members * DISCOVER_SOLDIER_COST);
+	}
+
+	// Cost of a discovered vehicle by kind (crew and embarked infantry are added by the caller).
+	static int DiscoveredVehicleCost(string kind, bool armed)
+	{
+		int baseCost = 100;
+		if (kind == CLW_ForceKind.MOTORIZED)
+			baseCost = 50;
+		else if (kind == CLW_ForceKind.LIGHT)
+			baseCost = 60;
+		else if (kind == CLW_ForceKind.MECH)
+			baseCost = 180;
+		else if (kind == CLW_ForceKind.ARMOR)
+			baseCost = 280;
+		else if (kind == CLW_ForceKind.ARMORED_RECON)
+			baseCost = 120;
+
+		if (armed && kind == CLW_ForceKind.MOTORIZED)
+			baseCost += DISCOVER_ARMED_BONUS;
+
+		return baseCost;
+	}
 
 	// ---- Vehicle units (P2, spec section 5) ----
 	static const int VEHICLE_TICK_MS = 2000;

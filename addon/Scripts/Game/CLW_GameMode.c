@@ -9,6 +9,9 @@ class CLW_GameMode : SCR_BaseGameMode
 {
 	protected static const bool RUN_ORDER_SPIKE = false;
 	protected static const bool RUN_REST_SPIKE = true;
+	protected static const int SQUAD_RETRY_MS = 5000;		// player squad search interval
+	protected static const int SQUAD_RETRY_MAX = 24;		// 2 min, then a free infantry squad is spawned
+	protected static const int SQUAD_RETRY_EXTRA = 12;		// further tries for that squad to appear
 
 	[Attribute("", UIWidgets.ResourceNamePicker, "Scenario config: factions, bases, objectives, economy (spec 0a). Empty = CLW_WarConfig.DEFAULT_SCENARIO", "conf")]
 	protected ResourceName m_ScenarioConfig;
@@ -397,35 +400,113 @@ class CLW_GameMode : SCR_BaseGameMode
 		if (!faction)
 			return;
 
-		// Pick the player's squad from the registry (sweep first: the squads may have spawned after the last sweep); the "_1" squad is preferred.
+		TryJoinPlayer(playerId, faction.GetFactionKey(), 0);
+	}
+
+	// First adopted infantry squad of the faction that is led by a human (more players join it), else the first free one.
+	// The scenario's preferred squad name wins when it is adopted and of this faction.
+	protected SCR_AIGroup FindStartSquad(string factionKey)
+	{
 		m_Registry.Sweep();
-		// preferred squad entity name comes from the scenario faction setup (empty = first free squad)
 		string preferredSquad;
 		CLW_ScenarioConfig scenario = CLW_ScenarioConfig.Get();
 		if (scenario)
 		{
-			CLW_FactionSetup factionSetup = scenario.FindFaction(faction.GetFactionKey());
+			CLW_FactionSetup factionSetup = scenario.FindFaction(factionKey);
 			if (factionSetup)
 				preferredSquad = factionSetup.m_sPreferredSquad;
 		}
-		SCR_AIGroup squad = m_Registry.FindPlayerSquad(faction.GetFactionKey(), preferredSquad);
-		if (!squad && !preferredSquad.IsEmpty())
-			squad = FindSquad(preferredSquad);	// not adopted yet (no living AI member): Join retries until it is ready
-		if (squad && CLW_SquadRegistry.GetFactionKey(squad) != faction.GetFactionKey())
-			squad = m_Registry.FindPlayerSquad(faction.GetFactionKey(), "");	// preferred squad belongs to another faction (faction choice)
-		SCR_GroupsManagerComponent groups = SCR_GroupsManagerComponent.GetInstance();
-		if (!squad || !groups)
+
+		if (!preferredSquad.IsEmpty())
 		{
-			Print("CLW: no squad/groups manager to join", LogLevel.WARNING);
+			SCR_AIGroup preferred = m_Registry.Find(preferredSquad);
+			if (preferred && CLW_SquadRegistry.GetFactionKey(preferred) == factionKey)
+				return preferred;
+		}
+
+		array<string> ids = {};
+		m_Registry.GetIds(factionKey, ids);
+		SCR_AIGroup firstFree;
+		foreach (string id : ids)
+		{
+			if (m_Registry.IsHidden(id) || m_Registry.GetKind(id) != CLW_ForceKind.INFANTRY)
+				continue;
+
+			SCR_AIGroup group = m_Registry.Find(id);
+			if (!group)
+				continue;
+
+			if (CLW_SquadInfo.HumanLeaderEntity(group))
+				return group;
+
+			if (!firstFree)
+				firstFree = group;
+		}
+
+		return firstFree;
+	}
+
+	// Join the player to a squad; while there is none (start forces come with the war start) retry every 5 s for 2 min, then spawn
+	// a free infantry squad of the faction and join that. Only counts attempts while the war is running (the setup phase keeps the
+	// player alone at the base).
+	protected void TryJoinPlayer(int playerId, string factionKey, int attempt)
+	{
+		if (!GetGame().GetPlayerManager().GetPlayerControlledEntity(playerId))
+			return;	// player gone / dead: the next spawn starts a new search
+
+		Faction current = SCR_FactionManager.SGetPlayerFaction(playerId);
+		if (current)
+			factionKey = current.GetFactionKey();
+
+		bool running = m_War && m_War.IsRunning();
+		SCR_AIGroup squad;
+		if (running)
+			squad = FindStartSquad(factionKey);
+
+		if (squad)
+		{
+			Print(string.Format("CLW: player %1 joins squad %2 (after %3 retries)", playerId, squad, attempt), LogLevel.NORMAL);
+			CLW_PlayerSquad.Join(squad, playerId);
+			Print(string.Format("CLW: player %1 in squad=%2 players=%3 leaderId=%4", playerId, squad.IsPlayerInGroup(playerId), squad.GetPlayerCount(), squad.GetLeaderID()), LogLevel.NORMAL);
 			return;
 		}
 
-		// Never AddPlayerToGroup/AssignGroupID directly: CLW_PlayerSquad.Join does group ID + controller join + leader + slave group + AI move.
-		Print(string.Format("CLW: squad %1 groupId=%2 playable=%3 (before Join)", squad, squad.GetGroupID(), squad.IsPlayable()), LogLevel.NORMAL);
-		CLW_PlayerSquad.Join(squad, playerId);
-		array<SCR_AIGroup> factionGroups = groups.GetPlayableGroupsByFaction(faction);
-		Print(string.Format("CLW: playable groups of faction %1: %2", faction.GetFactionKey(), factionGroups.Count()), LogLevel.NORMAL);
-		Print(string.Format("CLW: player %1 in squad=%2 players=%3 leaderId=%4", playerId, squad.IsPlayerInGroup(playerId), squad.GetPlayerCount(), squad.GetLeaderID()), LogLevel.NORMAL);
+		if (!running)
+		{
+			if (attempt == 0)
+				Print(string.Format("CLW: player %1 waits for the war start to get a squad (setup: alone at the base)", playerId), LogLevel.NORMAL);
+			GetGame().GetCallqueue().CallLater(TryJoinPlayer, SQUAD_RETRY_MS, false, playerId, factionKey, attempt);
+			return;
+		}
+
+		attempt++;
+		if (attempt == SQUAD_RETRY_MAX && m_Spawner && m_Catalog)
+		{
+			CLW_ForceEntry best;
+			array<CLW_ForceEntry> entries = {};
+			m_Catalog.GetEntries(factionKey, entries);
+			foreach (CLW_ForceEntry entry : entries)
+			{
+				if (entry.m_sKind != CLW_ForceKind.INFANTRY || entry.HasVehicle())
+					continue;
+
+				if (!best || entry.m_iGroupMembers > best.m_iGroupMembers)
+					best = entry;
+			}
+
+			string error;
+			if (best && m_Spawner.SpawnFree(factionKey, best.m_sType, "player squad (none available)", error))
+				Print(string.Format("CLW: player %1 got no squad in %2 retries: spawning a free %3", playerId, attempt, best.m_sType), LogLevel.WARNING);
+			else
+				Print(string.Format("CLW: player %1 got no squad and no infantry entry could be spawned: %2", playerId, error), LogLevel.ERROR);
+		}
+		else if (attempt > SQUAD_RETRY_MAX + SQUAD_RETRY_EXTRA)
+		{
+			Print(string.Format("CLW: player %1 gave up waiting for a squad", playerId), LogLevel.ERROR);
+			return;
+		}
+
+		GetGame().GetCallqueue().CallLater(TryJoinPlayer, SQUAD_RETRY_MS, false, playerId, factionKey, attempt);
 	}
 
 	// M0 spike: squads spawned, then a canned MOVE order -> waypoint, then check the squad moved.
