@@ -188,6 +188,93 @@ FrameWidgetClass {
      }
     }
    }
-  }
+   }
+    FrameWidgetClass "{7D3A91C45E300030}" {
+     Name "SupplyPanel"
+     Slot FrameWidgetSlot "{7D3A91C45E300031}" {
+      Anchor 0.5 0
+      PositionX 0
+      OffsetLeft 0
+      PositionY 50
+      OffsetTop 50
+      SizeX 0
+      OffsetRight 0
+      SizeY 0
+      OffsetBottom 0
+      Alignment 0.5 0
+      SizeToContent 1
+     }
+     {
+      ImageWidgetClass "{7D3A91C45E300032}" {
+       Name "SupplyBack"
+       Slot FrameWidgetSlot "{7D3A91C45E300033}" {
+        Anchor 0 0 1 1
+        PositionX 0
+        OffsetLeft 0
+        PositionY 0
+        OffsetTop 0
+        SizeX 0
+        OffsetRight 0
+        SizeY 0
+        OffsetBottom 0
+       }
+       Color 0 0 0 0.35
+      }
+      VerticalLayoutWidgetClass "{7D3A91C45E300034}" {
+       Name "SupplyCol"
+       Slot FrameWidgetSlot "{7D3A91C45E300035}" {
+        PositionX 0
+        OffsetLeft 0
+        PositionY 0
+        OffsetTop 0
+        SizeX 0
+        OffsetRight 0
+        SizeY 0
+        OffsetBottom 0
+        SizeToContent 1
+       }
+       {
+        TextWidgetClass "{7D3A91C45E300036}" {
+         Name "Supply_Label"
+         Slot LayoutSlot "{7D3A91C45E300037}" {
+          HorizontalAlign 3
+          Padding 14 2 14 0
+         }
+         Color 1 1 1 1
+         Text ""
+         "Font Size" 16
+         "Min Font Size" 16
+         "Horizontal Alignment" Center
+         "Vertical Alignment" Center
+         FontProperties FontProperties "{7D3A91C45E300038}" {
+          Font "{EABA4FE9D014CCEF}UI/Fonts/RobotoCondensed/RobotoCondensed_Bold.fnt"
+          ShadowSize 4
+          ShadowOffset 5 5
+          ShadowOpacity 0.5
+         }
+        }
+        TextWidgetClass "{7D3A91C45E300039}" {
+         Name "Supply_Value"
+         Slot LayoutSlot "{7D3A91C45E30003A}" {
+          HorizontalAlign 3
+          Padding 14 0 14 2
+         }
+         Color 1 1 1 1
+         Text ""
+         "Font Size" 14
+         "Min Font Size" 14
+         "Horizontal Alignment" Center
+         "Vertical Alignment" Center
+         FontProperties FontProperties "{7D3A91C45E30003B}" {
+          Font "{EABA4FE9D014CCEF}UI/Fonts/RobotoCondensed/RobotoCondensed_Bold.fnt"
+          ShadowSize 4
+          ShadowOffset 5 5
+          ShadowOpacity 0.5
+         }
+        }
+       }
+      }
+     }
+    }
  }
 }
