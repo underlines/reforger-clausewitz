@@ -72,6 +72,47 @@ class CLW_ControlPoints
 		Print(string.Format("CLW: points started: %1 points, %2 vs %3", m_aPoints.Count(), m_sFirst, m_sSecond), LogLevel.NORMAL);
 	}
 
+	// The scenario sides were assigned other factions (CLW_Sides.Apply, before the war runs): adopt the new keys, reset every
+	// point to its start ownership (the objective's start owner names a side slot's default key -> mapped to the faction now
+	// on that slot) and force the map markers to be rebuilt for the new identities.
+	void Rekey(notnull CLW_ScenarioConfig scenario)
+	{
+		if (!Replication.IsServer())
+			return;
+
+		m_sFirst = scenario.GetFactionKey(0);
+		m_sSecond = scenario.GetFactionKey(1);
+		foreach (CLW_ControlPoint point : m_aPoints)
+		{
+			CLW_ObjectiveSetup setup = scenario.FindObjective(point.m_sId);
+			string owner;
+			if (setup)
+				owner = scenario.MapDefaultKey(setup.m_sStartOwner);
+			point.m_sOwner = owner;
+			point.m_bContested = false;
+			point.m_fProgress = 0;
+			if (owner == m_sFirst)
+				point.m_fProgress = 100;
+			else if (owner == m_sSecond)
+				point.m_fProgress = -100;
+			point.m_sMarkerOwner = "?";
+			Print(string.Format("CLW: points %1 re-keyed owner='%2'", point.m_sId, owner), LogLevel.NORMAL);
+		}
+
+		SCR_MapMarkerManagerComponent manager = SCR_MapMarkerManagerComponent.GetInstance();
+		if (manager)
+		{
+			foreach (SCR_MapMarkerBase baseMarker : m_aBaseMarkers)
+			{
+				manager.RemoveStaticMarker(baseMarker);
+			}
+		}
+
+		m_aBaseMarkers.Clear();
+		m_aBaseMarkerKeys.Clear();
+		Print(string.Format("CLW: points re-keyed: %1 vs %2", m_sFirst, m_sSecond), LogLevel.NORMAL);
+	}
+
 	void Stop()
 	{
 		m_bRunning = false;

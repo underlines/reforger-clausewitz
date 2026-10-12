@@ -6,6 +6,7 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 ## [Unreleased]
 
 ### Added
+- Faction choice for both sides: the setup menu's Side A / Side B pick any playable faction of the world, including factions added by mod packs (e.g. RHS) with no dependency on them. At war start the sides are re-keyed (bases, spawn points, control points, ledgers, squad registry, force catalogs), the two factions become playable and hostile, players join side A by default with a spawnable loadout, and scene groups of other factions are removed (`m_bRemoveUnusedSceneGroups`). The Arland world now uses `CLW_FactionManager` / `CLW_LoadoutManager` (children of the vanilla editor managers).
 - Faction force profiles (`Configs/CLW/Factions/US|USSR|FIA.conf`, class `CLW_FactionProfile`) plus catalog auto-discovery: factions without a profile, or profiles with `m_bIncludeDiscovered`, get buyable forces classified from the faction entity catalogs (mod-pack vehicles such as tanks show up as kind `armor`); the catalog is built at war start per faction key.
 - Force purchases and start forces (`CLW_ForceSpawner`): supplies, AI and vehicle caps, crewed vehicles with embarked infantry, refund on failure; Arland starts both sides with a motorized and a mechanized unit.
 - Mechanized / motorized vehicle units (`CLW_VehicleUnit`): mount, dismount short of the target, overwatch, trucks return to base and are removed (partial refund), remount with timeout and split, stuck watchdog (re-issue, then infantry walks).

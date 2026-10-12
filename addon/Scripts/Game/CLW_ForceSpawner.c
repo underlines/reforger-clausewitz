@@ -96,6 +96,29 @@ class CLW_ForceSpawner
 
 	protected void StartForceLater(string factionKey, string typeId)
 	{
+		// The faction on a side may not be the one the type id was written for (faction choice, P6): when the catalog has
+		// no such type id, read it as a generic kind and take the cheapest enabled entry of that kind.
+		if (m_Catalog && !m_Catalog.Find(factionKey, typeId))
+		{
+			array<CLW_ForceEntry> candidates = {};
+			m_Catalog.GetEntries(factionKey, candidates);
+			CLW_ForceEntry cheapest;
+			foreach (CLW_ForceEntry candidate : candidates)
+			{
+				if (candidate.m_sKind == typeId && (!cheapest || candidate.m_iCost < cheapest.m_iCost))
+					cheapest = candidate;
+			}
+
+			if (!cheapest)
+			{
+				Print(string.Format("CLW: spawn start force %1 %2 skipped: not a type id or kind of this faction's catalog", factionKey, typeId), LogLevel.WARNING);
+				return;
+			}
+
+			Print(string.Format("CLW: spawn start force %1 %2 -> kind match %3", factionKey, typeId, cheapest.m_sType), LogLevel.NORMAL);
+			typeId = cheapest.m_sType;
+		}
+
 		string error;
 		if (!SpawnFree(factionKey, typeId, "start force", error))
 			Print(string.Format("CLW: spawn start force %1 %2 FAILED: %3", factionKey, typeId, error), LogLevel.ERROR);
