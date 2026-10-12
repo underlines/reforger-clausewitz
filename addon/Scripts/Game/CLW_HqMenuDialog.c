@@ -38,6 +38,7 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 	protected Managed m_RepDistComp;
 	protected Managed m_RepKindComp;
 	protected Managed m_RepDirComp;
+	protected Managed m_VCatComp;		// depot menu: category spin box
 
 	bool IsOpen()
 	{
@@ -101,6 +102,7 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 		m_RepDistComp = null;
 		m_RepKindComp = null;
 		m_RepDirComp = null;
+		m_VCatComp = null;
 
 		string headline = string.Format("%1 (%2), supplies %3 at %4", m_Data.m_sFaction, m_Data.m_sRole, m_Data.m_sSupplies, m_Data.m_sBase);
 		if (!m_Data.m_bRunning)
@@ -118,6 +120,12 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 
 	protected void BuildRequests()
 	{
+		if (m_Data.m_bDepot)
+		{
+			BuildDepotVehicles();
+			return;
+		}
+
 		if (m_Data.m_aRequests.IsEmpty())
 		{
 			AddText(m_wRequestBox, "No requests available.", Color.FromSRGBA(160, 160, 160, 255));
@@ -154,6 +162,49 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 			AddButton(m_wRequestBox, "Request " + request.m_sId, "req", "", i);
 			if (!request.m_sBlocked.IsEmpty())
 				AddText(m_wRequestBox, "Not possible now: " + request.m_sBlocked, Color.FromSRGBA(240, 130, 90, 255));
+		}
+	}
+
+	protected static const int DEPOT_CATS = 6;
+
+	protected static string DepotCatId(int index)
+	{
+		array<string> ids = {"all", "light", "motorized", "mech", "armor", "logistics"};
+		return ids[Math.Clamp(index, 0, ids.Count() - 1)];
+	}
+
+	// Depot menu (WP11): one page of the vehicle list (the server sends only the page), category spin box, page buttons.
+	protected void BuildDepotVehicles()
+	{
+		AddText(m_wRequestBox, string.Format("VEHICLE DEPOT - %1 vehicle(s) in this category, delivered next to this depot", m_Data.m_iTotal), null);
+		array<string> catNames = {"All", "Light", "Motorized", "Mech", "Armor", "Logistics"};
+		int catIndex;
+		for (int c = 0; c < DEPOT_CATS; c++)
+		{
+			if (DepotCatId(c) == m_Data.m_sCat)
+				catIndex = c;
+		}
+
+		m_VCatComp = AddSpin(m_wRequestBox, "Category", catNames, catIndex);
+		if (!m_Data.m_sVBlocked.IsEmpty())
+			AddText(m_wRequestBox, "Not possible now: " + m_Data.m_sVBlocked, Color.FromSRGBA(240, 130, 90, 255));
+
+		if (m_Data.m_aVehicles.IsEmpty())
+			AddText(m_wRequestBox, "No vehicle in this category.", Color.FromSRGBA(160, 160, 160, 255));
+
+		foreach (CLW_HqVehicle vehicle : m_Data.m_aVehicles)
+		{
+			string label = vehicle.m_sLabel + " - " + vehicle.m_iCost.ToString() + " supplies";
+			AddButton(m_wRequestBox, label, "vreq", vehicle.m_sType, -1);
+		}
+
+		if (m_Data.m_iPages > 1)
+		{
+			AddText(m_wRequestBox, string.Format("Page %1 / %2", m_Data.m_iPage + 1, m_Data.m_iPages), null);
+			if (m_Data.m_iPage > 0)
+				AddButton(m_wRequestBox, "Previous page", "vpage", m_Data.m_sCat + "|" + (m_Data.m_iPage - 1).ToString(), -1);
+			if (m_Data.m_iPage < m_Data.m_iPages - 1)
+				AddButton(m_wRequestBox, "Next page", "vpage", m_Data.m_sCat + "|" + (m_Data.m_iPage + 1).ToString(), -1);
 		}
 	}
 
@@ -324,6 +375,13 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 		if (comp == m_RepKindComp)
 		{
 			m_iRepKind = index;
+			return;
+		}
+
+		if (m_VCatComp && comp == m_VCatComp)
+		{
+			SetStatus("Sending to HQ...", false);
+			CLW_HqMenuClient.Act("vpage", DepotCatId(index) + "|0");
 			return;
 		}
 

@@ -1653,7 +1653,7 @@ modded class SCR_CatalogEntitySpawnerComponent
 
 		if (firstCatalog < 0)
 		{
-			CLW_LogFit(sideKey, "NO SCR_CatalogSpawnerUserAction on this depot prefab, nothing can be requested at it");
+			CLW_LogFit(sideKey, "depot menu mode (no catalog actions on the prefab, vehicles are bought through CLW_OpenDepotAction)");
 			return;
 		}
 

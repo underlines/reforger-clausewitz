@@ -19,10 +19,30 @@ class CLW_HqMenuConfig
 	static const int FIELD_MAX = 200;				// characters per text field on the wire
 	static const int DELIVERY_MARKER_SEC = 300;		// map marker of a delivered vehicle is removed after this
 	static const int DELIVERY_POLL_MS = 2000;		// check "did the requester get in"
+	static const int PAGE_SIZE = 12;				// depot menu: vehicles per page
+
+	// Depot menu categories (CLW_ForceKind of the catalog entry): all / light / motorized / mech / armor / logistics.
+	static bool IsCategory(string cat)
+	{
+		return cat == "all" || cat == "light" || cat == "motorized" || cat == "mech" || cat == "armor" || cat == "logistics";
+	}
+
+	static bool InCategory(string cat, string kind)
+	{
+		if (cat == "all")
+			return true;
+		if (cat == "light")
+			return kind == CLW_ForceKind.LIGHT || kind == CLW_ForceKind.RECON;
+		if (cat == "armor")
+			return kind == CLW_ForceKind.ARMOR || kind == CLW_ForceKind.ARMORED_RECON;
+		return cat == kind;
+	}
 }
 
 class CLW_HqMenuServer
 {
+	protected static ref map<int, string> s_mView = new map<int, string>();	// WP11 depot menu: player id -> "<category>|<page>"
+
 	// ---- entry points (from the player controller RPCs) ----
 
 	// The player opened the menu (terminal action: terminalPos = terminal; chat: Zero). Answers with the first payload.
@@ -32,6 +52,11 @@ class CLW_HqMenuServer
 			return;
 
 		Print(string.Format("CLW: hqmenu open player=%1(%2) terminal=%3", playerId, CLW_RequestService.PlayerName(playerId), terminalPos), LogLevel.NORMAL);
+		s_mView.Remove(playerId);
+		CLW_ServiceInstance depot = CLW_DepotLookup.FindAt(CLW_RequestService.FactionKeyOf(playerId), terminalPos);
+		if (depot)
+			Print(string.Format("CLW: depot menu %1 opened at %2 %3", CLW_RequestService.PlayerName(playerId), depot.m_sSide, depot.m_sBase), LogLevel.NORMAL);
+
 		Push(playerId, terminalPos, "");
 	}
 
@@ -56,6 +81,16 @@ class CLW_HqMenuServer
 				typeArg = parts[1];
 			kind.ToLower();
 			status = CLW_RequestService.Handle(playerId, kind, typeArg, terminalPos);	// answers chat + hint itself
+		}
+		else if (action == "vpage")
+		{
+			s_mView.Set(playerId, arg);	// validated when the page is built (AppendDepotVehicles)
+		}
+		else if (action == "vreq")
+		{
+			// depot menu: arg = exact catalog type id; the server re-validates side, distance to the depot, cost and caps (Handle)
+			status = CLW_RequestService.Handle(playerId, CLW_RequestKind.VEHICLE, arg, terminalPos);
+			Print(string.Format("CLW: depot request %1 %2 -> %3", CLW_RequestService.PlayerName(playerId), arg, status), LogLevel.NORMAL);
 		}
 		else if (action == "report")
 		{
@@ -187,7 +222,16 @@ class CLW_HqMenuServer
 		// the base whose stock a terminal request draws from
 		string baseId;
 		string baseLabel = "HQ";
-		if (terminalPos != vector.Zero)
+		bool atDepot;
+		CLW_ServiceInstance depotInst = CLW_DepotLookup.FindAt(faction, terminalPos);
+		if (depotInst)
+		{
+			atDepot = true;
+			baseId = depotInst.m_sBase;
+			if (!CLW_SupplyStore.IsHq(baseId))
+				baseLabel = baseId;
+		}
+		else if (terminalPos != vector.Zero)
 		{
 			CLW_TerminalInfo terminal = CLW_RequestTerminals.FindAt(terminalPos);
 			if (terminal && terminal.m_sSide == faction)
@@ -215,7 +259,10 @@ class CLW_HqMenuServer
 			return wire;
 		}
 
-		AppendRequests(wire, playerId, faction, baseId, terminalPos);
+		if (atDepot)
+			AppendDepotVehicles(wire, playerId, faction, baseId);
+		else
+			AppendRequests(wire, playerId, faction, baseId, terminalPos);
 		AppendSquads(wire, playerId, faction);
 		AppendBase(wire, faction, baseId);
 
@@ -274,6 +321,54 @@ class CLW_HqMenuServer
 		}
 
 		return "";
+	}
+
+	// WP11 depot menu: header V <category> <page> <pages> <total> <blocked>, then one W <type> <name> <cost> <kind> per vehicle of the page.
+	protected static void AppendDepotVehicles(inout string wire, int playerId, string faction, string baseId)
+	{
+		string cat = "all";
+		int page;
+		string view;
+		if (s_mView.Find(playerId, view))
+		{
+			array<string> viewParts = {};
+			view.Split("|", viewParts, false);
+			if (viewParts.Count() > 0)
+				cat = viewParts[0];
+			if (viewParts.Count() > 1)
+				page = viewParts[1].ToInt();
+		}
+
+		cat.ToLower();
+		if (!CLW_HqMenuConfig.IsCategory(cat))
+			cat = "all";
+
+		array<CLW_ForceEntry> entries = {};
+		CLW_ForceCatalog catalog = CLW_GameMode.GetForceCatalog();
+		if (catalog)
+			catalog.GetEntries(faction, entries, true);	// players drive: crewless vehicles too
+
+		array<CLW_ForceEntry> shown = {};
+		foreach (CLW_ForceEntry entry : entries)
+		{
+			if (!entry || !entry.m_bEnabled || !entry.HasVehicle() || !CLW_HqMenuConfig.InCategory(cat, entry.m_sKind))
+				continue;
+
+			shown.Insert(entry);
+		}
+
+		int pages = Math.Max(1, (shown.Count() + CLW_HqMenuConfig.PAGE_SIZE - 1) / CLW_HqMenuConfig.PAGE_SIZE);
+		page = Math.Clamp(page, 0, pages - 1);
+		s_mView.Set(playerId, cat + "|" + page.ToString());
+		string reason = Blocked(playerId, faction, CLW_RequestKind.VEHICLE, baseId);
+		wire += Line("V", cat, page.ToString(), pages.ToString(), shown.Count().ToString(), reason);
+		int from = page * CLW_HqMenuConfig.PAGE_SIZE;
+		int to = Math.Min(from + CLW_HqMenuConfig.PAGE_SIZE, shown.Count());
+		for (int i = from; i < to; i++)
+		{
+			CLW_ForceEntry listed = shown[i];
+			wire += Line("W", listed.m_sType, listed.GetVehicleName(), CLW_RequestService.VehicleCost(listed).ToString(), listed.m_sKind);
+		}
 	}
 
 	protected static void AppendRequests(inout string wire, int playerId, string faction, string baseId, vector terminalPos)
