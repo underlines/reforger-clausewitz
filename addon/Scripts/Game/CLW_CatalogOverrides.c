@@ -12,6 +12,9 @@
 //   cost     : supplies cost (>= 0)       weight : buy-mix weight (>= 0)
 //   enabled  : false hides the entry from the buy mix      antiArmor : marks the entry as an anti-armour team
 //   name     : display name (also the vehicle name for vehicle entries)
+// Other top-level keys of the same file (each read by its own class, unknown keys are skipped by every reader):
+//   "debugChat" (CLW_Debug), "setup" (CLW_SetupPreset), "sides" and "props" (CLW_AdminOverrides in CLW_SidePool.c: side pool rules and
+//   prop overrides, M4 WP3).
 // Details: dev/notes/overrides.md
 
 // One override in the scenario config. Tri-state numbers use -1 = unchanged; no field initializers on [Attribute] members.
@@ -309,7 +312,9 @@ class CLW_CatalogOverrides
 
 		handle.WriteLine("{\"entries\":[");
 		handle.WriteLine("{\"match\":\"EXAMPLE_ONLY\",\"faction\":\"\",\"kind\":\"light\",\"cost\":90,\"weight\":10,\"enabled\":false,\"name\":\"M1025 M2\",\"antiArmor\":false}");
-		handle.WriteLine("]}");
+		handle.WriteLine("],");
+		handle.WriteLine("\"sides\":{},");
+		handle.WriteLine("\"props\":{}}");
 		handle.Close();
 		Print("CLW: overrides: no file found, wrote an example (matches nothing) to " + FILE_PATH + " - edit it to fix the catalog, see dev/notes/overrides.md in the mod repo", LogLevel.NORMAL);
 	}

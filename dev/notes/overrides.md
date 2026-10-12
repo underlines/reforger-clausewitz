@@ -61,3 +61,76 @@ The object is flat and uses the same keys and values as the menu and `/war start
 - An invalid preset (unknown mode, faction or parameter, bad value) is NOT replaced by defaults. The war stays in setup, and the log shows
   `CLW: ERROR setup preset ...` plus the `StartWar refused` reason. Players get a chat line pointing them to `/war setup`.
 - Log: `CLW: setup preset from overrides.json: ...` at load and `CLW: war auto start from the setup preset: ...` at start.
+
+## Side pools (`sides`) - M4 WP3
+Code: `CLW_SidePool.c` (rules), `CLW_ForceCatalog.FillFromKin`. A side's buy catalog is built as: its own faction entries (profile + auto-discovery,
+catalog overrides applied), then **kin** entries for every role (kind) the own faction lacks. Kinds: infantry, recon, motorized, light, mech,
+armor, armored_recon, logistics (a logistics role needs a vehicle and a cargo amount). The first kin faction that has a role fills it; the
+entries are cloned with type id `kin_<type>` and carry `m_sKinFrom` ("kin" in the catalog log). Own entries always win, duplicates (same role and
+same vehicle model / group prefab) are skipped. This is what gives RHS_USAF / RHS_AFRF a supply truck (the vanilla US / USSR `supply_truck`
+profile entry) so convoys run.
+- Kin = (1) `sides.<key>.kin` of the server file, (2) `m_aKinFactions` of the faction profile, (3) the factions the faction data calls friendly
+  (same rule as the arsenal item pool: a pack faction lists the vanilla faction it is built on). Never the side itself, the enemy side, a faction
+  friendly to the enemy side (civilians), a faction on the scenario's ignore list, or one excluded below.
+- Entries whose vehicle has no default crew (`crewless`) are never imported and never bought by the AI (see "Crew check").
+
+```json
+{"sides":{
+  "*":        {"excludePathContains":["Tank_Destroyer"]},
+  "RHS_USAF": {"kin":["US"], "excludeFactions":["FIA"], "excludePathContains":["Mortar"]},
+  "WCS_X":    {"ownOnly":true}
+}}
+```
+| key (per faction key, `*` = every side, both merged) | meaning |
+|---|---|
+| `ownOnly` | `true`: no kin at all for this side (roles it lacks stay empty) |
+| `kin` | extra kin faction keys, tried first |
+| `excludeFactions` | faction keys never used as kin (also removes them from the explicit lists) |
+| `excludePathContains` | prefab path texts (case-insensitive) never used: own AND kin entries whose vehicle / group / cargo-group prefab path contains one are disabled |
+
+Log: `CLW: overrides sides '<key>': ...` (file read), `CLW: sidepool <side>: roles without an own entry: ...; kin factions: ...`,
+`CLW: sidepool <side>: role <kind> filled from <kin>: <type> ...`, `CLW: sidepool <side>: roles still without an entry ...`,
+`CLW: catalog <side> built: N entries (a from profile, b discovered, c from kin, d crewless, e path-excluded)`.
+
+### Crew check
+Discovered vehicles are spawn-probed once (cached per prefab, at most 80 real spawns per catalog build): a vehicle with no pilot / crew seat
+that has a default occupant prefab cannot be crewed by `SpawnDefaultOccupants` (seen on RHS_AFRF `APC_K17_unarmed.et`, `K4386.et`). Such an entry
+is kept but marked **crewless**: `CLW_ForceCatalog.GetEntries` / `Find` leave it out (AI buy mix, FOB builder, convoys), `includeCrewless = true`
+lists it (player vehicle request: the vehicle is spawned empty). A purchase that still hits "no default crew" marks the entry crewless at once
+(`CLW: catalog <side> entry <type> marked CREWLESS`). Log: `CLW: catalog crew check <side>: <prefab> ok|has NO default crew|unknown`.
+
+## Props (`props`) and style sets - M4 WP3
+Code: `CLW_PropResolver.c`. Roles: `service.command_post`, `service.supply`, `service.arsenal`, `service.vehicle_depot`, `service.medical`,
+`service.repair`, FOB kit `fob.arsenal_box`, `fob.supply_box`, `fort.sandbag_long`. The role keeps its placement data (offset, yaw, radius,
+footprint, map marker) from the faction data; only the prefab changes.
+
+Resolution chain per side + role (first prefab that **loads** wins):
+1. admin override `props` of the server file
+2. shipped preference sets `Configs/CLW/Props/PropSets.conf` (non-vanilla sets whose `m_aFactions` names the side)
+3. faction data: the side's profile, the profile of `m_sServiceFallbackFaction`, a friendly (kin) profile of the scenario list
+4. the vanilla set that fits the side's kin (`m_bVanilla 1`), last resort
+5. none (logged)
+A side with no service data at all gets its base services synthesized from steps 1, 2 and 4 (`CLW: props <side>: ... services synthesized`).
+Prefabs taken from an override or set have their default faction affiliation moved to the side (`CLW_Services.AdoptFaction`, source key `*`).
+
+```json
+{"props":{
+  "*":        {"fort.sandbag_long":"vanilla"},
+  "RHS_USAF": {"style":"my_pack", "service.arsenal":"{0123456789ABCDEF}Prefabs/Props/Pack/Arsenal.et"},
+  "RHS_AFRF": {"fob.supply_box":"vanilla"}
+}}
+```
+| value | meaning |
+|---|---|
+| a prefab path (`{GUID}Prefabs/...et` or a plain path) | use exactly this prefab for the role |
+| `"vanilla"` | the vanilla set (US / USSR / FIA look, the one matching the side's kin) |
+| a set name | the candidate of that set (`PropSets.conf`) for the role |
+| `"style": "<set name or vanilla>"` (a key next to the roles) | applies that set to every role of the side that has no entry of its own |
+A value that does not load / names no set / the set has no such role is logged once (`CLW: props <side> <role>: override '<value>' is not usable ...`)
+and the chain continues with the next source. Per side + role one line: `CLW: props <side> <role> -> <prefab path> (source override prefab|override vanilla (set x)|override style set x|set <name>|profile <key>|fallback <key>|kin <key>|vanilla set <name>|none)`.
+
+### PropSets.conf
+`CLW_PropSets { m_aSets { CLW_PropSet { m_sName, m_bVanilla, m_aFactions, m_aRoles { CLW_PropRoleCandidates { m_sRole, m_aPrefabs } } } } }`.
+Shipped: `vanilla_us`, `vanilla_ussr`, `vanilla_fia` (all `m_bVanilla`, the prefabs of the three vanilla profiles). Pack sets: add a `CLW_PropSet`
+with `m_bVanilla 0` and `m_aFactions { "RHS_USAF" }` and the pack's prefabs (candidates in order, the first that loads is used; a missing pack
+just falls through). None is shipped yet: no pack GUID could be verified (the enfusion asset index has vanilla only).

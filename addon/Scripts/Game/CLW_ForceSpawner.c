@@ -293,6 +293,9 @@ class CLW_ForceSpawner
 		if (!source)
 		{
 			error = "unknown force type " + typeId;
+			if (m_Catalog.Find(factionKey, typeId, true))
+				error = "force type " + typeId + " has a vehicle without default crew (crewless entries are not bought by the AI)";
+
 			Print(string.Format("CLW: spawn %1 %2 refused: %3", label, factionKey, error), LogLevel.WARNING);
 			return false;
 		}
@@ -599,6 +602,7 @@ class CLW_ForceSpawner
 		{
 			compartments.GetOnDoneSpawningDefaultOccupants().Remove(OnOccupantsDone);
 			job.m_sFailure = "vehicle has no default crew to spawn";
+			m_Catalog.MarkCrewless(job.m_sFaction, entry.m_sType, "SpawnDefaultOccupants refused at purchase");	// the AI stops picking it (M4 WP3)
 			return false;
 		}
 

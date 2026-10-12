@@ -1,0 +1,17 @@
+MetaFileClass {
+ Name "{7E3B91D2A4C60F85}Configs/CLW/Props/PropSets.conf"
+ Configurations {
+  ConfigurationClass PC {
+  }
+  ConfigurationClass XBOX_ONE : PC {
+  }
+  ConfigurationClass XBOX_SERIES : PC {
+  }
+  ConfigurationClass PS4 : PC {
+  }
+  ConfigurationClass PS5 : PC {
+  }
+  ConfigurationClass HEADLESS : PC {
+  }
+ }
+}

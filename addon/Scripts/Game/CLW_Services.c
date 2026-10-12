@@ -379,9 +379,16 @@ class CLW_Services
 	{
 		// the prefab of the role comes from the resolver (single choke point, CLW_PropResolver); the entry only carries the placement data
 		string propSource;
-		ResourceName prefabName = CLW_PropResolver.Resolve(sideKey, CLW_PropResolver.SERVICE_PREFIX + entry.m_sKind, propSource);
+		string propKey;
+		ResourceName prefabName;
+		CLW_ServiceEntry resolved = CLW_PropResolver.ResolveEntry(sideKey, CLW_PropResolver.SERVICE_PREFIX + entry.m_sKind, propSource, propKey);
+		if (resolved)
+			prefabName = resolved.m_Prefab;
+
 		if (prefabName.IsEmpty())
 			prefabName = entry.m_Prefab;
+		else if (!propKey.IsEmpty())
+			source = propKey;	// the faction the prefab really came from (an override or a set: "*" = whatever the prefab says)
 
 		Resource resource = Resource.Load(prefabName);
 		if (!resource || !resource.IsValid())
@@ -621,6 +628,11 @@ class CLW_Services
 			}
 		}
 
+		// no profile in the chain has services (a pack faction without a profile or a friendly vanilla one): admin overrides, shipped
+		// pack sets and the vanilla set can still supply the base services (CLW_PropResolver.Synthesize, M4 WP3)
+		if (CLW_PropResolver.Synthesize(sideKey, entries))
+			return CLW_PropResolver.SYNTH_SOURCE;
+
 		return "";
 	}
 
@@ -693,11 +705,22 @@ class CLW_Services
 		if (!side)
 			return 0;
 
+		// "*" = the prefab came from an admin override or a style set: every affiliation with another default faction moves to the side
+		bool any = sourceKey == "*";
 		int changed;
 		foreach (IEntity entity : tree)
 		{
 			FactionAffiliationComponent affiliation = FactionAffiliationComponent.Cast(entity.FindComponent(FactionAffiliationComponent));
-			if (!affiliation || affiliation.GetDefaultFactionKey() != sourceKey)
+			if (!affiliation)
+				continue;
+
+			string defaultKey = affiliation.GetDefaultFactionKey();
+			if (any)
+			{
+				if (defaultKey.IsEmpty() || defaultKey == sideKey)
+					continue;
+			}
+			else if (defaultKey != sourceKey)
 				continue;
 
 			affiliation.SetAffiliatedFaction(side);
