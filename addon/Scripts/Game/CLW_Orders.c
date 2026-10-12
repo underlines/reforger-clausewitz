@@ -116,6 +116,14 @@ class CLW_Orders
 		return null;
 	}
 
+	// Forget the current order of a unit (a human gave it back to HQ): the commander may issue a new one at once.
+	void ForgetOrder(string id)
+	{
+		CLW_UnitTrack track;
+		if (m_mTracks.Find(id, track) && track)
+			track.m_Order = null;
+	}
+
 	// Drop the tracks of units that are not listed any more. Ids removed are appended to outRemoved.
 	void Prune(notnull array<string> liveIds, notnull array<string> outRemoved)
 	{

@@ -1,6 +1,6 @@
 # Squad join design: deploy menu, groups menu, command post, auto-join -> one join service
 
-Status: design, nothing implemented (2026-10-12). Labels: **[SRC]** = read in vanilla scripts (`game_read` / unpacked `scripts/Game/...`), **[hyp]** = inference or engine-side behaviour not visible in script, needs a Workbench / dedicated-server test.
+Status: steps 1-9 implemented on feature/m2-real-war (2026-10-12, untested in play); step 10 (command post) open. Files: CLW_SquadGroups.c, CLW_SquadJoin.c, CLW_PlayerSquad.c, CLW_SpawnLogic.c, CLW_GroupMirrorController.c. Labels: **[SRC]** = read in vanilla scripts (`game_read` / unpacked `scripts/Game/...`), **[hyp]** = inference or engine-side behaviour not visible in script, needs a Workbench / dedicated-server test.
 The online Script API site (community.bistudio.com wikidata) answered with a Cloudflare challenge to curl; method names were confirmed with enfusion-mcp `api_search` + the unpacked vanilla scripts instead.
 SCR_AIGroup (`Entities/SCR_AIGroup.c`) IS readable as script, contrary to the older note in `dev/research/groups-and-commanding.md`.
 

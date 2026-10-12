@@ -11,6 +11,14 @@ class CLW_WarConfig
 	static const int CAPTURE_MAX_COUNTED = 4;
 	static const float CAPTURE_DECAY_PCT_PER_SEC = 1;	// back toward the current owner when nobody is present
 
+	// Player squads (squad join service, dev/notes/squad-join-design.md)
+	static const int SQUAD_MAX_HUMANS = 4;				// humans per HQ squad in the vanilla group lists (0 = unlimited)
+	static const int SQUAD_JOIN_DEFER_MS = 100;			// vanilla fires its player events before the controller group ID is set
+	static const float SQUAD_FAR_HINT_M = 500;			// switching to a squad this far away: hint instead of a teleport
+	static const int SQUAD_NAME_AUTHOR = 1;				// author id of the custom group name (must be non-zero)
+	static const int DEPLOY_WAIT_SQUADS_MS = 1000;		// deploy menu waits (max 30 tries) until HQ squads are joinable
+	static const int DEPLOY_WAIT_SQUADS_MAX = 30;
+
 	// War state (spec section 2)
 	static const int WAR_TICK_MS = 5000;
 	static const int SUMMARY_INTERVAL_SEC = 60;

@@ -123,6 +123,7 @@ class CLW_GameMode : SCR_BaseGameMode
 			m_Catalog.BuildAll();
 		if (m_Spawner)
 			m_Spawner.SpawnStartForces();
+		CLW_SquadGroups.LockNewGroups();	// HQ squads are the only player groups; the registry registers them in its next sweep
 
 		// the factions are final now: rebuild books, markers and commanders from the scenario's current keys
 		BuildFactionObjects();
@@ -229,6 +230,12 @@ class CLW_GameMode : SCR_BaseGameMode
 			{
 				Print("CLW: NO SCENARIO: war systems, registry adoption and commanders are disabled", LogLevel.ERROR);
 			}
+
+			// Squad join service: vanilla group events -> commandable squads; HQ squads are the only player groups.
+			CLW_SquadJoin.Init();
+			CLW_SquadGroups.LockNewGroups();
+			GetOnPlayerRegistered().Insert(OnClwPlayerRegistered);
+			GetGame().GetCallqueue().CallLater(PruneVanillaGroups, 3000);	// after the groups manager made its predefined groups
 
 			// Adopt the scene-placed squads now (before the first commander tick), then keep sweeping for new/lost groups.
 			m_Registry.Start();
@@ -389,7 +396,20 @@ class CLW_GameMode : SCR_BaseGameMode
 		}
 	}
 
-	// Player flow: after the auto-spawn, put the player into the AI rifle squad of their faction.
+	// A client connected: tell it which HQ squads are in the vanilla group lists (after its controller is up).
+	protected void OnClwPlayerRegistered(int playerId)
+	{
+		GetGame().GetCallqueue().CallLater(CLW_SquadGroups.MirrorAll, 3000, false, playerId);
+	}
+
+	protected void PruneVanillaGroups()
+	{
+		if (m_Registry)
+			CLW_SquadGroups.PruneVanillaGroups(m_Registry);
+	}
+
+	// Player flow: after the spawn (auto in SETUP, deploy menu later) the player is in an HQ squad (menu choice) or gets the fallback
+	// auto-join into the AI rifle squad of their faction.
 	override void OnPlayerSpawnFinalize_S(SCR_SpawnRequestComponent requestComponent, SCR_SpawnHandlerComponent handlerComponent, SCR_SpawnData data, IEntity entity)
 	{
 		super.OnPlayerSpawnFinalize_S(requestComponent, handlerComponent, data, entity);
@@ -402,6 +422,7 @@ class CLW_GameMode : SCR_BaseGameMode
 		if (!faction)
 			return;
 
+		CLW_SquadGroups.MirrorAll(playerId);	// idempotent safety net for clients that connected before the squads existed
 		TryJoinPlayer(playerId, faction.GetFactionKey(), 0);
 	}
 
@@ -422,7 +443,7 @@ class CLW_GameMode : SCR_BaseGameMode
 		if (!preferredSquad.IsEmpty())
 		{
 			SCR_AIGroup preferred = m_Registry.Find(preferredSquad);
-			if (preferred && CLW_SquadRegistry.GetFactionKey(preferred) == factionKey)
+			if (preferred && CLW_SquadRegistry.GetFactionKey(preferred) == factionKey && !preferred.IsFull())
 				return preferred;
 		}
 
@@ -431,11 +452,8 @@ class CLW_GameMode : SCR_BaseGameMode
 		SCR_AIGroup firstFree;
 		foreach (string id : ids)
 		{
-			if (m_Registry.IsHidden(id) || m_Registry.GetKind(id) != CLW_ForceKind.INFANTRY)
-				continue;
-
 			SCR_AIGroup group = m_Registry.Find(id);
-			if (!group)
+			if (!group || !m_Registry.IsJoinable(group) || group.IsFull())
 				continue;
 
 			if (CLW_SquadInfo.HumanLeaderEntity(group))
@@ -463,7 +481,22 @@ class CLW_GameMode : SCR_BaseGameMode
 		bool running = m_War && m_War.IsRunning();
 		SCR_AIGroup squad;
 		if (running)
+		{
+			// entry point 1/2: the player already picked an HQ squad (deploy menu / groups menu): the hooks establish it, we only
+			// make sure (idempotent). Anything else (no group, a vanilla group) = fallback auto-join below.
+			SCR_GroupsManagerComponent groups = SCR_GroupsManagerComponent.GetInstance();
+			SCR_AIGroup chosen;
+			if (groups)
+				chosen = groups.GetPlayerGroup(playerId);
+			if (chosen && m_Registry.IsJoinable(chosen))
+			{
+				Print(string.Format("CLW: player %1 is in HQ squad %2 (chosen): establishing", playerId, chosen), LogLevel.NORMAL);
+				CLW_PlayerSquad.Establish(chosen, playerId);
+				return;
+			}
+
 			squad = FindStartSquad(factionKey);
+		}
 
 		if (squad)
 		{

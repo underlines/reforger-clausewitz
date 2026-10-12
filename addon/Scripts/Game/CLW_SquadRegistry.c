@@ -397,11 +397,69 @@ class CLW_SquadRegistry
 			}
 		}
 
+		SyncJoinable();
 		if (changed)
 		{
 			m_iVersion++;
 			LogSummary();
 		}
+	}
+
+	// ---- joinable squads (vanilla group lists, see CLW_SquadGroups) ----
+
+	// Register the squads a player may pick (infantry without a vehicle link, not hidden, alive, on a side, war running),
+	// unregister the ones that stopped qualifying (when no human is in them), drop empty vanilla groups.
+	protected void SyncJoinable()
+	{
+		foreach (CLW_SquadRecord record : m_aRecords)
+		{
+			if (!record.m_Group)
+				continue;
+
+			bool want = IsJoinableRecord(record);
+			bool have = CLW_SquadGroups.IsRegistered(record.m_Group);
+			if (want && !have)
+				CLW_SquadGroups.Register(record.m_Group);
+			else if (!want && have && record.m_Group.GetPlayerCount() == 0)
+				CLW_SquadGroups.Unregister(record.m_Group);
+		}
+
+		CLW_SquadGroups.PruneVanillaGroups(this);
+	}
+
+	protected bool IsJoinableRecord(CLW_SquadRecord record)
+	{
+		CLW_WarState war = CLW_GameMode.GetWarState();
+		if (!war || !war.IsRunning())
+			return false;
+
+		if (record.m_bHidden || !IsClwFaction(record.m_sFaction))
+			return false;
+
+		Resolve(record);
+		if (record.m_sKind != CLW_ForceKind.INFANTRY)
+			return false;
+
+		if (m_Catalog && !record.m_sTypeId.IsEmpty())
+		{
+			CLW_ForceEntry entry = m_Catalog.Find(record.m_sFaction, record.m_sTypeId);
+			if (entry && entry.HasVehicle())
+				return false;
+		}
+
+		return CLW_SquadInfo.AliveCount(record.m_Group) > 0;
+	}
+
+	// True when the squad is in the vanilla group lists (a player can pick it).
+	bool IsJoinable(SCR_AIGroup group)
+	{
+		return IsAdopted(group) && CLW_SquadGroups.IsRegistered(group);
+	}
+
+	// Number of joinable squads of the faction ("" = all).
+	int CountJoinable(string factionKey = "")
+	{
+		return CLW_SquadGroups.Count(factionKey);
 	}
 
 	protected bool TryAdopt(notnull SCR_AIGroup group)
@@ -451,6 +509,8 @@ class CLW_SquadRegistry
 		CLW_SquadRecord record = m_aRecords[index];
 		Print(string.Format("CLW: registry released %1 reason=%2", record.m_sId, reason), LogLevel.NORMAL);
 		m_mTags.Remove(record.m_sId);
+		if (record.m_Group && CLW_SquadGroups.IsRegistered(record.m_Group))
+			CLW_SquadJoin.OnSquadReleased(record.m_Group);
 		m_aRecords.Remove(index);
 	}
 

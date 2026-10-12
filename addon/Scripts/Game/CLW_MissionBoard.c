@@ -102,6 +102,26 @@ class CLW_MissionBoard : CLW_MissionHook
 		Print("CLW: mission board installed", LogLevel.NORMAL);
 	}
 
+	protected static bool s_bTickQueued;
+
+	// A squad changed hands (leader changed, last human left): re-evaluate soon instead of waiting for the 5 s tick.
+	// Debounced; Tick() itself cleans up records of squads that are no longer human-led or whose leader changed.
+	static void RequestTick()
+	{
+		if (!s_Board || !Replication.IsServer() || s_bTickQueued)
+			return;
+
+		s_bTickQueued = true;
+		GetGame().GetCallqueue().CallLater(TickNow, 300);
+	}
+
+	protected static void TickNow()
+	{
+		s_bTickQueued = false;
+		if (s_Board)
+			s_Board.Tick();
+	}
+
 	// Static trampolines: the invokers are static, the board instance is replaceable.
 	protected static void OnAssigneeAdded(SCR_Task task, SCR_TaskExecutor executor, int requesterID)
 	{
