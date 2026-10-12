@@ -5,6 +5,18 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 
 ## [Unreleased]
 
+### Added
+- Faction SITREP for players: one briefing per side (BLUF headline, Situation, Intel, Mission, Execution, Logistics) in natural NATO/US military prose (sizes and times in words, objective or nearest map place plus a 100 m grid matching the map labels, no unit ids or coordinates). Built in game every 20 s from that side's own picture (works without the sidecar); the LLM version rides in the commander reply (no extra call) and replaces it while fresh. Only the own side receives it: map journal on the deploy screen and in-game map (opens on first map view), hint on every spawn (H shows it again), `/sitrep` chat command.
+- Battle size scales the battlefield: small battles place the HQs at half the authored distance (`m_aDistanceScales`, minimum `m_fMinHqDistanceM`), objectives declare the smallest battle size they appear in (`m_iMinBattleSize`) and are re-spaced with a hard HQ clearance (`m_fHqObjectiveClearM`) and a minimum gap between objectives (`m_fObjectiveGapM`); the spawn point and players at the old HQ move along. Hook for future FOB placement.
+- Dashboard: faction-vs-faction comparison tables (game mode rules and live numbers, forces), SITREP card per side, forces table with a detail row, missions page with a mini map (click a squad or offer to focus its target), map shading and filter for active vs dormant units (hover card shows the activity). Situation JSON reports `dormant` per squad.
+
+### Changed
+- Enemy contact markers show size words ("squad", "veh section + fire team") instead of a raw count.
+- Mission panels on the dashboard explain that HQ only offers missions to player-led squads.
+
+### Fixed
+- Enemy contact counts: destroyed and disarmed targets and vehicle crews no longer inflate contacts (a side with one vehicle was reported as "75 vehicles"); vehicles and infantry are counted separately.
+
 ## [0.3.0] - 2026-10-12
 
 ### Added
