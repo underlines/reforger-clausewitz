@@ -5,6 +5,8 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-12
+
 ### Added
 - M3 phase B, base services: every side gets its service compositions at its HQ at war start (command post, supply cache, arsenal, vehicle depot, medical), positioned on free spots around the base and listed per base for later requests/FOBs. Prefabs come from the faction profile data (`m_aServices`, US, USSR and FIA ship them); a faction without services uses its kin faction (`m_sServiceFallbackFaction` or a friendly faction with services), so RHS/WCS/GRS sides get a base too. Log lines `CLW: services ...`.
 - Supply link: the base supply containers mirror the side supplies; arsenal kits spend the same supplies as purchases (changes in both directions are synced every 1.5 s).
