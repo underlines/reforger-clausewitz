@@ -5,6 +5,8 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-12
+
 ### Added
 - Faction SITREP for players: one briefing per side (BLUF headline, Situation, Intel, Mission, Execution, Logistics) in natural NATO/US military prose (sizes and times in words, objective or nearest map place plus a 100 m grid matching the map labels, no unit ids or coordinates). Built in game every 20 s from that side's own picture (works without the sidecar); the LLM version rides in the commander reply (no extra call) and replaces it while fresh. Only the own side receives it: map journal on the deploy screen and in-game map (opens on first map view), hint on every spawn (H shows it again), `/sitrep` chat command.
 - Battle size scales the battlefield: small battles place the HQs at half the authored distance (`m_aDistanceScales`, minimum `m_fMinHqDistanceM`), objectives declare the smallest battle size they appear in (`m_iMinBattleSize`) and are re-spaced with a hard HQ clearance (`m_fHqObjectiveClearM`) and a minimum gap between objectives (`m_fObjectiveGapM`); the spawn point and players at the old HQ move along. Hook for future FOB placement.
