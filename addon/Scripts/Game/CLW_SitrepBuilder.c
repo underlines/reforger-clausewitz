@@ -8,7 +8,7 @@
 class CLW_SitrepArea
 {
 	string m_sKey;
-	string m_sShort;			// "Timber Hub (C)" / "Newfield" / "grid 26-28"
+	string m_sShort;			// "Timber Hub (C)" / "Newfield" / "grid 262-288"
 	CLW_ControlPoint m_Point;	// objective of the area, null for a place / grid area
 	int m_iVehicles;
 	int m_iInfantry;

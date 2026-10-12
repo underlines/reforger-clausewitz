@@ -6,9 +6,8 @@
 //
 // Grid scheme: the vanilla map draws a grid whose labels are SCR_MapEntity.GetGridPos(pos, gx, gz, resMin 2, resMax 4): per axis the
 // decimal digits of the world coordinate for 10 km, 1 km and 100 m (X = east, Z = north), so a 100 m cell reads "262 288" on the map
-// legend. The text grid here is the SAME function at 1 km precision (resMin 3, resMax 4): the leading two of those three digits per
-// axis, written "26-28" (east-north), which is the 1 km square that contains the 100 m cell "262 288". It is the coarse
-// reference the players read off the map legend; to find it, look at the first two digits of the east/north labels.
+// legend. The text grid here is the SAME function and precision (resMin 2, resMax 4), written "262-288" (east-north), so players
+// read it straight off the map labels. (Verified 2026-10-12: resMin 3 gave "02-02" for x=2535, z=2853, i.e. 10 km + 1 km digits.)
 class CLW_Place
 {
 	string m_sName;
@@ -148,19 +147,20 @@ class CLW_Places
 
 	// ---- grid ----
 
-	// 1 km grid reference "26-28" (east-north); same digits the vanilla map legend shows (see header).
+	// 100 m grid reference "025-285" (east-north): exactly the 100 m cell labels of the vanilla map legend (see header). 1 km squares
+	// (resMin 3) were too coarse on small maps (Arland: 16 squares, all "0x"), owner decision 2026-10-12.
 	static string Grid(vector pos)
 	{
 		int gridX;
 		int gridZ;
-		SCR_MapEntity.GetGridPos(pos, gridX, gridZ, 3, 4);
-		return Pad2(gridX) + "-" + Pad2(gridZ);
+		SCR_MapEntity.GetGridPos(pos, gridX, gridZ, 2, 4);
+		return Pad3(gridX) + "-" + Pad3(gridZ);
 	}
 
-	protected static string Pad2(int value)
+	protected static string Pad3(int value)
 	{
 		string text = value.ToString();
-		while (text.Length() < 2)
+		while (text.Length() < 3)
 		{
 			text = "0" + text;
 		}
