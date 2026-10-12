@@ -1400,7 +1400,6 @@ modded class SCR_CatalogEntitySpawnerComponent
 {
 	protected int m_iCLWKinAdded;		// entries added from kin catalogs by the last build
 	protected int m_iCLWKinFactions;	// friendly factions that were looked at
-	protected bool m_bCLWRefreshQueued;
 
 	protected override void SetCurrentFactionCatalog()
 	{
@@ -1433,17 +1432,11 @@ modded class SCR_CatalogEntitySpawnerComponent
 		if (!m_aCatalogTypes || !m_aCatalogTypes.Contains(EEntityCatalogType.VEHICLE))
 			return;
 
-		if (!CLW_ArsenalPool.IsActive())
-		{
-			// a client under a Game Master takeover learns about the war a few seconds after the depot faction replicated: build once more later
-			if (!Replication.IsServer() && !m_bCLWRefreshQueued)
-			{
-				m_bCLWRefreshQueued = true;
-				GetGame().GetCallqueue().CallLater(CLW_RefreshDepotList, 20000, false);
-			}
+		if (!Replication.IsServer())
+			CLW_DepotRefresh.Start();	// a client learns about the war after the depot faction replicated: the driver rebuilds the list once the war is active
 
+		if (!CLW_ArsenalPool.IsActive())
 			return;
-		}
 
 		SCR_Faction faction = SCR_Faction.Cast(GetFaction());
 		if (!faction)
@@ -1501,18 +1494,100 @@ modded class SCR_CatalogEntitySpawnerComponent
 		}
 	}
 
-	protected void CLW_RefreshDepotList()
+	// True for a spawner that offers vehicles (a depot).
+	bool CLW_IsVehicleSpawner()
 	{
-		if (!GetOwner())
-			return;
-
-		SetCurrentFactionCatalog();
-		Print(string.Format("CLW: services depot list (client refresh) entries=%1 kin=%2", m_aAssetList.Count(), m_iCLWKinAdded), LogLevel.NORMAL);
+		return m_aCatalogTypes && m_aCatalogTypes.Contains(EEntityCatalogType.VEHICLE);
 	}
 
-	override protected void OnDelete(IEntity owner)
+	// Nothing more to merge: kin entries are in, or the faction has no friendly factions (or is not known yet: not settled).
+	bool CLW_ListSettled()
 	{
-		GetGame().GetCallqueue().Remove(CLW_RefreshDepotList);
-		super.OnDelete(owner);
+		if (m_iCLWKinAdded > 0)
+			return true;
+
+		return GetFaction() != null && m_iCLWKinFactions == 0 && CLW_ArsenalPool.IsActive();
+	}
+
+	// Client driver step: rebuilds the list (force, or when nothing was merged yet) and logs entries / merged.
+	int CLW_ClientRefresh(bool force)
+	{
+		if (!force && m_iCLWKinAdded > 0)
+			return m_aAssetList.Count();
+
+		SetCurrentFactionCatalog();
+		Print(string.Format("CLW: services depot list (client refresh) entries=%1 merged=%2 (friendly factions %3, war active %4)", m_aAssetList.Count(), m_iCLWKinAdded, m_iCLWKinFactions, CLW_ArsenalPool.IsActive()), LogLevel.NORMAL);
+		return m_aAssetList.Count();
+	}
+
+	protected override void OnPostInit(IEntity owner)
+	{
+		super.OnPostInit(owner);
+		if (!Replication.IsServer() && CLW_IsVehicleSpawner())
+			CLW_DepotRefresh.Start();
+	}
+}
+
+// Client side rebuild of the depot lists (the request RPC sends an index into the list: server and client must hold the same one). The client
+// learns that a war runs (CLW_ArsenalPool.IsActive) some seconds after the depot spawner got its faction, and SetCurrentFactionCatalog may not
+// run again, so a tick walks every vehicle spawner (SCR_CatalogEntitySpawnerComponent.INSTANCES): every 5 s while waiting for the war, then on
+// the first active tick for all, then for the ones still not merged, until all are settled or 60 s of active ticks passed.
+class CLW_DepotRefresh
+{
+	static const int TICK_MS = 5000;
+	static const int ACTIVE_TICKS_MAX = 12;
+	static const int WAIT_TICKS_MAX = 120;
+
+	protected static bool s_bRunning;
+	protected static int s_iWait;
+	protected static int s_iActive;
+
+	static void Start()
+	{
+		if (s_bRunning)
+			return;
+
+		s_bRunning = true;
+		s_iWait = 0;
+		s_iActive = 0;
+		GetGame().GetCallqueue().CallLater(Tick, TICK_MS, true);
+	}
+
+	protected static void Stop(string why)
+	{
+		GetGame().GetCallqueue().Remove(Tick);
+		s_bRunning = false;
+		Print("CLW: services depot list client refresh stopped: " + why, LogLevel.NORMAL);
+	}
+
+	protected static void Tick()
+	{
+		if (!CLW_ArsenalPool.IsActive())
+		{
+			s_iWait++;
+			if (s_iWait >= WAIT_TICKS_MAX)
+				Stop("the war never became active on this client");
+
+			return;
+		}
+
+		s_iActive++;
+		int depots;
+		int unsettled;
+		foreach (SCR_CatalogEntitySpawnerComponent spawner : SCR_CatalogEntitySpawnerComponent.INSTANCES)
+		{
+			if (!spawner || !spawner.CLW_IsVehicleSpawner())
+				continue;
+
+			depots++;
+			spawner.CLW_ClientRefresh(s_iActive == 1);
+			if (!spawner.CLW_ListSettled())
+				unsettled++;
+		}
+
+		if (unsettled == 0)
+			Stop(string.Format("%1 depot list(s) settled after %2 active tick(s)", depots, s_iActive));
+		else if (s_iActive >= ACTIVE_TICKS_MAX)
+			Stop(string.Format("%1 of %2 depot list(s) still not merged after %3 s", unsettled, depots, s_iActive * TICK_MS / 1000));
 	}
 }
