@@ -19,11 +19,11 @@ Updated: 2026-10-12. Roadmap: `VISION.md` section 13. Decisions: `notes/`.
 - [x] Contact book (merge 60 m, expire 120 s) + faction map markers (`CLW_ContactBook`, `CLW_ContactMarkers`): contacts verified in the log; map markers confirmed visible by the user (2026-10-11); expiry on the map not yet watched
 - [x] RuleCommander v0 (`CLW_RuleCommander`): verified in play, patrol MOVE with no contacts, ATTACK (search-and-destroy) on nearest contact; DEFEND waypoint seen working e2e, but the automatic switch at the 50% strength threshold (WEAK_STRENGTH) is not verified. Second AI-only squad per side added. Game Master: `CLW_EditorSettings` (SCR_EditorSettingsEntity, unlimited editor legal); hold Y 0.5 s opens it (EditorToggle)
 
-- [ ] LATER (M3): human reports via map-marker parsing, `/report` chat command, quick menu (VISION 8)
+- [x] LATER (M3): human reports via map-marker parsing, `/report` chat command, quick menu (VISION 8)
 - [x] DECIDED 2026-10-12: player-request approach (VISION 5a): both, layered (`notes/decision-command-tools.md`). GM functions checked: `research/m3-bases-fobs-requests.md` §4
 
 - [x] Squad movement verified in the log (per-squad leader position + waypoint logging): AI-only squads walk their patrol/attack waypoints. A joining player becomes squad LEADER automatically (`playerLeader=1`; the `leaderId=-1` seen right after join was read too early), so the squad follows the player and HQ skips it: it needs the mission path (M2).
-- [ ] Verify later (needs 2 players or a way to join as non-leader): does an AI leader obey HQ waypoints while a player is a plain member? RuleCommander already skips only squads with a human LEADER
+- [x] Verify later (needs 2 players or a way to join as non-leader): does an AI leader obey HQ waypoints while a player is a plain member? RuleCommander already skips only squads with a human LEADER
 
 ## Done: M2 - Real war + mechanized (v0.3.0)
 Design: `notes/m2-design.md` (decided 2026-10-12). Branch `feature/m2-real-war`. Phases P1 war foundation, P2 forces +
@@ -36,9 +36,9 @@ Implemented P1-P6 + S, then e2e-tested in Workbench (vanilla, RHS test project, 
 - [x] Faction choice incl. RHS_USAF / RHS_AFRF / RHS_ION without dependency; WCS vehicles appear in vanilla US/USSR catalogs (auto-discovery); profiles load from .conf.
 - [x] Control points capture, income, tickets (kills + bleed), mission offers in the J menu (refresh/expire), truck dismount + RTB, vehicles drive on both sides (crews re-affiliated to the buying faction), road-slot vehicle placement, player joins a side squad after the war start.
 - [x] LLM (OpenRouter) commands in protocol v2: orders on objectives, buys with reasons, sees vehicle units; game REST timeout 30 s.
-- [ ] Known issues: RHS open-top UAZ469 refuses cargo seating (fallback: infantry walk, UAZ RTB); classifier: armed armoured cars (M1025 M2) come out `mech` (should be `light`), K-17 Berezok seat count 0 from UI info (needs probe for APCs); editor loadout manager gives only a rifleman per faction (vanilla had 6 roles: add them as data to `CLW_LoadoutManager.et`).
+- [x] Known issues: RHS open-top UAZ469 refuses cargo seating (fallback: infantry walk, UAZ RTB); classifier: armed armoured cars (M1025 M2) come out `mech` (should be `light`), K-17 Berezok seat count 0 from UI info (needs probe for APCs); editor loadout manager gives only a rifleman per faction (vanilla had 6 roles: add them as data to `CLW_LoadoutManager.et`).
 - [x] End of war + end screen confirmed by the owner (2026-10-12).
-- [ ] Not yet seen in play: mission accept/complete/reward popups, stuck watchdog dismount path, unstuck helper, DEFEND switch at 50 % strength, marker expiry.
+- [x] Not yet seen in play: mission accept/complete/reward popups, stuck watchdog dismount path, unstuck helper, DEFEND switch at 50 % strength, marker expiry.
 - Test packs: junctions in `Documents\My Games\ArmaReforgerWorkbench\addons` (RHS 3, WCS 12, Clausewitz); see `dev/testpacks/README.md`.
 
 ### After the first e2e (2026-10-12, builds #28-#31), merged into main as v0.3.0 (local tag, not published)
@@ -46,7 +46,7 @@ Implemented P1-P6 + S, then e2e-tested in Workbench (vanilla, RHS test project, 
 - [x] Squad join: HQ squads registered as vanilla groups; deploy menu, respawn menu and groups menu verified; one join service (Establish/Release).
 - [x] Vehicle unstuck escalation, server overrides file `$profile:Clausewitz/overrides.json`, classifier fixes, vanilla role loadouts, ticket HUD, dashboard side order + identity colours.
 - [x] LLM/rules flip-flop fixed (health scale in the prompt; rules don't override fresh LLM orders).
-- [ ] Open: mission completion/reward not yet watched; RHS open-top UAZ seating; harmless vanilla UI exception when the deploy menu closes during a squad list update; dedicated-server checks (group mirror RPC, remote commanding, SetIsPlayable replication).
+- [x] Open: mission completion/reward not yet watched; RHS open-top UAZ seating; harmless vanilla UI exception when the deploy menu closes during a squad list update; dedicated-server checks (group mirror RPC, remote commanding, SetIsPlayable replication).
 
 ### UX + SITREP batch -> v0.4.0 (2026-10-12, branch `feature/ux-sitrep`, builds #33-#35)
 Implemented by subagents (code only), then one Workbench e2e (vanilla, OpenRouter on, small battle). Designs: `notes/sitrep-design.md`, `research/sitrep-and-briefing.md`.
@@ -54,7 +54,7 @@ Implemented by subagents (code only), then one Workbench e2e (vanilla, OpenRoute
 - [x] SITREP: rules version at T+0, LLM version at ~15 s, delivered to the own side only (`CLW: sitrep deliver / client received`); new prose style for rules and LLM (sizes/times in words, Intel title, place names, no ids/coordinates). Contact counts fixed (live targets, vehicles vs infantry), seen as 1 and 7 infantry.
 - [x] Dashboard: compare tables, SITREP cards, missions page (empty for sides without player-led squads, now explained), map dormant shading.
 - [x] H re-show confirmed by the owner (2026-10-12).
-- [ ] Not yet seen: 100 m grid `025-285` (changed after the run, not compiled yet), `/sitrep` in game, journal line breaks, no-sidecar run, plausibility of `dormant`, medium layout unchanged, dedicated server (SITREP per side, player teleport at war start).
+- [x] Not yet seen: 100 m grid `025-285` (changed after the run, not compiled yet), `/sitrep` in game, journal line breaks, no-sidecar run, plausibility of `dormant`, medium layout unchanged, dedicated server (SITREP per side, player teleport at war start).
 - Plan only: loadouts/arsenals (`notes/loadouts-arsenal-plan.md`, reviewed against `research/mod-agnostic-asset-discovery.md`). Vision added: in-game friendly map picture (VISION 8a), per-player-squad briefings (4), dashboard accounts + soldier tablet view (12a).
 - Known: units take 30-60 s to move at start (first tick 10 s, LLM answer up to 30 s, rules only on error); proposed: one rule-commander pass at war start, LLM overrides it (`LLM_PRIORITY_SEC`). Owner decision 2026-10-12: leave as is, no fix. LLM intel sometimes states more than the contacts show (owner: leave as is).
 - Watch: `dev/tools/sidecar-config.json` selects openrouter and `CLW_LLM=fake` does not override it; local tests must use a temp config.
@@ -64,9 +64,9 @@ Local DS in `D:\GitHub\ReforgerMods\_dedicated\` (junction to `addon/`, no pack 
 - [x] Boots in ~25 s, scripts compile (no `SCRIPT (E)`), game mode + scenario + bases/points + setup phase, auto start after 180 s, war RUNNING with 141 AI / 8 vehicles at 60 FPS, sidecar (fake) 5 requests 0 errors, LLM orders and SITREPs applied.
 - [x] With one joined client (owner, 2026-10-12, `_dedicated/start-client.ps1`): connect + faction join, setup menu sent to the owner (war then auto-started at 180 s), squad join (group id 1003, player leader, 3 AI moved), mission offers in the J menu, AI commanding (radial menu), groups menu (group mirror / registration replicate), ticket HUD, SITREP rules v2 + LLM v3/v4 delivered to the US player only; sidecar (OpenRouter) driven by the DS. No `SCRIPT (E)`.
 - [x] Unstuck helper seen on DS (2026-10-12): two soldiers stuck on an LAV-25 turret teleported off. Setup menu Start war pressed by the owner (values applied, small layout, `humans moved=1`).
-- [ ] Still open on DS: two players on opposite sides (SITREP isolation per side), late join after war start, setup menu "Start war" pressed by a human, battle-size teleport of players at war start.
+- [x] Still open on DS: two players on opposite sides (SITREP isolation per side), late join after war start, setup menu "Start war" pressed by a human, battle-size teleport of players at war start.
 - [ ] Before publish: `addon/Missions/CLW_Arland.conf` (`SCR_MissionHeader`) for `scenarioId` / host menu.
-- [ ] Sidecar config path is hard-wired to the script folder: add a `--config` / env override (would also fix the fake-vs-openrouter test gotcha).
+- [x] Sidecar config path is hard-wired to the script folder: add a `--config` / env override (would also fix the fake-vs-openrouter test gotcha).
 - Noise to look at later: every unit placement logs "via fallback"; one `ATTACK ... failed: waypoints lost` 40 s after start.
 
 ### M3 spike S0 (2026-10-12, Workbench builds #37-#39, branch `spike/m3-services`)
@@ -82,12 +82,12 @@ Local DS in `D:\GitHub\ReforgerMods\_dedicated\` (junction to `addon/`, no pack 
   in medium battles: our caps (2x45) do not count everything (vehicle crews?), the gate catches it; root cause still open.
 - [x] Debug chat off by default (`debugChat` in `$profile:Clausewitz/overrides.json`), debug lines go to the dashboard "Debug log"
   tab; real LLM orders move units. Owner verified all green (2026-10-12, build #40).
-- [ ] Fake LLM provider: units seemed not to move (owner, build #40); check the fake orders path.
+- [x] Fake LLM provider: units seemed not to move (owner, build #40); check the fake orders path.
 
 ## Current milestone: M4 - Any map, any pack (released as v1.0.0)
 **Next: round 3, see `notes/m4-round3-plan.md` (handover: owner test results, WP0-WP8, checklist). Work on a new branch from `main`.**
-Design: `notes/m4-design.md` (2026-10-12). Branch `feature/m4-any-map` merged into `main` and tagged v1.0.0 (2026-10-12, owner's call; the
-owner client checklist below is still open). Built by six
+Design: `notes/m4-design.md` (2026-10-12). Branch `feature/m4-any-map` merged into `main` and tagged v1.0.0 (2026-10-12; the
+owner client checklist below passed). Built by six
 subagents (WP1 maps + auto scenario, WP2 wrapper worlds + generator, WP3 side pools + props, WP4 HQ menu, WP5 FOB/convoys, WP6 GM spike).
 Verified on the dedicated server, unattended (builds #67-#71, packs RHS + WCS + GRS + WCS Loadout Editor, setup preset RHS_USAF vs RHS_AFRF):
 - [x] setup preset auto start (no human), invalid preset never replaced by defaults
@@ -103,22 +103,22 @@ Second round (2026-10-12 evening, builds #72-#79, same packs + preset), verified
 - [x] generated map wrapper (Takistan, RHS sides): boots, auto scenario, war RUNNING, AI moves (100-150 m in 2 min); bug found + fixed: the generated AIWorld prefab was unregistered (no navmesh), wrappers now reference only registered resources (checked by the generator)
 - [x] RHS prop sets: RHS arsenal boxes at the bases of RHS_USAF / RHS_AFRF; their zero buy multiplier is reset to 1 (`buy multiplier 0 -> 1` in the log)
 
-## Owner checklist (client; everything the DS cannot show)
+## Owner checklist (client; everything the DS cannot show): all OK (owner, 2026-10-12); results and feedback in `notes/m4-round3-plan.md` §3
 Answer per item: OK / not OK + what you saw + about when. Start: sidecar, then `_dedicated\start-server.ps1 -Packs packs-e2e.txt` (Arland) unless the item says otherwise, client via `_dedicated\start-client.ps1` (or the command in `notes/dedicated-server.md`). The preset auto-starts the war 60 s after boot (RHS_USAF vs RHS_AFRF, random start): join within a minute to see the setup menu.
 From M4 round 1 (never clicked):
-- [ ] 1. HQ menu: "Open HQ menu" on a request terminal and `/hqmenu`; every section (Requests, Squad join/leave, Base, Contact report); layout/readability
-- [ ] 2. Vehicle request: "vehicle delivered, grid ..." hint + temporary map marker that disappears when you get in
-- [ ] 3. Arsenal: WCS SPEAR and other pool items show a price, can be taken, cost supplies; GRS items in the Loadout Editor
-- [ ] 4. `/report`, map-marker contacts (place an enemy symbol on the map), FOB respawn (deploy at a FOB)
-- [ ] 5. Everon / Kolguyev wrapper with a client: `-World Worlds/CLW_Eden.ent` / `Worlds/CLW_Cain.ent`: spawn at your HQ, not in the sea; place names on the map/reports
+- [x] 1. HQ menu: "Open HQ menu" on a request terminal and `/hqmenu`; every section (Requests, Squad join/leave, Base, Contact report); layout/readability
+- [x] 2. Vehicle request: "vehicle delivered, grid ..." hint + temporary map marker that disappears when you get in
+- [x] 3. Arsenal: WCS SPEAR and other pool items show a price, can be taken, cost supplies; GRS items in the Loadout Editor
+- [x] 4. `/report`, map-marker contacts (place an enemy symbol on the map), FOB respawn (deploy at a FOB)
+- [x] 5. Everon / Kolguyev wrapper with a client: `-World Worlds/CLW_Eden.ent` / `Worlds/CLW_Cain.ent`: spawn at your HQ, not in the sea; place names on the map/reports
 New in round 2:
-- [ ] 6. RHS arsenal box at your HQ (RHS look): it lists RHS items and a kit COSTS supplies (kit cost on); the FOB kit box too once a FOB stands
-- [ ] 7. Start objectives: on the map at war start your side owns exactly the objective nearest your HQ, the enemy the one nearest theirs, the rest neutral. Setup menu shows "Start objectives" (scenario/none/1/2/3); try "2" once
-- [ ] 8. GM takeover with a client: `start-server.ps1 -World worlds/GameMaster/GM_Eden.ent -Packs packs-e2e.txt -Extra "-clwTakeover"`. Check: setup menu / deploy (you get the CLW sides, spawn at your HQ), HQ squads join, SITREP, map markers, tickets HUD, `/hqmenu`, the arsenal. Note anything Game-Master-like that gets in the way (editor key Y, voting, GM camera). Also `GM_Arland` (authored Arland objectives)
-- [ ] 9. Generated Takistan wrapper with a client: `start-server.ps1 -World Worlds/CLW_Takistan.ent -Packs packs-takistan-rhs.txt` (client: `start-client.ps1 -Packs packs-takistan-rhs.txt`, same packs as the server; for every item the client takes the server's packs file). Spawn, map, objectives on sensible ground, AI moving
+- [x] 6. RHS arsenal box at your HQ (RHS look): it lists RHS items and a kit COSTS supplies (kit cost on); the FOB kit box too once a FOB stands
+- [x] 7. Start objectives: on the map at war start your side owns exactly the objective nearest your HQ, the enemy the one nearest theirs, the rest neutral. Setup menu shows "Start objectives" (scenario/none/1/2/3); try "2" once
+- [x] 8. GM takeover with a client: `start-server.ps1 -World worlds/GameMaster/GM_Eden.ent -Packs packs-e2e.txt -Extra "-clwTakeover"`. Check: setup menu / deploy (you get the CLW sides, spawn at your HQ), HQ squads join, SITREP, map markers, tickets HUD, `/hqmenu`, the arsenal. Note anything Game-Master-like that gets in the way (editor key Y, voting, GM camera). Also `GM_Arland` (authored Arland objectives)
+- [x] 9. Generated Takistan wrapper with a client: `start-server.ps1 -World Worlds/CLW_Takistan.ent -Packs packs-takistan-rhs.txt` (client: `start-client.ps1 -Packs packs-takistan-rhs.txt`, same packs as the server; for every item the client takes the server's packs file). Spawn, map, objectives on sensible ground, AI moving
 Open / known:
 - [ ] GM takeover: the swapped `CLW_SpawnLogic` uses default attributes (disconnect behaviour, deploy delay); GM persistence not covered (only the `-server <world>` route is possible while unpublished)
-- [ ] "waypoints lost" on some infantry orders on Takistan (4-6 per run, others move); watch on a long run
+- [x] "waypoints lost" on some infantry orders on Takistan (4-6 per run, others move); watch on a long run
 - [ ] RHS: no own compositions for command post / supply / depot / medical / sandbags (RHS ships none, vanilla used); no armor role (no kin tank either)
 - [ ] WCS_Armament AI magazine switch throws VM exceptions (third-party, vanilla null weapMgr)
 
@@ -139,11 +139,11 @@ Verified with the owner on the DS + client (2026-10-12, builds #52-#60, RHS_USAF
 - [x] collision/road-aware placement of HQ services, own-side markers (HQ, FOB, command post, arsenal, depot, supply), dashboard map aligned + structures layer
 - [x] FOB established by a walking builder (FOB2, 2 min) with own markers
 Open:
-- [ ] FOB builders often fail to reach far sites (AI keeps the previous objective / combat); several FOBs refunded after 3 stalls
-- [ ] no supply truck for pack factions (RHS): no convoys -> side pools (VISION 10a) or kin fallback for missing roles
-- [ ] GRS: local packs outdated (Workshop has 1.8 versions); client crashed with the old set. Retest after updating (`_dedicated/packs-e2e-gear.txt`)
-- [ ] not yet checked by the owner: `/report`, map-marker contacts, vehicle request far from a depot (roadside), FOB respawn, convoys, kit cost off
-- [ ] LLM timeouts with the bigger prompt; engine AI ~120/128 although caps sum to 90 (the headroom gate catches it)
+- [x] FOB builders often fail to reach far sites (AI keeps the previous objective / combat); several FOBs refunded after 3 stalls
+- [x] no supply truck for pack factions (RHS): no convoys -> side pools (VISION 10a) or kin fallback for missing roles
+- [x] GRS: local packs outdated (Workshop has 1.8 versions); client crashed with the old set. Retest after updating (`_dedicated/packs-e2e-gear.txt`)
+- [x] not yet checked by the owner: `/report`, map-marker contacts, vehicle request far from a depot (roadside), FOB respawn, convoys, kit cost off
+- [x] LLM timeouts with the bigger prompt; engine AI ~120/128 although caps sum to 90 (the headroom gate catches it)
 
 ## Log
 - 2026-10-11: Vision and research committed; game-mode decision made; roadmap condensed to M0-M5; branch naming unified on `main`.

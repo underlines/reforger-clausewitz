@@ -26,7 +26,7 @@ AI High Command for Arma Reforger (built-in rule-based commander, optional LLM):
 - `CHANGELOG.md`, `VERSION` - releases via `_tools/release.ps1` (workspace)
 
 ## Status
-v1.0.0 (local tag, not published). M0 skeleton, M1 LLM bridge, M1.5 dashboard, M2 real war + mechanized, UX + SITREP, M3 logistics/bases/requests and M4 any map/any pack are done; M4 verified on the local dedicated server (vanilla, RHS, WCS, GRS packs; Arland, Everon, Kolguyev, Takistan, GM takeover). Open: the owner client checklist for M4 and the round 3 polish (`dev/notes/m4-round3-plan.md`); see `dev/PROGRESS.md`.
+v1.0.0 (local tag, not published). M0 skeleton, M1 LLM bridge, M1.5 dashboard, M2 real war + mechanized, UX + SITREP, M3 logistics/bases/requests and M4 any map/any pack are done; M4 verified on the local dedicated server (vanilla, RHS, WCS, GRS packs; Arland, Everon, Kolguyev, Takistan, GM takeover). Next: the round 3 polish (`dev/notes/m4-round3-plan.md`); see `dev/PROGRESS.md`.
 
 ## Dependencies
 None (base game only). RHS / WCS / GRS factions, vehicles and gear work when loaded alongside, without a hard dependency.
