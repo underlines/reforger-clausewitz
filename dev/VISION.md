@@ -416,8 +416,16 @@ optional packs when present, vanilla otherwise, and the server admin decides las
   default. Every candidate is validated at runtime (prefab loads, footprint known); a missing/renamed pack prefab falls through with a log
   line instead of breaking the base.
 - **Visible:** log + dashboard list "role -> prefab (source: admin|preferred:<set>|vanilla, reason)" so admins see what they got.
-- Same mechanism later for vehicles/units fallbacks (already partly the catalog override) and for FOB layouts (a layout = list of roles
-  with relative positions, not prefabs).
+- **Side pools for vehicles, groups, loadouts (arsenal already works this way):** the chosen faction + its kin factions (vanilla friendly
+  lists + explicit kin list in config, e.g. RHS_USAF + US incl. vanilla/WCS US content) form one pool per role (MBT, IFV, truck, supply
+  truck...). Priority, not exclusivity: own faction > preferred packs (shipped order) > vanilla. Dedupe by role + model (variants of one
+  vehicle = one entry), costs normalised per role. Never content of the enemy side.
+- **Admin overrides** (`overrides.json`, always win): per side "own faction only", "exclude pack X", "role -> fixed prefab". Every
+  candidate validated at war start (prefab loads, crew seats...), fallback down the chain to vanilla, source shown in log + dashboard.
+- FOB layouts use the same roles (layout = list of roles with relative positions, not prefabs).
+- **Dashboard config editor (later):** the running game reports everything available (factions, catalogs, loaded packs, style sets, what
+  each role resolved to); the admin edits overrides WYSIWYG (pick/exclude/reorder per role, side, set), saves `overrides.json`, restarts
+  and plays.
 
 ---
 
