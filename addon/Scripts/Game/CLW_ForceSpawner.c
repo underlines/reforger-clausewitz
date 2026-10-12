@@ -98,18 +98,34 @@ class CLW_ForceSpawner
 		}
 	}
 
+	protected static bool IsBetterStartEntry(CLW_ForceEntry a, CLW_ForceEntry b)
+	{
+		if (a.m_iWeight != b.m_iWeight)
+			return a.m_iWeight > b.m_iWeight;
+
+		int sizeA = a.m_iGroupMembers + a.m_iCargoMembers;
+		int sizeB = b.m_iGroupMembers + b.m_iCargoMembers;
+		if (sizeA != sizeB)
+			return sizeA > sizeB;
+
+		return a.m_iCost < b.m_iCost;
+	}
+
 	protected void StartForceLater(string factionKey, string typeId)
 	{
 		// The faction on a side may not be the one the type id was written for (faction choice, P6): when the catalog has
-		// no such type id, read it as a generic kind and take the cheapest enabled entry of that kind.
+		// no such type id, read it as a generic kind and take the most representative entry of that kind: highest buy
+		// weight (the profile's main unit), then the most soldiers (a full squad, not a 2-man patrol), then the cheapest.
 		if (m_Catalog && !m_Catalog.Find(factionKey, typeId))
 		{
 			array<CLW_ForceEntry> candidates = {};
 			m_Catalog.GetEntries(factionKey, candidates);
-			CLW_ForceEntry cheapest;
+			CLW_ForceEntry cheapest;	// = the chosen entry
 			foreach (CLW_ForceEntry candidate : candidates)
 			{
-				if (candidate.m_sKind == typeId && (!cheapest || candidate.m_iCost < cheapest.m_iCost))
+				if (candidate.m_sKind != typeId || !candidate.m_bEnabled)
+					continue;
+				if (!cheapest || IsBetterStartEntry(candidate, cheapest))
 					cheapest = candidate;
 			}
 

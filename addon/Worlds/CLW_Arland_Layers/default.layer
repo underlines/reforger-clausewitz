@@ -23,21 +23,3 @@ SCR_SpawnPoint CLW_Spawn_US : "{5A2220DD0C16958B}Prefabs/MP/Spawning/SpawnPoint_
 SCR_LoadoutManager CLW_LoadoutManager : "{5B1F83D6E02A7C49}Prefabs/Managers/CLW_LoadoutManager.et" {
  coords 2048 0 2068
 }
-$grp SCR_AIGroup : "{DDF3799FA1387848}Prefabs/Groups/BLUFOR/Group_US_RifleSquad.et" {
- CLW_Squad_US_1 {
-  coords 2030 52 3030
-  m_bPlayable 1
- }
- CLW_Squad_US_2 {
-  coords 2150 52 3030
- }
-}
-$grp SCR_AIGroup : "{E552DABF3636C2AD}Prefabs/Groups/OPFOR/Group_USSR_RifleSquad.et" {
- CLW_Squad_USSR_1 {
-  coords 2030 50 2630
-  m_bPlayable 1
- }
- CLW_Squad_USSR_2 {
-  coords 2150 50 2630
- }
-}
