@@ -74,7 +74,8 @@ class CLW_Situation
 		}
 
 		// concatenate: string.Format truncates its result at ~8 KB
-		string head = "{\"v\":2,\"faction\":\"" + Escape(m_sFaction) + "\",\"time\":" + Math.Round(now) + ",\"timeLeftSec\":" + war.GetTimeLeftSec();
+		string head = "{\"v\":2,\"faction\":\"" + Escape(m_sFaction) + "\",\"side\":" + SideIndex(m_sFaction);
+		head += ",\"identity\":\"" + Escape(CLW_ScenarioConfig.GetIdentityText(m_sFaction)) + "\",\"time\":" + Math.Round(now) + ",\"timeLeftSec\":" + war.GetTimeLeftSec();
 		json = head + ",\"war\":" + warJson + ",\"objectives\":[" + objectivesJson + "],\"bases\":[" + basesJson + "],\"catalog\":[" + catalogJson + "],\"squads\":[" + squadsJson + "],\"contacts\":[" + contactsJson + "],\"events\":[" + eventsJson + "]}";
 		if (json.Length() > MAX_BODY)
 		{
@@ -115,7 +116,32 @@ class CLW_Situation
 		string text = "{\"tickets\":" + war.GetTickets(m_sFaction) + ",\"enemyTickets\":" + war.GetTickets(enemy) + ",\"supplies\":" + war.GetSupplies(m_sFaction);
 		text += ",\"income\":" + incomePerMinute + ",\"liveAI\":" + liveAI + ",\"aiCap\":" + war.GetAiCap(m_sFaction);
 		text += ",\"vehicles\":" + vehicles + ",\"vehicleCap\":" + war.GetVehicleCap(m_sFaction);
-		text += ",\"mode\":" + modeJson + ",\"phase\":\"" + phase + "\"}";
+		text += ",\"mode\":" + modeJson + ",\"phase\":\"" + phase + "\",\"sides\":[" + BuildSides(war) + "]}";
+		return text;
+	}
+
+	protected static int SideIndex(string key)
+	{
+		CLW_ScenarioConfig scenario = CLW_ScenarioConfig.Get();
+		if (!scenario)
+			return -1;
+
+		return scenario.GetSideIndex(key);
+	}
+
+	// Both sides, side A first: {"faction":..,"identity":..}
+	protected string BuildSides(CLW_WarState war)
+	{
+		string text = "";
+		array<string> keys = {};
+		war.GetFactionKeys(keys);
+		foreach (string key : keys)
+		{
+			if (!text.IsEmpty())
+				text += ",";
+			text += "{\"faction\":\"" + Escape(key) + "\",\"identity\":\"" + Escape(CLW_ScenarioConfig.GetIdentityText(key)) + "\"}";
+		}
+
 		return text;
 	}
 

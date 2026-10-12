@@ -159,6 +159,12 @@ class CLW_WarMode
 		return -1;
 	}
 
+	// False for modes without a ticket ledger (the HUD shows "-").
+	bool UsesTickets()
+	{
+		return true;
+	}
+
 	bool AllowsPlayerSpawn(string factionKey)
 	{
 		return true;

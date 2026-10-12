@@ -961,7 +961,7 @@ async function handleOrders(req, res) {
     // war epoch (read-only bookkeeping for activeFactions): a faction whose game time went backwards starts a new epoch, unless it
     // is catching up with an epoch another faction already started.
     if (old && (old.epoch ?? 0) === (state.epoch ?? 0) && isNum(old.situation?.time) && isNum(sit.time) && sit.time < old.situation.time - 5) state.epoch = (state.epoch ?? 0) + 1;
-    state.factions[faction] = { ts: state.lastRequestTs, epoch: state.epoch ?? 0, situation: sit, orders: keepOld ? (old?.orders ?? []) : r.orders,
+    state.factions[faction] = { ts: state.lastRequestTs, epoch: state.epoch ?? 0, situation: sit, side: isNum(sit.side) ? sit.side : null, identity: typeof sit.identity === "string" ? sit.identity : null, orders: keepOld ? (old?.orders ?? []) : r.orders,
       buy: keepOld ? (old?.buy ?? []) : (r.buy ?? []), missions: keepOld ? (old?.missions ?? []) : (r.missions ?? []), eventLog, prevPos, orderTs };
   }
   if (!r.gated) state.exchanges.unshift({
@@ -1175,7 +1175,9 @@ function activeFactions() {
   // once a war runs, factions still reporting the setup phase are the setup defaults the host did not pick
   const phase = (e) => e.situation?.war?.phase;
   if (live.some(([, e]) => phase(e) === "running")) live = live.filter(([, e]) => phase(e) !== "setup");
-  return live.map(([n]) => n).sort();
+  // side A first (situation.side), unknown side last, then alphabetical
+  const sideOf = (e) => (isNum(e.situation?.side) && e.situation.side >= 0 ? e.situation.side : 99);
+  return live.sort((x, y) => sideOf(x[1]) - sideOf(y[1]) || x[0].localeCompare(y[0])).map(([n]) => n);
 }
 
 async function handleApi(req, res, url) {

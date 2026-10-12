@@ -31,6 +31,7 @@ class CLW_WarState
 	protected string m_sStartedMode;
 	protected string m_sStartedParams;
 	protected ref ScriptInvoker m_OnWarStarted;
+	protected ref CLW_WarStatus m_Status;		// HUD broadcast
 
 	void Init(notnull CLW_ScenarioConfig scenario, CLW_ControlPoints points)
 	{
@@ -62,6 +63,8 @@ class CLW_WarState
 		if (scenario.m_iAutoStartSec > 0)
 			GetGame().GetCallqueue().CallLater(AutoStart, scenario.m_iAutoStartSec * 1000);
 
+		m_Status = new CLW_WarStatus();
+		m_Status.Init(this);
 		CLW_SetupServer.Start(this, scenario);		// setup menu driver (CLW_SetupServer.c)
 	}
 
@@ -159,6 +162,7 @@ class CLW_WarState
 		LogSummary();
 		if (m_OnWarStarted)
 			m_OnWarStarted.Invoke();
+		NotifyStatus();
 		return true;
 	}
 
@@ -184,6 +188,13 @@ class CLW_WarState
 		m_aVehicleOwners.Clear();
 		m_aVehicleFactions.Clear();
 		Print("CLW: war ledgers re-keyed: " + m_aKeys[0] + " vs " + m_aKeys[1], LogLevel.NORMAL);
+	}
+
+	// HUD: something visible changed, broadcast the status soon.
+	void NotifyStatus()
+	{
+		if (m_Status)
+			m_Status.Request();
 	}
 
 	// Fired once when the war switches SETUP -> RUNNING (ledgers are initialised). No arguments.
@@ -423,6 +434,7 @@ class CLW_WarState
 			return;
 
 		m_mTickets.Set(factionKey, Math.Max(0, value));
+		NotifyStatus();
 		Print(string.Format("CLW: war %1 tickets set %2", factionKey, value), LogLevel.NORMAL);
 	}
 
@@ -443,6 +455,7 @@ class CLW_WarState
 
 		int now = Math.Max(0, GetTickets(factionKey) + amount);
 		m_mTickets.Set(factionKey, now);
+		NotifyStatus();
 		Print(string.Format("CLW: war %1 tickets %2 (%3) -> %4", factionKey, amount, reason, now), LogLevel.NORMAL);
 	}
 
@@ -635,6 +648,7 @@ class CLW_WarState
 			PushEvent(key, text);
 		}
 
+		NotifyStatus();
 		if (IsRunning() && m_Mode)
 			m_Mode.OnObjectiveChanged(this, id, oldOwner, newOwner);
 	}
@@ -681,6 +695,7 @@ class CLW_WarState
 
 		m_ePhase = CLW_EWarPhase.ENDED;
 		m_sWinner = winnerKey;
+		NotifyStatus();
 		GetGame().GetCallqueue().Remove(Tick);
 		CLW_Debug.Say(string.Format("WAR OVER: winner=%1 (%2)", winnerKey, why));
 		LogSummary();

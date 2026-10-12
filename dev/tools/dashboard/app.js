@@ -4,23 +4,45 @@ import { html, render, useState, useEffect, useRef, useMemo, useCallback } from 
 
 const WORLD = 4096, GRID = 512, STALE_MS = 30000; // WORLD = fallback extent until /api/world reports the real one
 const DEF_EXT = { x0: 0, z0: 0, x1: WORLD, z1: WORLD };
-// Faction colours are derived from the sorted faction keys (no hard-wired names): first blue, second red, then a palette; unowned = grey.
-const PALETTE = ["#4aa3ff", "#ff5c5c", "#f0b429", "#3fcf8e", "#b57bff", "#ff8fd1"];
+// Faction order and colours come from the game: situation.side (0 = side A) and situation.identity (BLUFOR / OPFOR / INDFOR),
+// plus war.sides. BLUFOR blue, OPFOR red, INDFOR green; other identity: side A blue / side B red / grey. Without those fields
+// (older game build) the old behaviour applies: colours from the alphabetically sorted keys (first blue, second red, then a palette).
+const PALETTE = ["#4aa3ff", "#ff5c5c", "#f0b429", "#3fcf8e", "#b57bff", "#ff8fd1", "#8793a6"];
 const NEUTRAL = "#8793a6";
-let FACTIONS = []; // sorted faction keys seen in the state (set on every poll by setFactions)
+const IDENT_PAL = { BLUFOR: 0, OPFOR: 1, INDFOR: 3 };
+let FACTIONS = []; // faction keys seen in the state, side A first (setFactions)
+let SIDE = new Map(), IDENT = new Map(); // key -> side index / identity text (only when the game reported them)
 function setFactions(st) {
   const set = new Set(Object.keys(st.factions ?? {}));
+  SIDE = new Map(); IDENT = new Map();
   for (const e of Object.values(st.factions ?? {})) {
     const sit = e.situation ?? {};
     for (const b of Array.isArray(sit.bases) ? sit.bases : []) if (typeof b?.faction === "string") set.add(b.faction);
     for (const o of Array.isArray(sit.objectives) ? sit.objectives : []) if (typeof o?.owner === "string" && o.owner !== "none" && o.owner !== "") set.add(o.owner);
+    if (Array.isArray(sit.war?.sides)) sit.war.sides.forEach((x, i) => { if (typeof x?.faction === "string") { set.add(x.faction); SIDE.set(x.faction, i); if (typeof x.identity === "string" && x.identity) IDENT.set(x.faction, x.identity); } });
   }
-  FACTIONS = [...set].sort();
+  for (const [f, e] of Object.entries(st.factions ?? {})) {
+    if (num(e.side ?? e.situation?.side) && (e.side ?? e.situation.side) >= 0) SIDE.set(f, e.side ?? e.situation.side);
+    const id = e.identity ?? e.situation?.identity;
+    if (typeof id === "string" && id) IDENT.set(f, id);
+  }
+  FACTIONS = [...set].sort(facCmp);
 }
+// side A first, unknown side last, then alphabetical
+const facCmp = (a, b) => (SIDE.has(a) ? SIDE.get(a) : 99) - (SIDE.has(b) ? SIDE.get(b) : 99) || (a < b ? -1 : a > b ? 1 : 0);
+const sortedKeys = (o) => Object.keys(o ?? {}).sort(facCmp);
 const facIdx = (f) => FACTIONS.indexOf(f);
-const colorOf = (f) => { const i = facIdx(f); return i < 0 ? NEUTRAL : PALETTE[i % PALETTE.length]; };
+// palette index of a faction; -1 = unknown faction
+function palIdx(f) {
+  const id = String(IDENT.get(f) ?? "").toUpperCase();
+  if (id in IDENT_PAL) return IDENT_PAL[id];
+  if (SIDE.has(f)) return SIDE.get(f) === 0 ? 0 : SIDE.get(f) === 1 ? 1 : 6;
+  if (SIDE.size) return facIdx(f) < 0 ? -1 : 6; // game reports sides: a faction without a side is grey
+  const i = facIdx(f); return i < 0 ? -1 : i % 6;
+}
+const colorOf = (f) => { const i = palIdx(f); return i < 0 ? NEUTRAL : PALETTE[i]; };
 const enemyColor = (f) => { const o = FACTIONS.find((x) => x !== f); return o === undefined ? "#f0b429" : colorOf(o); };
-const facClass = (f) => { const i = facIdx(f); return i < 0 ? "f-none" : "f-c" + (i % PALETTE.length); };
+const facClass = (f) => { const i = palIdx(f); return i < 0 ? "f-none" : "f-c" + i; };
 const KIND_LABEL = { infantry: "INF", recon: "RECON", motorized: "MOT", light: "LIGHT", mech: "MECH", armor: "ARMOR", armored_recon: "A-RECON" };
 const kindLabel = (k) => (typeof k === "string" && k ? KIND_LABEL[k] ?? k.toUpperCase().slice(0, 8) : "-");
 const fmtTime = (sec) => (num(sec) ? `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}` : "-");
@@ -209,7 +231,7 @@ function Strip({ st, toast, refresh }) {
     <div class=${"chip" + (cf.enabled === false ? " bad" : "")}>enabled <b>${cf.enabled === false ? "NO" : "yes"}</b></div>
     <div class="chip">requests <b>${c.requests ?? 0}</b></div>
     <div class="chip" title="Requests answered without a provider call (interval / unchanged)">skipped <b>${c.skipped ?? 0}</b></div>
-    ${cf.enabled !== false && Object.keys(st.scheduler ?? {}).sort().map((n) => html`<${WakeChip} key=${n} name=${n} s=${st.scheduler[n]} recvAt=${st.recvAt} toast=${toast} refresh=${refresh} paused=${!!st.paused} engine=${cf.engine} />`)}
+    ${cf.enabled !== false && Object.keys(st.scheduler ?? {}).sort(facCmp).map((n) => html`<${WakeChip} key=${n} name=${n} s=${st.scheduler[n]} recvAt=${st.recvAt} toast=${toast} refresh=${refresh} paused=${!!st.paused} engine=${cf.engine} />`)}
     <${HqControls} st=${st} toast=${toast} refresh=${refresh} />
     ${(st.paused || (cf.engine && cf.engine !== "llm")) && html`<div class="chip hqnote">HQ engine: <b>${cf.engine && cf.engine !== "llm" ? cf.engine : "llm"}</b>${st.paused ? " (paused)" : ""}, no LLM calls</div>`}
     <div class=${"chip" + (c.errors ? " bad" : "")}>errors <b>${c.errors ?? 0}</b></div>
@@ -597,7 +619,7 @@ function SquadsTable({ rows, sel, onSel }) {
 
 // ---------- war strip (protocol v2): tickets, supplies, caps per faction ----------
 function WarStrip({ st, faction }) {
-  const names = Object.keys(st.factions ?? {}).filter((f) => (faction === "all" || f === faction) && st.factions[f].situation?.war).sort();
+  const names = sortedKeys(st.factions).filter((f) => (faction === "all" || f === faction) && st.factions[f].situation?.war);
   if (!names.length) return null;
   const cap = (v, c) => html`<b>${dash(v)}</b>${num(c) ? html`<span class="muted"> / ${c}</span>` : ""}`;
   return html`<div class="warstrip">${names.map((f) => {
@@ -642,7 +664,7 @@ function EventsPanel({ st, faction }) {
 
 // ---------- sitrep ----------
 function Sitrep({ st, faction }) {
-  const names = Object.keys(st.factions ?? {}).filter((f) => faction === "all" || f === faction).sort();
+  const names = sortedKeys(st.factions).filter((f) => faction === "all" || f === faction);
   return html`<section class="panel side"><h2>SITREP / contacts</h2><div class="scroll">
     ${names.map((f) => {
       const e = st.factions[f], sit = e.situation ?? {}, ct = Array.isArray(sit.contacts) ? sit.contacts : [];
@@ -755,16 +777,22 @@ function FactionBar({ names, faction, setFaction, hidden, showInactive, setShowI
 function OwnerBar({ st }) {
   const { objs } = publicPicture(st);
   if (!objs.length) return null;
-  const wt = (o) => (num(o.value) && o.value > 0 ? o.value : 1), tot = objs.reduce((n, o) => n + wt(o), 0), by = new Map();
-  for (const o of objs) { const k = o.owner && o.owner !== "none" ? o.owner : ""; by.set(k, (by.get(k) ?? 0) + wt(o)); }
-  const keys = [...by.keys()].sort((a, b) => (a === "" ? 1 : b === "" ? -1 : a < b ? -1 : 1));
+  const wt = (o) => (num(o.value) && o.value > 0 ? o.value : 1), tot = objs.reduce((n, o) => n + wt(o), 0), by = new Map(), hatch = new Map();
+  for (const o of objs) {
+    const k = o.owner && o.owner !== "none" ? o.owner : "";
+    by.set(k, (by.get(k) ?? 0) + wt(o));
+    if (o.contested) hatch.set(k, (hatch.get(k) ?? 0) + wt(o));
+  }
+  // side A | neutral | side B (| further factions): both sides keep their slot even when they hold nothing
+  const facs = [...new Set([...Object.keys(st.factions ?? {}), ...by.keys()].filter((k) => k))].sort(facCmp);
+  const keys = facs.length ? [facs[0], "", ...facs.slice(1)] : [""];
   const contested = objs.filter((o) => o.contested).length;
   return html`<section class="panel"><h2>Objective control <span class="sub">${objs.length} points, weighted by value${contested ? `, ${contested} contested` : ""}</span></h2><div class="cfgbody">
-    <div class="ownbar">${keys.map((k) => html`<i key=${k} style=${{ width: (100 * by.get(k) / tot) + "%", background: k ? colorOf(k) : NEUTRAL }} title=${(k || "neutral") + ": " + by.get(k) + " / " + tot}></i>`)}</div>
-    <div class="ownleg">${keys.map((k) => html`<span key=${k}><b class=${k ? facClass(k) : "f-none"}>${k || "neutral"}</b> <span class="muted">${by.get(k)} / ${tot}</span></span>`)}</div></div></section>`;
+    <div class="ownbar">${keys.map((k) => html`<i key=${k} style=${{ width: (100 * (by.get(k) ?? 0) / tot) + "%", background: k ? colorOf(k) : NEUTRAL }} title=${(k || "neutral") + ": " + (by.get(k) ?? 0) + " / " + tot + (hatch.get(k) ? ", contested " + hatch.get(k) : "")}>${hatch.get(k) ? html`<b class="hatch" style=${{ width: (100 * hatch.get(k) / by.get(k)) + "%" }}></b>` : ""}</i>`)}</div>
+    <div class="ownleg">${keys.map((k) => html`<span key=${k}><b class=${k ? facClass(k) : "f-none"}>${k || "neutral"}</b> <span class="muted">${by.get(k) ?? 0} / ${tot}</span></span>`)}</div></div></section>`;
 }
 function ForceSummary({ st, rows }) {
-  const names = Object.keys(st.factions ?? {}).sort();
+  const names = sortedKeys(st.factions);
   if (!names.length) return null;
   return html`<section class="panel"><h2>Forces <span class="sub">per side</span></h2><div class="scroll"><table>
     <thead><tr><th>Faction</th><th>Squads</th><th>Soldiers</th><th>By kind</th><th>Human-led</th><th>Contacts</th><th>Updated</th></tr></thead><tbody>
@@ -830,7 +858,7 @@ function PurchasesPanel({ st, faction }) {
     </tbody></table>${!list.length && html`<div class="empty">No purchases yet.</div>`}</div></section>`;
 }
 function ForcesView({ st, faction, rows, sel, onSel }) {
-  const names = Object.keys(st.factions ?? {}).filter((f) => faction === "all" || f === faction).sort();
+  const names = sortedKeys(st.factions).filter((f) => faction === "all" || f === faction);
   return html`<main class="view forces">
     <${ForceSummary} st=${st} rows=${rows.filter((r) => faction === "all" || r.faction === faction)} />
     <${SquadsTable} rows=${rows} sel=${sel} onSel=${onSel} />
@@ -865,7 +893,7 @@ function Decision({ st, f }) {
   </div></section>`;
 }
 function HqView({ st, faction }) {
-  const names = Object.keys(st.factions ?? {}).filter((f) => faction === "all" || f === faction).sort();
+  const names = sortedKeys(st.factions).filter((f) => faction === "all" || f === faction);
   return html`<main class="view">
     <div class="grid2">${names.map((f) => html`<${Decision} key=${f} st=${st} f=${f} />`)}</div>
     <div class="grid" style=${{ marginTop: "12px" }}><div class="col"><${Log} st=${st} faction=${faction} /></div><div class="col"><${Sitrep} st=${st} faction=${faction} /></div></div></main>`;
@@ -1123,7 +1151,7 @@ function App() {
   useEffect(() => { try { localStorage.setItem(TAB_KEY, tab); } catch { /* storage unavailable */ } }, [tab]);
   useEffect(() => { try { localStorage.setItem(INACT_KEY, showInactive ? "1" : "0"); } catch { /* storage unavailable */ } }, [showInactive]);
   useEffect(() => { try { localStorage.setItem(LAYER_KEY, JSON.stringify(layers)); } catch { /* storage unavailable */ } }, [layers]);
-  const names = Object.keys(st.factions ?? {}).sort();
+  const names = sortedKeys(st.factions);
   const fac = faction === "all" || names.includes(faction) ? faction : "all"; // a selected faction that became inactive falls back to all
   const rows = useMemo(() => buildRows(st, fac), [st, fac]);
   const go = (id) => (e) => { e.preventDefault(); setTab(id); try { history.replaceState(null, "", "#" + id); } catch { location.hash = id; } };

@@ -407,6 +407,19 @@ class CLW_ScenarioConfig
 		return setup.GetIdentity();
 	}
 
+	// Identity text (BLUFOR / OPFOR / INDFOR / ...) of a faction key, "" for unknown keys.
+	static string GetIdentityText(string key)
+	{
+		if (!s_Active)
+			return "";
+
+		CLW_FactionSetup setup = s_Active.FindFaction(key);
+		if (!setup)
+			return "";
+
+		return setup.m_sIdentity;
+	}
+
 	// Checks the data; logs every problem. Fills defaults for a missing economy block.
 	protected bool Validate()
 	{

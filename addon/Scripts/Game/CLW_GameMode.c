@@ -254,6 +254,23 @@ class CLW_GameMode : SCR_BaseGameMode
 		}
 	}
 
+	// Ticket counter HUD: server -> every client (also run locally for the listen-server host; the broadcast does not loop back).
+	void CLW_BroadcastWarStatus(string wire)
+	{
+		if (!Replication.IsServer())
+			return;
+
+		Rpc(CLW_RpcAsk_WarStatus, wire);
+		if (SCR_PlayerController.GetLocalPlayerId() > 0)
+			CLW_WarHud.Update(wire);
+	}
+
+	[RplRpc(RplChannel.Reliable, RplRcver.Broadcast)]
+	protected void CLW_RpcAsk_WarStatus(string wire)
+	{
+		CLW_WarHud.Update(wire);
+	}
+
 	// Scenario from the prefab attribute, else the default path (logged).
 	protected CLW_ScenarioConfig LoadScenario()
 	{
