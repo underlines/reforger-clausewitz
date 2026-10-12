@@ -29,6 +29,9 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 		m_aParams.Insert(CLW_ModeParam.CreateChoice("battleSize", "Battle size", "Caps for live AI and vehicles per side; bigger battles also get more income.", sizes, config.m_sBattleSize));
 		m_aParams.Insert(CLW_ModeParam.CreateBool("ticketBleed", "Ticket bleed", "The side holding fewer points loses tickets over time.", config.m_bTicketBleed));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("holdAllWinMin", "Hold-all win (min)", "Holding every point this long wins. 0 = off.", CLW_ModeParam.TYPE_INT, 0, 15, 1, config.m_iHoldAllWinMin));
+		// capability switches (CLW_Capabilities.Has): declared in GetCapabilities, "cap_<name>" turns one off in the setup menu
+		m_aParams.Insert(CLW_ModeParam.CreateBool("cap_logistics", "Logistics", "Per-base supplies and convoys. Off: one supply pool per side.", true));
+		m_aParams.Insert(CLW_ModeParam.CreateBool("cap_kitCost", "Kit cost", "Arsenal items cost supplies. Off: kits are free.", true));
 	}
 
 	override string GetId()
@@ -44,6 +47,16 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 	override string GetDescription()
 	{
 		return "Tickets drain with losses and from holding fewer points; win by tickets, by holding all points, or by tickets at the time limit.";
+	}
+
+	override void GetCapabilities(notnull array<string> caps)
+	{
+		caps.Insert("services");
+		caps.Insert("fob");
+		caps.Insert("logistics");
+		caps.Insert("requests");
+		caps.Insert("reports");
+		caps.Insert("kitCost");
 	}
 
 	override float GetDistanceScale()

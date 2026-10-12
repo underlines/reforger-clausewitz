@@ -84,6 +84,8 @@ Local DS in `D:\GitHub\ReforgerMods\_dedicated\` (junction to `addon/`, no pack 
 - [ ] Fake LLM provider: units seemed not to move (owner, build #40); check the fake orders path.
 
 ## Next up
+M3 phase R (action registry) coded 2026-10-12, not compiled or tested yet: `CLW_ActionRegistry` / `CLW_ActionsCore` / `CLW_Capabilities`, `Configs/CLW/Actions/Actions.conf`, protocol v3 (manifest POST + hash, sidecar prompt/validator from the manifest). Check first at compile: `string.ToType()` + `typename.Spawn()` in `CLW_ActionRegistry.Register`, `[Attribute] ref array<ref CLW_ActionParam>` conf load, `ref Managed m_Payload`. In the e2e: log `CLW: action registry: 7 of 7 entries`, sidecar log `manifest faction=...`, LLM orders still applied.
+M3 phase B (bases + services + arsenal) coded 2026-10-12, not compiled or tested yet: `CLW_Services`, `CLW_SupplyLink`, `CLW_ArsenalPool`, service data in the faction profiles, setup switches `cap_logistics` / `cap_kitCost`. Check first in the e2e: services spawn + base link, container sync log lines (`CLW: services supply ...`), arsenal item counts.
 M3 "Logistics, bases & requests": draft design `notes/m3-design.md` (open decisions in its section 11), command/tool decision proposed in `notes/decision-command-tools.md`. Before or alongside: dedicated-server join test with one client (`notes/dedicated-server.md`).
 
 ## Log

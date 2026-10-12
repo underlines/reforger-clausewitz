@@ -5,6 +5,13 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 
 ## [Unreleased]
 
+### Added
+- M3 phase B, base services: every side gets its service compositions at its HQ at war start (command post, supply cache, arsenal, vehicle depot, medical), positioned on free spots around the base and listed per base for later requests/FOBs. Prefabs come from the faction profile data (`m_aServices`, US, USSR and FIA ship them); a faction without services uses its kin faction (`m_sServiceFallbackFaction` or a friendly faction with services), so RHS/WCS/GRS sides get a base too. Log lines `CLW: services ...`.
+- Supply link: the base supply containers mirror the side supplies; arsenal kits spend the same supplies as purchases (changes in both directions are synced every 1.5 s).
+- Arsenal kin pool: during a Clausewitz war each faction's arsenal also lists the items of factions friendly to it (pack factions list the vanilla faction they are built on), never the enemy side; saved kits accept friendly items.
+- Setup menu: "Logistics" and "Kit cost" switches (kit cost off = arsenal kits are free).
+- M3 phase R, action registry: one registry (`CLW_ActionRegistry`, data in `Configs/CLW/Actions/Actions.conf`, executors as script classes) behind every HQ command. The LLM orders (MOVE/ATTACK/DEFEND/RECON/FALL_BACK), purchases and mission offers are validated and executed through it (no behaviour change). War modes declare capabilities (`CLW_Capabilities.Has`, switchable with `cap_<name>` mode params); registry entries whose capabilities are off drop out. Protocol v3: the game sends its action manifest to the sidecar (`POST /manifest`, hash in every situation), the sidecar builds the prompt command list, the validator and the fake provider from it and falls back to a built-in manifest (v2 posts keep working); the dashboard shows the manifest in the HQ view data (`/api/state` `manifests`).
+
 ### Changed
 - Debug lines (spawns, orders, missions, contacts, point captures, ...) no longer appear in players' chat by default; they stay in the log and are sent to the sidecar, whose dashboard has a new "Debug log" tab. Set `"debugChat": true` in `$profile:Clausewitz/overrides.json` to show them in chat again. War-over and hold-all announcements stay visible.
 

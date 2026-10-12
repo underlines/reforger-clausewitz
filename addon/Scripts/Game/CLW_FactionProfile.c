@@ -167,11 +167,73 @@ class CLW_ForceEntry
 	}
 }
 
+// The closed set of base service kinds (M3 design section 3). Data (CLW_ServiceEntry) maps a kind to a composition prefab.
+class CLW_ServiceKind
+{
+	static const string COMMAND_POST = "command_post";	// HQ composition: base logic, spawn, radio
+	static const string VEHICLE_DEPOT = "vehicle_depot";
+	static const string ARSENAL = "arsenal";
+	static const string MEDICAL = "medical";
+	static const string REPAIR = "repair";
+	static const string SUPPLY = "supply";				// supply cache (stock the arsenal draws from)
+
+	static bool IsKnown(string kind)
+	{
+		return kind == COMMAND_POST || kind == VEHICLE_DEPOT || kind == ARSENAL || kind == MEDICAL || kind == REPAIR || kind == SUPPLY;
+	}
+
+	// Default footprint radius (m) of the composition, used by the free-spot search when the data gives none.
+	static float DefaultRadius(string kind)
+	{
+		if (kind == COMMAND_POST)
+			return 10;
+		if (kind == MEDICAL)
+			return 13;
+		if (kind == VEHICLE_DEPOT || kind == REPAIR)
+			return 9;
+		if (kind == SUPPLY)
+			return 9;
+
+		return 3;	// arsenal box
+	}
+}
+
+// One base service of a faction: kind -> composition prefab (+ optional placement).
+[BaseContainerProps()]
+class CLW_ServiceEntry
+{
+	[Attribute("", UIWidgets.EditBox, "Kind: command_post, vehicle_depot, arsenal, medical, repair, supply")]
+	string m_sKind;
+
+	[Attribute("", UIWidgets.ResourceNamePicker, "Composition prefab spawned for this service", "et")]
+	ResourceName m_Prefab;
+
+	[Attribute("0 0 0", UIWidgets.EditBox, "Optional offset from the base anchor (x y z, y ignored, surface snapped). 0 0 0 = automatic free spot around the base")]
+	vector m_vOffset;
+
+	[Attribute("-1", UIWidgets.EditBox, "Heading in degrees (Enforce yaw). Negative = automatic: facing the base centre")]
+	float m_fYaw;
+
+	[Attribute("0", UIWidgets.EditBox, "Footprint radius (m) for the free-spot search. 0 = default of the kind")]
+	float m_fRadius;
+
+	[Attribute("1", UIWidgets.CheckBox, "Service is spawned")]
+	bool m_bEnabled;
+}
+
 [BaseContainerProps(configRoot: true)]
 class CLW_FactionProfile
 {
 	[Attribute("", UIWidgets.EditBox, "Faction key this profile is for (e.g. US). Profiles are looked up by this key")]
 	string m_sFactionKey;
+
+	// Base services (command post, depot, arsenal, ...) as composition prefabs. Empty = the services of the kin faction below,
+	// else of a friendly faction that has some.
+	[Attribute()]
+	ref array<ref CLW_ServiceEntry> m_aServices;
+
+	[Attribute("", UIWidgets.EditBox, "Faction key whose services this faction uses when it has none of its own (e.g. a pack faction naming the vanilla faction it is built on). Empty = automatic friendly faction")]
+	string m_sServiceFallbackFaction;
 
 	[Attribute("1", UIWidgets.CheckBox, "Also add entries auto-discovered from the faction's entity catalogs that the list below does not cover (mod packs that extend the vanilla catalogs show up as kind armor, mech, ...)")]
 	bool m_bIncludeDiscovered;
@@ -194,6 +256,8 @@ class CLW_FactionProfile
 
 		if (!profile.m_aEntries)
 			profile.m_aEntries = {};
+		if (!profile.m_aServices)
+			profile.m_aServices = {};
 
 		return profile;
 	}

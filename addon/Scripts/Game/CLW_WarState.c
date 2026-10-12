@@ -719,6 +719,7 @@ class CLW_WarState
 		m_sWinner = winnerKey;
 		NotifyStatus();
 		GetGame().GetCallqueue().Remove(Tick);
+		CLW_Services.OnWarEnded();
 		CLW_Debug.Announce(string.Format("WAR OVER: winner=%1 (%2)", winnerKey, why));
 		LogSummary();
 

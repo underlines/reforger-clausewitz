@@ -121,6 +121,7 @@ class CLW_GameMode : SCR_BaseGameMode
 		Print("CLW: war started: building force catalogs and spawning start forces", LogLevel.NORMAL);
 		if (m_Catalog)
 			m_Catalog.BuildAll();
+		CLW_Services.OnWarStart(m_War);	// base services + supply link, before the start forces take their parking spots
 		if (m_Spawner)
 			m_Spawner.SpawnStartForces();
 		CLW_SquadGroups.LockNewGroups();	// HQ squads are the only player groups; the registry registers them in its next sweep
@@ -203,6 +204,11 @@ class CLW_GameMode : SCR_BaseGameMode
 				GetGame().GetCallqueue().CallLater(CLW_RestSpike.Run, 10000);
 			if (RUN_ORDER_SPIKE)
 				GetGame().GetCallqueue().CallLater(SpikeOrderLoop, 15000);
+
+			CLW_Services.Reset();	// base services of a previous session (statics survive a Play restart)
+
+			// 0. action registry of this war (data entries from Configs/CLW/Actions/Actions.conf; script entries register after this)
+			CLW_ActionRegistry.Reset();
 
 			// 1. scenario data (factions, bases, objectives, economy)
 			CLW_ScenarioConfig scenario = LoadScenario();

@@ -1078,8 +1078,26 @@ function DebugView({ st }) {
       ${!rows.length && html`<div class="empty">${all.length ? "No line matches the filter." : "No debug lines yet. They arrive with the game's situation posts while a war runs."}</div>`}</div></section></main>`;
 }
 
+// ---- action manifest (protocol v3): what each faction's game offers HQ in this war mode, read-only ----
+function ManifestTable({ title, rows }) {
+  return html`<h3 class="cfgh">${title} <span class="muted">(${rows.length})</span></h3>
+    ${rows.length ? html`<div class="scroll"><table><thead><tr><th>Name</th><th>Reply key</th><th>Authority</th><th>Requires</th><th>Parameters</th><th>Description</th></tr></thead><tbody>
+      ${rows.map((e) => html`<tr key=${e.name}><td><b>${e.name}</b></td><td class="mono">${e.channel}</td><td>${e.authority}</td><td class="mono">${(e.requires ?? []).join(", ") || "-"}</td>
+        <td class="mono wrap">${(e.params ?? []).map((p) => p.name + (p.required ? "*" : "") + ":" + p.type).join(", ")}</td><td class="wrap muted">${e.desc}</td></tr>`)}</tbody></table></div>` : html`<div class="empty">none</div>`}`;
+}
+function ActionsView({ st }) {
+  const ms = st.manifests ?? { factions: {}, builtin: null };
+  const names = Object.keys(ms.factions ?? {}).sort();
+  return html`<main class="view">
+    ${names.map((n) => { const m = ms.factions[n]; return html`<section class="panel" key=${n}><h2>${n} <span class="sub">manifest ${m.hash}, mode ${m.mode || "?"}, received ${new Date(m.receivedAt).toLocaleTimeString()}</span></h2>
+      <div class="cfgbody"><div class="muted">Capabilities on: <b>${(m.capabilities ?? []).join(", ") || "none"}</b></div>
+      <${ManifestTable} title="Intents (strategic tick)" rows=${m.intents ?? []} /><${ManifestTable} title="Primitives (agent turns)" rows=${m.primitives ?? []} /></div></section>`; })}
+    ${!names.length && ms.builtin && html`<section class="panel"><h2>Built-in manifest <span class="sub">no game manifest received yet; the sidecar uses this one</span></h2><div class="cfgbody"><${ManifestTable} title="Intents" rows=${ms.builtin.intents ?? []} /></div></section>`}
+  </main>`;
+}
+
 // ---- tabs ----
-const TABS = [["overview", "Overview"], ["map", "Map"], ["forces", "Forces"], ["hq", "HQ / LLM"], ["missions", "Missions"], ["debug", "Debug log"], ["usage", "Usage & Config"]];
+const TABS = [["overview", "Overview"], ["map", "Map"], ["forces", "Forces"], ["hq", "HQ / LLM"], ["missions", "Missions"], ["actions", "Actions"], ["debug", "Debug log"], ["usage", "Usage & Config"]];
 const TAB_KEY = "clw.tab", INACT_KEY = "clw.showInactive";
 const tabOf = (s) => { const k = String(s ?? "").replace(/^#/, ""), t = k === "config" ? "usage" : k; return TABS.some(([id]) => id === t) ? t : null; };
 function loadTab() {
@@ -1309,12 +1327,13 @@ function App() {
       <nav>${TABS.map(([id, label]) => html`<a key=${id} href=${"#" + id} class=${tab === id ? "active" : ""} onClick=${go(id)}>${label}</a>`)}</nav>
       <${Strip} st=${st} toast=${toast} refresh=${refresh} />
     </header>
-    ${tab !== "usage" && tab !== "debug" && html`<div class="subwrap"><${FactionBar} names=${names} faction=${fac} setFaction=${setFaction} hidden=${st.hidden ?? []} showInactive=${showInactive} setShowInactive=${setShowInactive} /></div>`}
+    ${tab !== "usage" && tab !== "debug" && tab !== "actions" && html`<div class="subwrap"><${FactionBar} names=${names} faction=${fac} setFaction=${setFaction} hidden=${st.hidden ?? []} showInactive=${showInactive} setShowInactive=${setShowInactive} /></div>`}
     ${tab === "overview" && html`<${Overview} ...${common} />`}
     ${tab === "map" && html`<${MapView} ...${common} layers=${layers} setLayers=${setLayers} world=${world} />`}
     ${tab === "forces" && html`<${ForcesView} ...${common} />`}
     ${tab === "hq" && html`<${HqView} ...${common} />`}
     ${tab === "missions" && html`<${MissionsView} ...${common} layers=${layers} world=${world} />`}
+    ${tab === "actions" && html`<${ActionsView} st=${st} />`}
     ${tab === "debug" && html`<${DebugView} st=${st} />`}
     ${tab === "usage" && html`<${Config} st=${st} toast=${toast} refresh=${refresh} />`}
     <div class="toasts">${toasts.map((t) => html`<div class=${"toast " + t.kind} key=${t.id}>${t.text}</div>`)}</div>
