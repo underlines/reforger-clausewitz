@@ -21,6 +21,9 @@ class CLW_ContactBook
 				known.m_iCount = sighting.m_iCount;
 				known.m_fLastSeen = Math.Max(known.m_fLastSeen, sighting.m_fLastSeen);
 				known.m_sObserver = sighting.m_sObserver;
+				// a vehicle seen in the cluster keeps the contact a vehicle contact; otherwise the newest kind wins
+				if (sighting.m_sKind == CLW_Contact.KIND_VEHICLE || known.m_sKind != CLW_Contact.KIND_VEHICLE)
+					known.m_sKind = sighting.m_sKind;
 				continue;
 			}
 

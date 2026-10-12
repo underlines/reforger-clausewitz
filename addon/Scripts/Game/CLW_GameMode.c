@@ -22,19 +22,15 @@ class CLW_GameMode : SCR_BaseGameMode
 	protected ref CLW_ForceCatalog m_Catalog;
 	protected ref CLW_VehicleManager m_Vehicles;
 	protected ref CLW_ForceSpawner m_Spawner;
-	// The two scenario faction keys; the commander/book/marker sets below belong to them in order (First = *US fields, Second = *USSR fields).
-	protected string m_sKeyFirst;
-	protected string m_sKeySecond;
 
 	// Which AI groups HQ commands (scene-placed and added at runtime, e.g. from Game Master); the commanders and markers query it.
 	protected ref CLW_SquadRegistry m_Registry = new CLW_SquadRegistry();
-	// One contact picture, marker set and rule commander per faction.
-	protected ref CLW_ContactBook m_BookUS = new CLW_ContactBook();
-	protected ref CLW_ContactBook m_BookUSSR = new CLW_ContactBook();
-	protected ref CLW_ContactMarkers m_MarkersUS = new CLW_ContactMarkers();
-	protected ref CLW_ContactMarkers m_MarkersUSSR = new CLW_ContactMarkers();
-	protected ref CLW_RemoteCommander m_CommanderUS = new CLW_RemoteCommander();
-	protected ref CLW_RemoteCommander m_CommanderUSSR = new CLW_RemoteCommander();
+	// One contact picture, marker set and commander per scenario faction, keyed by faction key. The keys can change at war start
+	// (faction choice in the setup), so these are (re)created from the scenario in BuildFactionObjects, never cached at init.
+	protected ref map<string, ref CLW_ContactBook> m_mBooks = new map<string, ref CLW_ContactBook>();
+	protected ref map<string, ref CLW_ContactMarkers> m_mMarkers = new map<string, ref CLW_ContactMarkers>();
+	protected ref map<string, ref CLW_RemoteCommander> m_mCommanders = new map<string, ref CLW_RemoteCommander>();
+	protected ref array<string> m_aBuiltKeys = {};
 
 	static CLW_GameMode GetInstance()
 	{
@@ -110,6 +106,69 @@ class CLW_GameMode : SCR_BaseGameMode
 			m_Catalog.BuildAll();
 		if (m_Spawner)
 			m_Spawner.SpawnStartForces();
+
+		// the factions are final now: rebuild books, markers and commanders from the scenario's current keys
+		BuildFactionObjects();
+		CLW_MissionHook.Get().OnWarStarted();
+	}
+
+	// (Re)create the per-faction contact book, marker set and commander from the scenario's current faction keys.
+	protected void BuildFactionObjects()
+	{
+		CLW_ScenarioConfig scenario = CLW_ScenarioConfig.Get();
+		if (!scenario)
+			return;
+
+		foreach (string oldKey, CLW_ContactMarkers oldMarkers : m_mMarkers)
+		{
+			if (oldMarkers)
+				oldMarkers.RemoveAll();
+		}
+
+		m_mBooks.Clear();
+		m_mMarkers.Clear();
+		m_mCommanders.Clear();
+		m_aBuiltKeys.Clear();
+		array<string> keys = {};
+		scenario.GetFactionKeys(keys);
+		foreach (string key : keys)
+		{
+			CLW_ContactBook book = new CLW_ContactBook();
+			CLW_RemoteCommander commander = new CLW_RemoteCommander();
+			commander.Init(key, book, m_Registry);
+			m_mBooks.Set(key, book);
+			m_mMarkers.Set(key, new CLW_ContactMarkers());
+			m_mCommanders.Set(key, commander);
+			m_aBuiltKeys.Insert(key);
+		}
+
+		Print("CLW: faction objects (contact books, markers, commanders) built for " + keys.Count() + " factions", LogLevel.NORMAL);
+	}
+
+	// Rebuild when the scenario's faction keys differ from the ones the objects were built for.
+	protected void EnsureFactionObjects()
+	{
+		CLW_ScenarioConfig scenario = CLW_ScenarioConfig.Get();
+		if (!scenario)
+			return;
+
+		array<string> keys = {};
+		scenario.GetFactionKeys(keys);
+		bool same = keys.Count() == m_aBuiltKeys.Count();
+		if (same)
+		{
+			foreach (string key : keys)
+			{
+				if (!m_aBuiltKeys.Contains(key))
+					same = false;
+			}
+		}
+
+		if (!same)
+		{
+			Print("CLW: scenario faction keys changed, rebuilding faction objects", LogLevel.NORMAL);
+			BuildFactionObjects();
+		}
 	}
 
 	protected override void OnGameStart()
@@ -131,8 +190,6 @@ class CLW_GameMode : SCR_BaseGameMode
 			CLW_ScenarioConfig scenario = LoadScenario();
 			if (scenario)
 			{
-				m_sKeyFirst = scenario.GetFactionKey(0);
-				m_sKeySecond = scenario.GetFactionKey(1);
 				// 2. bases + respawn points, 3. control points, 4. war state
 				m_Bases = new CLW_Bases();
 				m_Bases.Init(scenario);
@@ -158,13 +215,7 @@ class CLW_GameMode : SCR_BaseGameMode
 			m_Registry.Start();
 			// The commanders take their squads from the registry; human-led squads get missions instead of waypoints.
 			if (scenario)
-			{
-				m_CommanderUS.Init(m_sKeyFirst, m_BookUS, m_Registry);
-				m_CommanderUSSR.Init(m_sKeySecond, m_BookUSSR, m_Registry);
-				// Patrol points come from data: the two objectives nearest to each faction's base.
-				m_CommanderUS.SetPatrolPoints(NearestObjectivePositions(scenario, m_sKeyFirst, 2));
-				m_CommanderUSSR.SetPatrolPoints(NearestObjectivePositions(scenario, m_sKeySecond, 2));
-			}
+				BuildFactionObjects();
 
 			GetGame().GetCallqueue().CallLater(CLW_WorldInfo.Start, 5000);
 			GetGame().GetCallqueue().CallLater(SayBuild, 8000);
@@ -194,43 +245,6 @@ class CLW_GameMode : SCR_BaseGameMode
 		}
 
 		return CLW_ScenarioConfig.Load(CLW_WarConfig.DEFAULT_SCENARIO);
-	}
-
-	// Positions (surface Y) of the objectives nearest to a faction's base, nearest first.
-	protected array<vector> NearestObjectivePositions(CLW_ScenarioConfig scenario, string factionKey, int count)
-	{
-		array<vector> result = {};
-		if (!m_Bases || !scenario.m_aObjectives)
-			return result;
-
-		vector basePos = m_Bases.GetBasePos(factionKey);
-		array<CLW_ObjectiveSetup> pool = {};
-		foreach (CLW_ObjectiveSetup objective : scenario.m_aObjectives)
-		{
-			pool.Insert(objective);
-		}
-
-		while (result.Count() < count && !pool.IsEmpty())
-		{
-			int best = 0;
-			float bestDist = 1000000000;
-			foreach (int i, CLW_ObjectiveSetup candidate : pool)
-			{
-				float dist = vector.DistanceXZ(basePos, candidate.m_vPos);
-				if (dist < bestDist)
-				{
-					bestDist = dist;
-					best = i;
-				}
-			}
-
-			vector pos = pool[best].m_vPos;
-			pos[1] = GetGame().GetWorld().GetSurfaceY(pos[0], pos[2]);
-			result.Insert(pos);
-			pool.Remove(best);
-		}
-
-		return result;
 	}
 
 	// Respawn gate: a faction without tickets (or a finished war) cannot spawn players.
@@ -277,12 +291,18 @@ class CLW_GameMode : SCR_BaseGameMode
 	// Perception -> contact book -> map markers, for both factions.
 	protected void PollContacts()
 	{
-		UpdateFaction(m_sKeyFirst, m_BookUS, m_MarkersUS);
-		UpdateFaction(m_sKeySecond, m_BookUSSR, m_MarkersUSSR);
+		EnsureFactionObjects();
+		foreach (string key : m_aBuiltKeys)
+		{
+			UpdateFaction(key, m_mBooks.Get(key), m_mMarkers.Get(key));
+		}
 	}
 
 	protected void UpdateFaction(string factionKey, CLW_ContactBook book, CLW_ContactMarkers markers)
 	{
+		if (!book || !markers)
+			return;
+
 		array<string> squads = {};
 		m_Registry.GetIds(factionKey, squads);
 		foreach (string name : squads)
@@ -340,8 +360,13 @@ class CLW_GameMode : SCR_BaseGameMode
 
 	protected void ThinkCommanders()
 	{
-		m_CommanderUS.Think();
-		m_CommanderUSSR.Think();
+		EnsureFactionObjects();
+		foreach (string key : m_aBuiltKeys)
+		{
+			CLW_RemoteCommander commander = m_mCommanders.Get(key);
+			if (commander)
+				commander.Think();
+		}
 	}
 
 	// Player flow: after the auto-spawn, put the player into the AI rifle squad of their faction.

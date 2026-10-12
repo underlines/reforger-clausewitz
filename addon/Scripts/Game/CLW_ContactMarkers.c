@@ -5,6 +5,7 @@ class CLW_ContactMarkers
 	static const float MOVE_THRESHOLD = 20;	// m: a contact must move farther than this before its marker is re-inserted
 
 	protected ref map<int, ref SCR_MapMarkerBase> m_mMarkers = new map<int, ref SCR_MapMarkerBase>();
+	protected ref map<int, string> m_mKinds = new map<int, string>();	// contact kind each marker was built for
 
 	// Create, move or update the markers of one faction's contacts. factionKey = the observer faction that sees them.
 	void Sync(string factionKey, notnull array<CLW_Contact> contacts)
@@ -32,15 +33,18 @@ class CLW_ContactMarkers
 				int pos[2];
 				marker.GetWorldPos(pos);
 				vector markerPos = Vector(pos[0], 0, pos[1]);
-				if (vector.DistanceXZ(markerPos, contact.m_vPos) <= MOVE_THRESHOLD && marker.GetCustomText() == text)
+				string builtKind;
+					m_mKinds.Find(contact.m_iId, builtKind);
+					if (vector.DistanceXZ(markerPos, contact.m_vPos) <= MOVE_THRESHOLD && marker.GetCustomText() == text && builtKind == contact.m_sKind)
 					continue;
 
 				manager.RemoveStaticMarker(marker);
 				m_mMarkers.Remove(contact.m_iId);
+					m_mKinds.Remove(contact.m_iId);
 			}
 
 			// the symbol shows the enemy side, hostile infantry on the land dimension
-			marker = manager.PrepareMilitaryMarker(GetIdentity(contact.m_sEnemyFaction), EMilitarySymbolDimension.LAND, EMilitarySymbolIcon.INFANTRY);
+			marker = manager.PrepareMilitaryMarker(GetIdentity(contact.m_sEnemyFaction), EMilitarySymbolDimension.LAND, IconFor(contact.m_sKind));
 			if (!marker)
 				continue;
 
@@ -49,6 +53,7 @@ class CLW_ContactMarkers
 			marker.SetCustomText(text);
 			manager.InsertStaticMarker(marker, false, true);
 			m_mMarkers.Insert(contact.m_iId, marker);
+				m_mKinds.Set(contact.m_iId, contact.m_sKind);
 		}
 	}
 
@@ -70,7 +75,37 @@ class CLW_ContactMarkers
 
 			manager.RemoveStaticMarker(marker);
 			m_mMarkers.Remove(id);
+			m_mKinds.Remove(id);
 		}
+	}
+
+	// Remove every marker of this set (the faction objects are rebuilt at war start).
+	void RemoveAll()
+	{
+		array<int> ids = {};
+		foreach (int id, SCR_MapMarkerBase marker : m_mMarkers)
+		{
+			ids.Insert(id);
+		}
+		Remove(ids);
+	}
+
+	// Vehicle contacts use an armour symbol, everything else infantry. Looked up by name at runtime so a missing member
+	// cannot break compilation. [verify] member names ARMOR / MECHANIZED / MOTORIZED of EMilitarySymbolIcon
+	protected EMilitarySymbolIcon IconFor(string kind)
+	{
+		if (kind == CLW_Contact.KIND_VEHICLE)
+		{
+			array<string> names = {"ARMOR", "MECHANIZED", "MOTORIZED"};
+			foreach (string iconName : names)
+			{
+				int value = typename.StringToEnum(EMilitarySymbolIcon, iconName);
+				if (value > 0)
+					return value;
+			}
+		}
+
+		return EMilitarySymbolIcon.INFANTRY;
 	}
 
 	protected EMilitarySymbolIdentity GetIdentity(string factionKey)
