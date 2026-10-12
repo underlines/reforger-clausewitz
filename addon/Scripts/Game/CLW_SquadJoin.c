@@ -183,7 +183,8 @@ class CLW_SquadJoin
 			angle += 360;
 
 		array<string> names = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
-		int index = Math.Round(angle / 45) % 8;
+		int index = Math.Round(angle / 45);	// Math.Round returns float: no % on floats in Enforce
+		index = index % 8;
 		return names[index];
 	}
 }
