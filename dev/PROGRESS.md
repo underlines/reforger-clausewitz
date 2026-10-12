@@ -30,8 +30,18 @@ Design: `notes/m2-design.md` (decided 2026-10-12). Branch `feature/m2-real-war`.
 mechanized, P3 commander v1 + protocol v2, P4 missions, S sidecar/dashboard; implemented code-only by subagents, one
 Workbench e2e test at the end. LLM: fake + OpenRouter tested e2e; Anthropic provider deferred.
 
+### M2 status (2026-10-12, branch `feature/m2-real-war`, build #27)
+Implemented P1-P6 + S, then e2e-tested in Workbench (vanilla, RHS test project, WCS test project; real LLM via OpenRouter):
+- [x] Setup menu (generated from mode params + faction pickers) looks good and starts the war; no AI before the war starts (scene squads removed, start forces from data).
+- [x] Faction choice incl. RHS_USAF / RHS_AFRF / RHS_ION without dependency; WCS vehicles appear in vanilla US/USSR catalogs (auto-discovery); profiles load from .conf.
+- [x] Control points capture, income, tickets (kills + bleed), mission offers in the J menu (refresh/expire), truck dismount + RTB, vehicles drive on both sides (crews re-affiliated to the buying faction), road-slot vehicle placement, player joins a side squad after the war start.
+- [x] LLM (OpenRouter) commands in protocol v2: orders on objectives, buys with reasons, sees vehicle units; game REST timeout 30 s.
+- [ ] Known issues: RHS open-top UAZ469 refuses cargo seating (fallback: infantry walk, UAZ RTB); classifier: armed armoured cars (M1025 M2) come out `mech` (should be `light`), K-17 Berezok seat count 0 from UI info (needs probe for APCs); editor loadout manager gives only a rifleman per faction (vanilla had 6 roles: add them as data to `CLW_LoadoutManager.et`).
+- [ ] Not yet seen in play: end of war (tickets 0 / hold all / time limit + end screen), mission accept/complete/reward popups, stuck watchdog dismount path, unstuck helper, DEFEND switch at 50 % strength, marker expiry.
+- Test packs: junctions in `Documents\My Games\ArmaReforgerWorkbench\addons` (RHS 3, WCS 12, Clausewitz); see `dev/testpacks/README.md`.
+
 ## Next up
-Implement M2 phases; then the single e2e run (also covers the open M0 checks: weak-squad DEFEND switch, marker expiry).
+Fix the known issues above, play one long war to the end (end screen, missions), then merge `feature/m2-real-war` into `main` and release v0.3.0 (skill `reforger-release`).
 
 ## Log
 - 2026-10-11: Vision and research committed; game-mode decision made; roadmap condensed to M0-M5; branch naming unified on `main`.
