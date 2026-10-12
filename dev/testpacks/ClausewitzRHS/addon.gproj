@@ -1,0 +1,18 @@
+GameProject {
+ ID "ClausewitzRHS"
+ GUID "D2B16F8C4EA05B39"
+ TITLE "Clausewitz test project - RHS"
+ Dependencies {
+  "58D0FB3206B6F859"
+  "C1A05E7B3D9F4A28"
+  "1337C0DE5DABBEEF"
+  "BADC0DEDABBEDA5E"
+  "595F2BF2F44836FB"
+ }
+ Configurations {
+  GameProjectConfig PC {
+  }
+  GameProjectConfig HEADLESS {
+  }
+ }
+}

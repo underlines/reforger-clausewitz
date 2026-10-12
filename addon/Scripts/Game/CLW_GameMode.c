@@ -396,6 +396,8 @@ class CLW_GameMode : SCR_BaseGameMode
 		SCR_AIGroup squad = m_Registry.FindPlayerSquad(faction.GetFactionKey(), preferredSquad);
 		if (!squad && !preferredSquad.IsEmpty())
 			squad = FindSquad(preferredSquad);	// not adopted yet (no living AI member): Join retries until it is ready
+		if (squad && CLW_SquadRegistry.GetFactionKey(squad) != faction.GetFactionKey())
+			squad = m_Registry.FindPlayerSquad(faction.GetFactionKey(), "");	// preferred squad belongs to another faction (faction choice)
 		SCR_GroupsManagerComponent groups = SCR_GroupsManagerComponent.GetInstance();
 		if (!squad || !groups)
 		{

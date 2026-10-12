@@ -303,23 +303,17 @@ class CLW_SetupServer
 		string keyA;
 		string keyB;
 		ParseBattle(battleJson, keyA, keyB, error);
-		string defA = m_Scenario.GetFactionKey(0);
-		string defB = m_Scenario.GetFactionKey(1);
-		if (keyA != defA || keyB != defB)
-			Print("CLW: setup faction override " + keyA + "/" + keyB + " requested (applied in P6)", LogLevel.NORMAL);		// P6 makes the sides dynamic
-
 		if (modeId.IsEmpty())
 			modeId = m_Scenario.m_sDefaultMode;
 
-		if (!m_War.StartWar(modeId, modeJson, playerId))
+		// StartWar validates the sides again and re-keys the whole war (CLW_Sides.Apply) before the mode starts.
+		if (!m_War.StartWar(modeId, modeJson, playerId, keyA, keyB))
 		{
 			Print("CLW: setup REJECTED: StartWar refused", LogLevel.WARNING);
 			return "the war could not be started (see the server log)";
 		}
 
-		m_sBattleText = defA + " vs " + defB;
-		if (keyA != defA || keyB != defB)
-			m_sBattleText += " (requested " + keyA + " vs " + keyB + ", not applied yet)";
+		m_sBattleText = m_Scenario.GetFactionKey(0) + " vs " + m_Scenario.GetFactionKey(1);
 
 		Print("CLW: setup ACCEPTED from player " + playerId + ", war is starting", LogLevel.NORMAL);
 		return "";
@@ -398,6 +392,10 @@ class CLW_SetupServer
 			error = "the two sides must be different factions";
 			return false;
 		}
+
+		error = m_Scenario.CheckSides(keyA, keyB);		// SCR_Faction, exists, not on the ignore list
+		if (!error.IsEmpty())
+			return false;
 
 		return true;
 	}

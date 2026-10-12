@@ -65,6 +65,30 @@ class CLW_SquadRegistry
 		GetGame().GetCallqueue().CallLater(Sweep, SWEEP_MS, true);
 	}
 
+	// The scenario sides were assigned other factions (CLW_Sides.Apply): the faction filter is the scenario's active keys, so
+	// release the squads of factions that are no longer a side, then re-sweep to adopt the new factions' scene groups.
+	void Rekey()
+	{
+		if (!Replication.IsServer())
+			return;
+
+		int released;
+		for (int i = m_aRecords.Count() - 1; i >= 0; i--)
+		{
+			if (!IsClwFaction(m_aRecords[i].m_sFaction))
+			{
+				Release(i, "faction left the war");
+				released++;
+			}
+		}
+
+		if (released > 0)
+			m_iVersion++;
+
+		Print(string.Format("CLW: registry re-keyed, released %1 squads of other factions, sweeping", released), LogLevel.NORMAL);
+		Sweep();
+	}
+
 	void SetCatalog(CLW_ForceCatalog catalog)
 	{
 		m_Catalog = catalog;

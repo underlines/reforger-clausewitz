@@ -41,6 +41,7 @@ class CLW_WarState
 		m_Economy = scenario.m_Economy;
 		m_Points = points;
 		scenario.GetFactionKeys(m_aKeys);
+		CLW_Sides.PrepareSetup(scenario);		// default sides playable + hostile during SETUP
 		foreach (string key : m_aKeys)
 		{
 			m_mTickets.Set(key, 0);
@@ -94,7 +95,9 @@ class CLW_WarState
 
 	// Validates and switches SETUP -> RUNNING. paramsJson: flat object of parameter values ("" = defaults).
 	// Returns false (and logs the reason) when not in SETUP, unknown mode or invalid values. byPlayerId -1 = system/auto.
-	bool StartWar(string modeId, string paramsJson, int byPlayerId)
+	// factionA / factionB: the factions fighting on side A / B ("" = keep the scenario's current ones). They are validated
+	// before anything changes, then CLW_Sides.Apply re-keys everything BEFORE the mode starts and before GetOnWarStarted fires.
+	bool StartWar(string modeId, string paramsJson, int byPlayerId, string factionA = "", string factionB = "")
 	{
 		if (!Replication.IsServer())
 			return false;
@@ -122,6 +125,28 @@ class CLW_WarState
 			return false;
 		}
 
+		if (m_Scenario)
+		{
+			if (factionA.IsEmpty())
+				factionA = m_Scenario.GetFactionKey(0);
+			if (factionB.IsEmpty())
+				factionB = m_Scenario.GetFactionKey(1);
+
+			string sidesError = m_Scenario.CheckSides(factionA, factionB);
+			if (!sidesError.IsEmpty())
+			{
+				Print("CLW: war StartWar refused: " + sidesError, LogLevel.WARNING);
+				return false;
+			}
+
+			// Sides become dynamic here: scenario keys, bases, points, ledgers, registry, playable/hostile, scene groups.
+			if (!CLW_Sides.Apply(this, m_Scenario, factionA, factionB))
+			{
+				Print("CLW: war StartWar refused: could not apply the sides", LogLevel.ERROR);
+				return false;
+			}
+		}
+
 		m_Mode = mode;
 		m_ePhase = CLW_EWarPhase.RUNNING;
 		m_iElapsedSec = 0;
@@ -135,6 +160,30 @@ class CLW_WarState
 		if (m_OnWarStarted)
 			m_OnWarStarted.Invoke();
 		return true;
+	}
+
+	// The scenario sides were assigned other factions (CLW_Sides.Apply, SETUP only): rebuild the keyed ledgers.
+	// Tickets / supplies / events of the previous keys are dropped (nothing is running yet).
+	void OnSidesChanged()
+	{
+		if (!Replication.IsServer() || !m_Scenario)
+			return;
+
+		m_aKeys.Clear();
+		m_mTickets.Clear();
+		m_mSupplies.Clear();
+		m_mEvents.Clear();
+		m_Scenario.GetFactionKeys(m_aKeys);
+		foreach (string key : m_aKeys)
+		{
+			m_mTickets.Set(key, 0);
+			m_mSupplies.Set(key, 0);
+			m_mEvents.Set(key, new array<string>());
+		}
+
+		m_aVehicleOwners.Clear();
+		m_aVehicleFactions.Clear();
+		Print("CLW: war ledgers re-keyed: " + m_aKeys[0] + " vs " + m_aKeys[1], LogLevel.NORMAL);
 	}
 
 	// Fired once when the war switches SETUP -> RUNNING (ledgers are initialised). No arguments.

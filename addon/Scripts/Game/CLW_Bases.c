@@ -51,6 +51,38 @@ class CLW_Bases
 		GetGame().GetCallqueue().CallLater(DisableSceneSpawns, CLW_WarConfig.SCENE_SPAWN_RECHECK_MS);
 	}
 
+	// The scenario sides were assigned other factions (CLW_Sides.Apply): the base positions stay with the side slots,
+	// the factions on them change. Re-keys our spawn points and disables the scene spawn points of the new factions.
+	void Rekey(notnull CLW_ScenarioConfig scenario)
+	{
+		if (!Replication.IsServer() || !m_bStarted)
+			return;
+
+		foreach (int i, CLW_FactionSetup setup : scenario.m_aFactions)
+		{
+			if (i >= m_aKeys.Count())
+				break;
+
+			string oldKey = m_aKeys[i];
+			m_aKeys[i] = setup.m_sKey;
+			SCR_SpawnPoint own = m_aOwnSpawns[i];
+			if (own)
+			{
+				own.SetFactionKey(setup.m_sKey);
+				own.SetSpawnPointEnabled_S(true);
+			}
+			else if (!setup.m_SpawnPointPrefab.IsEmpty())
+			{
+				m_aOwnSpawns[i] = SpawnBasePoint(setup, m_aPos[i]);
+			}
+
+			Print(string.Format("CLW: bases side %1 re-keyed %2 -> %3 (spawn point %4)", i, oldKey, setup.m_sKey, m_aOwnSpawns[i]), LogLevel.NORMAL);
+		}
+
+		DisableSceneSpawns();
+		GetGame().GetCallqueue().CallLater(DisableSceneSpawns, CLW_WarConfig.SCENE_SPAWN_RECHECK_MS);
+	}
+
 	// Base center (surface Y) of a faction; vector.Zero when unknown.
 	vector GetBasePos(string factionKey)
 	{

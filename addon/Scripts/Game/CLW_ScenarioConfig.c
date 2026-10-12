@@ -4,8 +4,11 @@
 [BaseContainerProps()]
 class CLW_FactionSetup
 {
-	[Attribute("", UIWidgets.EditBox, "Faction key (must exist in the FactionManager), e.g. US")]
+	[Attribute("", UIWidgets.EditBox, "DEFAULT faction key of this side slot (must exist in the FactionManager), e.g. US. The war setup may assign another faction: m_sKey then holds the active one")]
 	string m_sKey;
+
+	// Runtime: the key from the data (never changes); m_sKey is the faction currently on this side (CLW_ScenarioConfig.ApplySides).
+	string m_sDefaultKey;
 
 	[Attribute("", UIWidgets.EditBox, "Map label of the main base, e.g. 'US HQ'")]
 	string m_sBaseLabel;
@@ -133,8 +136,15 @@ class CLW_ScenarioConfig
 	[Attribute(desc: "Faction keys never offered in the setup menu (civilians, renegades, ...)")]
 	ref array<string> m_aIgnoreFactions;
 
+	[Attribute("1", UIWidgets.CheckBox, "At war start delete scene-placed AI groups of factions that are neither side (ignored factions such as civilians are kept)")]
+	bool m_bRemoveUnusedSceneGroups;
+
+	[Attribute("0", UIWidgets.EditBox, "Side (0 = A, 1 = B) players are put on by default (spawn logic forced faction)")]
+	int m_iDefaultPlayerSide;
+
 	protected static ref CLW_ScenarioConfig s_Active;
 	protected bool m_bValid;
+	protected ref ScriptInvoker m_OnSidesChanged;
 
 	// The loaded scenario (null before Load succeeded).
 	static CLW_ScenarioConfig Get()
@@ -197,6 +207,118 @@ class CLW_ScenarioConfig
 			return false;
 
 		return s_Active.IsFaction(key);
+	}
+
+	// Fired after ApplySides changed the factions of the sides. No arguments; read the keys with GetActiveKeys.
+	ScriptInvoker GetOnSidesChanged()
+	{
+		if (!m_OnSidesChanged)
+			m_OnSidesChanged = new ScriptInvoker();
+
+		return m_OnSidesChanged;
+	}
+
+	// Keys of the factions on the two sides right now (side A first). Same as GetFactionKeys.
+	void GetActiveKeys(notnull array<string> keys)
+	{
+		GetFactionKeys(keys);
+	}
+
+	// Side index (0 = A, 1 = B) of a faction key, -1 when it is neither.
+	int GetSideIndex(string key)
+	{
+		if (key.IsEmpty() || !m_aFactions)
+			return -1;
+
+		foreach (int i, CLW_FactionSetup setup : m_aFactions)
+		{
+			if (setup && setup.m_sKey == key)
+				return i;
+		}
+
+		return -1;
+	}
+
+	// Maps a key written in the data (objective start owner, which refers to a side slot's default key) to the faction
+	// currently on that slot. Unknown keys and "" are returned unchanged.
+	string MapDefaultKey(string key)
+	{
+		if (key.IsEmpty() || !m_aFactions)
+			return key;
+
+		foreach (CLW_FactionSetup setup : m_aFactions)
+		{
+			if (setup && setup.m_sDefaultKey == key)
+				return setup.m_sKey;
+		}
+
+		return key;
+	}
+
+	// Faction key players are put on by default (data: m_iDefaultPlayerSide).
+	string GetDefaultPlayerFactionKey()
+	{
+		int side = m_iDefaultPlayerSide;
+		if (side < 0 || side > 1)
+			side = 0;
+
+		return GetFactionKey(side);
+	}
+
+	bool IsIgnoredFaction(string key)
+	{
+		return m_aIgnoreFactions && m_aIgnoreFactions.Contains(key);
+	}
+
+	// Checks that keyA/keyB can fight: both SCR_Faction in the FactionManager, different, not on the ignore list.
+	// "" on success, else the reason. No side effects.
+	string CheckSides(string keyA, string keyB)
+	{
+		if (keyA.IsEmpty() || keyB.IsEmpty())
+			return "both sides need a faction";
+
+		if (keyA == keyB)
+			return "the two sides must be different factions";
+
+		FactionManager manager = GetGame().GetFactionManager();
+		if (!manager)
+			return "no faction manager";
+
+		array<string> keys = {keyA, keyB};
+		foreach (string key : keys)
+		{
+			if (IsIgnoredFaction(key))
+				return "faction '" + key + "' is not selectable (ignore list)";
+
+			if (!SCR_Faction.Cast(manager.GetFactionByKey(key)))
+				return "faction '" + key + "' does not exist or is not a SCR_Faction";
+		}
+
+		return "";
+	}
+
+	// Assigns the factions to the two side slots (base, identity, spawn settings and start forces stay with the slot).
+	// Returns false (nothing changed) when CheckSides fails. Callers re-key their own structures afterwards;
+	// CLW_Sides.Apply does the whole job. Fires GetOnSidesChanged when something changed.
+	bool ApplySides(string keyA, string keyB)
+	{
+		string error = CheckSides(keyA, keyB);
+		if (!error.IsEmpty())
+		{
+			Print("CLW: scenario ApplySides refused: " + error, LogLevel.ERROR);
+			return false;
+		}
+
+		if (m_aFactions[0].m_sKey == keyA && m_aFactions[1].m_sKey == keyB)
+			return true;
+
+		Print(string.Format("CLW: scenario sides %1/%2 -> %3/%4", m_aFactions[0].m_sKey, m_aFactions[1].m_sKey, keyA, keyB), LogLevel.NORMAL);
+		m_aFactions[0].m_sKey = keyA;
+		m_aFactions[1].m_sKey = keyB;
+		if (m_OnSidesChanged)
+			m_OnSidesChanged.Invoke();
+
+		return true;
 	}
 
 	// Key of faction number i (0 or 1), "" when out of range.
@@ -304,6 +426,9 @@ class CLW_ScenarioConfig
 				Print("CLW: scenario faction without key", LogLevel.ERROR);
 				return false;
 			}
+
+			if (setup.m_sDefaultKey.IsEmpty())
+				setup.m_sDefaultKey = setup.m_sKey;
 
 			if (seen.Contains(setup.m_sKey))
 			{
