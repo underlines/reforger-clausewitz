@@ -38,6 +38,9 @@ class CLW_PlacementQuery
 class CLW_Placement
 {
 	protected static AIPathfindingComponent s_Pathfinding;	// weak, from some live agent
+	protected static AIAgent s_PathAgent;					// weak, the agent s_Pathfinding belongs to
+	protected static bool s_bNavmeshCalibrated;				// the query answered "yes" for the agent's own position at least once
+	protected static bool s_bUncalibratedLogged;
 
 	static void SurfaceAt(inout vector pos)
 	{
@@ -82,6 +85,8 @@ class CLW_Placement
 			if (path)
 			{
 				s_Pathfinding = path;
+				s_PathAgent = agent;
+				s_bNavmeshCalibrated = false;
 				return path;
 			}
 		}
@@ -99,6 +104,29 @@ class CLW_Placement
 			return -1;
 
 		vector found;
+		// calibration: a query at the agent's own position must find the navmesh, else the answer "0" is meaningless (navmesh not
+		// loaded yet / not the layer we ask) and reported as unknown (-1)
+		if (!s_bNavmeshCalibrated)
+		{
+			IEntity self;
+			if (s_PathAgent)
+				self = s_PathAgent.GetControlledEntity();
+			vector selfFound;
+			if (!self || !path.GetClosestPositionOnNavmesh(self.GetOrigin(), Vector(2.5, 6, 2.5), selfFound))
+			{
+				if (!s_bUncalibratedLogged)
+				{
+					s_bUncalibratedLogged = true;
+					Print("CLW: place navmesh query not usable yet (agent's own position is not on the navmesh it reports): navmesh = unknown (-1)", LogLevel.NORMAL);
+				}
+				return -1;
+			}
+
+			s_bNavmeshCalibrated = true;
+			s_bUncalibratedLogged = false;
+			Print("CLW: place navmesh query calibrated (agent's own position found)", LogLevel.NORMAL);
+		}
+
 		vector half = Vector(tolerance, 6, tolerance);
 		if (path.GetClosestPositionOnNavmesh(pos, half, found))
 		{
@@ -122,7 +150,13 @@ class CLW_Placement
 		return CountAround(pos, vehicleClear, charClear);
 	}
 
-		protected static bool CountAround(vector pos, float vehicleClear, float charClear)
+	// Occupancy only (no solid-geometry trace): hand-placed scenario slots are trusted to be clear ground.
+	static bool IsUnoccupied(vector pos, float vehicleClear, float charClear)
+	{
+		return CountAround(pos, vehicleClear, charClear);
+	}
+
+	protected static bool CountAround(vector pos, float vehicleClear, float charClear)
 	{
 		float radius = Math.Max(vehicleClear, charClear);
 		CLW_PlacementQuery query = new CLW_PlacementQuery();
@@ -473,8 +507,12 @@ class CLW_BasePlacement
 
 				vector slotPos = slot.m_vPos;
 				CLW_Placement.SurfaceAt(slotPos);
-				if (!CLW_Placement.IsFree(slotPos, cylRadius, cylHeight, clear, clear))
+				// slots are trusted ground (data Y is 0, the surface Y is applied above): only vehicles / characters on it block
+				if (!CLW_Placement.IsUnoccupied(slotPos, clear, CLW_WarConfig.PLACE_SLOT_CHAR_CLEAR_M))
+				{
+					Print(string.Format("CLW: place %1 vehicle slot %2 at %3 occupied, trying the next", m_Setup.m_sKey, idx, slotPos), LogLevel.NORMAL);
 					continue;
+				}
 
 				m_iVehicleCursor = idx + 1;
 				pos = slotPos;
@@ -495,7 +533,10 @@ class CLW_BasePlacement
 
 			vector snapped;
 			if (CLW_Placement.NavmeshCheck(roadPos, CLW_WarConfig.PLACE_NAVMESH_TOL_M + 1, snapped) == 0)
+			{
+				Print(string.Format("CLW: place %1 road spot %2 at %3 skipped: off the navmesh", m_Setup.m_sKey, r, roadPos), LogLevel.NORMAL);
 				continue;
+			}
 
 			pos = roadPos;
 			yaw = m_aRoadYaw[r];

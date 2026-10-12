@@ -46,6 +46,13 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 - HQ picks up AI groups added at runtime (e.g. from Game Master) via a squad registry that sweeps every 5 s; opt a group out with the entity-name prefix `CLW_IGNORE_`.
 
 ### Fixed
+- Vehicle crews of pack factions (default occupants are vanilla US/USSR crew) are re-affiliated to the buying faction (group, characters, vehicle), so the registry adopts them and the vehicles get orders.
+- Cargo seating: soldiers that did not end up in the vehicle are retried with an explicit free cargo slot (teleport), then get a Get-In waypoint; verbose per-member diagnostics replaced by one summary line.
+- Catalog probes no longer cause delayed-init VM exceptions: seats come from the editable-entity UI info when available, otherwise a probe vehicle is spawned high above the base, inactive, and deleted after 3 s; probe results cached per prefab; the catalog is built once at war start.
+- Discovered force costs are normalized (11 per soldier, vehicle base by kind) instead of the inconsistent pack supply costs; classifier: tanks are `armor` regardless of rider seats, armed trucks are `motorized`, `mech` needs armour or APC; decisive labels are logged.
+- Players without a squad (faction switch, start forces not there yet) retry for 2 min and then get a free infantry squad; the player stays alone during SETUP and joins the first infantry squad at war start.
+- Rule commander stops spamming refused buys: after an AI-cap refusal no buys until the AI count drops or 60 s passed.
+- Placement: unknown/unreliable navmesh answers (-1) no longer decide base choice (roads do); scenario vehicle slots only need to be unoccupied; Arland start forces are 2 infantry + motorized + mech per side.
 - Situation JSON and world uploads are built by concatenation (`string.Format` cut them at 8 KB).
 - Squads whose leader died no longer count as alive (corpse agents showed as 1/6 strength).
 - Squads you lead always get an objective: if the LLM ignores a human-led squad, the rule commander issues its first mission.

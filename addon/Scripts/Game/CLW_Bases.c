@@ -23,7 +23,7 @@ class CLW_Bases
 			float roadDist;
 			float score = EvaluateBase(setup.m_sKey, pos, nav, roadDist);
 			bool water = IsWater(world, pos);
-			if (water || nav == 0 || roadDist < 0 || roadDist > CLW_WarConfig.PLACE_BASE_ROAD_WARN_M)
+			if (water || roadDist < 0 || roadDist > CLW_WarConfig.PLACE_BASE_ROAD_WARN_M)
 			{
 				Print(string.Format("CLW: bases WARNING %1 base %2 is not usable (water=%3 navmesh=%4 nearestRoad=%5 m; surfaceY=%6 ocean=%7)", setup.m_sKey, pos, water, nav, roadDist, pos[1], world.GetOceanHeight(pos[0], pos[2])), LogLevel.WARNING);
 				if (setup.m_vBaseFallbackPos != vector.Zero)
@@ -74,8 +74,7 @@ class CLW_Bases
 		nav = CLW_Placement.NavmeshCheck(pos, CLW_WarConfig.PLACE_BASE_NAVMESH_TOL_M, snapped);
 		roadDist = CLW_Placement.NearestRoadDistance(pos);
 		float score = 0;
-		if (nav == 0)
-			score += 1000;
+		// the navmesh answer is logged only: the query is unreliable (unknown -1 at Init, 0 on a road junction); roads decide
 		if (roadDist < 0)
 			score += 500;
 		else
@@ -92,7 +91,7 @@ class CLW_Bases
 			float roadDist;
 			EvaluateBase(key, m_aPos[i], nav, roadDist);
 			Print(string.Format("CLW: bases %1 base at %2: navmesh=%3 nearestRoad=%4 (recheck, navmesh -1 = unknown)", key, m_aPos[i], nav, roadDist), LogLevel.NORMAL);
-			if (nav == 0 || roadDist < 0 || roadDist > CLW_WarConfig.PLACE_BASE_ROAD_WARN_M)
+			if (roadDist < 0 || roadDist > CLW_WarConfig.PLACE_BASE_ROAD_WARN_M)
 				Print(string.Format("CLW: bases WARNING %1 base %2 is not usable (navmesh=%3 nearestRoad=%4 m): vehicles will use fallback ground", key, m_aPos[i], nav, roadDist), LogLevel.WARNING);
 		}
 	}
