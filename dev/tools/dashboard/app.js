@@ -456,6 +456,16 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall, act = "a
         if (layers.labels) { ctx.font = "bold 11px system-ui, sans-serif"; ctx.lineWidth = 3.5; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(8,11,16,.9)"; ctx.strokeText(b.faction + " base", x + 12, y); ctx.fillStyle = col; ctx.fillText(b.faction + " base", x + 12, y); ctx.lineJoin = "miter"; ctx.font = "11px system-ui, sans-serif"; }
         h.push({ x, y, r: 12, title: `${b.faction} main base`, lines: [`at ${Math.round(b.pos[0])}, ${Math.round(b.pos[1])}`] });
       }
+      // FOBs (M3 phase F): each faction's own situation lists its FOBs; a diamond, hollow while planned / moving / building
+      for (const [fk, fe] of Object.entries(st.factions ?? {})) for (const f of Array.isArray(fe.situation?.fobs) ? fe.situation.fobs : []) {
+        if (!f || !Array.isArray(f.pos) || !num(f.pos[0]) || !num(f.pos[1]) || f.state === "lost") continue;
+        const x = sx(f.pos[0]), y = sy(f.pos[1]), col = colorOf(fk), up = f.state === "active";
+        ctx.globalAlpha = f.underAttack ? 0.5 + 0.5 * Math.sin(t / 200) : 1; ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.moveTo(x, y - 9); ctx.lineTo(x + 9, y); ctx.lineTo(x, y + 9); ctx.lineTo(x - 9, y); ctx.closePath();
+        if (up) ctx.fill(); ctx.stroke(); ctx.globalAlpha = 1;
+        if (layers.labels) { const txt = `${f.id}${up ? "" : " " + f.state + (f.state === "building" ? " " + Math.round(f.build ?? 0) + "%" : "")}`; ctx.font = "bold 11px system-ui, sans-serif"; ctx.lineWidth = 3.5; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(8,11,16,.9)"; ctx.strokeText(txt, x + 12, y); ctx.fillStyle = col; ctx.fillText(txt, x + 12, y); ctx.lineJoin = "miter"; ctx.font = "11px system-ui, sans-serif"; }
+        h.push({ x, y, r: 12, title: `${fk} FOB ${f.id}${f.name ? " " + f.name : ""}`, lines: [`state ${f.state}${f.state === "building" ? " " + Math.round(f.build ?? 0) + "%" : ""}, tier ${dash(f.tier)}${f.underAttack ? " (UNDER ATTACK)" : ""}`, `services: ${Array.isArray(f.services) && f.services.length ? f.services.join(", ") : "-"}`, `at ${Math.round(f.pos[0])}, ${Math.round(f.pos[1])}`] });
+      }
     }
     const shown =Object.keys(st.factions ?? {}).filter((f) => faction === "all" || f === faction);
     for (const f of shown) {
@@ -1064,6 +1074,27 @@ function MissionsView({ st, faction, rows, sel, onSel, layers, world, act }) {
     </div></main>`;
 }
 
+
+// ---- player requests (M3 phase Q): situation.requests[] of every faction, newest first ----
+function RequestsView({ st, faction }) {
+  const rows = [];
+  for (const [f, fs] of Object.entries(st.factions ?? {})) {
+    if (faction !== "all" && f !== faction) continue;
+    const sit = fs?.situation;
+    const ts = fs?.ts ?? 0;
+    for (const r of Array.isArray(sit?.requests) ? sit.requests : []) rows.push({ ...r, faction: f, at: ts - (num(r.ageSec) ? r.ageSec * 1000 : 0) });
+  }
+  rows.sort((a, b) => b.at - a.at);
+  const granted = rows.filter((r) => r.status === "granted").length;
+  return html`<main class="view">
+    <section class="panel"><h2>Player requests <span class="sub">${rows.length} recent, ${granted} granted; chat /request, request terminal; HQ rules decide</span></h2><div class="scroll"><table>
+      <thead><tr><th>Time</th><th>Faction</th><th>Player</th><th>Role</th><th>Request</th><th>Status</th><th>Answer</th></tr></thead><tbody>
+      ${rows.map((r, i) => html`<tr key=${r.faction + r.id + i}><td class="mono muted">${r.at ? new Date(r.at).toLocaleTimeString() : "-"}</td><td class=${facClass(r.faction)}>${r.faction}</td><td><b>${dash(r.player)}</b></td><td>${dash(r.role)}</td>
+        <td><b>${dash(r.kind)}</b> <span class="mono muted">${dash(r.args)}</span></td><td><span class=${"badge " + (r.status === "granted" ? "ok" : "bad")}>${dash(r.status)}</span></td><td class="wrap muted">${dash(r.reason)}</td></tr>`)}</tbody></table>
+      ${!rows.length && html`<div class="empty">No player requests yet (the war must run with the <code>requests</code> capability; try <code>/request</code> in game chat).</div>`}</div></section>
+  </main>`;
+}
+
 // ---- debug log: the game's CLW_Debug lines (not shown in game chat by default), newest first ----
 function DebugView({ st }) {
   const [q, setQ] = useState("");
@@ -1097,7 +1128,7 @@ function ActionsView({ st }) {
 }
 
 // ---- tabs ----
-const TABS = [["overview", "Overview"], ["map", "Map"], ["forces", "Forces"], ["hq", "HQ / LLM"], ["missions", "Missions"], ["actions", "Actions"], ["debug", "Debug log"], ["usage", "Usage & Config"]];
+const TABS = [["overview", "Overview"], ["map", "Map"], ["forces", "Forces"], ["hq", "HQ / LLM"], ["missions", "Missions"], ["requests", "Requests"], ["actions", "Actions"], ["debug", "Debug log"], ["usage", "Usage & Config"]];
 const TAB_KEY = "clw.tab", INACT_KEY = "clw.showInactive";
 const tabOf = (s) => { const k = String(s ?? "").replace(/^#/, ""), t = k === "config" ? "usage" : k; return TABS.some(([id]) => id === t) ? t : null; };
 function loadTab() {
@@ -1333,6 +1364,7 @@ function App() {
     ${tab === "forces" && html`<${ForcesView} ...${common} />`}
     ${tab === "hq" && html`<${HqView} ...${common} />`}
     ${tab === "missions" && html`<${MissionsView} ...${common} layers=${layers} world=${world} />`}
+    ${tab === "requests" && html`<${RequestsView} st=${st} faction=${fac} />`}
     ${tab === "actions" && html`<${ActionsView} st=${st} />`}
     ${tab === "debug" && html`<${DebugView} st=${st} />`}
     ${tab === "usage" && html`<${Config} st=${st} toast=${toast} refresh=${refresh} />`}

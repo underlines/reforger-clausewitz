@@ -35,8 +35,18 @@ class CLW_MissionDto
 	ref array<ref CLW_OfferDto> offers = {};
 }
 
+// Reply channel "fob" (M3 phase F): ESTABLISH_FOB {site} or UPGRADE_FOB {fob}. command is optional (site -> establish, fob -> upgrade).
+class CLW_FobDto
+{
+	string command;
+	string site;
+	string fob;
+	string reason;
+}
+
 class CLW_OrdersReply
 {
+	ref array<ref CLW_FobDto> fobs = {};
 	ref array<ref CLW_OrderDto> orders = {};
 	ref array<ref CLW_BuyDto> buy = {};
 	ref array<ref CLW_MissionDto> missions = {};
@@ -306,7 +316,8 @@ class CLW_RemoteCommander
 		bool hasOrders = reply.orders && !reply.orders.IsEmpty();
 		bool hasBuy = reply.buy && !reply.buy.IsEmpty();
 		bool hasMissions = reply.missions && !reply.missions.IsEmpty();
-		if (!hasOrders && !hasBuy && !hasMissions)
+		bool hasFobs = reply.fobs && !reply.fobs.IsEmpty();
+		if (!hasOrders && !hasBuy && !hasMissions && !hasFobs)
 		{
 			if (reply.keep)
 			{
@@ -332,6 +343,8 @@ class CLW_RemoteCommander
 			applied += ApplyBuys(reply.buy, summary);
 		if (hasMissions)
 			applied += ApplyMissions(reply.missions, summary);
+		if (hasFobs)
+			applied += ApplyFobs(reply.fobs, summary);
 
 		if (applied == 0)
 		{
@@ -496,6 +509,59 @@ class CLW_RemoteCommander
 			if (!summary.IsEmpty())
 				summary += ", ";
 			summary += result;
+		}
+
+		return applied;
+	}
+
+	// ---- FOBs (M3 phase F) ----
+
+	protected int ApplyFobs(notnull array<ref CLW_FobDto> fobs, out string summary)
+	{
+		CLW_ActionRegistry registry = CLW_ActionRegistry.Get();
+		int applied;
+		foreach (int index, CLW_FobDto item : fobs)
+		{
+			if (!item)
+				continue;
+
+			if (index >= 1)
+			{
+				Print(string.Format("CLW: RemoteCommander %1: fob entry ignored (max 1 per reply)", m_sFaction), LogLevel.WARNING);
+				break;
+			}
+
+			string action = item.command;
+			action.ToUpper();
+			if (action.IsEmpty() && !item.site.IsEmpty())
+				action = "ESTABLISH_FOB";
+			else if (action.IsEmpty() && !item.fob.IsEmpty())
+				action = "UPGRADE_FOB";
+
+			CLW_ActionEntry entry = registry.Find(action);
+			if (!entry || entry.m_sChannel != "fob")
+			{
+				Print(string.Format("CLW: RemoteCommander %1: fob entry rejected (unknown command '%2')", m_sFaction, item.command), LogLevel.WARNING);
+				continue;
+			}
+
+			CLW_ActionCall call = NewCall(action);
+			call.m_sReason = item.reason;
+			call.SetString("site", item.site);
+			call.SetString("fob", item.fob);
+			call.SetString("reason", item.reason);
+			string result = "";
+			if (!registry.Run(call, result))
+			{
+				Print(string.Format("CLW: RemoteCommander %1: %2 rejected: %3", m_sFaction, action, result), LogLevel.WARNING);
+				continue;
+			}
+
+			applied += call.m_iApplied;
+			if (!summary.IsEmpty())
+				summary += ", ";
+			summary += result;
+			Print(string.Format("CLW: RemoteCommander %1: %2 (%3)", m_sFaction, result, item.reason), LogLevel.NORMAL);
 		}
 
 		return applied;

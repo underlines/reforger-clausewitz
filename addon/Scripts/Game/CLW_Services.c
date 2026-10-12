@@ -50,6 +50,7 @@ class CLW_Services
 		s_bPolling = false;
 		CLW_SupplyLink.Reset();
 		CLW_ArsenalPool.Reset();
+		CLW_RequestTerminals.Reset();
 	}
 
 	// War SETUP -> RUNNING (CLW_GameMode.OnWarStarted, before the start forces are fielded, after the battle layout moved the HQs).
@@ -112,6 +113,7 @@ class CLW_Services
 			}
 		}
 
+		CLW_RequestTerminals.RemoveAll();
 		Print(string.Format("CLW: services war over: %1 services removed", removed), LogLevel.NORMAL);
 		s_aInst.Clear();
 		CLW_SupplyLink.Reset();
@@ -178,6 +180,31 @@ class CLW_Services
 		}
 
 		return count;
+	}
+
+	// Deletes the services of one base (a lost FOB) and its supply link. The link goes first: its containers die with the entities and
+	// a vanished stock must not be read as a withdrawal from the side ledger. Returns the number of services removed.
+	static int RemoveBase(string sideKey, string baseId)
+	{
+		if (!Replication.IsServer() || baseId == BASE_HQ)
+			return 0;
+
+		CLW_SupplyLink.Remove(sideKey, baseId);
+		int removed;
+		for (int i = s_aInst.Count() - 1; i >= 0; i--)
+		{
+			CLW_ServiceInstance inst = s_aInst[i];
+			if (inst.m_sSide != sideKey || inst.m_sBase != baseId)
+				continue;
+
+			if (inst.m_Entity)
+				SCR_EntityHelper.DeleteEntityAndChildren(inst.m_Entity);
+
+			s_aInst.Remove(i);
+			removed++;
+		}
+
+		return removed;
 	}
 
 	// ---- spawning ----
@@ -311,6 +338,7 @@ class CLW_Services
 		CollectHierarchy(entity, tree);
 		int reaffiliated = AdoptFaction(tree, source, sideKey);
 		int spawnPoints = DisableSpawnPoints(tree);
+		CLW_RequestTerminals.OnServicePlaced(sideKey, baseId, entry.m_sKind, spot, radius);	// M3 phase Q: request terminal next to the command post / depot
 		Print(string.Format("CLW: services placed %1 %2 %3 at %4 yaw=%5 r=%6 via=%7", sideKey, baseId, entry.m_sKind, spot, Math.Round(yaw), radius, via), LogLevel.NORMAL);
 		Print(string.Format("CLW: services   %1 %2 entities=%3 reaffiliated=%4 spawnPointsOff=%5 prefab=%6", sideKey, entry.m_sKind, tree.Count(), reaffiliated, spawnPoints, entry.m_Prefab.GetPath()), LogLevel.NORMAL);
 		return true;
@@ -484,7 +512,7 @@ class CLW_Services
 
 	// A service built from a kin faction's prefab carries that faction's affiliation: move every affiliation that still has the source
 	// faction as default to the side's faction (arsenal item pool, base logic). Returns how many were changed.
-	protected static int AdoptFaction(notnull array<IEntity> tree, string sourceKey, string sideKey)
+	static int AdoptFaction(notnull array<IEntity> tree, string sourceKey, string sideKey)
 	{
 		if (sourceKey == sideKey)
 			return 0;

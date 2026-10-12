@@ -32,6 +32,16 @@ class CLW_SupplyLink
 		return null;
 	}
 
+	// Forgets the link of a base (a lost FOB) without touching the ledger.
+	static void Remove(string sideKey, string baseId)
+	{
+		for (int i = s_aLinks.Count() - 1; i >= 0; i--)
+		{
+			if (s_aLinks[i].m_sSide == sideKey && s_aLinks[i].m_sBase == baseId)
+				s_aLinks.Remove(i);
+		}
+	}
+
 	static CLW_SupplyLink GetOrCreate(string sideKey, string baseId)
 	{
 		CLW_SupplyLink link = Find(sideKey, baseId);

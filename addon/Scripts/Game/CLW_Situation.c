@@ -86,7 +86,31 @@ class CLW_Situation
 			Print(string.Format("CLW: situation %1 body trimmed to %2 bytes (catalog descriptions and contacts dropped)", m_sFaction, json.Length()), LogLevel.WARNING);
 		}
 
+		AppendFobBlocks(json);
+		AppendRequests(json);
 		return squadCount;
+	}
+
+	// M3 phase Q: recent player requests of this faction (requests[], needs the `requests` capability). Appended after the trim.
+	protected void AppendRequests(inout string json)
+	{
+		if (json.Length() < 2 || !CLW_Capabilities.Has("requests"))
+			return;
+
+		json = json.Substring(0, json.Length() - 1) + ",\"requests\":" + CLW_RequestService.GetJson(m_sFaction) + "}";
+	}
+
+	// M3 phase F: own FOBs, candidate sites and the FOB rules (only with the `fob` capability and at least one FOB allowed).
+	// Appended after the trim so the blocks (a few hundred bytes) are always sent.
+	protected void AppendFobBlocks(inout string json)
+	{
+		if (json.Length() < 2 || !CLW_Capabilities.Has("fob") || CLW_FobManager.GetMax() <= 0)
+			return;
+
+		string fobsJson = CLW_FobManager.FobsJson(m_sFaction);
+		string sitesJson = CLW_FobManager.SitesJson(m_sFaction);
+		string extra = ",\"fobs\":[" + fobsJson + "],\"fobSites\":[" + sitesJson + "],\"fobRules\":" + CLW_FobManager.RulesJson(m_sFaction);
+		json = json.Substring(0, json.Length() - 1) + extra + "}";
 	}
 
 	// ---- parts ----
@@ -387,6 +411,9 @@ class CLW_Situation
 			text += "{\"id\":\"" + Escape(id) + "\",\"kind\":\"" + Escape(kind) + "\",\"type\":\"" + Escape(CLW_SquadInfo.TypeName(group)) + "\",\"pos\":[" + Math.Round(pos[0]) + "," + Math.Round(pos[1]) + "," + Math.Round(pos[2]) + "]";
 			text += ",\"agents\":" + alive + ",\"startAgents\":" + start + ",\"vehicle\":" + vehicleJson + ",\"humanLed\":" + BoolText(human);
 			text += ",\"wounded\":" + wounded + ",\"health\":" + avgHealth.ToString(-1, 2) + ",\"speed\":" + speed.ToString(-1, 1) + ",\"heading\":" + headingDeg + ",\"state\":\"" + stateText + "\",\"dormant\":" + BoolText(dormant);
+			string reservedFor = CLW_FobManager.ReservedFor(id);
+			if (!reservedFor.IsEmpty())
+				text += ",\"reserved\":\"" + Escape(reservedFor) + "\"";	// M3 phase F: tied up building a FOB, orders are refused
 			text += ",\"objective\":" + objectiveJson + ",\"mission\":" + missionJson + "}";
 			squadCount++;
 		}

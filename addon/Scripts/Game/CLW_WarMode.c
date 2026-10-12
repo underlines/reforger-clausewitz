@@ -54,6 +54,26 @@ class CLW_WarMode
 		}
 	}
 
+	// Current value of an INT / FLOAT / BOOL / CHOICE-index parameter, 'fallback' when the mode has no such parameter.
+	int GetIntParam(string id, int fallback)
+	{
+		CLW_ModeParam param = FindIn(m_aParams, id);
+		if (!param)
+			return fallback;
+
+		return param.GetInt();
+	}
+
+	// Current choice text of a CHOICE parameter, "" when the mode has no such parameter.
+	string GetChoiceParam(string id)
+	{
+		CLW_ModeParam param = FindIn(m_aParams, id);
+		if (!param)
+			return "";
+
+		return param.GetChoice();
+	}
+
 	// Live parameter list (definitions + current values).
 	void GetParams(notnull array<ref CLW_ModeParam> outParams)
 	{

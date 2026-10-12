@@ -206,6 +206,7 @@ class CLW_RuleCommander
 		array<CLW_Contact> contacts = {};
 		m_Book.GetContacts(contacts);
 
+		CLW_FobDoctrine.Think(this, m_sFaction, war);	// M3 phase F: before Spend, which would use up the supplies a FOB needs
 		Spend(war, contacts);
 		Plan(war, contacts);
 		ThinkHumanLed();
@@ -697,6 +698,9 @@ class CLW_RuleCommander
 			if (!group || HasHumanLeader(group) || m_Orders.UnitAlive(id) <= 0)
 				continue;
 
+			if (CLW_FobManager.IsReserved(id))
+				continue;	// builder / escort of a FOB being established (CLW_FobManager gives its orders)
+
 			if (m_Orders.IsWeak(id))
 			{
 				FallBack(id);
@@ -902,6 +906,13 @@ class CLW_RuleCommander
 		if (IsHumanLed(squadId))
 		{
 			why = "human-led squad (missions only)";
+			return false;
+		}
+
+		string reservedFor = CLW_FobManager.ReservedFor(squadId);
+		if (!reservedFor.IsEmpty())
+		{
+			why = "reserved: " + reservedFor;
 			return false;
 		}
 

@@ -46,7 +46,10 @@
 //     The prompt's command list, the order/buy/mission validation and the fake provider come from the manifest of that hash (the built-in
 //     one mirrors Actions.conf). Unknown hash (sidecar restarted) -> built-in manifest + the reply carries "needManifest":true and the
 //     game resends. v2 posts (no hash) keep working with the built-in manifest. GET /api/state has "manifests" (dashboard Actions tab).
-//     Reply channels stay orders / buy / missions (same command JSON as v2); new channels need game + sidecar support.
+//     M3 phase Q: the situation carries "requests":[{"id","player","role":"leader|soldier","kind":"vehicle|squad|resupply|reinforce|recon","args",
+//     "status":"granted|refused","reason","ageSec"}] (recent player requests the game's rules decided; fast path, no LLM). Passed through
+//     unchanged: GET /api/state factions[<name>].situation.requests (dashboard Requests tab). Protocol stays v3.
+//     Reply channels: orders / buy / missions (same command JSON as v2) + "fobs" (M3 phase F: [{"command":"ESTABLISH_FOB","site":"<fobSites id>"} or {"command":"UPGRADE_FOB","fob":"<fobs id>"}], max 1, only with the fob capability; situation blocks fobs[] / fobSites[] / fobRules). New channels need game + sidecar support.
 //
 //   Faction SITREP (design: dev/notes/sitrep-design.md). The game POST may carry "sitrep": the rules SITREP the game built from the
 //     same fog-limited picture {scope,unit,source:"rules",warTimeSec,headline,situation,enemy,mission,execution,logistics}; the sidecar
@@ -173,9 +176,12 @@ const orderNamesOf = (m) => new Set(channelOf(m, "orders").map((e) => e.name));
 const fieldsText = (e) => (Array.isArray(e.params) ? e.params : []).map((p) => `${p.name}${p.required ? "*" : ""}${Array.isArray(p.enum) && p.enum.length ? "=" + p.enum.join("|") : ""}${p.hint ? " (" + p.hint + ")" : ""}`).join(", ");
 const sentence = (t) => String(t ?? "").trim().replace(/\.$/, "");
 
+// FOB paragraph (M3 phase F): added to the prompt only when the manifest contains FOB intents (capability fob on, fobMax > 0).
+const FOB_PROMPT = "FOBS: a FOB is a forward base (spawn point, command post, supply cache, arsenal) that a transport builds at a site you pick from fobSites (pos, grid, place); it costs fobRules.cost supplies up front (refunded if it fails), takes time to build and is lost if the enemy holds the zone. Establish one toward the front when supplies allow (keep ~100 for units), fobRules.live < fobRules.max and fobRules.inProgress = 0; fobs[] lists yours (state planned|moving|building|active|lost, build %, tier, underAttack). Upgrade an active tier-1 FOB (vehicle depot, medical) when supplies are plentiful. Squads with a reserved field are building a FOB: do not order them.\n";
+
 // COMMANDS + REPLY paragraphs of the v2/v3 prompt, generated from the manifest (entries with unmet capabilities are not in it).
 function commandsSection(m) {
-  const orders = channelOf(m, "orders"), buys = channelOf(m, "buy"), offers = channelOf(m, "missions");
+  const orders = channelOf(m, "orders"), buys = channelOf(m, "buy"), offers = channelOf(m, "missions"), fobs = channelOf(m, "fob");
   let t = "";
   if (orders.length) {
     t += "COMMANDS (orders, one per squad, only for squads with humanLed=false)\n";
@@ -183,6 +189,7 @@ function commandsSection(m) {
     t += `Order fields ("command" is the name above; * = required): ${fieldsText(orders[0])}.\n`;
   }
   if (buys.length) t += buys.map((e) => `${e.name}: ${sentence(e.desc)}. Fields: ${fieldsText(e)}.\n`).join("");
+  if (fobs.length) t += FOB_PROMPT + fobs.map((e) => `${e.name}: ${sentence(e.desc)}. Fields: ${fieldsText(e)}.\n`).join("");
   t += offers.length
     ? "HUMAN-LED SQUADS (humanLed=true) are never ordered. " + offers.map((e) => sentence(e.desc)).join(". ") + ".\n"
     : "HUMAN-LED SQUADS (humanLed=true) are never ordered and get no missions.\n";
@@ -193,9 +200,10 @@ function commandsSection(m) {
     keys.push("orders");
   }
   if (buys.length) { parts.push('"buy":[{"type":"<catalog type>","count":1,"reason":"short"}]'); keys.push("buy"); }
+  if (fobs.length) { parts.push('"fobs":[{"command":"ESTABLISH_FOB","site":"<fobSites id>","reason":"short"}]'); keys.push("fobs"); }
   if (offers.length) { parts.push('"missions":[{"squad":"<human-led id>","offers":[{"kind":"CAPTURE","target":"D","brief":"..."}]}]'); keys.push("missions"); }
   t += "REPLY with ONLY one JSON object, no prose, no code fences:\n{" + parts.join(",\n ") + "}\n";
-  t += (keys.length ? `${keys.join("/")} may be empty or omitted. ` : "") + (buys.length ? "buy: max 3 entries, count 1-3, total cost <= war.supplies. " : "") + '{"keep":true} alone = keep all current orders.';
+  t += (keys.length ? `${keys.join("/")} may be empty or omitted. ` : "") + (buys.length ? "buy: max 3 entries, count 1-3, total cost <= war.supplies. " : "") + (fobs.length ? "fobs: at most 1 entry per reply. " : "") + '{"keep":true} alone = keep all current orders.';
   return t;
 }
 
@@ -626,7 +634,7 @@ function fakeOrders(sit) {
 const xz = (p) => (Array.isArray(p) ? (p.length > 2 ? [p[0], p[2]] : [p[0], p[1]]) : [NaN, NaN]);
 const dist2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 function fakeV2(sit, manifest = DEFAULT_MANIFEST) {
-  const me = sit.faction, out = { orders: [], buy: [], missions: [] };
+  const me = sit.faction, out = { orders: [], buy: [], missions: [], fobs: [] };
   const names = orderNamesOf(manifest), canBuy = channelOf(manifest, "buy").length > 0, canOffer = channelOf(manifest, "missions").length > 0;
   const objs = (Array.isArray(sit.objectives) ? sit.objectives : []).filter((o) => o && typeof o.id === "string" && okPos(o.pos));
   const squads = (Array.isArray(sit.squads) ? sit.squads : []).filter((s) => s && typeof s.id === "string" && okPos(s.pos));
@@ -652,7 +660,20 @@ function fakeV2(sit, manifest = DEFAULT_MANIFEST) {
     }
   }
 
-  const ai = squads.filter((s) => !s.humanLed);
+  // FOBs (M3 phase F): when affordable, on a rotating minute so it does not happen on every poll; then upgrade an active tier-1 FOB
+  const fobNames = new Set(channelOf(manifest, "fob").map((e) => e.name)), fobRules = sit.fobRules ?? {};
+  if (fobNames.size && isNum(fobRules.cost) && isNum(fobRules.max)) {
+    const minute = Math.floor((isNum(sit.time) ? sit.time : 0) / 60);
+    const mine = Array.isArray(sit.fobs) ? sit.fobs : [], sites = Array.isArray(sit.fobSites) ? sit.fobSites : [];
+    if (fobNames.has("ESTABLISH_FOB") && sites[0] && fobRules.live < fobRules.max && !fobRules.inProgress && supplies >= fobRules.cost + 100 && minute % 3 === 1)
+      out.fobs.push({ command: "ESTABLISH_FOB", site: sites[0].id, reason: `fake provider: forward base at ${sites[0].name ?? sites[0].id}` });
+    else if (fobNames.has("UPGRADE_FOB") && isNum(fobRules.upgradeCost) && supplies >= fobRules.upgradeCost + 150 && minute % 3 === 2) {
+      const up = mine.find((f) => f?.state === "active" && f.tier < 2);
+      if (up) out.fobs.push({ command: "UPGRADE_FOB", fob: up.id, reason: "fake provider: depot and medical" });
+    }
+  }
+
+  const ai = squads.filter((s) => !s.humanLed && !s.reserved);
   const assigned = new Set();
   const give = (s, command, tgt, reason) => { assigned.add(s.id); out.orders.push(tgt.id ? { squad: s.id, command, target: tgt.id, reason } : { squad: s.id, command, pos: tgt.pos, reason }); };
   const weak = (s) => isNum(s.agents) && isNum(s.startAgents) && s.startAgents > 0 && s.agents < s.startAgents * 0.5;
@@ -694,7 +715,7 @@ function extractOrders(text, v2 = false) {
   const obj = JSON.parse(text.slice(a, b + 1));
   if (!obj || typeof obj !== "object" || Array.isArray(obj)) throw new Error("reply is not a JSON object");
   if (v2) {
-    if (!["orders", "buy", "missions"].some((k) => Array.isArray(obj[k])) && obj.keep !== true && !(obj.sitrep && typeof obj.sitrep === "object")) throw new Error("reply has no orders/buy/missions array");
+    if (!["orders", "buy", "missions", "fobs"].some((k) => Array.isArray(obj[k])) && obj.keep !== true && !(obj.sitrep && typeof obj.sitrep === "object")) throw new Error("reply has no orders/buy/missions/fobs array");
   } else if (!Array.isArray(obj.orders)) throw new Error("reply has no orders array");
   return obj;
 }
@@ -776,7 +797,7 @@ function validateV2(obj, sit, dropped = [], manifest = DEFAULT_MANIFEST) {
     if (o.pos !== undefined && o.pos !== null) return xzOk(o.pos) ? { pos: [o.pos[0], o.pos[1]] } : { error: "bad pos" };
     return {};
   };
-  const res = { orders: [], buy: [], missions: [] };
+  const res = { orders: [], buy: [], missions: [], fobs: [] };
 
   const seen = new Set();
   for (const o of Array.isArray(obj.orders) ? obj.orders : []) {
@@ -785,6 +806,7 @@ function validateV2(obj, sit, dropped = [], manifest = DEFAULT_MANIFEST) {
     const why = !o || typeof o !== "object" ? "not an object"
       : !s ? `unknown squad ${o.squad}`
       : s.humanLed ? `${o.squad} is human-led: no orders, only missions`
+      : s.reserved ? `${o.squad} is reserved (${s.reserved})`
       : seen.has(o.squad) ? `duplicate order for ${o.squad}`
       : !orderNames.has(o.command) ? `bad command ${o.command}`
       : a.error ? a.error
@@ -809,6 +831,29 @@ function validateV2(obj, sit, dropped = [], manifest = DEFAULT_MANIFEST) {
     if (why) { drop("buy", b, why); continue; }
     left -= cost;
     res.buy.push({ type: b.type, count: b.count, reason: typeof b.reason === "string" ? b.reason.slice(0, 120) : "" });
+  }
+
+  // FOB intents (channel "fob"): at most 1 per reply; the game validates again (cap, one in progress, site, supplies)
+  const fobNames = new Set(channelOf(manifest, "fob").map((e) => e.name));
+  const fobSites = new Set((Array.isArray(sit.fobSites) ? sit.fobSites : []).filter((x) => x && typeof x.id === "string").map((x) => x.id));
+  const myFobs = new Map((Array.isArray(sit.fobs) ? sit.fobs : []).filter((x) => x && typeof x.id === "string").map((x) => [x.id, x]));
+  const fr = sit.fobRules ?? {};
+  for (const f of Array.isArray(obj.fobs) ? obj.fobs : []) {
+    const cmd = f && typeof f === "object" ? (typeof f.command === "string" && f.command ? f.command.toUpperCase() : f.site ? "ESTABLISH_FOB" : f.fob ? "UPGRADE_FOB" : "") : "";
+    const mine = cmd === "UPGRADE_FOB" && f ? myFobs.get(f.fob) : null;
+    const why = !f || typeof f !== "object" ? "not an object"
+      : !fobNames.size ? "FOBs are not available in this war mode"
+      : !fobNames.has(cmd) ? `bad fob command ${f.command}`
+      : res.fobs.length >= 1 ? "more than 1 fob entry per reply"
+      : cmd === "ESTABLISH_FOB" ? (!fobSites.has(f.site) ? `unknown fob site ${f.site}`
+        : isNum(fr.live) && isNum(fr.max) && fr.live >= fr.max ? "FOB limit reached"
+        : fr.inProgress > 0 ? "another FOB is still being established"
+        : isNum(fr.cost) && fr.cost > left ? `FOB cost ${fr.cost} exceeds remaining supplies ${left}` : null)
+      : (!mine ? `unknown fob ${f.fob}` : mine.state !== "active" ? `${f.fob} is not active` : mine.tier >= 2 ? `${f.fob} is already tier 2`
+        : isNum(fr.upgradeCost) && fr.upgradeCost > left ? `upgrade cost ${fr.upgradeCost} exceeds remaining supplies ${left}` : null);
+    if (why) { drop("fob", f, why); continue; }
+    left -= cmd === "ESTABLISH_FOB" ? (fr.cost ?? 0) : (fr.upgradeCost ?? 0);
+    res.fobs.push({ command: cmd, ...(cmd === "ESTABLISH_FOB" ? { site: f.site } : { fob: f.fob }), reason: typeof f.reason === "string" ? f.reason.slice(0, 120) : "" });
   }
 
   const offered = new Set();
@@ -845,7 +890,7 @@ let cooldownUntil = 0;
 
 // Runs one situation through the given config. Never throws.
 async function computeOrders(c, sit, isTest = false, opts = {}) {
-  const r = { orders: [], buy: [], missions: [], keep: false, dropped: [], rawReply: null, usage: null, ok: true, reason: null };
+  const r = { orders: [], buy: [], missions: [], fobs: [], keep: false, dropped: [], rawReply: null, usage: null, ok: true, reason: null };
   try {
     if (!isTest && c.provider !== "fake" && Date.now() < cooldownUntil) throw new Error(`provider cooling down after rate limit/server error (${Math.ceil((cooldownUntil - Date.now()) / 1000)}s left)`);
     if (!sit || typeof sit !== "object" || !Array.isArray(sit.squads)) throw new Error("no squads array");
@@ -863,7 +908,7 @@ async function computeOrders(c, sit, isTest = false, opts = {}) {
         if (isNum(obj.next_check_sec)) r.nextCheck = { sec: Math.round(obj.next_check_sec), reason: typeof obj.next_check_reason === "string" ? obj.next_check_reason.slice(0, 120) : "" };
       }
       Object.assign(r, validateV2(obj, sit, r.dropped, opts.manifest));
-      r.keep = (obj.keep === true || (!r.orders.length && !r.buy.length && !r.missions.length && !!obj.sitrep && !Array.isArray(obj.orders) && !Array.isArray(obj.buy) && !Array.isArray(obj.missions))) && !r.orders.length && !r.buy.length && !r.missions.length;
+      r.keep = (obj.keep === true || (!r.orders.length && !r.buy.length && !r.missions.length && !r.fobs.length && !!obj.sitrep && !Array.isArray(obj.orders) && !Array.isArray(obj.buy) && !Array.isArray(obj.missions) && !Array.isArray(obj.fobs))) && !r.orders.length && !r.buy.length && !r.missions.length && !r.fobs.length;
       if (obj.sitrep !== undefined) {
         r.sitrep = normSitrep(obj.sitrep);
         if (!r.sitrep) { console.log("  dropped sitrep: not a usable object"); r.dropped.push({ sitrep: obj.sitrep, reason: "not a usable sitrep object" }); }
@@ -885,7 +930,7 @@ async function computeOrders(c, sit, isTest = false, opts = {}) {
     if (e?.cooldownMs && !isTest) cooldownUntil = Date.now() + e.cooldownMs;
     r.ok = false;
     r.reason = e?.name === "AbortError" ? "timeout" : String(e?.message ?? e);
-    r.orders = []; r.buy = []; r.missions = []; r.keep = false;
+    r.orders = []; r.buy = []; r.missions = []; r.fobs = []; r.keep = false;
     console.log(`  error: ${r.reason}`);
   }
   return r;
@@ -1217,7 +1262,7 @@ async function handleOrders(req, res) {
     state.counters.requests++;
     if (r.skipped) state.counters.skipped++;
     if (!r.ok && r.reason !== "disabled" && r.reason !== "budget limit reached") state.counters.errors++;
-    if (!r.skipped && !r.keep && (!r.ok || (r.orders.length === 0 && !r.buy?.length && !r.missions?.length))) state.counters.fallbacks++;
+    if (!r.skipped && !r.keep && (!r.ok || (r.orders.length === 0 && !r.buy?.length && !r.missions?.length && !r.fobs?.length))) state.counters.fallbacks++;
     if (r.usage) { state.counters.inputTokens += r.usage.input; state.counters.outputTokens += r.usage.output; }
   }
   state.lastRequestTs = Date.now();
@@ -1238,21 +1283,21 @@ async function handleOrders(req, res) {
     // is catching up with an epoch another faction already started.
     if (old && (old.epoch ?? 0) === (state.epoch ?? 0) && isNum(old.situation?.time) && isNum(sit.time) && sit.time < old.situation.time - 5) state.epoch = (state.epoch ?? 0) + 1;
     state.factions[faction] = { ts: state.lastRequestTs, epoch: state.epoch ?? 0, situation: sit, side: isNum(sit.side) ? sit.side : null, identity: typeof sit.identity === "string" ? sit.identity : null, manifest: manifestHash ? { hash: manifestHash, known: !needManifest } : null, sitrep: composeSitrep(faction, sit, gameSitrep), orders: keepOld ? (old?.orders ?? []) : r.orders,
-      buy: keepOld ? (old?.buy ?? []) : (r.buy ?? []), missions: keepOld ? (old?.missions ?? []) : (r.missions ?? []), eventLog, prevPos, orderTs };
+      buy: keepOld ? (old?.buy ?? []) : (r.buy ?? []), missions: keepOld ? (old?.missions ?? []) : (r.missions ?? []), fobs: keepOld ? (old?.fobs ?? []) : (r.fobs ?? []), eventLog, prevPos, orderTs };
   }
   if (!r.gated) state.exchanges.unshift({
     ts: state.lastRequestTs, faction, provider: snapshot.enabled ? snapshot.provider : "disabled",
     model: snapshot.provider === "fake" ? null : snapshot.model,
-    request: sit, rawReply: r.rawReply, orders: r.orders, buy: r.buy ?? [], missions: r.missions ?? [], keep: !!r.keep, sitrep: r.sitrep ?? null, dropped: r.dropped,
+    request: sit, rawReply: r.rawReply, orders: r.orders, buy: r.buy ?? [], missions: r.missions ?? [], fobs: r.fobs ?? [], keep: !!r.keep, sitrep: r.sitrep ?? null, dropped: r.dropped,
     latencyMs, ok: r.ok, reason: r.reason, usage: r.usage,
     wake, nextCheck: r.nextCheck ?? null, intervalSec: interval,
   });
   if (state.exchanges.length > RING_MAX) state.exchanges.length = RING_MAX;
 
   const nContacts = Array.isArray(sit?.contacts) ? sit.contacts.length : 0;
-  if (!r.gated) console.log(`orders faction=${faction} squads=${sit?.squads?.length ?? 0} contacts=${nContacts} orders=${r.orders.length}${v2 ? ` buy=${r.buy?.length ?? 0} missions=${r.missions?.length ?? 0}` : ""} ${latencyMs}ms${r.skipped ? " (" + r.reason + ")" : ""}${wake ? " wake=" + wake.reason + (wake.triggers.length ? " [" + wake.triggers.join("; ") + "]" : "") : ""}${r.nextCheck ? " next=" + r.nextCheck.sec + "s" : ""}`);
+  if (!r.gated) console.log(`orders faction=${faction} squads=${sit?.squads?.length ?? 0} contacts=${nContacts} orders=${r.orders.length}${v2 ? ` buy=${r.buy?.length ?? 0} missions=${r.missions?.length ?? 0}${r.fobs?.length ? ` fobs=${r.fobs.length}` : ""}` : ""} ${latencyMs}ms${r.skipped ? " (" + r.reason + ")" : ""}${wake ? " wake=" + wake.reason + (wake.triggers.length ? " [" + wake.triggers.join("; ") + "]" : "") : ""}${r.nextCheck ? " next=" + r.nextCheck.sec + "s" : ""}`);
   const reply = r.rules ? { orders: [] } : r.paused || r.phaseGate ? { orders: [], keep: true } : r.gated && sc.failed ? { orders: [] } : r.skipped || r.keep ? { orders: [], keep: true, ...(r.sitrep ? { sitrep: r.sitrep } : {}) }
-    : v2 ? { orders: r.orders, buy: r.buy ?? [], missions: r.missions ?? [], ...(r.sitrep ? { sitrep: r.sitrep } : {}) } : { orders: r.orders };
+    : v2 ? { orders: r.orders, buy: r.buy ?? [], missions: r.missions ?? [], ...(r.fobs?.length ? { fobs: r.fobs } : {}), ...(r.sitrep ? { sitrep: r.sitrep } : {}) } : { orders: r.orders };
   if (needManifest) reply.needManifest = true;
   send(res, 200, reply);
 }

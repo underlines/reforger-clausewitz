@@ -1,0 +1,162 @@
+// RPC glue of the player requests and reports (M3 phase Q), same pattern as CLW_SitrepPlayerController.c.
+// Client -> server: /request and the terminal actions ("<kind> [arg]"), /report. Server -> owner: the answer (hint + chat line) and the
+// request costs for the terminal action labels. The listen-server host never uses the RPCs (the service calls the local code directly).
+modded class SCR_PlayerController
+{
+	protected static bool s_bClwRequestChatRegistered;
+
+	// ---- client -> server ----
+
+	// args = "<kind> [arg]" (chat text after /request, or the kind of a terminal action); "" = the menu.
+	void CLW_SendRequest(string args)
+	{
+		if (Replication.IsServer())
+		{
+			CLW_RequestService.Chat(GetPlayerId(), args);
+			return;
+		}
+
+		Rpc(CLW_RpcAsk_Request, args);
+	}
+
+	[RplRpc(RplChannel.Reliable, RplRcver.Server)]
+	protected void CLW_RpcAsk_Request(string args)
+	{
+		CLW_RequestService.Chat(GetPlayerId(), args);	// the sender: never a player id from the client
+	}
+
+	void CLW_SendReport(string args)
+	{
+		if (Replication.IsServer())
+		{
+			CLW_Reports.Chat(GetPlayerId(), args);
+			return;
+		}
+
+		Rpc(CLW_RpcAsk_Report, args);
+	}
+
+	[RplRpc(RplChannel.Reliable, RplRcver.Server)]
+	protected void CLW_RpcAsk_Report(string args)
+	{
+		CLW_Reports.Chat(GetPlayerId(), args);
+	}
+
+	// ---- server -> owning client ----
+
+	void CLW_RequestAnswer(string text, bool hint)
+	{
+		Rpc(CLW_RpcAsk_Answer, text, hint);
+	}
+
+	[RplRpc(RplChannel.Reliable, RplRcver.Owner)]
+	protected void CLW_RpcAsk_Answer(string text, bool hint)
+	{
+		CLW_RequestClient.Show(text, hint);
+	}
+
+	void CLW_RequestCosts(string wire)
+	{
+		Rpc(CLW_RpcAsk_Costs, wire);
+	}
+
+	[RplRpc(RplChannel.Reliable, RplRcver.Owner)]
+	protected void CLW_RpcAsk_Costs(string wire)
+	{
+		CLW_RequestClient.SetCosts(wire);
+	}
+
+	static void CLW_MarkRequestChatRegistered()
+	{
+		s_bClwRequestChatRegistered = true;
+	}
+
+	override void OnControlledEntityChanged(IEntity from, IEntity to)
+	{
+		super.OnControlledEntityChanged(from, to);
+
+		if (this != GetGame().GetPlayerController())
+			return;
+
+		if (!s_bClwRequestChatRegistered)
+			CLW_RequestClient.RegisterChatCommands();
+	}
+}
+
+// Client side: chat commands, answers, cost cache for the action labels.
+class CLW_RequestClient
+{
+	protected static ref map<string, string> s_mCosts = new map<string, string>();
+
+	static void RegisterChatCommands()
+	{
+		SCR_ChatPanelManager chat = SCR_ChatPanelManager.GetInstance();
+		if (!chat)
+			return;
+
+		ChatCommandInvoker request = chat.GetCommandInvoker("request");
+		ChatCommandInvoker report = chat.GetCommandInvoker("report");
+		if (!request || !report)
+			return;
+
+		request.Insert(OnRequestChat);
+		report.Insert(OnReportChat);
+		SCR_PlayerController.CLW_MarkRequestChatRegistered();
+		Print("CLW: chat commands /request and /report registered", LogLevel.NORMAL);
+	}
+
+	static void OnRequestChat(SCR_ChatPanel panel, string data)
+	{
+		SCR_PlayerController controller = SCR_PlayerController.Cast(GetGame().GetPlayerController());
+		if (!controller)
+			return;
+
+		Print("CLW: chat /request " + data, LogLevel.NORMAL);
+		controller.CLW_SendRequest(data);
+	}
+
+	static void OnReportChat(SCR_ChatPanel panel, string data)
+	{
+		SCR_PlayerController controller = SCR_PlayerController.Cast(GetGame().GetPlayerController());
+		if (!controller)
+			return;
+
+		Print("CLW: chat /report " + data, LogLevel.NORMAL);
+		controller.CLW_SendReport(data);
+	}
+
+	// Chat line, plus a hint for the answers.
+	static void Show(string text, bool hint)
+	{
+		CLW_Debug.Show(text);
+		if (hint)
+			SCR_HintManagerComponent.ShowCustomHint(text, "HQ", 8);
+	}
+
+	// "vehicle=60;squad=120;resupply=20;" from the server (the force catalog only exists there).
+	static void SetCosts(string wire)
+	{
+		s_mCosts.Clear();
+		array<string> parts = {};
+		wire.Split(";", parts, true);
+		foreach (string part : parts)
+		{
+			int eq = part.IndexOf("=");
+			if (eq <= 0)
+				continue;
+
+			s_mCosts.Set(part.Substring(0, eq), part.Substring(eq + 1, part.Length() - eq - 1));
+		}
+	}
+
+	// Action label with the cost: "Request squad (120)".
+	static string ActionLabel(string kind)
+	{
+		string label = "Request " + kind;
+		string cost;
+		if (s_mCosts.Find(kind, cost))
+			label += " (" + cost + " supplies)";
+
+		return label;
+	}
+}

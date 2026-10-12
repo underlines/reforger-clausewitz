@@ -63,6 +63,18 @@ class CLW_WarModeConfig_Short : CLW_WarModeConfig
 	[Attribute("5", UIWidgets.EditBox, "Holding all points this many minutes wins (0-15, 0 = off)")]
 	int m_iHoldAllWinMin;
 
+	[Attribute("2", UIWidgets.EditBox, "Max FOBs per side at once (0-4, 0 = no FOBs)")]
+	int m_iFobMax;
+
+	[Attribute("timed", UIWidgets.EditBox, "FOB build mode: instant (done on arrival) or timed (progress while the builder is on site)")]
+	string m_sFobBuild;
+
+	[Attribute("300", UIWidgets.EditBox, "FOB cost in supplies (0-1000)")]
+	int m_iFobCost;
+
+	[Attribute("90", UIWidgets.EditBox, "Timed FOB build duration in seconds (10-600)")]
+	int m_iFobBuildSec;
+
 	override string GetModeId()
 	{
 		return "short";

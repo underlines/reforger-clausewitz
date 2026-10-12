@@ -31,10 +31,12 @@ class CLW_SpawnJob
 	bool m_bCrewCanceled;
 	ref array<IEntity> m_aCrew;	// occupants reported by the callback (weak entity pointers)
 	string m_sFailure;
+	string m_sTag;				// owner tag of a tagged purchase (CLW_ForceSpawner.BuyTagged), "" = none
 	int m_iMounted;
 	int m_iVerifyPass;			// 0: first check (then retry with explicit slots), 1: final check
 	int m_iRetried;
 	int m_iMemberRetries;		// spawn re-requests for a group that stayed empty (active-AI limit dropped the request)
+	int m_iRequester = -1;		// player id whose request (CLW_RequestService) bought this infantry group, -1 = none
 }
 
 // Spawns forces at the base: purchases (supplies) and start forces (free). Server only. Vehicles get a crew from
@@ -48,6 +50,9 @@ class CLW_ForceSpawner
 	protected CLW_SquadRegistry m_Registry;		// weak
 	protected CLW_VehicleManager m_Vehicles;	// weak
 	protected bool m_bTicking;
+	protected string m_sNextTag;				// tag handed to the job Start() creates (BuyTagged)
+	protected ref ScriptInvoker m_OnTagged;		// (string tag, string unitId): a tagged purchase finished (unitId = registry id) or failed (unitId empty)
+	protected int m_iNextRequester = -1;		// set by BuyFor for the job Start creates
 
 	void Init(CLW_ForceCatalog catalog, CLW_SquadRegistry registry, CLW_VehicleManager vehicles)
 	{
@@ -68,6 +73,34 @@ class CLW_ForceSpawner
 	bool Buy(string factionKey, string typeId, string reason, out string error)
 	{
 		return Start(factionKey, typeId, reason, false, error);
+	}
+
+	// Purchase for a player request (CLW_RequestService): like Buy, and when the infantry group is complete it is handed to
+	// CLW_RequestService.OnSquadReady (the AI join the requester's squad). Infantry types only.
+	bool BuyFor(string factionKey, string typeId, string reason, int requesterId, out string error)
+	{
+		m_iNextRequester = requesterId;
+		bool started = Start(factionKey, typeId, reason, false, error);
+		m_iNextRequester = -1;
+		return started;
+	}
+
+	// Purchase for an owner system (FOB builders): same as Buy, and GetOnTagged() fires with (tag, unit id) when the unit is READY
+	// (id = the registry id of the unit, the crew group for a vehicle) or (tag, "") when the purchase failed (also when this returns false).
+	bool BuyTagged(string factionKey, string typeId, string reason, string tag, out string error)
+	{
+		m_sNextTag = tag;
+		bool started = Start(factionKey, typeId, reason, false, error);
+		m_sNextTag = "";
+		return started;
+	}
+
+	ScriptInvoker GetOnTagged()
+	{
+		if (!m_OnTagged)
+			m_OnTagged = new ScriptInvoker();
+
+		return m_OnTagged;
 	}
 
 	// Same without charging supplies and without the AI/vehicle caps (start forces are part of the scenario).
@@ -321,7 +354,10 @@ class CLW_ForceSpawner
 		job.m_sFaction = factionKey;
 		job.m_Entry = source.CloneEntry();
 		job.m_sReason = reason;
+		job.m_sTag = m_sNextTag;
 		job.m_bFree = free;
+		if (!source.HasVehicle())
+			job.m_iRequester = m_iNextRequester;
 		job.m_vPos = spot;
 		job.m_fYaw = spotYaw;
 		job.m_sVia = via;
@@ -912,6 +948,12 @@ class CLW_ForceSpawner
 		Print(string.Format("CLW: spawn %1 %2 (%3) READY as %4: %5", job.m_sFaction, entry.m_sType, entry.m_sName, job.m_sUnitId, detail), LogLevel.NORMAL);
 		if (war)
 			war.PushEvent(job.m_sFaction, job.m_sUnitId + " arrived: " + entry.m_sName);
+
+		if (!job.m_sTag.IsEmpty() && m_OnTagged)
+			m_OnTagged.Invoke(job.m_sTag, job.m_sUnitId);
+
+		if (job.m_iRequester >= 0 && job.m_Group)
+			CLW_RequestService.OnSquadReady(job.m_iRequester, job.m_Group, job.m_sUnitId, entry.m_sName);
 	}
 
 	// Clean up everything the job spawned, refund, tell the war.
@@ -936,6 +978,9 @@ class CLW_ForceSpawner
 
 			war.PushEvent(job.m_sFaction, job.m_sFaction + " purchase failed: " + job.m_Entry.m_sName);
 		}
+
+		if (!job.m_sTag.IsEmpty() && m_OnTagged)
+			m_OnTagged.Invoke(job.m_sTag, "");
 	}
 
 	protected string RefundNote(CLW_SpawnJob job)
