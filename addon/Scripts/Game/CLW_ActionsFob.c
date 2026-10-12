@@ -127,7 +127,9 @@ class CLW_FobDoctrine
 			return;
 		}
 
-		if (war.GetSupplies(side) < CLW_FobManager.GetUpgradeCost() + CLW_RuleCommander.SUPPLY_RESERVE + UPGRADE_EXTRA_SUPPLIES)
+		// logistics off: the one pool must be plentiful; logistics on: the upgrade is paid from the FOB's own stock (checked per FOB below)
+		bool perBase = CLW_Capabilities.Has("logistics");
+		if (!perBase && war.GetSupplies(side) < CLW_FobManager.GetUpgradeCost() + CLW_RuleCommander.SUPPLY_RESERVE + UPGRADE_EXTRA_SUPPLIES)
 			return;
 
 		array<CLW_Fob> own = {};
@@ -135,6 +137,9 @@ class CLW_FobDoctrine
 		foreach (CLW_Fob fob : own)
 		{
 			if (fob.m_iTier >= 2)
+				continue;
+
+			if (perBase && CLW_SupplyStore.Get(side, fob.m_sId) < CLW_FobManager.GetUpgradeCost() + UPGRADE_EXTRA_SUPPLIES)
 				continue;
 
 			CLW_ActionCall upgrade = NewCall("UPGRADE_FOB", side, rules);

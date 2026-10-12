@@ -11,16 +11,17 @@ class CLW_ForceKind
 	static const string MECH = "mech";					// armed vehicle with cargo + infantry
 	static const string ARMOR = "armor";				// armed vehicle without cargo (tanks from mod packs)
 	static const string ARMORED_RECON = "armored_recon";
+	static const string LOGISTICS = "logistics";			// unarmed supply truck (M3 phase L): never fights, convoys only (CLW_Convoys); cargo = CLW_ForceEntry.m_iCargo
 
 	static bool IsKnown(string kind)
 	{
-		return kind == INFANTRY || kind == RECON || kind == MOTORIZED || kind == LIGHT || kind == MECH || kind == ARMOR || kind == ARMORED_RECON;
+		return kind == INFANTRY || kind == RECON || kind == MOTORIZED || kind == LIGHT || kind == MECH || kind == ARMOR || kind == ARMORED_RECON || kind == LOGISTICS;
 	}
 
 	// True for kinds that are normally built from a vehicle (profile entries may still omit it).
 	static bool IsVehicleKind(string kind)
 	{
-		return kind == MOTORIZED || kind == LIGHT || kind == MECH || kind == ARMOR || kind == ARMORED_RECON;
+		return kind == MOTORIZED || kind == LIGHT || kind == MECH || kind == ARMOR || kind == ARMORED_RECON || kind == LOGISTICS;
 	}
 
 	// Short tag used in generated entity names (US_Mech1).
@@ -38,6 +39,8 @@ class CLW_ForceKind
 			return "Arm";
 		if (kind == ARMORED_RECON)
 			return "ARcn";
+		if (kind == LOGISTICS)
+			return "Log";
 
 		return "Inf";
 	}
@@ -77,6 +80,9 @@ class CLW_ForceEntry
 
 	[Attribute("1", UIWidgets.CheckBox, "Entry can be bought")]
 	bool m_bEnabled;
+
+	[Attribute("0", UIWidgets.EditBox, "Supply cargo in supplies a convoy truck carries (kind logistics). 0 = not a supply truck")]
+	int m_iCargo;
 
 	[Attribute("0", UIWidgets.CheckBox, "Anti-armour team: the rule commander buys it first when enemy vehicles are known")]
 	bool m_bAntiArmor;
@@ -155,6 +161,7 @@ class CLW_ForceEntry
 		copy.m_iWeight = m_iWeight;
 		copy.m_bEnabled = m_bEnabled;
 		copy.m_bAntiArmor = m_bAntiArmor;
+		copy.m_iCargo = m_iCargo;
 		copy.m_sSource = m_sSource;
 		copy.m_iCargoSeats = m_iCargoSeats;
 		copy.m_iCrewSeats = m_iCrewSeats;

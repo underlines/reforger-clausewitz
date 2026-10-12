@@ -181,6 +181,8 @@ class CLW_FobManager
 		}
 
 		CLW_FobSites.Build();
+		GetOnLost().Remove(CLW_RequestTerminals.OnFobLost);	// M3 phase L fix B: a lost FOB loses its request terminals
+		GetOnLost().Insert(CLW_RequestTerminals.OnFobLost);
 		CLW_ForceSpawner spawner = CLW_GameMode.GetForceSpawner();
 		if (spawner)
 		{
@@ -340,6 +342,9 @@ class CLW_FobManager
 		if (unitId.IsEmpty())
 			return false;
 
+		if (CLW_Convoys.IsReserved(unitId))
+			return true;
+
 		foreach (CLW_Fob fob : s_aFobs)
 		{
 			if (!fob.IsInProgress())
@@ -357,6 +362,10 @@ class CLW_FobManager
 	{
 		if (unitId.IsEmpty())
 			return "";
+
+		string convoyText = CLW_Convoys.ReservedFor(unitId);
+		if (!convoyText.IsEmpty())
+			return convoyText;
 
 		foreach (CLW_Fob fob : s_aFobs)
 		{
@@ -539,9 +548,9 @@ class CLW_FobManager
 		}
 
 		CLW_WarState war = CLW_GameMode.GetWarState();
-		if (!war || !war.TrySpend(side, GetUpgradeCost()))
+		if (!war || !CLW_SupplyStore.TrySpend(side, fobId, GetUpgradeCost()))	// M3 phase L: drawn from the FOB's own stock (logistics on)
 		{
-			why = string.Format("not enough supplies for the upgrade (cost %1)", GetUpgradeCost());
+			why = string.Format("not enough supplies for the upgrade (cost %1, %2 has %3)", GetUpgradeCost(), fobId, CLW_SupplyStore.Get(side, fobId));
 			return false;
 		}
 
@@ -572,9 +581,9 @@ class CLW_FobManager
 		}
 
 		CLW_WarState war = CLW_GameMode.GetWarState();
-		if (!war || war.GetSupplies(side) < GetUpgradeCost())
+		if (!war || CLW_SupplyStore.Get(side, fobId) < GetUpgradeCost())
 		{
-			why = string.Format("not enough supplies for the upgrade (cost %1)", GetUpgradeCost());
+			why = string.Format("not enough supplies for the upgrade (cost %1, %2 has %3)", GetUpgradeCost(), fobId, CLW_SupplyStore.Get(side, fobId));
 			return false;
 		}
 
@@ -1197,6 +1206,8 @@ class CLW_FobManager
 				text += ",";
 			text += "{\"id\":\"" + fob.m_sId + "\",\"site\":\"" + CLW_Situation.Escape(fob.m_sSiteId) + "\",\"name\":\"" + CLW_Situation.Escape(fob.m_sName) + "\",\"pos\":[" + Math.Round(fob.m_vPos[0]) + "," + Math.Round(fob.m_vPos[2]) + "],\"grid\":\"" + CLW_Places.Grid(fob.m_vPos) + "\"";
 			text += ",\"state\":\"" + fob.StateName() + "\",\"build\":" + Math.Round(fob.m_fBuild) + ",\"tier\":" + fob.m_iTier + ",\"services\":[" + services + "],\"underAttack\":" + CLW_Situation.BoolText(fob.m_bUnderAttack);
+			if (CLW_Capabilities.Has("logistics"))
+				text += ",\"stock\":" + CLW_SupplyStore.Get(side, fob.m_sId);
 			if (!fob.m_sBuilderId.IsEmpty() && fob.IsInProgress())
 				text += ",\"builder\":\"" + CLW_Situation.Escape(fob.m_sBuilderId) + "\"";
 			text += "}";

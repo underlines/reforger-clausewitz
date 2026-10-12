@@ -32,3 +32,6 @@ dev/.env
 
 # Extracted map imagery cache (do not commit BI content)
 dev/tools/.cache/
+
+# Sidecar npm dependencies (AI SDK, agent turn)
+dev/tools/node_modules/

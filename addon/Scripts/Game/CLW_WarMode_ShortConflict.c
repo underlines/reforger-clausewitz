@@ -39,6 +39,7 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 		m_aParams.Insert(CLW_ModeParam.CreateChoice("fobBuild", "FOB build", "instant: the FOB stands as soon as the builder arrives. timed: it is built over the build time while the builder is on site.", fobBuildModes, fobBuildDefault));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("fobCost", "FOB cost (supplies)", "Paid when the FOB is ordered; refunded when it fails before it stands.", CLW_ModeParam.TYPE_INT, 0, 1000, 25, config.m_iFobCost));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("fobBuildSec", "FOB build time (s)", "Timed build: seconds of the builder on site until the FOB stands.", CLW_ModeParam.TYPE_INT, 10, 600, 10, config.m_iFobBuildSec));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("convoyMax", "Max convoys per side", "Supply convoys a side may have on the road at once (logistics only).", CLW_ModeParam.TYPE_INT, 1, 4, 1, 2));
 		m_aParams.Insert(CLW_ModeParam.CreateBool("cap_logistics", "Logistics", "Per-base supplies and convoys. Off: one supply pool per side.", true));
 		m_aParams.Insert(CLW_ModeParam.CreateBool("cap_kitCost", "Kit cost", "Arsenal items cost supplies. Off: kits are free.", true));
 	}

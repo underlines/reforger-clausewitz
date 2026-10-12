@@ -26,7 +26,12 @@ gives us control, any OpenRouter model.
   poll would stall the loop. Queued action tools return an accepted id at once (+ `command_status` read tool); reads
   carry `ageSec`. An MCP view can be added later for external clients.
 - One planner with per-echelon instructions, not a model per echelon.
-- Verify before building: `usage.cost` via the OpenRouter provider, structured-output reliability per target model,
+- Verified 2026-10-12 (phase A, official docs + the installed packages, pinned in `dev/tools/package.json`): `ai` **7.0.137** (Apache-2.0; npm `latest`, v6 is the `ai-v6` tag), `@openrouter/ai-sdk-provider` **3.1.0** (Apache-2.0, peer `ai ^7`), `zod` **4.6.6** (MIT; the SDK accepts 3.25.76+ or 4.1.8+). Node >= 20 (tested on 24).
+  - API in v7: `new ToolLoopAgent({model, instructions, tools, stopWhen, activeTools, prepareStep, ...})` then `await agent.generate({prompt, abortSignal})`; default stop is `isStepCount(20)` (exported also under the old name `stepCountIs`), we use 4. `tool({description, inputSchema: zod, execute})`. `generate()` returns `text`, `steps[]` (each with `toolCalls`, `toolResults`, `usage`, `providerMetadata`).
+  - **Tool search is built in and client side**: `toolSearch({search, maxResults})` plus tools marked `deferLoading: true`; deferred tools are not sent to the provider until a search matched them (matches become available on the next step). `search` is our own ranker (name/description token score). Works through OpenRouter chat completions, tested end to end (find_tools -> deferred REQUEST_ARTILLERY -> call). `activeTools` exists on the agent and per step (`prepareStep`) but is not needed with deferLoading.
+  - **Cost**: `openrouter.chat(model, {usage: {include: true}})` puts the real cost in each step's `providerMetadata.openrouter.usage.cost` (USD); `step.usage` has the token counts. The sidecar sums the steps and feeds `recordUsage` (budget view). A typical HQ chat turn with `inclusionai/ling-3.0-flash` costs about $0.00003 (2 model calls, ~3.7k input tokens, mostly the tool schemas) and 2-6 s.
+  - **Schemas**: zod tuples become JSON-schema `prefixItems`, which an upstream (DeepInfra) rejected ("invalid parameters schema"): use `z.array(z.number()).length(2)` for positions.
+  - Structured output for the strategic tick (`generateText` + `Output.object`) is not verified or needed yet: the tick stays on raw fetch + JSON extraction. Per-model tool-calling reliability: the eval per OpenRouter model is still open (ling-3.0-flash called the right tool in 8 of 8 fixture messages, reply language followed the player).
   licenses. The sidecar has no `package.json` yet (zero-dependency today): adds one.
 
 ## The layers

@@ -2,5 +2,5 @@
 class CLW_Build
 {
 	static const string VERSION = "0.4.0";
-	static const string STAMP = "0.4.0 #43 2026-10-12 08:30:02";
+	static const string STAMP = "0.4.0 #44 2026-10-12 08:41:57";
 }

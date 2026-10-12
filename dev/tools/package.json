@@ -1,0 +1,13 @@
+{
+  "name": "clausewitz-sidecar",
+  "private": true,
+  "type": "module",
+  "description": "Clausewitz LLM bridge sidecar. The strategic tick is zero-dependency; the HQ chat agent turn (agent/agentTurn.mjs) uses the Vercel AI SDK.",
+  "scripts": { "start": "node llm_sidecar.mjs", "test:agent": "node agent/test_agent.mjs" },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@openrouter/ai-sdk-provider": "3.1.0",
+    "ai": "7.0.137",
+    "zod": "4.6.6"
+  }
+}

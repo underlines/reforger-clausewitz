@@ -8,21 +8,21 @@ modded class SCR_PlayerController
 	// ---- client -> server ----
 
 	// args = "<kind> [arg]" (chat text after /request, or the kind of a terminal action); "" = the menu.
-	void CLW_SendRequest(string args)
+	void CLW_SendRequest(string args, vector terminalPos = vector.Zero)
 	{
 		if (Replication.IsServer())
 		{
-			CLW_RequestService.Chat(GetPlayerId(), args);
+			CLW_RequestService.Chat(GetPlayerId(), args, terminalPos);
 			return;
 		}
 
-		Rpc(CLW_RpcAsk_Request, args);
+		Rpc(CLW_RpcAsk_Request, args, terminalPos);
 	}
 
 	[RplRpc(RplChannel.Reliable, RplRcver.Server)]
-	protected void CLW_RpcAsk_Request(string args)
+	protected void CLW_RpcAsk_Request(string args, vector terminalPos)
 	{
-		CLW_RequestService.Chat(GetPlayerId(), args);	// the sender: never a player id from the client
+		CLW_RequestService.Chat(GetPlayerId(), args, terminalPos);	// the sender: never a player id from the client
 	}
 
 	void CLW_SendReport(string args)
@@ -40,6 +40,24 @@ modded class SCR_PlayerController
 	protected void CLW_RpcAsk_Report(string args)
 	{
 		CLW_Reports.Chat(GetPlayerId(), args);
+	}
+
+	// M3 phase A: /hq <free text> to the HQ agent turn (CLW_HqChat).
+	void CLW_SendHq(string text)
+	{
+		if (Replication.IsServer())
+		{
+			CLW_HqChat.Chat(GetPlayerId(), text);
+			return;
+		}
+
+		Rpc(CLW_RpcAsk_Hq, text);
+	}
+
+	[RplRpc(RplChannel.Reliable, RplRcver.Server)]
+	protected void CLW_RpcAsk_Hq(string text)
+	{
+		CLW_HqChat.Chat(GetPlayerId(), text);	// the sender: never a player id from the client
 	}
 
 	// ---- server -> owning client ----
@@ -101,8 +119,12 @@ class CLW_RequestClient
 
 		request.Insert(OnRequestChat);
 		report.Insert(OnReportChat);
+		ChatCommandInvoker hq = chat.GetCommandInvoker("hq");
+		if (hq)
+			hq.Insert(OnHqChat);
+
 		SCR_PlayerController.CLW_MarkRequestChatRegistered();
-		Print("CLW: chat commands /request and /report registered", LogLevel.NORMAL);
+		Print("CLW: chat commands /request, /report and /hq registered", LogLevel.NORMAL);
 	}
 
 	static void OnRequestChat(SCR_ChatPanel panel, string data)
@@ -113,6 +135,16 @@ class CLW_RequestClient
 
 		Print("CLW: chat /request " + data, LogLevel.NORMAL);
 		controller.CLW_SendRequest(data);
+	}
+
+	static void OnHqChat(SCR_ChatPanel panel, string data)
+	{
+		SCR_PlayerController controller = SCR_PlayerController.Cast(GetGame().GetPlayerController());
+		if (!controller)
+			return;
+
+		Print("CLW: chat /hq " + data, LogLevel.NORMAL);
+		controller.CLW_SendHq(data);
 	}
 
 	static void OnReportChat(SCR_ChatPanel panel, string data)

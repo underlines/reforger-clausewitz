@@ -87,6 +87,7 @@ class CLW_Situation
 		}
 
 		AppendFobBlocks(json);
+		AppendLogistics(json);
 		AppendRequests(json);
 		return squadCount;
 	}
@@ -98,6 +99,16 @@ class CLW_Situation
 			return;
 
 		json = json.Substring(0, json.Length() - 1) + ",\"requests\":" + CLW_RequestService.GetJson(m_sFaction) + "}";
+	}
+
+	// M3 phase L: convoys[] and logisticsRules (only with the `logistics` capability and a supply truck in the catalog). Appended after the trim.
+	protected void AppendLogistics(inout string json)
+	{
+		if (json.Length() < 2 || !CLW_Capabilities.Has("logistics") || !CLW_Convoys.HasTruckData(m_sFaction))
+			return;
+
+		string extra = ",\"convoys\":[" + CLW_Convoys.ConvoysJson(m_sFaction) + "],\"logisticsRules\":" + CLW_Convoys.RulesJson(m_sFaction);
+		json = json.Substring(0, json.Length() - 1) + extra + "}";
 	}
 
 	// M3 phase F: own FOBs, candidate sites and the FOB rules (only with the `fob` capability and at least one FOB allowed).
@@ -138,6 +149,8 @@ class CLW_Situation
 		string phase = war.GetPhaseName();
 		phase.ToLower();
 		string text = "{\"tickets\":" + war.GetTickets(m_sFaction) + ",\"enemyTickets\":" + war.GetTickets(enemy) + ",\"supplies\":" + war.GetSupplies(m_sFaction);
+		if (CLW_Capabilities.Has("logistics"))
+			text += ",\"supplyTotal\":" + CLW_SupplyStore.GetTotal(m_sFaction);	// supplies = HQ stock; the total adds the FOB stocks
 		text += ",\"income\":" + incomePerMinute + ",\"liveAI\":" + liveAI + ",\"aiCap\":" + war.GetAiCap(m_sFaction);
 		text += ",\"vehicles\":" + vehicles + ",\"vehicleCap\":" + war.GetVehicleCap(m_sFaction);
 		int engineActive;
@@ -221,7 +234,10 @@ class CLW_Situation
 
 			if (!text.IsEmpty())
 				text += ",";
-			text += "{\"faction\":\"" + Escape(key) + "\",\"pos\":[" + Math.Round(pos[0]) + "," + Math.Round(pos[2]) + "]}";
+			text += "{\"id\":\"" + CLW_Services.BASE_HQ + "\",\"faction\":\"" + Escape(key) + "\",\"pos\":[" + Math.Round(pos[0]) + "," + Math.Round(pos[2]) + "]";
+			if (key == m_sFaction && CLW_Capabilities.Has("logistics"))
+				text += ",\"stock\":" + CLW_SupplyStore.Get(key, CLW_Services.BASE_HQ);
+			text += "}";
 		}
 
 		return text;

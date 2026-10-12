@@ -119,6 +119,7 @@ class CLW_RequestService
 		s_aBoxPlayers.Clear();
 		s_iSeq = 0;
 		CLW_Reports.Reset();
+		CLW_HqChat.Reset();	// M3 phase A: pending /hq messages
 	}
 
 	// War SETUP -> RUNNING: start the marker parser, tell the players the request costs once the catalogs exist.
@@ -128,6 +129,7 @@ class CLW_RequestService
 			return;
 
 		CLW_Reports.Start();
+		CLW_HqChat.Start();	// M3 phase A: timeout tick of the /hq messages
 		GetGame().GetCallqueue().CallLater(SendCostsToAll, CLW_RequestConfig.COSTS_DELAY_MS, false);
 	}
 
@@ -378,14 +380,38 @@ class CLW_RequestService
 	}
 
 	// Parking spot for a requested vehicle: next to the side's vehicle depot, else at the HQ base. False when none was found.
-	static bool FindVehicleSpot(string factionKey, out vector spot, out float yaw, out string via, out string where)
+	static bool FindVehicleSpot(string factionKey, out vector spot, out float yaw, out string via, out string where, string baseId = "")
 	{
 		CLW_Bases bases = CLW_GameMode.GetBases();
 		vector anchor;
 		if (bases)
 			anchor = bases.GetBasePos(factionKey);
 
-		IEntity depot = CLW_Services.Find(factionKey, CLW_ServiceKind.VEHICLE_DEPOT);
+		// M3 phase L: a request made at a FOB terminal parks the vehicle at that FOB (its depot, else beside its position)
+		IEntity depot;
+		if (!CLW_SupplyStore.IsHq(baseId))
+		{
+			CLW_Fob fob = CLW_FobManager.Find(baseId);
+			if (fob && fob.m_sSide == factionKey && fob.IsActive())
+			{
+				anchor = fob.m_vPos;
+				depot = CLW_Services.FindAt(factionKey, baseId, CLW_ServiceKind.VEHICLE_DEPOT);
+				if (!depot)
+				{
+					where = baseId;
+					if (CLW_Placement.FindGround(anchor, 12, 50, CLW_WarConfig.SPAWN_VEHICLE_CYLINDER_R, CLW_WarConfig.SPAWN_VEHICLE_CYLINDER_H, CLW_WarConfig.PLACE_CHAR_CLEAR_M, spot, via))
+					{
+						yaw = 0;
+						return true;
+					}
+				}
+			}
+		}
+		else
+			depot = CLW_Services.FindAt(factionKey, CLW_Services.BASE_HQ, CLW_ServiceKind.VEHICLE_DEPOT);
+
+		if (!depot && CLW_SupplyStore.IsHq(baseId))
+			depot = CLW_Services.Find(factionKey, CLW_ServiceKind.VEHICLE_DEPOT);
 		if (depot)
 		{
 			where = "depot";
@@ -435,7 +461,7 @@ class CLW_RequestService
 	// ---- entry points ----
 
 	// Chat "/request ..." and the terminal actions: args = "<kind> [arg]" or "" (the menu). Runs on the server, answers the player.
-	static void Chat(int playerId, string args)
+	static void Chat(int playerId, string args, vector terminalPos = vector.Zero)
 	{
 		if (!Replication.IsServer())
 			return;
@@ -458,16 +484,39 @@ class CLW_RequestService
 			arg += tokens[i];
 		}
 
-		Handle(playerId, kind, arg);
+		Handle(playerId, kind, arg, terminalPos);
+	}
+
+	// Fix A: a terminal only serves requesters of its own side. The side was bound when the terminal was spawned. True = ok, baseId set.
+	protected static bool CheckTerminal(vector terminalPos, string faction, out string baseId, out string refusal)
+	{
+		CLW_TerminalInfo terminal = CLW_RequestTerminals.FindAt(terminalPos);
+		if (!terminal)
+		{
+			refusal = "that request terminal is not in service";
+			Print(string.Format("CLW: request terminal at %1 unknown or removed: refused", terminalPos), LogLevel.NORMAL);
+			return false;
+		}
+
+		if (terminal.m_sSide != faction)
+		{
+			refusal = "this terminal belongs to " + terminal.m_sSide + ", you are " + faction;
+			Print(string.Format("CLW: request terminal %1 %2 refused a %3 requester", terminal.m_sSide, terminal.m_sBase, faction), LogLevel.NORMAL);
+			return false;
+		}
+
+		baseId = terminal.m_sBase;
+		return true;
 	}
 
 	// One request: validates and executes through the registry, records and answers. Returns the answer text.
-	static string Handle(int playerId, string kind, string arg)
+	static string Handle(int playerId, string kind, string arg, vector terminalPos = vector.Zero)
 	{
 		string faction = FactionKeyOf(playerId);
 		string role = RoleOf(playerId);
 		bool granted;
 		string reply;
+		string terminalBase;	// base the request terminal belongs to ("" = chat request = HQ)
 		CLW_WarState war = CLW_GameMode.GetWarState();
 		if (kind == "help" || kind == "list" || kind == "?")
 		{
@@ -487,6 +536,10 @@ class CLW_RequestService
 		{
 			reply = "you are not on a side";
 		}
+		else if (terminalPos != vector.Zero && !CheckTerminal(terminalPos, faction, terminalBase, reply))
+		{
+			// fix A: reply holds the refusal (unknown terminal, or it belongs to the other side)
+		}
 		else
 		{
 			CLW_ActionCall call = new CLW_ActionCall();
@@ -496,6 +549,7 @@ class CLW_RequestService
 			call.m_sSource = "player";
 			call.m_iPlayerId = playerId;
 			call.m_sReason = "request by " + PlayerName(playerId);
+			call.SetString("base", terminalBase);	// M3 phase L: spending draws from this base's stock (empty = HQ)
 			CLW_RemoteCommander commander = CLW_GameMode.GetCommander(faction);
 			if (commander)
 				call.m_Rules = commander.GetRules();

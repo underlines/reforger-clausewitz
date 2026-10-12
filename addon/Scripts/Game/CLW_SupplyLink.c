@@ -3,8 +3,8 @@
 // the same supplies as the commanders' purchases.
 //   ledger -> containers   the ledger value is written into the containers (up to their capacity) whenever it differs
 //   containers -> ledger   a drop (arsenal kit) or rise (delivery) since the last sync is applied to the ledger as a delta
-// Polled every ~1.5 s by CLW_Services (server only). Encapsulated here so phase L (per-base stock) only changes Push / Poll: today every
-// base of a side mirrors the same side ledger. Log prefix: "CLW: services supply".
+// Polled every ~1.5 s by CLW_Services (server only). Phase L: the stock of a link is CLW_SupplyStore.Get(side, base): the side ledger (= HQ stock) for the HQ, and for every base when logistics is off; the own stock of a FOB when logistics is on. Push/Poll are the only places that know.
+// Log prefix: "CLW: services supply".
 class CLW_SupplyLink
 {
 	protected static ref array<ref CLW_SupplyLink> s_aLinks = {};
@@ -114,7 +114,7 @@ class CLW_SupplyLink
 	// First write: the ledger value goes into the containers.
 	void Push(notnull CLW_WarState war)
 	{
-		int ledger = war.GetSupplies(m_sSide);
+		int ledger = CLW_SupplyStore.Get(m_sSide, m_sBase);
 		float written = Write(ledger);
 		m_bPushed = true;
 		Print(string.Format("CLW: services supply link %1 %2 active: %3 containers, capacity %4, ledger %5 -> containers %6", m_sSide, m_sBase, m_aContainers.Count(), m_fCapacity, ledger, written), LogLevel.NORMAL);
@@ -129,11 +129,11 @@ class CLW_SupplyLink
 		float observed = GetStock();
 		float delta = observed - m_fLast;
 		int whole = Math.Round(delta);
-		int ledger = war.GetSupplies(m_sSide);
+		int ledger = CLW_SupplyStore.Get(m_sSide, m_sBase);
 		if (whole != 0)
 		{
-			war.AddSupplies(m_sSide, whole);
-			int after = war.GetSupplies(m_sSide);
+			CLW_SupplyStore.Add(m_sSide, m_sBase, whole);
+			int after = CLW_SupplyStore.Get(m_sSide, m_sBase);
 			Print(string.Format("CLW: services supply sync %1 %2: containers %3 -> %4 (delta %5): ledger %6 -> %7", m_sSide, m_sBase, m_fLast, observed, whole, ledger, after), LogLevel.NORMAL);
 			m_fLast += whole;	// the fractional rest stays for the next step
 			ledger = after;

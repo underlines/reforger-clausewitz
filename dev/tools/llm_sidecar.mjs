@@ -49,7 +49,7 @@
 //     M3 phase Q: the situation carries "requests":[{"id","player","role":"leader|soldier","kind":"vehicle|squad|resupply|reinforce|recon","args",
 //     "status":"granted|refused","reason","ageSec"}] (recent player requests the game's rules decided; fast path, no LLM). Passed through
 //     unchanged: GET /api/state factions[<name>].situation.requests (dashboard Requests tab). Protocol stays v3.
-//     Reply channels: orders / buy / missions (same command JSON as v2) + "fobs" (M3 phase F: [{"command":"ESTABLISH_FOB","site":"<fobSites id>"} or {"command":"UPGRADE_FOB","fob":"<fobs id>"}], max 1, only with the fob capability; situation blocks fobs[] / fobSites[] / fobRules). New channels need game + sidecar support.
+//     Reply channels: orders / buy / missions (same command JSON as v2) + "fobs" (M3 phase F: [{"command":"ESTABLISH_FOB","site":"<fobSites id>"} or {"command":"UPGRADE_FOB","fob":"<fobs id>"}], max 1; phase L adds {"command":"RESUPPLY","fob":"<fobs id>"} and {"command":"CONVOY","origin":"<base id>","dest":"<base id>"}, max 3 per reply in total, only with the logistics capability + blocks convoys[] / logisticsRules; situation blocks fobs[] / fobSites[] / fobRules). New channels need game + sidecar support.
 //
 //   Faction SITREP (design: dev/notes/sitrep-design.md). The game POST may carry "sitrep": the rules SITREP the game built from the
 //     same fog-limited picture {scope,unit,source:"rules",warTimeSec,headline,situation,enemy,mission,execution,logistics}; the sidecar
@@ -102,7 +102,7 @@ import { fileURLToPath } from "node:url";
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const DASH_DIR = path.join(DIR, "dashboard");
-const CONFIG_FILE = path.join(DIR, "sidecar-config.json");
+const CONFIG_FILE = process.env.CLW_CONFIG ? path.resolve(process.env.CLW_CONFIG) : path.join(DIR, "sidecar-config.json"); // CLW_CONFIG: a second instance (tests) keeps its own settings file
 const PORT = Number(process.env.CLW_PORT) || 8788;
 const COMMANDS = new Set(["MOVE", "ATTACK", "DEFEND"]);
 const MISSION_KINDS = new Set(["CAPTURE", "DEFEND", "RECON", "DESTROY"]);
@@ -179,6 +179,9 @@ const sentence = (t) => String(t ?? "").trim().replace(/\.$/, "");
 // FOB paragraph (M3 phase F): added to the prompt only when the manifest contains FOB intents (capability fob on, fobMax > 0).
 const FOB_PROMPT = "FOBS: a FOB is a forward base (spawn point, command post, supply cache, arsenal) that a transport builds at a site you pick from fobSites (pos, grid, place); it costs fobRules.cost supplies up front (refunded if it fails), takes time to build and is lost if the enemy holds the zone. Establish one toward the front when supplies allow (keep ~100 for units), fobRules.live < fobRules.max and fobRules.inProgress = 0; fobs[] lists yours (state planned|moving|building|active|lost, build %, tier, underAttack). Upgrade an active tier-1 FOB (vehicle depot, medical) when supplies are plentiful. Squads with a reserved field are building a FOB: do not order them.\n";
 
+// Logistics paragraph (M3 phase L): added only when the manifest contains RESUPPLY (capability logistics on, FOBs allowed, a supply truck in the catalog).
+const LOGISTICS_PROMPT = "LOGISTICS: stock is per base. war.supplies is the HQ stock (income lands there, units and FOBs are paid from it); each FOB has its own fobs[].stock, which its arsenal, requests and upgrade draw from, and a new FOB starts empty. A supply truck convoy (convoys[]: id, from, to, cargo, state loading|en_route|delivered|lost, pos, grid) loads min(truck capacity logisticsRules.truckCargo, source stock) at departure, drives to the destination and adds it to that stock on arrival; a destroyed truck loses its cargo. Keep every active FOB above logisticsRules.lowStock with RESUPPLY (HQ -> FOB) while the HQ can spare a load (keep ~50), one convoy at a time per FOB and at most logisticsRules.convoyMax in flight; CONVOY moves stock between two bases. Do not order squads that have a reserved field (convoy trucks).\n";
+
 // COMMANDS + REPLY paragraphs of the v2/v3 prompt, generated from the manifest (entries with unmet capabilities are not in it).
 function commandsSection(m) {
   const orders = channelOf(m, "orders"), buys = channelOf(m, "buy"), offers = channelOf(m, "missions"), fobs = channelOf(m, "fob");
@@ -190,6 +193,7 @@ function commandsSection(m) {
   }
   if (buys.length) t += buys.map((e) => `${e.name}: ${sentence(e.desc)}. Fields: ${fieldsText(e)}.\n`).join("");
   if (fobs.length) t += FOB_PROMPT + fobs.map((e) => `${e.name}: ${sentence(e.desc)}. Fields: ${fieldsText(e)}.\n`).join("");
+  if (fobs.some((e) => e.name === "RESUPPLY")) t += LOGISTICS_PROMPT;
   t += offers.length
     ? "HUMAN-LED SQUADS (humanLed=true) are never ordered. " + offers.map((e) => sentence(e.desc)).join(". ") + ".\n"
     : "HUMAN-LED SQUADS (humanLed=true) are never ordered and get no missions.\n";
@@ -203,7 +207,7 @@ function commandsSection(m) {
   if (fobs.length) { parts.push('"fobs":[{"command":"ESTABLISH_FOB","site":"<fobSites id>","reason":"short"}]'); keys.push("fobs"); }
   if (offers.length) { parts.push('"missions":[{"squad":"<human-led id>","offers":[{"kind":"CAPTURE","target":"D","brief":"..."}]}]'); keys.push("missions"); }
   t += "REPLY with ONLY one JSON object, no prose, no code fences:\n{" + parts.join(",\n ") + "}\n";
-  t += (keys.length ? `${keys.join("/")} may be empty or omitted. ` : "") + (buys.length ? "buy: max 3 entries, count 1-3, total cost <= war.supplies. " : "") + (fobs.length ? "fobs: at most 1 entry per reply. " : "") + '{"keep":true} alone = keep all current orders.';
+  t += (keys.length ? `${keys.join("/")} may be empty or omitted. ` : "") + (buys.length ? "buy: max 3 entries, count 1-3, total cost <= war.supplies. " : "") + (fobs.length ? "fobs: at most 3 entries per reply, at most 1 of them ESTABLISH_FOB or UPGRADE_FOB. " : "") + '{"keep":true} alone = keep all current orders.';
   return t;
 }
 
@@ -261,11 +265,14 @@ const cfg = {
     objectiveChanged: true, ticketsDropPct: 10, unitSpawned: true, missionEvent: true },
   // faction SITREP written by the model inside the commander reply: asked on the first call, every intervalSec at most, and on big events
   sitrep: { enabled: true, intervalSec: 120 },
+  // HQ chat (/hq <text>): AI SDK agent turn per player message, see agent/agentTurn.mjs and "HQ chat" below
+  agent: { enabled: true, maxSteps: 4, timeoutSec: 40, maxConcurrent: 3 },
 };
 
 // Group settings: "bool" or [min, max] number range per key. Partial objects are merged onto the current group.
 const GROUP_SPECS = {
   sitrep: { enabled: "bool", intervalSec: [30, 3600] },
+  agent: { enabled: "bool", maxSteps: [1, 8], timeoutSec: [5, 120], maxConcurrent: [1, 10] },
   wakeup: { dynamic: "bool", defaultSec: [5, 3600], minSec: [5, 3600], maxSec: [5, 7200], budgetStretch: "bool" },
   triggers: { enabled: "bool", newContact: "bool", contactNearSquadM: [0, 5000], casualties: [0, 1000], squadLost: "bool", strengthDropPct: [0, 100], objectiveReached: "bool", squadChange: "bool", cooldownSec: [0, 600],
     objectiveChanged: "bool", ticketsDropPct: [0, 100], unitSpawned: "bool", missionEvent: "bool" },
@@ -336,6 +343,7 @@ function validateConfig(inp) {
         out.mapMaxSize = v; break;
       case "wakeup":
       case "sitrep":
+      case "agent":
       case "triggers": {
         const g = validateGroup(k, v);
         if (g.error) return g;
@@ -672,6 +680,13 @@ function fakeV2(sit, manifest = DEFAULT_MANIFEST) {
       if (up) out.fobs.push({ command: "UPGRADE_FOB", fob: up.id, reason: "fake provider: depot and medical" });
     }
   }
+  // Logistics (M3 phase L): RESUPPLY an active FOB whose stock is low, when the HQ can spare a load and no convoy is on its way there
+  const logiRules = sit.logisticsRules ?? {};
+  if (fobNames.has("RESUPPLY") && isNum(logiRules.lowStock) && (logiRules.inFlight ?? 0) < (logiRules.convoyMax ?? 2) && supplies >= (logiRules.minCargo ?? 40) + 40) {
+    const convoys = Array.isArray(sit.convoys) ? sit.convoys : [];
+    const low = (Array.isArray(sit.fobs) ? sit.fobs : []).find((f) => f?.state === "active" && isNum(f.stock) && f.stock < logiRules.lowStock && !convoys.some((c) => c?.to === f.id && ["planned", "loading", "en_route"].includes(c.state)));
+    if (low) out.fobs.push({ command: "RESUPPLY", fob: low.id, reason: `fake provider: ${low.id} stock ${low.stock} is low` });
+  }
 
   const ai = squads.filter((s) => !s.humanLed && !s.reserved);
   const assigned = new Set();
@@ -837,23 +852,36 @@ function validateV2(obj, sit, dropped = [], manifest = DEFAULT_MANIFEST) {
   const fobNames = new Set(channelOf(manifest, "fob").map((e) => e.name));
   const fobSites = new Set((Array.isArray(sit.fobSites) ? sit.fobSites : []).filter((x) => x && typeof x.id === "string").map((x) => x.id));
   const myFobs = new Map((Array.isArray(sit.fobs) ? sit.fobs : []).filter((x) => x && typeof x.id === "string").map((x) => [x.id, x]));
-  const fr = sit.fobRules ?? {};
+  const fr = sit.fobRules ?? {}, lr = sit.logisticsRules ?? {};
+  const baseIds = new Set(["HQ", ...[...myFobs.values()].filter((x) => x.state === "active").map((x) => x.id)]);
   for (const f of Array.isArray(obj.fobs) ? obj.fobs : []) {
     const cmd = f && typeof f === "object" ? (typeof f.command === "string" && f.command ? f.command.toUpperCase() : f.site ? "ESTABLISH_FOB" : f.fob ? "UPGRADE_FOB" : "") : "";
     const mine = cmd === "UPGRADE_FOB" && f ? myFobs.get(f.fob) : null;
     const why = !f || typeof f !== "object" ? "not an object"
       : !fobNames.size ? "FOBs are not available in this war mode"
       : !fobNames.has(cmd) ? `bad fob command ${f.command}`
-      : res.fobs.length >= 1 ? "more than 1 fob entry per reply"
+      : res.fobs.length >= 3 ? "more than 3 fob entries per reply"
+      : (cmd === "ESTABLISH_FOB" || cmd === "UPGRADE_FOB") && res.fobs.some((x) => x.command === "ESTABLISH_FOB" || x.command === "UPGRADE_FOB") ? "more than 1 ESTABLISH_FOB/UPGRADE_FOB per reply"
+      : cmd === "RESUPPLY" ? (!myFobs.get(f.fob) ? `unknown fob ${f.fob}` : myFobs.get(f.fob).state !== "active" ? `${f.fob} is not active`
+        : isNum(lr.convoyMax) && isNum(lr.inFlight) && lr.inFlight + res.fobs.filter((x) => x.command === "RESUPPLY" || x.command === "CONVOY").length >= lr.convoyMax ? "convoy limit reached"
+        : res.fobs.some((x) => x.command === "RESUPPLY" && x.fob === f.fob) ? `${f.fob} already gets a convoy in this reply`
+        : (Array.isArray(sit.convoys) ? sit.convoys : []).some((c) => c?.to === f.fob && ["loading", "planned", "en_route"].includes(c.state)) ? `a convoy is already on its way to ${f.fob}`
+        : isNum(lr.minCargo) && left < lr.minCargo ? `HQ stock ${left} is below the minimum load ${lr.minCargo}` : null)
+      : cmd === "CONVOY" ? (!baseIds.has(f.origin) || !baseIds.has(f.dest) ? `unknown or inactive base ${f.origin} -> ${f.dest}` : f.origin === f.dest ? "origin and destination are the same"
+        : isNum(lr.convoyMax) && isNum(lr.inFlight) && lr.inFlight + res.fobs.filter((x) => x.command === "RESUPPLY" || x.command === "CONVOY").length >= lr.convoyMax ? "convoy limit reached" : null)
       : cmd === "ESTABLISH_FOB" ? (!fobSites.has(f.site) ? `unknown fob site ${f.site}`
         : isNum(fr.live) && isNum(fr.max) && fr.live >= fr.max ? "FOB limit reached"
         : fr.inProgress > 0 ? "another FOB is still being established"
         : isNum(fr.cost) && fr.cost > left ? `FOB cost ${fr.cost} exceeds remaining supplies ${left}` : null)
       : (!mine ? `unknown fob ${f.fob}` : mine.state !== "active" ? `${f.fob} is not active` : mine.tier >= 2 ? `${f.fob} is already tier 2`
-        : isNum(fr.upgradeCost) && fr.upgradeCost > left ? `upgrade cost ${fr.upgradeCost} exceeds remaining supplies ${left}` : null);
+        : isNum(fr.upgradeCost) && isNum(mine.stock) && fr.upgradeCost > mine.stock ? `upgrade cost ${fr.upgradeCost} exceeds the stock of ${f.fob} (${mine.stock}); RESUPPLY it first`
+        : !isNum(mine.stock) && isNum(fr.upgradeCost) && fr.upgradeCost > left ? `upgrade cost ${fr.upgradeCost} exceeds remaining supplies ${left}` : null);
     if (why) { drop("fob", f, why); continue; }
-    left -= cmd === "ESTABLISH_FOB" ? (fr.cost ?? 0) : (fr.upgradeCost ?? 0);
-    res.fobs.push({ command: cmd, ...(cmd === "ESTABLISH_FOB" ? { site: f.site } : { fob: f.fob }), reason: typeof f.reason === "string" ? f.reason.slice(0, 120) : "" });
+    if (cmd === "ESTABLISH_FOB") left -= fr.cost ?? 0;
+    else if (cmd === "UPGRADE_FOB" && !isNum(mine?.stock)) left -= fr.upgradeCost ?? 0;
+    else if (cmd === "RESUPPLY" || (cmd === "CONVOY" && f.origin === "HQ")) left -= Math.min(isNum(lr.truckCargo) ? lr.truckCargo : 0, Math.max(0, left)); // the load leaves the HQ stock (approximation for CONVOY from a FOB)
+    const out = cmd === "ESTABLISH_FOB" ? { site: f.site } : cmd === "CONVOY" ? { origin: f.origin, dest: f.dest } : { fob: f.fob };
+    res.fobs.push({ command: cmd, ...out, reason: typeof f.reason === "string" ? f.reason.slice(0, 120) : "" });
   }
 
   const offered = new Set();
@@ -1009,6 +1037,95 @@ async function handleManifest(req, res) {
   manifests[m.faction] = { ...m, receivedAt: Date.now() };
   console.log(`manifest faction=${m.faction} hash=${m.hash} mode=${m.mode || "?"} intents=${m.intents.length} primitives=${m.primitives.length} capabilities=[${m.capabilities.join(",")}]`);
   send(res, 200, { ok: true, hash: m.hash });
+}
+
+// ---------- HQ chat (M3 phase A: /hq <free text>) ----------
+// The situation carries hq:[{id,player,role,squad,grid,pos:[x,z],text,ageSec}] = the faction's pending player messages (re-sent every
+// poll until the game has an answer). Each new message starts ONE agent turn (agent/agentTurn.mjs, AI SDK ToolLoopAgent, <= agent.maxSteps
+// steps) in the background; at most agent.maxConcurrent run at once. The result waits in hqOut[faction] and rides on the NEXT reply for that
+// faction: hqActions [{msgId,id,action,args:[{name,value}]}] (the game runs them through its action registry as the player) and
+// hqReplies [{msgId,text,fallback?}] (fallback:true = no answer, the game shows its /request menu hint). The SDK is loaded lazily, so the
+// strategic tick keeps working without node_modules.
+const HQ_MAX = 60, HQ_SEEN_MAX = 400, HQ_MAX_AGE_SEC = 90;
+const hqLog = [];            // newest first: dashboard "HQ chat" view
+const hqSeen = new Set();    // faction|id|player|text
+const hqOut = {};            // faction -> {actions:[], replies:[]}
+const hqWaiting = [];        // jobs waiting for a free slot
+let hqRunning = 0, agentMod = null;
+const hqOutFor = (f) => (hqOut[f] ??= { actions: [], replies: [] });
+async function loadAgent() { return (agentMod ??= await import("./agent/agentTurn.mjs")); }
+
+function cleanHqMessage(m) {
+  if (!m || typeof m !== "object" || !isNum(m.id) || typeof m.text !== "string" || !m.text.trim()) return null;
+  const str = (v, n) => (typeof v === "string" ? v.slice(0, n) : "");
+  return { id: m.id, player: str(m.player, 60) || "player", role: m.role === "leader" ? "leader" : "soldier", squad: str(m.squad, 60), grid: str(m.grid, 20),
+    pos: Array.isArray(m.pos) && m.pos.length >= 2 && m.pos.every(isNum) ? m.pos.slice(0, 3) : null, text: m.text.trim().slice(0, 400), ageSec: isNum(m.ageSec) ? m.ageSec : 0 };
+}
+function hqFallbackReason(c) {
+  if (!c.enabled) return "sidecar disabled";
+  if (c.engine !== "llm") return "engine " + c.engine;
+  if (!c.agent?.enabled) return "agent turns disabled";
+  if (paused) return "HQ paused";
+  if (budgetStopped(c)) return "budget limit reached";
+  if (!["fake", "openrouter", "openai-compatible"].includes(c.provider)) return `provider ${c.provider} has no agent turn`;
+  return null;
+}
+function hqFinish(entry, faction, r) {
+  const out = hqOutFor(faction);
+  entry.state = "done"; entry.ok = r.ok; entry.error = r.error ?? null; entry.latencyMs = r.latencyMs; entry.usage = r.usage; entry.steps = r.steps; entry.tools = r.tools;
+  entry.actions = r.actions; entry.reply = r.ok ? r.replyText : "";
+  if (r.ok) {
+    for (const a of r.actions) out.actions.push({ msgId: entry.msg.id, id: a.id, action: a.action, args: a.args });
+    out.replies.push({ msgId: entry.msg.id, text: r.replyText });
+  } else out.replies.push({ msgId: entry.msg.id, text: "", fallback: true });
+  console.log(`hq faction=${faction} msg=${entry.msg.id} player=${entry.msg.player} ${r.ok ? `actions=${r.actions.length} steps=${r.steps.length}` : "FAILED " + r.error} ${r.latencyMs}ms${r.usage?.cost ? ` cost=$${r.usage.cost.toFixed(5)}` : ""}`);
+}
+async function hqRun(job) {
+  hqRunning++;
+  const { faction, entry, sit, manifest } = job, c = job.cfg;
+  try {
+    const mod = await loadAgent();
+    if (c.provider !== "fake") { session.requests++; }
+    const r = await mod.runAgentTurn({ manifest, situation: sit, message: entry.msg, config: c, agentConfig: { maxSteps: c.agent.maxSteps, timeoutSec: c.agent.timeoutSec } });
+    if (c.provider === "openrouter") recordUsage(c.model, faction, r.usage);
+    hqFinish(entry, faction, r);
+  } catch (e) {
+    hqFinish(entry, faction, { ok: false, error: String(e?.message ?? e).slice(0, 300), replyText: "", actions: [], steps: [], tools: [], usage: null, latencyMs: Date.now() - entry.ts });
+  } finally {
+    hqRunning--;
+    while (hqRunning < Math.max(1, job.cfg.agent.maxConcurrent) && hqWaiting.length) void hqRun(hqWaiting.shift());
+  }
+}
+// Called by handleOrders with the faction's situation (hq already cut out of it).
+function hqIngest(faction, sit, list, manifest, c) {
+  if (!Array.isArray(list)) return;
+  for (const raw of list.slice(0, 10)) {
+    const msg = cleanHqMessage(raw);
+    if (!msg) continue;
+    const key = `${faction}|${msg.id}|${msg.player}|${msg.text}`;
+    if (hqSeen.has(key)) continue;
+    hqSeen.add(key);
+    if (hqSeen.size > HQ_SEEN_MAX) { const first = hqSeen.values().next().value; hqSeen.delete(first); }
+    const entry = { ts: Date.now(), faction, msg, provider: c.provider, model: c.provider === "fake" ? null : c.model, state: "running", ok: null, error: null, steps: [], tools: [], actions: [], reply: "", usage: null, latencyMs: null };
+    hqLog.unshift(entry); if (hqLog.length > HQ_MAX) hqLog.length = HQ_MAX;
+    const why = hqFallbackReason(c) ?? (msg.ageSec > HQ_MAX_AGE_SEC ? "message too old" : null);
+    if (why) {
+      entry.state = "done"; entry.ok = false; entry.error = "fallback: " + why;
+      hqOutFor(faction).replies.push({ msgId: msg.id, text: "", fallback: true });
+      console.log(`hq faction=${faction} msg=${msg.id} player=${msg.player}: fallback (${why})`);
+      continue;
+    }
+    const job = { faction, entry, sit, manifest, cfg: { ...c, agent: { ...c.agent } } };
+    if (hqRunning < Math.max(1, c.agent.maxConcurrent)) void hqRun(job); else hqWaiting.push(job);
+  }
+}
+// Results of finished turns for the next reply (each delivered once).
+function hqDrain(faction) {
+  const o = hqOut[faction];
+  if (!o || (!o.actions.length && !o.replies.length)) return {};
+  const res = { ...(o.actions.length ? { hqActions: o.actions } : {}), ...(o.replies.length ? { hqReplies: o.replies } : {}) };
+  hqOut[faction] = { actions: [], replies: [] };
+  return res;
 }
 
 // ---------- HQ scheduler ----------
@@ -1189,11 +1306,14 @@ async function handleOrders(req, res) {
   if (sit && typeof sit === "object" && "debug" in sit) { addDebugLines(sit.debug); delete sit.debug; } // game debug lines: dashboard only, never the model
   let manifestHash = null; // protocol v3: hash of the action manifest the situation was built for; never goes to the model
   if (sit && typeof sit === "object" && "manifest" in sit) { manifestHash = typeof sit.manifest === "string" && sit.manifest ? sit.manifest.slice(0, 64) : null; delete sit.manifest; }
+  let hqList = null; // pending HQ chat messages (M3 phase A): they start agent turns, they never go to the strategic model
+  if (sit && typeof sit === "object" && "hq" in sit) { hqList = sit.hq; delete sit.hq; }
   const t0 = Date.now();
   const snapshot = { ...cfg };
   const faction = typeof sit?.faction === "string" ? sit.faction : "?";
   const known = manifestHash ? manifests[faction] : null;
   const manifest = known && known.hash === manifestHash ? known : DEFAULT_MANIFEST;
+  if (hqList) hqIngest(faction, sit, hqList, manifests[faction] ?? DEFAULT_MANIFEST, snapshot);
   const needManifest = !!manifestHash && manifest === DEFAULT_MANIFEST; // v3 post with an unknown hash: ask the game to resend
   const lc = (lastCall[faction] ??= { ts: 0, sit: null });
   const valid = !!sit && Array.isArray(sit.squads);
@@ -1299,6 +1419,7 @@ async function handleOrders(req, res) {
   const reply = r.rules ? { orders: [] } : r.paused || r.phaseGate ? { orders: [], keep: true } : r.gated && sc.failed ? { orders: [] } : r.skipped || r.keep ? { orders: [], keep: true, ...(r.sitrep ? { sitrep: r.sitrep } : {}) }
     : v2 ? { orders: r.orders, buy: r.buy ?? [], missions: r.missions ?? [], ...(r.fobs?.length ? { fobs: r.fobs } : {}), ...(r.sitrep ? { sitrep: r.sitrep } : {}) } : { orders: r.orders };
   if (needManifest) reply.needManifest = true;
+  Object.assign(reply, hqDrain(faction));
   send(res, 200, reply);
 }
 
@@ -1515,7 +1636,7 @@ async function handleApi(req, res, url) {
     return send(res, 200, {
       now: Date.now(), startedAt: state.startedAt, lastRequestTs: state.lastRequestTs,
       factions: state.factions, activeFactions: activeFactions(), staleAfterSec: STALE_FACTION_MS / 1000,
-      exchanges: state.exchanges, debugLog: state.debugLog, manifests: manifestsView(), counters: state.counters, config: publicConfig(), usage: usageView(), scheduler: schedulerView(), paused,
+      exchanges: state.exchanges, hq: hqLog, debugLog: state.debugLog, manifests: manifestsView(), counters: state.counters, config: publicConfig(), usage: usageView(), scheduler: schedulerView(), paused,
     });
   }
   if (req.method === "POST" && url === "/api/pause") {

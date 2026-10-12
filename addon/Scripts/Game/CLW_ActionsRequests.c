@@ -120,9 +120,9 @@ class CLW_Action_RequestVehicle : CLW_Action_RequestBase
 		}
 
 		int cost = CLW_RequestService.VehicleCost(entry);
-		if (!war.TrySpend(faction, cost))
+		if (!CLW_SupplyStore.TrySpend(faction, call.GetString("base"), cost))
 		{
-			result = string.Format("not enough supplies (%1 costs %2, HQ has %3)", entry.GetVehicleName(), cost, war.GetSupplies(faction));
+			result = string.Format("not enough supplies (%1 costs %2, the base has %3)", entry.GetVehicleName(), cost, CLW_SupplyStore.Get(faction, call.GetString("base")));
 			return false;
 		}
 
@@ -130,9 +130,9 @@ class CLW_Action_RequestVehicle : CLW_Action_RequestBase
 		float yaw;
 		string via;
 		string where;
-		if (!CLW_RequestService.FindVehicleSpot(faction, spot, yaw, via, where))
+		if (!CLW_RequestService.FindVehicleSpot(faction, spot, yaw, via, where, call.GetString("base")))
 		{
-			war.Refund(faction, cost);
+			CLW_SupplyStore.Refund(faction, call.GetString("base"), cost);
 			result = "no free parking spot at the " + where;
 			return false;
 		}
@@ -140,7 +140,7 @@ class CLW_Action_RequestVehicle : CLW_Action_RequestBase
 		IEntity vehicle = CLW_RequestService.SpawnVehicle(entry.m_VehiclePrefab, spot, yaw);
 		if (!vehicle)
 		{
-			war.Refund(faction, cost);
+			CLW_SupplyStore.Refund(faction, call.GetString("base"), cost);
 			result = "the vehicle could not be spawned";
 			return false;
 		}
@@ -309,9 +309,9 @@ class CLW_Action_RequestResupply : CLW_Action_RequestBase
 		}
 
 		int cost = CLW_RequestConfig.RESUPPLY_COST;
-		if (!war.TrySpend(faction, cost))
+		if (!CLW_SupplyStore.TrySpend(faction, call.GetString("base"), cost))
 		{
-			result = string.Format("not enough supplies (resupply costs %1, HQ has %2)", cost, war.GetSupplies(faction));
+			result = string.Format("not enough supplies (resupply costs %1, the base has %2)", cost, CLW_SupplyStore.Get(faction, call.GetString("base")));
 			return false;
 		}
 
@@ -330,7 +330,7 @@ class CLW_Action_RequestResupply : CLW_Action_RequestBase
 
 		if (!box)
 		{
-			war.Refund(faction, cost);
+			CLW_SupplyStore.Refund(faction, call.GetString("base"), cost);
 			result = "the box could not be spawned";
 			return false;
 		}

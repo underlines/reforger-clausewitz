@@ -41,6 +41,8 @@ class CLW_FobDto
 	string command;
 	string site;
 	string fob;
+	string origin;	// CONVOY (M3 phase L): source and destination base ids ("HQ" or a FOB id); RESUPPLY uses fob
+	string dest;
 	string reason;
 }
 
@@ -52,6 +54,8 @@ class CLW_OrdersReply
 	ref array<ref CLW_MissionDto> missions = {};
 	bool needManifest;	// the sidecar does not know the manifest hash of our post: resend the manifest
 	bool keep;	// true with nothing else = "nothing changed, keep the current orders"
+	ref array<ref CLW_HqActionDto> hqActions = {};	// M3 phase A: finished HQ chat turns (see CLW_HqChat.c)
+	ref array<ref CLW_HqReplyDto> hqReplies = {};
 	ref CLW_SitrepDto sitrep = new CLW_SitrepDto();	// optional faction SITREP written by the model (empty = absent), see CLW_Sitrep.c
 }
 
@@ -120,6 +124,7 @@ class CLW_RemoteCommander
 	static const float STUCK_SECONDS = 45;		// a request in flight longer than this is considered lost
 	static const float LOG_INTERVAL = 60;		// s: repeat the same fallback reason at most this often
 	static const float RULES_INTERVAL = 25;		// s: the rule-commander fallback runs at most this often (we are polled every 10 s)
+	static const float ONLINE_SECONDS = 45;		// IsOnline: a valid reply within this long ago
 	static const int MAX_BUY_ENTRIES = 3;
 	static const int MAX_OFFERS = 3;
 	static const int MAX_BRIEF = 240;
@@ -141,6 +146,7 @@ class CLW_RemoteCommander
 	protected bool m_bManifestInFlight;
 	protected float m_fManifestSentAt;
 	protected float m_fLastManifestLogAt = -1000;
+	protected float m_fLastOkAt = -1000;	// world time of the last valid sidecar reply (IsOnline)
 
 	void Init(string factionKey, CLW_ContactBook book, CLW_SquadRegistry registry)
 	{
@@ -156,6 +162,16 @@ class CLW_RemoteCommander
 	CLW_RuleCommander GetRules()
 	{
 		return m_Rules;
+	}
+
+	// The LLM sidecar answered a situation recently (HQ chat only goes to it then, else the menu hint answers at once).
+	bool IsOnline()
+	{
+		if (!ENABLED)
+			return false;
+
+		float now = GetGame().GetWorld().GetWorldTime() * 0.001;
+		return now - m_fLastOkAt < ONLINE_SECONDS;
 	}
 
 	void Think()
@@ -204,6 +220,11 @@ class CLW_RemoteCommander
 		string manifestHash = SyncManifest(now);
 		if (!manifestHash.IsEmpty() && body.Length() > 2)
 			body = body.Substring(0, body.Length() - 1) + ",\"manifest\":\"" + manifestHash + "\"}";
+
+		// M3 phase A: pending HQ chat messages of this faction (/hq <text>) for the sidecar's agent turn
+		string hqJson = CLW_HqChat.GetJson(m_sFaction);
+		if (!hqJson.IsEmpty() && body.Length() > 2)
+			body = body.Substring(0, body.Length() - 1) + ",\"hq\":" + hqJson + "}";
 
 		if (squads <= 0)
 			ThinkRules();	// still POST the situation below: the sidecar/dashboard must learn the faction has no squads left (it may still buy)
@@ -304,6 +325,11 @@ class CLW_RemoteCommander
 
 		if (reply.needManifest)
 			m_sManifestSent = "";	// the sidecar lost / never got our manifest: resend with the next poll
+
+		m_fLastOkAt = GetGame().GetWorld().GetWorldTime() * 0.001;
+
+		// HQ chat answers (independent of the orders: a "keep" reply carries them too)
+		CLW_HqChat.Apply(m_sFaction, reply.hqActions, reply.hqReplies);
 
 		// optional SITREP written by the model: independent of the orders (a "keep" reply may carry one)
 		if (reply.sitrep)
@@ -525,9 +551,9 @@ class CLW_RemoteCommander
 			if (!item)
 				continue;
 
-			if (index >= 1)
+			if (index >= 3)
 			{
-				Print(string.Format("CLW: RemoteCommander %1: fob entry ignored (max 1 per reply)", m_sFaction), LogLevel.WARNING);
+				Print(string.Format("CLW: RemoteCommander %1: fob entry ignored (max 3 per reply)", m_sFaction), LogLevel.WARNING);
 				break;
 			}
 
@@ -549,6 +575,8 @@ class CLW_RemoteCommander
 			call.m_sReason = item.reason;
 			call.SetString("site", item.site);
 			call.SetString("fob", item.fob);
+			call.SetString("origin", item.origin);
+			call.SetString("dest", item.dest);
 			call.SetString("reason", item.reason);
 			string result = "";
 			if (!registry.Run(call, result))

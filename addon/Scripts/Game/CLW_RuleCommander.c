@@ -207,6 +207,7 @@ class CLW_RuleCommander
 		m_Book.GetContacts(contacts);
 
 		CLW_FobDoctrine.Think(this, m_sFaction, war);	// M3 phase F: before Spend, which would use up the supplies a FOB needs
+		CLW_LogisticsDoctrine.Think(this, m_sFaction, war);	// M3 phase L: RESUPPLY a FOB that runs low
 		Spend(war, contacts);
 		Plan(war, contacts);
 		ThinkHumanLed();
@@ -291,6 +292,9 @@ class CLW_RuleCommander
 			CLW_VehicleUnit unit = m_Orders.FindVehicleUnit(id);
 			if (unit)
 				kind = unit.GetKind();
+			if (kind == CLW_ForceKind.LOGISTICS)
+				continue;	// supply trucks are not part of the fighting mix (M3 phase L)
+
 			int category = CategoryOf(kind);
 			counts[category] = counts[category] + 1;
 		}
@@ -414,6 +418,9 @@ class CLW_RuleCommander
 		array<CLW_ForceEntry> pool = {};
 		foreach (CLW_ForceEntry entry : entries)
 		{
+			if (entry.m_sKind == CLW_ForceKind.LOGISTICS)
+				continue;	// trucks are bought for convoys (CLW_Convoys), never by the mix
+
 			if (CategoryOf(entry.m_sKind) != category || entry.m_iCost > spendable || excluded.Contains(entry.m_sType))
 				continue;
 
@@ -700,6 +707,9 @@ class CLW_RuleCommander
 
 			if (CLW_FobManager.IsReserved(id))
 				continue;	// builder / escort of a FOB being established (CLW_FobManager gives its orders)
+
+			if (KindOf(id) == CLW_ForceKind.LOGISTICS)
+				continue;	// supply trucks only move on convoy orders (M3 phase L)
 
 			if (m_Orders.IsWeak(id))
 			{
