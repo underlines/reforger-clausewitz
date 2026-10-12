@@ -354,7 +354,8 @@ class CLW_SitrepBuilder
 		if (angle < 0)
 			angle += 360;
 
-		int index = Math.Round(angle / 45) % 8;
+		int index = Math.Round(angle / 45);	// no % on floats in Enforce: round to int first
+		index = index % 8;
 		switch (index)
 		{
 			case 0: return "N";

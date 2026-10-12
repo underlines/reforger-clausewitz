@@ -298,6 +298,28 @@ Every group has an **orders age** timer. If no order arrives for N minutes AND t
   - Order: A, then chat, then B (all M3). Contacts -> faction map markers (server `InsertStaticMarker` with faction flags, removed on expiry) is automatic and goes into M0.
 - Same pipeline whether the report came from AI or player: `Contact` objects -> faction picture -> prompt context + map.
 
+### 8a. In-game map: friendly operational picture (backlog, owner request 2026-10-12)
+
+Bring the dashboard's friendly picture onto the in-game map for players of that faction: own squads and vehicle units (unit symbol by
+kind, strength, human-led), **arrows for HQ-assigned movement orders** (squad -> objective/waypoint), objective capture state (owner, contested,
+progress), HQ intent from the SITREP. Enemy side: only what the faction already knows (its contact markers), never more.
+
+- **Map markers vs dashboard circles (checked 2026-10-12):** same data. Objective positions in the game log, the in-game markers and
+  `/api/state` agree (also after the battle-size re-layout, markers are removed and rebuilt). The dashboard draws north up (screen y from world z).
+  They look different because of rendering: the game shows a NATO point symbol + label (`PrepareMilitaryMarker`, INSTALLATION/RELAY),
+  the dashboard draws the capture radius (50-80 m) with an owner hatch and auto-fits the view to the battle area, while the game map shows
+  the whole island. Converge: same objective glyph on both (radius ring + owner colour + progress), same unit symbols.
+- **Feasibility:** yes, in two tiers.
+  - *Points* (unit symbols, objective state): vanilla `SCR_MapMarkerManagerComponent` static markers with faction flags, already used for
+    objectives and contacts. Fine for slow-changing items; NOT for per-squad positions every few seconds (each insert/remove is replicated
+    to all clients).
+  - *Lines/arrows and moving units*: a client-side map layer (modded map UI component drawing on a canvas over `SCR_MapEntity`, the way
+    route/drawing mods do [verify the hook]) fed by a compact per-faction "friendly picture" (squad id, kind, pos, strength, order target)
+    that the server sends only to that faction's players every 5-10 s, the same path as the SITREP delivery (`CLW_SitrepStore` /
+    player-controller RPC). No enemy leak, low bandwidth, updates smoothly.
+- Toggle per layer in the map legend (squads, orders, objectives); off by default for realism-focused servers (server setting).
+- Shared spec with the dashboard (symbols, colours, active/dormant shading) so both read the same.
+
 ---
 
 ## 9. World-state hygiene: cleanup, pausing, size of war
