@@ -287,7 +287,7 @@ class CLW_HqMenuServer
 		CLW_ForceCatalog catalog = CLW_GameMode.GetForceCatalog();
 		array<CLW_ForceEntry> entries = {};
 		if (catalog)
-			catalog.GetEntries(faction, entries);
+			catalog.GetEntries(faction, entries, true);	// players drive: crewless vehicles too
 
 		CLW_ForceEntry defaultVehicle = CLW_RequestService.PickVehicle(faction, "");
 		if (defaultVehicle)

@@ -250,7 +250,10 @@ class CLW_ForceCatalog
 		if (!fromKin.IsEmpty())
 		{
 			CLW_CatalogOverrides.Apply(factionKey, fromKin);	// overrides written for this side apply to the imported entries as well
-			entries.InsertAll(fromKin);
+			foreach (CLW_ForceEntry imported : fromKin)
+			{
+				entries.Insert(imported);
+			}
 		}
 
 		int crewless;

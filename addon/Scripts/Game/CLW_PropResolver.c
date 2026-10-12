@@ -129,10 +129,10 @@ class CLW_PropResolver
 
 		// 4. the vanilla set as the last resort
 		CLW_PropSet vanillaSet;
-		ResourceName vanilla = FromVanilla(sideKey, role, vanillaSet);
-		if (!vanilla.IsEmpty())
+		ResourceName vanillaPrefab = FromVanilla(sideKey, role, vanillaSet);
+		if (!vanillaPrefab.IsEmpty())
 		{
-			CLW_ServiceEntry fromVanilla = WithPrefab(null, role, vanilla);
+			CLW_ServiceEntry fromVanilla = WithPrefab(null, role, vanillaPrefab);
 			source = "vanilla set " + vanillaSet.m_sName;
 			sourceKey = "*";
 			LogOnce(sideKey, role, fromVanilla, source);

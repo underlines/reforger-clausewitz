@@ -244,7 +244,7 @@ class CLW_RequestService
 			return null;
 
 		array<CLW_ForceEntry> entries = {};
-		catalog.GetEntries(factionKey, entries);
+		catalog.GetEntries(factionKey, entries, true);	// players drive: crewless vehicles too
 		string wanted = arg;
 		wanted = wanted.Trim();
 		wanted.ToLower();
@@ -748,7 +748,7 @@ class CLW_RequestService
 			return;
 
 		array<CLW_ForceEntry> entries = {};
-		catalog.GetEntries(factionKey, entries);
+		catalog.GetEntries(factionKey, entries, true);
 		foreach (CLW_ForceEntry entry : entries)
 		{
 			if (!entry || !entry.m_bEnabled || outTypes.Count() >= 8)

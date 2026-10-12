@@ -57,7 +57,7 @@ class CLW_Places
 					if (name.IsEmpty())
 						continue;
 
-					AddPlace(name, item.GetPos(), typeKey);
+					AddPlace(name, ItemPos(item), typeKey);
 					typed = true;
 				}
 			}
@@ -85,7 +85,35 @@ class CLW_Places
 			}
 		}
 
-		Print("CLW: places: " + s_aPlaces.Count() + " named places cached", LogLevel.NORMAL);
+		string sample;
+		for (int s = 0; s < s_aPlaces.Count() && s < 3; s++)
+		{
+			sample += " '" + s_aPlaces[s].m_sName + "' " + s_aPlaces[s].m_sType + " " + s_aPlaces[s].m_vPos.ToString();
+		}
+		Print("CLW: places: " + s_aPlaces.Count() + " named places cached, e.g." + sample, LogLevel.NORMAL);
+	}
+
+	// World position of a map item. MapItem.GetPos() is (0,0) on a dedicated server (the map is never built headless, seen 2026-10-12:
+	// every location at the origin), so the owner entity's origin is used then. GetPos() is 2D (x, z) packed into a vector [verify order].
+	static vector ItemPos(MapItem item)
+	{
+		if (!item)
+			return vector.Zero;
+
+		vector pos = item.GetPos();
+		if (pos[0] != 0 || pos[1] != 0 || pos[2] != 0)
+		{
+			if (pos[2] == 0 && pos[1] != 0)
+				return Vector(pos[0], 0, pos[1]);	// (x, z, 0)
+
+			return pos;
+		}
+
+		IEntity owner = item.Entity();
+		if (owner)
+			return owner.GetOrigin();
+
+		return pos;
 	}
 
 	protected static void AddPlace(string name, vector pos, string type)
