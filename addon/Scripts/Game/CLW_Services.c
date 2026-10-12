@@ -540,6 +540,8 @@ class CLW_Services
 	}
 
 	// The HQ composition brings its own supplies spawn point; our one base spawn point is the only one in play.
+	// Deleted, not disabled: a disabled point still shows in the deploy menu and was preselected ("spawn point disabled",
+	// owner could not spawn, DS e2e 2026-10-12).
 	protected static int DisableSpawnPoints(notnull array<IEntity> tree)
 	{
 		int off;
@@ -550,6 +552,7 @@ class CLW_Services
 				continue;
 
 			point.SetSpawnPointEnabled_S(false);
+			SCR_EntityHelper.DeleteEntityAndChildren(point);
 			off++;
 		}
 

@@ -43,6 +43,7 @@ class CLW_Sides
 			return false;
 
 		SetPlayableAndHostile(scenario);
+		BroadcastSides(keyA, keyB);
 
 		CLW_Bases bases = CLW_GameMode.GetBases();
 		if (bases)
@@ -83,6 +84,56 @@ class CLW_Sides
 	}
 
 	// ---- factions ----
+
+	// SetIsPlayable does not reach running clients (vanilla replicates it only through Game Master faction delegates): their deploy
+	// menu kept listing the setup sides (DS e2e 2026-10-12: "US Army / Soviet Army" after an RHS war start; a rejoin was fine).
+	// Every connected client applies the same playable/hostile state locally; later joiners get it from the server as usual.
+	protected static void BroadcastSides(string keyA, string keyB)
+	{
+		PlayerManager players = GetGame().GetPlayerManager();
+		if (!players)
+			return;
+
+		array<int> ids = {};
+		players.GetPlayers(ids);
+		foreach (int playerId : ids)
+		{
+			SCR_PlayerController controller = SCR_PlayerController.Cast(players.GetPlayerController(playerId));
+			if (controller)
+				controller.CLW_SyncSides_S(keyA, keyB);
+		}
+
+		Print(string.Format("CLW: sides broadcast %1 vs %2 to %3 client(s)", keyA, keyB, ids.Count()), LogLevel.NORMAL);
+	}
+
+	// Client side of BroadcastSides: the two sides playable and hostile, every other faction not playable.
+	static void ApplySidesLocal(string keyA, string keyB)
+	{
+		SCR_FactionManager manager = SCR_FactionManager.Cast(GetGame().GetFactionManager());
+		if (!manager)
+			return;
+
+		array<Faction> factions = {};
+		manager.GetFactionsList(factions);
+		foreach (Faction faction : factions)
+		{
+			SCR_Faction scrFaction = SCR_Faction.Cast(faction);
+			if (!scrFaction)
+				continue;
+
+			string key = scrFaction.GetFactionKey();
+			bool isSide = key == keyA || key == keyB;
+			if (scrFaction.IsPlayable() != isSide)
+				scrFaction.SetIsPlayable(isSide, false);
+		}
+
+		SCR_Faction first = SCR_Faction.Cast(manager.GetFactionByKey(keyA));
+		SCR_Faction second = SCR_Faction.Cast(manager.GetFactionByKey(keyB));
+		if (first && second && first.DoCheckIfFactionFriendly(second))
+			manager.SetFactionsHostile(first, second, -1, true);
+
+		Print(string.Format("CLW: sides client applied %1 vs %2", keyA, keyB), LogLevel.NORMAL);
+	}
 
 	// The two sides playable and hostile to each other, every other faction not playable. [verify] SetIsPlayable replicates.
 	protected static void SetPlayableAndHostile(notnull CLW_ScenarioConfig scenario)
@@ -262,6 +313,23 @@ class CLW_Sides
 
 			IEntity entity = players.GetPlayerControlledEntity(playerId);
 			Print(string.Format("CLW: sides moving player %1 from %2 to %3 (character %4)", playerId, key, scenario.GetDefaultPlayerFactionKey(), entity), LogLevel.NORMAL);
+
+			// the player's own faction must change too: otherwise it stays on the replaced side, which owns no spawn point
+			// any more. Not SetFaction_S on the server: the running client never learned it (DS e2e 2026-10-12: deploy menu with
+			// vanilla US loadouts, spawn point disabled). The client requests it itself, as the deploy menu would.
+			FactionManager factionManager = GetGame().GetFactionManager();
+			Faction target = factionManager.GetFactionByKey(scenario.GetDefaultPlayerFactionKey());
+			SCR_PlayerController controller = SCR_PlayerController.Cast(players.GetPlayerController(playerId));
+			if (target && controller)
+			{
+				controller.CLW_SwitchFaction_S(factionManager.GetFactionIndex(target));
+				Print(string.Format("CLW: sides player %1: client asked to switch to %2", playerId, target.GetFactionKey()), LogLevel.NORMAL);
+			}
+			else
+			{
+				Print(string.Format("CLW: sides player %1: cannot switch faction (target %2, controller %3)", playerId, target, controller), LogLevel.WARNING);
+			}
+
 			if (entity)
 				SCR_EntityHelper.DeleteEntityAndChildren(entity);	// [verify] -> OnPlayerEntityLost_S -> DoSpawn_S with the new forced faction
 		}

@@ -104,6 +104,7 @@ const DIR = path.dirname(fileURLToPath(import.meta.url));
 const DASH_DIR = path.join(DIR, "dashboard");
 const CONFIG_FILE = process.env.CLW_CONFIG ? path.resolve(process.env.CLW_CONFIG) : path.join(DIR, "sidecar-config.json"); // CLW_CONFIG: a second instance (tests) keeps its own settings file
 const PORT = Number(process.env.CLW_PORT) || 8788;
+const HOST = process.env.CLW_HOST || "127.0.0.1";	// 0.0.0.0 = reachable in the LAN (dashboard for other devices)
 const COMMANDS = new Set(["MOVE", "ATTACK", "DEFEND"]);
 const MISSION_KINDS = new Set(["CAPTURE", "DEFEND", "RECON", "DESTROY"]);
 const isV2 = (sit) => sit?.v === 2 || sit?.v === 3; // v3 = v2 + manifest hash
@@ -1285,8 +1286,14 @@ function serveStatic(res, name) {
   });
 }
 
-const LOCAL_HOST = /^(localhost|127\.0\.0\.1)(:\d+)?$/i;
-const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
+// CLW_HOST=0.0.0.0 opens the dashboard to the LAN: then private-network addresses pass the host/origin checks too
+// (anyone in the LAN can then pause the sidecar or change its config; the API key is never sent to the browser).
+const LAN = HOST !== "127.0.0.1" && HOST !== "localhost";
+const HOST_NAMES = LAN
+  ? "localhost|127\\.0\\.0\\.1|10\\.\\d+\\.\\d+\\.\\d+|192\\.168\\.\\d+\\.\\d+|172\\.(1[6-9]|2\\d|3[01])\\.\\d+\\.\\d+|[\\w-]+(\\.local|\\.lan)?"
+  : "localhost|127\\.0\\.0\\.1";
+const LOCAL_HOST = new RegExp(`^(${HOST_NAMES})(:\\d+)?$`, "i");
+const LOCAL_ORIGIN = new RegExp(`^https?:\\/\\/(${HOST_NAMES})(:\\d+)?$`, "i");
 const hostOk = (req) => LOCAL_HOST.test(req.headers.host ?? "");
 const originOk = (req) => !req.headers.origin || LOCAL_ORIGIN.test(req.headers.origin);
 
@@ -1731,7 +1738,7 @@ http.createServer((req, res) => {
     if (m && !m[1].includes("..") && MIME[path.extname(m[1]).toLowerCase()]) return serveStatic(res, "vendor/" + m[1]);
   }
   send(res, 404, { error: "not found" });
-}).listen(PORT, "127.0.0.1", () => {
-  console.log(`clausewitz llm sidecar (${cfg.provider}${cfg.enabled ? "" : ", DISABLED"}) on http://127.0.0.1:${PORT}  (dashboard at /)`);
+}).listen(PORT, HOST, () => {
+  console.log(`clausewitz llm sidecar (${cfg.provider}${cfg.enabled ? "" : ", DISABLED"}) on http://${HOST}:${PORT}  (dashboard at /${LAN ? ", open to the LAN" : ""})`);
   void pollKey();
 });
