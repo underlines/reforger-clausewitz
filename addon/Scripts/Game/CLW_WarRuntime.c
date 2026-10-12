@@ -611,17 +611,6 @@ class CLW_WarRuntime
 		}
 	}
 
-	// True (and the repeating timer is removed) when the hosting game mode entity is gone: statics and the call queue can outlive
-	// the entity (Play restart), the entity itself does not.
-	protected bool OwnerGone(func timer)
-	{
-		if (m_Owner)
-			return false;
-
-		GetGame().GetCallqueue().Remove(timer);
-		return true;
-	}
-
 	// ---- game mode hooks (called by CLW_GameModeHooks.c on the hosting entity) ----
 
 	// Respawn gate: a faction without tickets (or a finished war) cannot spawn players.
@@ -686,8 +675,11 @@ class CLW_WarRuntime
 	// Perception -> contact book -> map markers, for both factions.
 	protected void PollContacts()
 	{
-		if (OwnerGone(PollContacts))
+		if (!m_Owner)
+		{
+			GetGame().GetCallqueue().Remove(PollContacts);
 			return;
+		}
 
 		EnsureFactionObjects();
 		foreach (string key : m_aBuiltKeys)
@@ -758,8 +750,11 @@ class CLW_WarRuntime
 
 	protected void ThinkCommanders()
 	{
-		if (OwnerGone(ThinkCommanders))
+		if (!m_Owner)
+		{
+			GetGame().GetCallqueue().Remove(ThinkCommanders);
 			return;
+		}
 
 		EnsureFactionObjects();
 		foreach (string key : m_aBuiltKeys)
