@@ -1,0 +1,193 @@
+FrameWidgetClass {
+ Name "WarStatusRoot"
+ "Z Order" 900
+ {
+  FrameWidgetClass "{7D3A91C45E300019}" {
+   Name "Panel"
+   Slot FrameWidgetSlot "{7D3A91C45E30001A}" {
+    Anchor 0.5 0 0.5 0
+    PositionX 0
+    OffsetLeft 0
+    PositionY 6
+    OffsetTop 6
+    SizeX 0
+    OffsetRight 0
+    SizeY 0
+    OffsetBottom 0
+    Alignment 0.5 0
+    SizeToContent 1
+   }
+   {
+    ImageWidgetClass "{7D3A91C45E30001B}" {
+     Name "Back"
+     Slot FrameWidgetSlot "{7D3A91C45E30001C}" {
+      Anchor 0 0 1 1
+      PositionX 0
+      OffsetLeft 0
+      PositionY 0
+      OffsetTop 0
+      SizeX 0
+      OffsetRight 0
+      SizeY 0
+      OffsetBottom 0
+     }
+     Color 0 0 0 0.35
+    }
+    HorizontalLayoutWidgetClass "{7D3A91C45E30001D}" {
+     Name "Row"
+     Slot FrameWidgetSlot "{7D3A91C45E30001E}" {
+      PositionX 0
+      OffsetLeft 0
+      PositionY 0
+      OffsetTop 0
+      SizeX 0
+      OffsetRight 0
+      SizeY 0
+      OffsetBottom 0
+      SizeToContent 1
+     }
+     {
+      VerticalLayoutWidgetClass "{7D3A91C45E300001}" {
+       Name "ColA"
+       Slot LayoutSlot "{7D3A91C45E300002}" {
+        Padding 10 2 10 2
+       }
+       {
+        TextWidgetClass "{7D3A91C45E300003}" {
+         Name "A_Name"
+         Slot LayoutSlot "{7D3A91C45E300004}" {
+          HorizontalAlign 3
+          Padding 0 0 0 0
+         }
+         Color 1 1 1 1
+         Text ""
+         "Font Size" 16
+         "Min Font Size" 16
+         "Horizontal Alignment" Center
+         "Vertical Alignment" Center
+         FontProperties FontProperties "{7D3A91C45E300005}" {
+          Font "{EABA4FE9D014CCEF}UI/Fonts/RobotoCondensed/RobotoCondensed_Bold.fnt"
+          ShadowSize 4
+          ShadowOffset 5 5
+          ShadowOpacity 0.5
+         }
+        }
+        TextWidgetClass "{7D3A91C45E300006}" {
+         Name "A_Info"
+         Slot LayoutSlot "{7D3A91C45E300007}" {
+          HorizontalAlign 3
+          Padding 0 0 0 0
+         }
+         Color 1 1 1 1
+         Text ""
+         "Font Size" 14
+         "Min Font Size" 14
+         "Horizontal Alignment" Center
+         "Vertical Alignment" Center
+         FontProperties FontProperties "{7D3A91C45E300008}" {
+          Font "{EABA4FE9D014CCEF}UI/Fonts/RobotoCondensed/RobotoCondensed_Bold.fnt"
+          ShadowSize 4
+          ShadowOffset 5 5
+          ShadowOpacity 0.5
+         }
+        }
+       }
+      }
+      VerticalLayoutWidgetClass "{7D3A91C45E300009}" {
+       Name "ColC"
+       Slot LayoutSlot "{7D3A91C45E30000A}" {
+        Padding 10 2 10 2
+       }
+       {
+        TextWidgetClass "{7D3A91C45E30000B}" {
+         Name "Status"
+         Slot LayoutSlot "{7D3A91C45E30000C}" {
+          HorizontalAlign 3
+          Padding 0 0 0 0
+         }
+         Color 1 1 1 1
+         Text ""
+         "Font Size" 16
+         "Min Font Size" 16
+         "Horizontal Alignment" Center
+         "Vertical Alignment" Center
+         FontProperties FontProperties "{7D3A91C45E30000D}" {
+          Font "{EABA4FE9D014CCEF}UI/Fonts/RobotoCondensed/RobotoCondensed_Bold.fnt"
+          ShadowSize 4
+          ShadowOffset 5 5
+          ShadowOpacity 0.5
+         }
+        }
+        TextWidgetClass "{7D3A91C45E30000E}" {
+         Name "Clock"
+         Slot LayoutSlot "{7D3A91C45E30000F}" {
+          HorizontalAlign 3
+          Padding 0 0 0 0
+         }
+         Color 1 1 1 1
+         Text ""
+         "Font Size" 14
+         "Min Font Size" 14
+         "Horizontal Alignment" Center
+         "Vertical Alignment" Center
+         FontProperties FontProperties "{7D3A91C45E300010}" {
+          Font "{EABA4FE9D014CCEF}UI/Fonts/RobotoCondensed/RobotoCondensed_Bold.fnt"
+          ShadowSize 4
+          ShadowOffset 5 5
+          ShadowOpacity 0.5
+         }
+        }
+       }
+      }
+      VerticalLayoutWidgetClass "{7D3A91C45E300011}" {
+       Name "ColB"
+       Slot LayoutSlot "{7D3A91C45E300012}" {
+        Padding 10 2 10 2
+       }
+       {
+        TextWidgetClass "{7D3A91C45E300013}" {
+         Name "B_Name"
+         Slot LayoutSlot "{7D3A91C45E300014}" {
+          HorizontalAlign 3
+          Padding 0 0 0 0
+         }
+         Color 1 1 1 1
+         Text ""
+         "Font Size" 16
+         "Min Font Size" 16
+         "Horizontal Alignment" Center
+         "Vertical Alignment" Center
+         FontProperties FontProperties "{7D3A91C45E300015}" {
+          Font "{EABA4FE9D014CCEF}UI/Fonts/RobotoCondensed/RobotoCondensed_Bold.fnt"
+          ShadowSize 4
+          ShadowOffset 5 5
+          ShadowOpacity 0.5
+         }
+        }
+        TextWidgetClass "{7D3A91C45E300016}" {
+         Name "B_Info"
+         Slot LayoutSlot "{7D3A91C45E300017}" {
+          HorizontalAlign 3
+          Padding 0 0 0 0
+         }
+         Color 1 1 1 1
+         Text ""
+         "Font Size" 14
+         "Min Font Size" 14
+         "Horizontal Alignment" Center
+         "Vertical Alignment" Center
+         FontProperties FontProperties "{7D3A91C45E300018}" {
+          Font "{EABA4FE9D014CCEF}UI/Fonts/RobotoCondensed/RobotoCondensed_Bold.fnt"
+          ShadowSize 4
+          ShadowOffset 5 5
+          ShadowOpacity 0.5
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+}

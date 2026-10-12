@@ -10,10 +10,11 @@ CLW_GameMode : "{0F307326459A1395}Prefabs/MP/Modes/GameMode_Base.et" {
    m_fRespawnTime 10
   }
   SCR_RespawnSystemComponent "{56B2B4793051E7C9}" {
-   m_SpawnLogic SCR_AutoSpawnLogic "{5D38D0BF007E0C17}" {
-    m_sForcedFaction "US"
+   m_SpawnLogic CLW_SpawnLogic "{7D2B6F8C1B3E5A42}" {
+    m_sForcedFaction ""
    }
   }
  }
  m_bUseSpawnPreload 0
+ m_ScenarioConfig "{6B1E4C7A29D35F80}Configs/CLW/Scenarios/Arland.conf"
 }

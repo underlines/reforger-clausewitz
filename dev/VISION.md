@@ -137,6 +137,17 @@ A lobby UI shown to the first (admin) player before the war starts. Dedicated-se
 
 Generated scenario = a data object (`ScenarioConfig`) that is saved/loaded, so a setup can be repeated, shared or run headless.
 
+### 3b. War modes (pluggable, chosen in the setup menu)
+
+The host picks a war mode and its parameters in the setup menu when the first player joins (architecture: `notes/m2-design.md` section 2a; new modes are a subclass + config entry).
+
+| Mode | Rules | Status |
+|---|---|---|
+| **Short conflict** | Configurable time limit, tickets, supplies, income, battle size; tickets to 0, hold all points or time limit ends it | M2 |
+| **Long conflict** | No time limit; tickets/resources can run out, and a side that loses all its units (and cannot buy more) loses: total VICTORY for the other | later |
+| **True endless conflict** | Never ends: tickets never reach 0 (refilled over time), no time limit, HQ respawns new units even when everything was destroyed; a persistent front that ebbs and flows | later |
+| Ideas | Attack/defend (one side holds, the other has a ticket pool and a deadline), king of the hill (one moving objective), campaign (chain of battles with carried-over losses), story mode (3a) | vision |
+
 ### 3a. Story mode (far-future idea)
 
 An optional mode in the initial scenario setup (section 3), next to the usual settings (force strengths of BLUFOR/REDFOR, mechanization level, location). Besides the sandbox "realistic war", the host can pick or generate a **story and a plan for each side**, and the two HQs then play *loosely along that storyline* instead of purely optimising.
@@ -299,6 +310,17 @@ Large AI wars die on entity counts. The mod needs an explicit **population manag
   - Collapse inactive groups to a data record (type, strength, position) and respawn on demand, so a 1000-man "army" is a few hundred live entities.
 - **Delete vs. pause policy** is a scenario setting: *preserve* (collapse and keep strength), *attrit* (delete when far from action and mark as lost/reserve), *aggressive* (delete after N minutes out of contact).
 - Safe-guards: never delete a unit while it is in an active command, only after the command is reassigned; keep counts consistent with the faction's resource ledger.
+
+### Activity tiers (relevance-based simulation detail)
+
+The engine drops AI far from any observer to its lowest LOD (almost no thinking), so an AI-vs-AI front with no human nearby stalls. Seen in play (M2, 2026-10-12): enemy vehicles only acted when the Game Master camera came close.
+
+- **Now (M2, simple):** every 10 s each commanded unit gets a relevance check: enemy within ~800 m (ground truth), executing an unfinished HQ order (every driving vehicle), at a contested objective, or human-led. Relevant units stay at full detail (`PreventMaxLOD`), the rest are released to the engine (`AllowMaxLOD`) with 60 s hysteresis. A per-side budget of active agents (by battle size) ranks units by relevance score. Bases/FOBs keep operating because the economy is our own script, not AI; a garrison wakes when enemies approach.
+- **Later (smarter):**
+  - **Four tiers:** *full* (combat, humans near) / *reduced* (in transit: lower update rate, simpler pathing) / *dormant* (live, engine max LOD) / *virtualized* (despawned to a record, see below).
+  - **Adaptive budget** from server FPS and player count instead of fixed caps; HQ is told which units are "slow" so plans account for it.
+  - **Predictive relevance:** wake units whose route will cross an enemy or an objective within N minutes, not only when contact already happened.
+  - **Commander-side LOD:** HQ plans detailed only for the active front; quiet sectors are summarised (ties into 4b "caps and prioritisation").
 
 ### Experimental (far future): virtual battlefield
 

@@ -4,7 +4,7 @@ SCR_AIWorld CLW_AIWorld : "{26EE495A35AA70DC}Prefabs/AI/CLW_AIWorld_Arland.et" {
 PerceptionManager CLW_PerceptionManager : "{028DAEAD63E056BE}Prefabs/World/Game/PerceptionManager.et" {
  coords 2048 0 2088
 }
-SCR_FactionManager CLW_FactionManager : "{589540B35EBA8CDC}Prefabs/MP/Managers/Factions/FactionManager_USxUSSR.et" {
+SCR_FactionManager CLW_FactionManager : "{9A4E27C1B83D5F06}Prefabs/Managers/CLW_FactionManager.et" {
  coords 2048 0 2058
 }
 CLW_GameMode CLW_GameMode : "{CB770FDC19B2CC62}Prefabs/GameModes/CLW_GameMode.et" {
@@ -20,24 +20,6 @@ SCR_SpawnPoint CLW_Spawn_USSR : "{4FEA25583D0975F7}Prefabs/MP/Spawning/SpawnPoin
 SCR_SpawnPoint CLW_Spawn_US : "{5A2220DD0C16958B}Prefabs/MP/Spawning/SpawnPoint_US.et" {
  coords 2000 51.7 3000
 }
-SCR_LoadoutManager CLW_LoadoutManager : "{97EF4C1A41F63DDB}Prefabs/MP/Managers/Loadouts/LoadoutManager_USxUSSR.et" {
+SCR_LoadoutManager CLW_LoadoutManager : "{5B1F83D6E02A7C49}Prefabs/Managers/CLW_LoadoutManager.et" {
  coords 2048 0 2068
-}
-$grp SCR_AIGroup : "{DDF3799FA1387848}Prefabs/Groups/BLUFOR/Group_US_RifleSquad.et" {
- CLW_Squad_US_1 {
-  coords 2030 52 3030
-  m_bPlayable 1
- }
- CLW_Squad_US_2 {
-  coords 2150 52 3030
- }
-}
-$grp SCR_AIGroup : "{E552DABF3636C2AD}Prefabs/Groups/OPFOR/Group_USSR_RifleSquad.et" {
- CLW_Squad_USSR_1 {
-  coords 2030 50 2630
-  m_bPlayable 1
- }
- CLW_Squad_USSR_2 {
-  coords 2150 50 2630
- }
 }
