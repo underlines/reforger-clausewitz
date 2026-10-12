@@ -125,3 +125,20 @@ their final positions and the final HQs.
 - The result is written to the runtime point (owner, progress +100 / -100 / 0, contested reset, marker rebuilt) and back to the scenario's
   `m_sStartOwner` as the slot's default key (the form `Rekey` maps with `MapDefaultKey`). Logs: `CLW: points start owner ...`,
   `CLW: points start ownership mode=... perSide=... -> A .., B .., neutral ..`.
+
+## Compact base services + vehicle depot (owner playtest 2026-10-12)
+- Layout (`CLW_Services.FindSpot/SearchPass`): was min radius = scenario spawn radius (30) + footprint radius, first ring 55 m wide, gap 4 m
+  (services ended 50-80 m apart). Now: min radius = footprint radius + 5 m (capped by the spawn radius), first ring 14 m wide, then +12 m per
+  batch (4 batches), gap 3 m, overlap test on 80 % of the circumscribed footprint radii (CheckPose still blocks real overlaps; slope, water,
+  object, tree and road clearance unchanged). An authored `m_vOffset` is tried first (exact spot, then up to 8 m around it, strict then
+  relaxed) before the ring search. Constants block `PLACE_*` at the top of the class.
+- Logs: `CLW: services placed ... via=<free|relaxed|lenient|offset|offset+Nm|slope-ignored|forced> dist=<m>`; when a service lands farther than
+  35 m: `CLW: place <label> went N m from the base point ... : <reject summary of the nearer passes>`.
+- Vehicle depot: the vanilla `SCR_CatalogEntitySpawnerComponent` lists the VEHICLE catalog of its AFFILIATED faction (refreshed on
+  affiliation change), serves only requesters of that faction, and pays through its own `SCR_ResourceComponent` consumer (supplies containers
+  within 185 m, `m_bSuppliesConsumptionEnabled 1` in `VehicleService_base.et`); with supplies disabled by the game mode it is free. `AdoptFaction`
+  skipped a depot whose profile key equals the side (RHS profile with the vanilla depot prefab) so it kept the US/USSR catalog.
+  `SetupDepots` (1.8 s after spawn) affiliates the depot with the side, counts the catalog (`GetEntryAtIndex`), falls back to a kin faction
+  with vehicles, and logs `CLW: services depot <side> faction <key> catalog vehicles=<n> (source ...) supplies: consumption=.. consumer sees ..`.
+  Supplies: the linked containers of `CLW_SupplyLink` are the ones in range, so the depot spends the base stock like the arsenal (compact layout keeps them in range).
+- Arsenal log lines now carry `service=<kind> prefab=<path>`.

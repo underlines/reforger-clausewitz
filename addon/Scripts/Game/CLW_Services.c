@@ -26,12 +26,18 @@ class CLW_ServiceInstance
 class CLW_Services
 {
 	static const string BASE_HQ = "HQ";
-	static const int PLACE_BATCHES = 4;				// search rings, each wider than the last
-	static const int PLACE_ATTEMPTS = 20;			// random candidates per ring
-	static const float PLACE_GAP_M = 4;				// free space between two services
-	static const float PLACE_RING_M = 55;			// width of the first search ring beyond the spawn zone
-	static const float PLACE_RING_GROW_M = 30;		// every further ring is this much wider
+	// Compact base layout (owner playtest 2026-10-12: services were 50-80 m apart). Generic engine-level numbers, the clearance checks of
+	// CLW_FreeSpot (objects, trees, water, slope, roads) are unchanged: the search starts tight and only grows when the ground requires it.
+	static const int PLACE_BATCHES = 4;				// search widths, each wider than the last
+	static const float PLACE_GAP_M = 3;				// free space between the footprints of two services
+	static const float PLACE_OVERLAP_FACTOR = 0.8;	// footprint radius is the circumscribed circle: 80 % of it is enough, CheckPose blocks real overlaps
+	static const float PLACE_INNER_M = 5;			// clear ground around the anchor beyond the footprint radius (capped by the scenario spawn radius)
+	static const float PLACE_RING_M = 14;			// width of the first search ring beyond the inner radius
+	static const float PLACE_RING_GROW_M = 12;		// every further ring is this much wider
+	static const float PLACE_PIN_SLACK_M = 8;		// an authored offset may shift this far to reach clear ground before the ring search starts
+	static const float PLACE_COMPACT_MAX_M = 35;	// farther than this from the anchor is logged with the reason
 	static const float SPAWN_ZONE_DEFAULT_M = 30;	// keep-clear radius around the base anchor when the scenario gives none
+	static const int DEPOT_DELAY_MS = 1800;
 	static const int LINK_DELAY_MS = 800;			// the services' resource components initialise after the spawn
 	static const int LINK_RETRIES = 6;
 	static const int ARSENAL_DELAY_MS = 1500;
@@ -39,6 +45,7 @@ class CLW_Services
 	static const int SYNC_MS = 1500;
 
 	protected static ref array<ref CLW_ServiceInstance> s_aInst = {};
+	protected static string s_sPlaceWhy;	// reject summary of the strict passes that failed (why a service had to go farther)
 	protected static bool s_bPolling;
 
 	// ---- lifecycle ----
@@ -279,6 +286,7 @@ class CLW_Services
 		{
 			GetGame().GetCallqueue().CallLater(LinkBase, LINK_DELAY_MS, false, sideKey, baseId, 0);
 			GetGame().GetCallqueue().CallLater(SetupArsenals, ARSENAL_DELAY_MS, false, sideKey, baseId);
+			GetGame().GetCallqueue().CallLater(SetupDepots, DEPOT_DELAY_MS, false, sideKey, baseId);
 		}
 
 		return spawned;
@@ -412,18 +420,38 @@ class CLW_Services
 		vector spot;
 		string via;
 		float yaw = entry.m_fYaw;
+		string placeLabel = sideKey + " " + baseId + " " + entry.m_sKind;
+		s_sPlaceWhy = "";
+		bool pinned;
 		if (entry.m_vOffset[0] != 0 || entry.m_vOffset[2] != 0)
 		{
-			spot = Vector(anchor[0] + entry.m_vOffset[0], 0, anchor[2] + entry.m_vOffset[2]);
-			CLW_Placement.SurfaceAt(spot);
-			via = "offset";
-			if (yaw < 0)
-				yaw = CLW_Placement.YawFromDir(anchor[0] - spot[0], anchor[2] - spot[2]);
+			// authored offset first: the exact spot, then a short search around it (strict, then relaxed), only then the ring search
+			vector pin = Vector(anchor[0] + entry.m_vOffset[0], 0, anchor[2] + entry.m_vOffset[2]);
+			string pinWhy;
+			for (int pinPass = 0; pinPass < 2 && !pinned; pinPass++)
+			{
+				pinned = SearchPass(placeLabel + " (offset)", anchor, pin, 0, PLACE_PIN_SLACK_M, pinPass, foot, entry.m_fYaw, placedPos, placedRad, spot, yaw, pinWhy);
+			}
+
+			if (pinned)
+			{
+				via = "offset";
+				float pinShift = vector.DistanceXZ(spot, pin);
+				if (pinShift > 1.5)
+					via = "offset+" + Math.Round(pinShift).ToString() + "m";
+			}
+			else
+			{
+				s_sPlaceWhy = "authored offset blocked: " + pinWhy;
+			}
 		}
-		else
-		{
-			via = FindSpot(sideKey + " " + baseId + " " + entry.m_sKind, anchor, keepClear, foot, entry.m_fYaw, placedPos, placedRad, spot, yaw);
-		}
+
+		if (!pinned)
+			via = FindSpot(placeLabel, anchor, keepClear, foot, entry.m_fYaw, placedPos, placedRad, spot, yaw);
+
+		float anchorDist = vector.DistanceXZ(spot, anchor);
+		if (anchorDist > PLACE_COMPACT_MAX_M)
+			Print(string.Format("CLW: place %1 went %2 m from the base point (compact limit %3 m) via=%4: %5", placeLabel, Math.Round(anchorDist), PLACE_COMPACT_MAX_M, via, s_sPlaceWhy), LogLevel.NORMAL);
 
 		EntitySpawnParams params = new EntitySpawnParams();
 		params.TransformMode = ETransformMode.WORLD;
@@ -455,7 +483,7 @@ class CLW_Services
 		int spawnPoints = DisableSpawnPoints(tree);
 		CLW_StructureMarkers.Add(sideKey, baseId, entry.m_sKind, spot, entry.ShowsMapMarker());	// map marker (own side, important structures only) + dashboard structures (all)
 		CLW_RequestTerminals.OnServicePlaced(sideKey, baseId, entry.m_sKind, spot, radius);	// M3 phase Q: request terminal next to the command post / depot
-		Print(string.Format("CLW: services placed %1 %2 %3 at %4 yaw=%5 r=%6 via=%7 grid=%8", sideKey, baseId, entry.m_sKind, spot, Math.Round(yaw), radius, via, CLW_Places.Grid(spot)), LogLevel.NORMAL);
+		Print(string.Format("CLW: services placed %1 %2 %3 at %4 yaw=%5 r=%6 via=%7 dist=%8 grid=%9", sideKey, baseId, entry.m_sKind, spot, Math.Round(yaw), radius, via, Math.Round(anchorDist), CLW_Places.Grid(spot)), LogLevel.NORMAL);
 		Print(string.Format("CLW: services   %1 %2 entities=%3 reaffiliated=%4 spawnPointsOff=%5 prefab=%6", sideKey, entry.m_sKind, tree.Count(), reaffiliated, spawnPoints, prefabName.GetPath()), LogLevel.NORMAL);
 		return true;
 	}
@@ -471,48 +499,65 @@ class CLW_Services
 		return 0.25;
 	}
 
-	// Free spot around the anchor for a footprint: outside the keep-clear zone, clear of the placed services (+ gap), dry, flat and with
-	// nothing solid under the footprint (CLW_FreeSpot). Passes: strict (8 % grade over the footprint), relaxed (wider ring, trees ignored,
-	// 14 %), lenient (25 %, objects still block; DS e2e 2026-10-12: a fixed 1.2-3.7 m height range rejected 95 % of Arland). The last resort
-	// is a best-effort search that ignores only the slope (road + object clearance kept, "slope-ignored"); a blind forced spot on the minimum ring
-	// (logged as FORCED) only when even that fails. Every pass keeps the road clearance (CLW_SpotParams.m_fRoadClearance, roads are never relaxed).
-	// Returns how the spot was found.
+	// One search pass around 'center' between two radii. Pass 0 strict (8 % grade over the footprint), pass 1 relaxed (wider, trees ignored,
+	// 14 %), pass 2 lenient (25 %, objects still block). Roads keep their clearance in every pass. 'why' receives the reject summary on failure.
+	protected static bool SearchPass(string label, vector anchor, vector center, float minRadius, float maxRadius, int pass, CLW_Footprint foot, float fixedYaw, notnull array<vector> placedPos, notnull array<float> placedRad, out vector spot, out float yaw, out string why)
+	{
+		float footRadius = foot.Radius();
+		CLW_SpotParams p = new CLW_SpotParams();
+		p.m_sLabel = label;
+		if (pass == 1)
+			p.m_sLabel = label + " (relaxed)";
+		else if (pass >= 2)
+			p.m_sLabel = label + " (lenient)";
+
+		p.m_vCenter = center;
+		p.m_vFaceTarget = anchor;
+		p.SetFootprint(foot);
+		p.m_fMinRadius = minRadius;
+		p.m_fMaxRadius = maxRadius;
+		p.m_fMaxHeightRange = Math.Max(1.2, 2 * footRadius * PlaceGrade(pass));	// height range over the footprint diameter
+		p.m_fFixedYaw = fixedYaw;
+		if (pass >= 1)
+		{
+			p.m_fMaxRadius = p.m_fMaxRadius * 1.6;
+			p.m_bBlockTrees = false;
+			p.m_fMargin = 0.3;
+		}
+
+		foreach (int i, vector other : placedPos)
+		{
+			p.AddAvoid(other, (footRadius + placedRad[i]) * PLACE_OVERLAP_FACTOR + PLACE_GAP_M);
+		}
+
+		CLW_SpotResult res = new CLW_SpotResult();
+		if (CLW_FreeSpot.FindFreeSpot(p, res))
+		{
+			spot = res.m_vPos;
+			yaw = res.m_fYaw;
+			return true;
+		}
+
+		why = "pass " + pass.ToString() + " " + res.Summary();
+		return false;
+	}
+
+	// Free spot around the anchor for a footprint: starts right beside the anchor (footprint radius + PLACE_INNER_M) and grows outward in
+	// ring batches, so a service lands as close to the HQ point as the ground allows: clear of the placed services (+ gap), dry, flat and with
+	// nothing solid under the footprint (CLW_FreeSpot). Passes: strict, relaxed, lenient (see SearchPass; DS e2e 2026-10-12: a fixed
+	// 1.2-3.7 m height range rejected 95 % of Arland). The last resort is a best-effort search that ignores only the slope (road + object
+	// clearance kept, "slope-ignored"); a blind forced spot on the minimum ring (logged as FORCED) only when even that fails.
+	// s_sPlaceWhy receives what blocked the nearer passes. Returns how the spot was found.
 	protected static string FindSpot(string label, vector anchor, float keepClear, CLW_Footprint foot, float fixedYaw, notnull array<vector> placedPos, notnull array<float> placedRad, out vector spot, out float yaw)
 	{
 		float footRadius = foot.Radius();
-		float minDist = keepClear + footRadius;
+		float minDist = footRadius + Math.Min(PLACE_INNER_M, keepClear);
+		float maxDist = minDist + PLACE_RING_M + (PLACE_BATCHES - 1) * PLACE_RING_GROW_M;
+		string why;
 		for (int pass = 0; pass < 3; pass++)
 		{
-			CLW_SpotParams p = new CLW_SpotParams();
-			p.m_sLabel = label;
-			if (pass == 1)
-				p.m_sLabel = label + " (relaxed)";
-			else if (pass == 2)
-				p.m_sLabel = label + " (lenient)";
-
-			p.m_vCenter = anchor;
-			p.SetFootprint(foot);
-			p.m_fMinRadius = minDist;
-			p.m_fMaxRadius = minDist + PLACE_RING_M + (PLACE_BATCHES - 1) * PLACE_RING_GROW_M;
-			p.m_fMaxHeightRange = Math.Max(1.2, 2 * footRadius * PlaceGrade(pass));	// height range over the footprint diameter
-			p.m_fFixedYaw = fixedYaw;
-			if (pass >= 1)
+			if (SearchPass(label, anchor, anchor, minDist, maxDist, pass, foot, fixedYaw, placedPos, placedRad, spot, yaw, why))
 			{
-				p.m_fMaxRadius = p.m_fMaxRadius * 1.6;
-				p.m_bBlockTrees = false;
-				p.m_fMargin = 0.3;
-			}
-
-			foreach (int i, vector other : placedPos)
-			{
-				p.AddAvoid(other, footRadius + placedRad[i] + PLACE_GAP_M);
-			}
-
-			CLW_SpotResult res = new CLW_SpotResult();
-			if (CLW_FreeSpot.FindFreeSpot(p, res))
-			{
-				spot = res.m_vPos;
-				yaw = res.m_fYaw;
 				if (pass == 0)
 					return "free";
 				if (pass == 1)
@@ -520,6 +565,10 @@ class CLW_Services
 
 				return "lenient";
 			}
+
+			if (!s_sPlaceWhy.IsEmpty())
+				s_sPlaceWhy += "; ";
+			s_sPlaceWhy += why;
 		}
 
 		// best effort: only the slope limit is dropped (object + road + water clearance kept), wider ring
@@ -528,7 +577,7 @@ class CLW_Services
 		bp.m_vCenter = anchor;
 		bp.SetFootprint(foot);
 		bp.m_fMinRadius = minDist;
-		bp.m_fMaxRadius = (minDist + PLACE_RING_M + (PLACE_BATCHES - 1) * PLACE_RING_GROW_M) * 2.2;
+		bp.m_fMaxRadius = maxDist * 2.2;
 		bp.m_fMaxHeightRange = 100000;
 		bp.m_fFixedYaw = fixedYaw;
 		bp.m_bBlockTrees = false;
@@ -536,7 +585,7 @@ class CLW_Services
 		bp.m_iMaxTries = 1200;
 		foreach (int bi, vector bother : placedPos)
 		{
-			bp.AddAvoid(bother, footRadius + placedRad[bi] + PLACE_GAP_M);
+			bp.AddAvoid(bother, (footRadius + placedRad[bi]) * PLACE_OVERLAP_FACTOR + PLACE_GAP_M);
 		}
 
 		CLW_SpotResult bres = new CLW_SpotResult();
@@ -827,8 +876,8 @@ class CLW_Services
 					}
 				}
 
-				Print(string.Format("CLW: services arsenal %1 %2 at %3: kitCost=%4 (%5) saveType=FRIENDLY_AND_FACTION_ITEMS_ONLY", sideKey, baseId, inst.m_vPos, kitCost, cost), LogLevel.NORMAL);
-				GetGame().GetCallqueue().CallLater(LogArsenal, ARSENAL_LOG_MS, false, sideKey, entity);
+				Print(string.Format("CLW: services arsenal %1 %2 at %3: kitCost=%4 (%5) saveType=FRIENDLY_AND_FACTION_ITEMS_ONLY service=%6 prefab=%7", sideKey, baseId, inst.m_vPos, kitCost, cost, inst.m_sKind, inst.m_Prefab.GetPath()), LogLevel.NORMAL);
+				GetGame().GetCallqueue().CallLater(LogArsenal, ARSENAL_LOG_MS, false, sideKey, entity, inst.m_sKind + " " + inst.m_Prefab.GetPath() + " at " + inst.m_vPos.ToString());
 			}
 		}
 
@@ -836,7 +885,104 @@ class CLW_Services
 			Print(string.Format("CLW: services arsenal %1 %2: none in the services (kit cost: nothing to switch)", sideKey, baseId), LogLevel.NORMAL);
 	}
 
-	protected static void LogArsenal(string sideKey, IEntity entity)
+	// Vehicle depot (owner playtest 2026-10-12: "request vehicle" showed vanilla vehicles for an RHS side). The vanilla spawner builds its
+	// list from the catalog of the depot's AFFILIATED faction (SCR_CatalogEntitySpawnerComponent.SetCurrentFactionCatalog, refreshed on
+	// OnFactionChanged), only serves requesters of that faction, and pays from its own SCR_ResourceComponent consumer (supplies containers in
+	// range, the ones CLW_SupplyLink mirrors) when the prefab enables supply consumption (all vanilla depots do). AdoptFaction skips a depot
+	// whose profile key equals the side, so a pack side that reuses the vanilla depot prefab kept the vanilla faction. Here the depot is
+	// affiliated with the side whenever it is not already, the catalog is counted, and an empty catalog falls back to a kin faction that has one.
+	protected static void SetupDepots(string sideKey, string baseId)
+	{
+		FactionManager manager = GetGame().GetFactionManager();
+		if (!manager)
+			return;
+
+		Faction side = manager.GetFactionByKey(sideKey);
+		array<CLW_ServiceInstance> insts = {};
+		GetInstances(sideKey, baseId, insts);
+		foreach (CLW_ServiceInstance inst : insts)
+		{
+			if (inst.m_sKind != CLW_ServiceKind.VEHICLE_DEPOT)
+				continue;
+
+			array<IEntity> tree = {};
+			CollectHierarchy(inst.m_Entity, tree);
+			foreach (IEntity depotEntity : tree)
+			{
+				SCR_CatalogEntitySpawnerComponent spawner = SCR_CatalogEntitySpawnerComponent.Cast(depotEntity.FindComponent(SCR_CatalogEntitySpawnerComponent));
+				FactionAffiliationComponent affiliation = FactionAffiliationComponent.Cast(depotEntity.FindComponent(FactionAffiliationComponent));
+				if (!spawner || !affiliation)
+					continue;
+
+				string was = affiliation.GetDefaultFactionKey();
+				if (affiliation.GetAffiliatedFaction())
+					was = affiliation.GetAffiliatedFaction().GetFactionKey();
+
+				if (side && affiliation.GetAffiliatedFaction() != side)
+					affiliation.SetAffiliatedFaction(side);
+
+				string usedKey = sideKey;
+				string depotSource = "side catalog";
+				int vehicles = DepotCatalogCount(spawner);
+				if (vehicles == 0 && side)
+				{
+					array<Faction> factions = {};
+					manager.GetFactionsList(factions);
+					foreach (Faction candidate : factions)
+					{
+						if (!candidate || candidate == side || !AreKin(sideKey, candidate.GetFactionKey()))
+							continue;
+
+						affiliation.SetAffiliatedFaction(candidate);
+						int kinVehicles = DepotCatalogCount(spawner);
+						if (kinVehicles > 0)
+						{
+							vehicles = kinVehicles;
+							usedKey = candidate.GetFactionKey();
+							depotSource = "kin fallback, the side has no vehicle catalog";
+							break;
+						}
+					}
+
+					if (vehicles == 0)
+					{
+						affiliation.SetAffiliatedFaction(side);
+						depotSource = "NO vehicle catalog on the side or its kin";
+					}
+				}
+
+				string supplyInfo = "no consumer";
+				SCR_ResourceComponent resources = spawner.GetSpawnerResourceComponent();
+				if (resources)
+				{
+					SCR_ResourceConsumer consumer = resources.GetConsumer(EResourceGeneratorID.DEFAULT, EResourceType.SUPPLIES);
+					if (consumer)
+						supplyInfo = "consumer sees " + consumer.GetAggregatedResourceValue().ToString();
+				}
+
+				CLW_SupplyLink link = CLW_SupplyLink.Find(sideKey, baseId);
+				string linkInfo = "no supply link";
+				if (link)
+					linkInfo = "link stock " + link.GetStock().ToString();
+
+				Print(string.Format("CLW: services depot %1 faction %2 catalog vehicles=%3 (source %4; prefab faction was %5) supplies: consumption=%6 %7, %8", sideKey, usedKey, vehicles, depotSource, was, spawner.IsSuppliesConsumptionEnabled(), supplyInfo, linkInfo), LogLevel.NORMAL);
+			}
+		}
+	}
+
+	// Number of entries in the spawner's current asset list (the vanilla list is protected; GetEntryAtIndex returns null past the end).
+	protected static int DepotCatalogCount(notnull SCR_CatalogEntitySpawnerComponent spawner)
+	{
+		int count;
+		while (spawner.GetEntryAtIndex(count))
+		{
+			count++;
+		}
+
+		return count;
+	}
+
+	protected static void LogArsenal(string sideKey, IEntity entity, string what)
 	{
 		if (!entity)
 			return;
@@ -851,7 +997,7 @@ class CLW_Services
 		if (arsenal.GetAssignedFaction())
 			factionKey = arsenal.GetAssignedFaction().GetFactionKey();
 
-		Print(string.Format("CLW: services arsenal side %1 faction %2 items=%3 enabled=%4 usingSupplies=%5", sideKey, factionKey, prefabs.Count(), arsenal.IsArsenalEnabled(), arsenal.IsArsenalUsingSupplies()), LogLevel.NORMAL);
+		Print(string.Format("CLW: services arsenal side %1 faction %2 items=%3 enabled=%4 usingSupplies=%5 service=%6", sideKey, factionKey, prefabs.Count(), arsenal.IsArsenalEnabled(), arsenal.IsArsenalUsingSupplies(), what), LogLevel.NORMAL);
 	}
 
 	protected static void PollLinks()
