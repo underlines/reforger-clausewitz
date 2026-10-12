@@ -94,12 +94,18 @@ Verified on the DS (no human needed):
 - [x] FOB site pool (data + computed, 250 m from objectives), LLM and rule doctrine both issue ESTABLISH_FOB, cost paid/refunded, builder fallback to walking infantry when no purchase is possible
 - [x] fixed: `string.Substring` returns at most 8191 chars, the >8 KB situation was cut (sidecar HTTP 400, USSR fell back to rules): `CLW_Str` chunked helpers
 - [x] fixed: FOB/logistics entries are applied (game) and validated (sidecar) before buys of the same reply
-Open (next session):
-- [ ] **FOB builder does not reach the site**: walking infantry with a MOVE to a free position keeps heading to its previous objective (B/C) although `ExecuteInfantry` clears the waypoints; FOBs fail after 3 stalls. Check: is the site reachable on the navmesh (vanilla "Failed move ... to waypoint" exceptions seen), does the waypoint survive (log waypoint count + first waypoint pos after the order), forced move (`AddForcedMove`) for builders. Once fixed: FOB established -> respawn there, services tier 1, RESUPPLY convoys (`CLW: convoy`), FOB loss.
-- [ ] Needs a human client: request terminals (actions + side check), `/request`, `/report`, `/hq` (agent turn, sidecar tested alone with fake + OpenRouter), arsenal kit cost from the base containers and `cap_kitCost` off, enemy map markers -> contacts, setup menu params (fobMax/fobBuild/fobCost/fobBuildSec/convoyMax/cap_logistics/cap_kitCost).
-- [ ] RHS/WCS/GRS content test (m3-design §9): arsenal pool `own=0` lines appear once at load before the war (harmless?), check kin pool with packs.
-- [ ] LLM timeouts (20 s) more frequent with the bigger M3 prompt (ling-3.0-flash, ~6 of 40 calls): raise the timeout or trim the prompt.
-- [ ] Builder in BUILDING has no timeout if it keeps leaving the site (now holds via DEFEND at the site).
+Verified with the owner on the DS + client (2026-10-12, builds #52-#60, RHS_USAF vs RHS_AFRF, packs RHS + WCS gear + WCS_Arsenal + WCS Loadout Editor):
+- [x] setup on pack factions: running clients switch faction and get the new sides (no rejoin), spawn with RHS loadouts
+- [x] arsenal + WCS Loadout Editor show RHS items (WCS gear via WCS_Arsenal in the US/USSR catalogs, kin pool to the RHS sides)
+- [x] chat commands (world had no chat entity), `/request vehicle` granted, `/hq` agent turn: reply + action (armoured vehicle) in ~16 s, toast shown
+- [x] collision/road-aware placement of HQ services, own-side markers (HQ, FOB, command post, arsenal, depot, supply), dashboard map aligned + structures layer
+- [x] FOB established by a walking builder (FOB2, 2 min) with own markers
+Open:
+- [ ] FOB builders often fail to reach far sites (AI keeps the previous objective / combat); several FOBs refunded after 3 stalls
+- [ ] no supply truck for pack factions (RHS): no convoys -> side pools (VISION 10a) or kin fallback for missing roles
+- [ ] GRS: local packs outdated (Workshop has 1.8 versions); client crashed with the old set. Retest after updating (`_dedicated/packs-e2e-gear.txt`)
+- [ ] not yet checked by the owner: `/report`, map-marker contacts, vehicle request far from a depot (roadside), FOB respawn, convoys, kit cost off
+- [ ] LLM timeouts with the bigger prompt; engine AI ~120/128 although caps sum to 90 (the headroom gate catches it)
 
 ## Log
 - 2026-10-11: Vision and research committed; game-mode decision made; roadmap condensed to M0-M5; branch naming unified on `main`.
