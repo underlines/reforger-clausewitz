@@ -29,6 +29,7 @@ class CLW_WarRuntime
 	static const string CLI_SCENARIO = "clwScenario";
 	// Engine infrastructure (AI perception), spawned when a taken-over world has none.
 	static const ResourceName PERCEPTION_PREFAB = "{028DAEAD63E056BE}Prefabs/World/Game/PerceptionManager.et";
+	static const ResourceName CHAT_PREFAB = "{F69BC912AC8236F9}Prefabs/MP/ScriptedChatEntity.et";	// as placed by the wrapper worlds
 
 	protected static ref CLW_WarRuntime s_Instance;
 	protected static bool s_bClientSeen;	// a client received a war status from a taken-over game mode
@@ -354,26 +355,49 @@ class CLW_WarRuntime
 		Step("loadout manager", GetGame().GetLoadoutManager() != null);
 		Step("ai world", GetGame().GetAIWorld() != null);
 
-		bool chatFound;
-		IEntity child = m_Owner.GetChildren();
-		while (child)
-		{
-			if (ScriptedChatEntity.Cast(child))
-			{
-				chatFound = true;
-				break;
-			}
-
-			child = child.GetSibling();
-		}
-		Step("chat entity", chatFound, "child of the game mode");
+		EnsureChat();
 
 		EnsurePerception();
 
 		Step("respawn system", SCR_RespawnSystemComponent.GetInstance() != null, "spawn points now " + SCR_SpawnPoint.CountSpawnPoints().ToString() + " (base points are made by CLW_Bases)");
 		Step("commanding manager", SCR_CommandingManagerComponent.GetInstance() != null);
-		Step("spawn logic", true, "taken over by the modded SCR_MenuSpawnLogic (CLW_SpawnLogic flow)");
+		ReplaceSpawnLogic();
 		CLW_PlayerSquad.ApplyCommandingLimit();
+	}
+
+	// The chat is reached through GetGame().GetChat() (SCR_ChatPanelManager does the same): when the world has none, spawn the
+	// vanilla ScriptedChatEntity our wrapper worlds place (chat commands /request /war ... need it).
+	protected void EnsureChat()
+	{
+		if (ScriptedChatEntity.Cast(GetGame().GetChat()))
+		{
+			Step("chat entity", true, "present (GetGame().GetChat())");
+			return;
+		}
+
+		EntitySpawnParams chatParams = new EntitySpawnParams();
+		chatParams.TransformMode = ETransformMode.WORLD;
+		IEntity chatSpawned = GetGame().SpawnEntityPrefab(Resource.Load(CHAT_PREFAB), GetGame().GetWorld(), chatParams);
+		Step("chat entity", ScriptedChatEntity.Cast(GetGame().GetChat()) != null, string.Format("was missing, spawned %1 -> %2", CHAT_PREFAB, chatSpawned));
+	}
+
+	// The spawn logic is a prefab attribute of the vanilla respawn system (a modded SCR_MenuSpawnLogic breaks every vanilla prefab that
+	// uses it), so the takeover swaps in a CLW_SpawnLogic instance at runtime (CLW_RespawnSwap.c).
+	protected void ReplaceSpawnLogic()
+	{
+		SCR_RespawnSystemComponent respawnSystem = SCR_RespawnSystemComponent.GetInstance();
+		if (!respawnSystem)
+		{
+			Step("spawn logic", false, "no SCR_RespawnSystemComponent: vanilla deploy menu stays");
+			return;
+		}
+
+		string previousName;
+		string reason;
+		if (respawnSystem.CLW_ReplaceSpawnLogic(new CLW_SpawnLogic(), previousName, reason))
+			Step("spawn logic", true, "replaced " + previousName + " -> CLW_SpawnLogic");
+		else
+			Step("spawn logic", false, reason + " (previous " + previousName + ": vanilla deploy menu stays)");
 	}
 
 	// AI perception needs a PerceptionManager in the world (Cain's GM world may lack one): spawn the vanilla prefab when none exists.
