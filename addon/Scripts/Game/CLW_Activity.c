@@ -74,31 +74,45 @@ class CLW_Activity
 
 		array<AIAgent> agents = {};
 		CollectAgents(group, agents);
-		if (prevent)
-		{
-			group.PreventMaxLOD(CLW_WarConfig.ACTIVITY_PREVENT_SEC);	// [verify] seconds; the group agent itself and ...
-			SCR_AIGroup slave = group.GetSlave();
-			if (slave)
-				slave.PreventMaxLOD(CLW_WarConfig.ACTIVITY_PREVENT_SEC);
-		}
-		else
-		{
-			group.AllowMaxLOD();
-			SCR_AIGroup slave2 = group.GetSlave();
-			if (slave2)
-				slave2.AllowMaxLOD();
-		}
-
-		foreach (AIAgent agent : agents)	// ... its member agents (which level matters is not documented: both are covered)
+		// PreventMaxLOD only stops an agent from ENTERING the max LOD: an agent already there must be lifted out first
+		// (vanilla SCR_ResupplyTaskSolver: SetLOD(GetMaxLOD() - 1), then PreventMaxLOD). Seen 2026-10-12: without the lift
+		// all far agents stayed at max LOD although "prevented".
+		int liftLod = AIAgent.GetMaxLOD() - 1;
+		Lift(group, prevent, liftLod);
+		Lift(group.GetSlave(), prevent, liftLod);
+		foreach (AIAgent agent : agents)
 		{
 			if (!agent)
 				continue;
 
 			if (prevent)
+			{
+				if (agent.GetLOD() == AIAgent.GetMaxLOD())
+					agent.SetLOD(liftLod);
 				agent.PreventMaxLOD(CLW_WarConfig.ACTIVITY_PREVENT_SEC);
+			}
 			else
+			{
 				agent.AllowMaxLOD();
+			}
 		}
+	}
+
+	// The group agent itself (and its slave group): same lift + prevent as the members.
+	protected static void Lift(SCR_AIGroup group, bool prevent, int liftLod)
+	{
+		if (!group)
+			return;
+
+		if (!prevent)
+		{
+			group.AllowMaxLOD();
+			return;
+		}
+
+		if (group.GetLOD() == AIAgent.GetMaxLOD())
+			group.SetLOD(liftLod);
+		group.PreventMaxLOD(CLW_WarConfig.ACTIVITY_PREVENT_SEC);
 	}
 
 	protected static vector UnitPosition(SCR_AIGroup group)
