@@ -16,7 +16,7 @@ Written for a fresh session with no prior context. Read this file, then `dev/PRO
 ## 1b. Owner decisions (2026-10-12)
 - Rematch in place after victory (no world reload). Keep per-base supply stock: FOB arsenals use FOB-local stock, convoys carry it.
 - Vehicle depot may stay at its current distance; everything else 30 % tighter. FOB shown with a base marker + arrows, never as an objective.
-- HQ memory: compact journal (WP5), togglable in the dashboard. Last step: modern vehicle packs (WP8).
+- HQ memory: simple journal now (WP5), full journal later (VISION 1c); togglable in the dashboard. Last step: modern vehicle packs (WP8).
 - At handover the DS, the owner's client and the sidecar may still be running: run `_dedicated\stop-server.ps1`, close the client, kill the node sidecar before the first build.
 
 ## 2. Working rules (owner's, learned the hard way)
@@ -53,7 +53,7 @@ Order: WP0 docs, then WP1-WP7 in parallel worktrees (file ownership below), merg
 
 ### WP0 Docs (me, first, small)
 - `dev/PROGRESS.md`: round-3 results (section 3), the new open list, the owner checklist (section 6).
-- `dev/VISION.md`: logistics decision (per-base stock, FOB arsenals on local stock, convoys carry the stock; physical crates later); HQ memory (WP5); rematch-in-place loop.
+- `dev/VISION.md`: logistics decision (per-base stock, FOB arsenals on local stock, convoys carry the stock; physical crates later); rematch-in-place loop (HQ journal: section 1c already added 2026-10-12).
 - `README.md` (Clausewitz): how to run GM takeover on the DS, packs files, dashboard; link this plan.
 
 ### WP1 Readable names + HUD (owner P1, P8)
@@ -87,43 +87,27 @@ Order: WP0 docs, then WP1-WP7 in parallel worktrees (file ownership below), merg
 - First reproduce P6 unattended: preset `timeLimitMin` 1-2, start the client myself (`start-client.ps1`), watch `JIP_ERROR`. If the reload must stay possible (admin), also check for statics that survive a world reload in `CLW_WarRuntime` (stale instance -> item table mismatch).
 - Files: `CLW_WarRuntime.c`, `CLW_WarState.c` / war-end path, `CLW_SetupServer.c`, cleanup helpers in the owning managers (one `Reset()` per manager).
 
-### WP5 HQ campaign memory ("war journal") + flank nudge (P12, P13) - sidecar, game only supplies outcome data
-Why goals/todos are not enough: long-term play needs (1) an intent to commit to, (2) knowledge of what was tried and how it went,
-(3) lessons drawn from that, (4) a model of the enemy, (5) rules for when to change the plan. Small models do not keep these by themselves;
-they need them as short, fixed-slot text, and the bookkeeping (counting tries/failures) must be done by code, not by the model.
-
-Journal per faction (sidecar memory, reset at war start; dashboard shows it and lets the owner edit it). Fixed slots, hard caps, ~250 tokens total:
-| slot | written by | cap | purpose |
-|---|---|---|---|
-| `intent` | model | 1 x 120 chars | how we win: "Hold B+C, flank E via north FOB, bleed enemy" |
-| `phase` | model | enum opening / build-up / main effort / consolidate / last stand | sets the tempo |
-| `goals` | model | 3 x 40 chars, each `{text, by: <war min>, status: open/done/failed}` | measurable, with a deadline |
-| `plan` | model | 5 x 40 chars, each linked to a goal | next concrete steps (todos) |
-| `beliefs` | model | 3 x 50 chars + confidence low/med/high | enemy model: "enemy masses at D", "no enemy armour seen" |
-| `lessons` | model, seeded by code | 5 x 60 chars | "frontal on C failed 2x: needs flank/armour" |
-| `commit` | model | `{until: <war min>, unless: <trigger>}` | anti flip-flop: keep the plan until then unless a trigger fires |
-| `ledger` | **code** | last 8 entries, ~25 chars | `ATTACK C x2 -> FAIL (-6 inf)`, `FOB1 -> built`, `buy armor -> lost 2 min` |
-| `tries` | **code** | per target/action `{tries, fails, lastResult, ageMin}` | the "we tried 2x and failed" fact, never left to the model |
-Code side: the sidecar builds `ledger` + `tries` from the orders it sent and the game's outcome events (order failed / waypoints lost / squad lost /
-capture / FOB built or refunded / convoy delivered or failed; add missing outcome events to the situation `events`). When a target reaches 2 fails,
-the code adds a lesson CANDIDATE ("C: 2 failed attacks") that the next review must keep, rewrite or drop.
-
-Two update paths, both togglable (dashboard settings group `memory`: `mode` off | inline | review | both (default both), `reviewMin` (default 5),
-caps; fake provider supports it):
-- inline (every commander call): the reply may carry `journal: {intent?, phase?, goalDone?, goalFailed?, planDone?, addPlan?}` (small edits only).
-- review (every `reviewMin`, plus on triggers: objective lost, 2nd fail on a target, FOB lost, phase deadline passed): one dedicated small call
-  "after-action review" with a fixed 4-question form, answers go into the slots:
-  1. What changed since the last review? (-> beliefs) 2. Which goal is behind, and why? (-> goals/lessons) 3. Keep or change the intent? Change only with
-  a reason that cites a ledger/tries fact (-> intent/commit) 4. Next 3 steps (-> plan). Output = the full journal JSON, validated against the caps.
-Injection: one `HQ JOURNAL` block in the commander prompt and the `/hq` agent prompt, in slot order, ledger/tries compacted to one line each;
-plus 2 prompt rules: "Follow your intent until `commit.until` unless its trigger fired; if you change it, say which fact made you change." and
-"Do not repeat an action listed 2x failed in `tries` without changing the approach (flank, armour, FOB, more force, other target)."
-Flank nudge: one line ("Consider flanks: a FOB or a route off the direct axis can beat a frontal push.") + per objective `axisAngle` (deg off the
-HQ-HQ line) and `side: left/centre/right` in the situation, so a small model can name a flank without geometry.
-Why not tool calls (owner's first idea): tool schemas cost ~300 tokens per call and small models break multi-tool loops; fixed JSON slots in the normal
-reply plus a dedicated review call give the same edits with one simple output format.
+### WP5 HQ war journal, simple first version + flank nudge (P12, P13) - sidecar, game only supplies outcome data
+Goal: give the HQ a little long-term memory (intent, what failed, lessons) without much token cost and so that small models cope. The full version
+(phase, beliefs, commit/trigger rules, inline edits, review triggers) is in VISION section 1c as "later"; build only this now.
+Journal per faction (sidecar memory, reset at war start; read-only view on the dashboard), ~150 tokens in the prompt:
+| slot | written by | cap |
+|---|---|---|
+| `intent` | model | 1 x 120 chars: how we win ("Hold B+C, flank E via north FOB") |
+| `goals` | model | 3 x 40 chars, each `open/done/failed` |
+| `lessons` | model | 3 x 60 chars ("frontal on C failed 2x: try flank") |
+| `tries` | **code** | per target: attacks tried / failed / last result, only targets with >= 1 fail, max 5 lines |
+- `tries` is counted by the sidecar from the orders it sent and the game's outcome events (order failed / squad lost near the target / objective
+  captured); add missing outcome events to the situation `events`. The model never has to remember counts.
+- One update path: a small **review call** every `memory.reviewMin` (default 5): input = short situation summary + journal, output = the 3 model slots
+  as JSON (validated against the caps; invalid -> keep the old journal). No inline edits, no tools.
+- Injection: one `HQ JOURNAL` block in the commander prompt and the `/hq` agent prompt + one rule: "Stick to your intent; do not repeat an attack
+  that failed twice without changing the approach (flank, armour, FOB, more force, other target)."
+- Dashboard settings group `memory`: `enabled` (default on), `reviewMin`. Fake provider returns a fixed journal.
+- Flank nudge: one prompt line ("Consider flanks: a FOB or a route off the direct axis can beat a frontal push.") + per objective `side: left/centre/right`
+  of the HQ-HQ axis in the situation.
 Files: `dev/tools/llm_sidecar.mjs`, `dev/tools/agent/*`, dashboard journal view + memory settings (WP5 owns those dashboard files; WP3 owns the map
-files), `CLW_Situation.c` objective part (axisAngle, side) + outcome events (coordinate with WP1/WP3: separate functions).
+files), `CLW_Situation.c` objective `side` + outcome events (separate functions from WP1/WP3).
 
 ### WP6 Economy guard (P9, P10)
 - HQ reserve floor (param `hqReserve`, default 100 supplies): AI purchases and convoys never take the HQ below it (player requests still may, first come).
@@ -134,7 +118,7 @@ files), `CLW_Situation.c` objective part (axisAngle, side) + outcome events (coo
 
 ### WP7 (me) merge + DS check
 Merge order WP2, WP1, WP3, WP6, WP5, WP4 (WP4 touches the runtime last). One DS run on GM Everon with the full packs: compile clean, takeover steps ok,
-log checks for every WP (journal + ledger/tries in GET /api/state with the fake provider, names in the registry log, base distances, no medical, depot list size, kit lines, FOB/convoy markers, reserve floor, idle check),
+log checks for every WP (journal + tries in GET /api/state with the fake provider, names in the registry log, base distances, no medical, depot list size, kit lines, FOB/convoy markers, reserve floor, idle check),
 then the rematch loop (time limit 2 min, own client). Then the owner test (section 6).
 
 ### WP8 Modern vehicles test (last)
@@ -150,5 +134,5 @@ Physical supply crates on trucks; WCS `SCR_AISwitchMagazine` VM exceptions (thir
 ## 6. Owner checklist for the round-3 test (client)
 1 group names readable, garrison named `HQ Garrison`; 2 HUD shows own supplies; 3 base: spawn tent touches the command post, arsenal next to them, no medical tent;
 4 depot lists side-pool vehicles; 5 FOB planned/building/done on the in-game map + dashboard with builder arrow, convoy arrow; 6 victory -> results -> back to setup, no kick;
-7 dashboard journal view + memory settings (mode, review interval); does the HQ keep a plan, avoid repeating failed attacks, use flanks; 8 economy: HQ never drained to 0, convoys still run;
+7 dashboard journal view + memory toggle; does the HQ keep its intent, avoid repeating failed attacks, use flanks; 8 economy: HQ never drained to 0, convoys still run;
 9 (WP8) modern vehicles at the depot and in AI use.

@@ -77,6 +77,17 @@ Basic version (built): game polls every 10 s, the sidecar scheduler calls the LL
 
 ---
 
+### 1c. HQ war journal: long-term memory for the commander (owner 2026-10-12)
+The commander call is stateless: it only sees current orders, events since the last call, FOBs/convoys. For long-term planning it needs an intent to
+commit to, what was tried and how it went, and lessons. Small models do not keep this alone, so it is short fixed-slot text and the counting is code.
+- **Now (M4 round 3, simple):** per faction `intent` (1 line), 3 `goals`, 3 `lessons` (model, via a review call every ~5 min) + `tries` per target
+  (code: attacks tried/failed). Injected as one small block; rule "do not repeat a twice-failed attack without changing the approach". Toggle in the dashboard.
+- **Later (deluxe):** `phase` (opening/build-up/main effort/consolidate/last stand), `plan` steps tied to goals with deadlines, `beliefs` about the enemy
+  with confidence, `commit {until, unless}` against flip-flopping, a code-kept action `ledger`, code-seeded lesson candidates after a 2nd failure,
+  inline edits in every reply, review on triggers (objective lost, FOB lost, deadline passed) with a fixed after-action form
+  (what changed / which goal is behind and why / keep or change the intent, citing a fact / next 3 steps), dashboard editing of the journal.
+- Not tool calls: tool schemas cost tokens every call and small models break multi-tool loops; JSON slots + a review call do the same.
+
 ## 2. Scope: what the agents command
 
 - **Infantry** (fireteams, squads, platoons).
