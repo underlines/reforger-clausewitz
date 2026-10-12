@@ -2,7 +2,7 @@
 // (kinds) the own faction lacks. Kin = the factions the faction data calls friendly (a pack faction lists the vanilla faction it is
 // built on, the same rule as the arsenal item pool CLW_ArsenalPool.GetKin), plus explicit kin from data (CLW_FactionProfile.m_aKinFactions)
 // and from the server file; never the enemy side, never a faction that is friendly to the enemy side (civilians), never an excluded one.
-// Own entries always win; kin entries only fill an EMPTY role, deduped by role + vehicle model. The catalog code lives in CLW_ForceCatalog
+// Own entries always win; kin entries only fill an EMPTY role (unless kinFill all, see overrides.md), deduped by role + vehicle model. The catalog code lives in CLW_ForceCatalog
 // (FillFromKin); this file holds the rules, the server-file readers (overrides.json keys "sides" and "props") and a tiny JSON reader.
 //
 // overrides.json (details: dev/notes/overrides.md):
@@ -312,9 +312,54 @@ class CLW_JsonReader
 class CLW_SideRules
 {
 	bool m_bOwnOnly;
+	bool m_bKinAllInfantry;						// kinFill all also imports foot entries for roles the side has
+	string m_sKinFill;							// "" = not set (inherit), "missing" (default) | "all"
+	float m_fKinWeight = -1;					// < 0 = not set (inherit), default 0.5 (CLW_SideRules.DEFAULT_KIN_WEIGHT)
 	ref array<string> m_aKin = {};				// explicit kin faction keys (tried first)
 	ref array<string> m_aExcludeFactions = {};	// never kin
 	ref array<string> m_aExcludePaths = {};		// lower case; prefab path texts never used (own and kin entries)
+
+	static const string KIN_MISSING = "missing";
+	static const string KIN_ALL = "all";
+	static const float DEFAULT_KIN_WEIGHT = 0.5;
+
+	// kinFill all: kin entries are also imported for roles the own faction already has.
+	bool KinAll()
+	{
+		return m_sKinFill == KIN_ALL;
+	}
+
+	float KinWeight()
+	{
+		if (m_fKinWeight < 0)
+			return DEFAULT_KIN_WEIGHT;
+
+		return m_fKinWeight;
+	}
+
+	// Reads kinFill / kinWeight of a rules object (a "sides" entry or "sidesDefault"); bad values are logged and ignored.
+	void ReadKinFill(CLW_JsonNode body, string where)
+	{
+		string fill = body.FieldText("kinFill");
+		fill.ToLower();
+		if (fill == KIN_MISSING || fill == KIN_ALL)
+			m_sKinFill = fill;
+		else if (!fill.IsEmpty())
+			Print("CLW: ERROR overrides " + where + ": kinFill must be \"missing\" or \"all\" (got '" + fill + "'), ignored", LogLevel.ERROR);
+
+		if (body.FieldBool("kinAllInfantry", false))
+			m_bKinAllInfantry = true;
+
+		string weight = body.FieldText("kinWeight");
+		if (!weight.IsEmpty())
+		{
+			float parsed = weight.ToFloat();
+			if (parsed > 0)
+				m_fKinWeight = parsed;
+			else
+				Print("CLW: ERROR overrides " + where + ": kinWeight must be a number > 0 (got '" + weight + "'), ignored", LogLevel.ERROR);
+		}
+	}
 
 	bool ExcludesFaction(string key)
 	{
@@ -357,6 +402,13 @@ class CLW_SideRules
 		if (other.m_bOwnOnly)
 			m_bOwnOnly = true;
 
+		if (other.m_bKinAllInfantry)
+			m_bKinAllInfantry = true;
+		if (!other.m_sKinFill.IsEmpty())
+			m_sKinFill = other.m_sKinFill;
+		if (other.m_fKinWeight >= 0)
+			m_fKinWeight = other.m_fKinWeight;
+
 		m_aKin.InsertAll(other.m_aKin);
 		m_aExcludeFactions.InsertAll(other.m_aExcludeFactions);
 		m_aExcludePaths.InsertAll(other.m_aExcludePaths);
@@ -371,12 +423,14 @@ class CLW_AdminOverrides
 
 	protected static bool s_bLoaded;
 	protected static ref map<string, ref CLW_SideRules> s_mSides = new map<string, ref CLW_SideRules>();
+	protected static ref CLW_SideRules s_SidesDefault;	// "sidesDefault": kinFill / kinWeight for every side without its own value
 	protected static ref map<string, ref map<string, string>> s_mProps = new map<string, ref map<string, string>>();
 
 	// Game start: statics survive a Play restart, so the file is read again for the next session.
 	static void Reset()
 	{
 		s_bLoaded = false;
+		s_SidesDefault = null;
 		s_mSides.Clear();
 		s_mProps.Clear();
 	}
@@ -387,6 +441,7 @@ class CLW_AdminOverrides
 			return;
 
 		s_bLoaded = true;
+		s_SidesDefault = null;
 		s_mSides.Clear();
 		s_mProps.Clear();
 		if (!FileIO.FileExists(CLW_CatalogOverrides.FILE_PATH))
@@ -402,6 +457,21 @@ class CLW_AdminOverrides
 		{
 			Print("CLW: ERROR overrides sides/props not read, " + CLW_CatalogOverrides.FILE_PATH + " is not valid JSON (" + error + ")", LogLevel.ERROR);
 			return;
+		}
+
+		CLW_JsonNode sidesDefault = root.Field("sidesDefault");
+		if (sidesDefault)
+		{
+			if (sidesDefault.IsObject())
+			{
+				s_SidesDefault = new CLW_SideRules();
+				s_SidesDefault.ReadKinFill(sidesDefault, "sidesDefault");
+				Print(string.Format("CLW: overrides sidesDefault: kinFill=%1 kinWeight=%2", s_SidesDefault.m_sKinFill, s_SidesDefault.m_fKinWeight), LogLevel.NORMAL);
+			}
+			else
+			{
+				Print("CLW: ERROR overrides sidesDefault must be an object {\"kinFill\":\"all\"}, ignored", LogLevel.ERROR);
+			}
 		}
 
 		LoadSides(root.Field("sides"));
@@ -433,6 +503,7 @@ class CLW_AdminOverrides
 
 			CLW_SideRules rules = new CLW_SideRules();
 			rules.m_bOwnOnly = body.FieldBool("ownOnly", false);
+			rules.ReadKinFill(body, "sides '" + key + "'");
 			body.FieldStrings("kin", rules.m_aKin);
 			body.FieldStrings("excludeFactions", rules.m_aExcludeFactions);
 			body.FieldStrings("excludePathContains", rules.m_aExcludePaths);
@@ -449,14 +520,14 @@ class CLW_AdminOverrides
 			while (j < body.m_aKeys.Count())
 			{
 				string field = body.m_aKeys[j];
-				if (field != "ownOnly" && field != "kin" && field != "excludeFactions" && field != "excludePathContains")
-					Print("CLW: overrides sides '" + key + "': unknown key '" + field + "' ignored (known: ownOnly, kin, excludeFactions, excludePathContains)", LogLevel.WARNING);
+				if (field != "ownOnly" && field != "kin" && field != "excludeFactions" && field != "excludePathContains" && field != "kinFill" && field != "kinWeight" && field != "kinAllInfantry")
+					Print("CLW: overrides sides '" + key + "': unknown key '" + field + "' ignored (known: ownOnly, kin, kinFill, kinWeight, kinAllInfantry, excludeFactions, excludePathContains)", LogLevel.WARNING);
 
 				j++;
 			}
 
 			s_mSides.Set(key, rules);
-			Print(string.Format("CLW: overrides sides '%1': ownOnly=%2 kin=%3 excludeFactions=%4 excludePathContains=%5", key, rules.m_bOwnOnly, rules.m_aKin.Count(), rules.m_aExcludeFactions.Count(), rules.m_aExcludePaths.Count()), LogLevel.NORMAL);
+			Print(string.Format("CLW: overrides sides '%1': ownOnly=%2 kin=%3 excludeFactions=%4 excludePathContains=%5 kinFill='%6' kinWeight=%7", key, rules.m_bOwnOnly, rules.m_aKin.Count(), rules.m_aExcludeFactions.Count(), rules.m_aExcludePaths.Count(), rules.m_sKinFill, rules.m_fKinWeight), LogLevel.NORMAL);
 		}
 	}
 
@@ -509,6 +580,7 @@ class CLW_AdminOverrides
 	{
 		EnsureLoaded();
 		CLW_SideRules merged = new CLW_SideRules();
+		merged.Merge(s_SidesDefault);
 		CLW_SideRules common;
 		if (s_mSides.Find(ALL, common))
 			merged.Merge(common);

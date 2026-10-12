@@ -5,8 +5,8 @@
 // client menus, so the server tells every client (RPC in CLW_GroupMirrorController.c) which groups to register locally.
 // Idempotent on both sides; resent to a player on connect and on every spawn.
 //
-// Joinable = adopted by the registry, infantry kind, no vehicle link, not hidden, alive, on a side (decided by
-// CLW_SquadRegistry.SyncJoinable). Vehicle crews / linked cargo are never registered.
+// Joinable = adopted by the registry, dismounted kinds (rifle, recon) or the embarked cargo group of a vehicle unit, alive, on a side (decided by
+// CLW_SquadRegistry.SyncJoinable). Vehicle crews are never registered; cargo groups are named after their parent unit.
 class CLW_SquadGroups
 {
 	protected static const int MIRROR_RETRY_MS = 500;

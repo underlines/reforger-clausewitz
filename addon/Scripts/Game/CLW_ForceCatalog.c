@@ -393,15 +393,26 @@ class CLW_ForceCatalog
 			return;
 		}
 
-		if (missing.IsEmpty())
+		bool fillAll = rules.KinAll();
+		if (missing.IsEmpty() && !fillAll)
 		{
 			Print(string.Format("CLW: sidepool %1: the own catalog covers every role, no kin needed", sideKey), LogLevel.NORMAL);
 			return;
 		}
 
+		// kinFill all: every role is a target (kin entries are imported next to the own ones, deduped by vehicle model);
+		// otherwise only the roles the own list lacks.
+		array<string> wanted = {};
+		if (fillAll)
+			CLW_SidePool.AllKinds(wanted);
+		else
+			wanted.InsertAll(missing);
+
+		float kinWeight = rules.KinWeight();
+
 		array<string> kinKeys = {};
 		CLW_SidePool.GetKinKeys(sideKey, profile, rules, kinKeys);
-		Print(string.Format("CLW: sidepool %1: roles without an own entry: %2; kin factions: %3", sideKey, JoinKinds(missing), JoinKinds(kinKeys)), LogLevel.NORMAL);
+		Print(string.Format("CLW: sidepool %1: roles without an own entry: %2; kin factions: %3; kinFill=%4 kinWeight=%5 kinAllInfantry=%6 (kinFill all imports vehicle entries only for roles the side has, unless kinAllInfantry)", sideKey, JoinKinds(missing), JoinKinds(kinKeys), rules.m_sKinFill, kinWeight, rules.m_bKinAllInfantry), LogLevel.NORMAL);
 		if (kinKeys.IsEmpty())
 		{
 			if (missing.Contains(CLW_ForceKind.LOGISTICS))
@@ -412,14 +423,14 @@ class CLW_ForceCatalog
 
 		foreach (string kinKey : kinKeys)
 		{
-			if (missing.IsEmpty())
+			if (wanted.IsEmpty())
 				break;
 
 			array<ref CLW_ForceEntry> pool = GetKinPool(sideKey, kinKey);
-			int m = missing.Count() - 1;
+			int m = wanted.Count() - 1;
 			while (m >= 0)
 			{
-				string kind = missing[m];
+				string kind = wanted[m];
 				int added;
 				foreach (CLW_ForceEntry candidate : pool)
 				{
@@ -436,6 +447,10 @@ class CLW_ForceCatalog
 						continue;
 					}
 
+					// kinFill all on a role the side already has: vehicle entries only (the side keeps its own foot-team identity)
+					if (!missing.Contains(kind) && !candidate.HasVehicle() && !rules.m_bKinAllInfantry)
+						continue;
+
 					if (CLW_SidePool.IsDuplicate(entries, candidate) || CLW_SidePool.IsDuplicate(imported, candidate))
 						continue;
 
@@ -443,26 +458,49 @@ class CLW_ForceCatalog
 					copy.m_sType = UniqueType("kin_" + candidate.m_sType, entries, imported);
 					copy.m_sKinFrom = kinKey;
 					copy.m_sSource = "kin " + kinKey;
+					string how = "filled from";
+					if (!missing.Contains(kind))
+					{
+						how = "added (own role present, kinFill all) from";
+						// a role the own faction already has: the kin entry competes with a lower weight
+						int scaled = Math.Round(candidate.m_iWeight * kinWeight);
+						copy.m_iWeight = Math.Max(1, scaled);
+					}
+
 					imported.Insert(copy);
 					added++;
-					Print(string.Format("CLW: sidepool %1: role %2 filled from %3: %4 (%5) cost=%6 cargo=%7", sideKey, kind, kinKey, copy.m_sType, copy.GetVehicleName(), copy.m_iCost, copy.m_iCargo), LogLevel.NORMAL);
+					Print(string.Format("CLW: sidepool %1: role %2 %3 %4: %5 (%6) cost=%7 cargo=%8 weight=%9", sideKey, kind, how, kinKey, copy.m_sType, copy.GetVehicleName(), copy.m_iCost, copy.m_iCargo, copy.m_iWeight), LogLevel.NORMAL);
 				}
 
-				if (added > 0)
-					missing.Remove(m);
+				if (added > 0 && !fillAll)
+					wanted.Remove(m);
 
 				added = 0;
 				m--;
 			}
 		}
 
-		if (!missing.IsEmpty())
+		array<string> left = {};
+		foreach (string lackKind : missing)
+		{
+			bool filled = false;
+			foreach (CLW_ForceEntry filledBy : imported)
+			{
+				if (filledBy.m_sKind == lackKind)
+					filled = true;
+			}
+
+			if (!filled)
+				left.Insert(lackKind);
+		}
+
+		if (!left.IsEmpty())
 		{
 			LogLevel level = LogLevel.NORMAL;
-			if (missing.Contains(CLW_ForceKind.LOGISTICS))
+			if (left.Contains(CLW_ForceKind.LOGISTICS))
 				level = LogLevel.WARNING;
 
-			Print(string.Format("CLW: sidepool %1: roles still without an entry after the kin fill: %2", sideKey, JoinKinds(missing)), level);
+			Print(string.Format("CLW: sidepool %1: roles still without an entry after the kin fill: %2", sideKey, JoinKinds(left)), level);
 		}
 
 		Print(string.Format("CLW: sidepool %1: %2 entries imported from kin", sideKey, imported.Count()), LogLevel.NORMAL);
