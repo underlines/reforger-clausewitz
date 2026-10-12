@@ -10,7 +10,7 @@ class CLW_SitrepClient
 {
 	static const float HINT_SECONDS = 28;
 	static const float HINT_MIN_GAP_SEC = 240;		// automatic update hints at most this often
-	static const int HINT_MAX_CHARS = 330;
+	static const int HINT_MAX_CHARS = 800;	// owner 2026-10-12: 330 showed only ~7 short lines
 
 	protected static ref CLW_Sitrep s_Last;
 	protected static string s_sFaction;
@@ -74,11 +74,11 @@ class CLW_SitrepClient
 		if (s_Last.m_sSource == CLW_Sitrep.SOURCE_LLM)
 			title += " (HQ)";
 		string text = "";
-		text += Short(s_Last.GetBody(2), 150);
-		string enemy = Short(s_Last.GetBody(1), 120);
+		text += Short(s_Last.GetBody(2), 320);
+		string enemy = Short(s_Last.GetBody(1), 240);
 		if (!enemy.IsEmpty())
 			text += "\nEnemy: " + enemy;
-		string situation = Short(s_Last.GetBody(0), 110);
+		string situation = Short(s_Last.GetBody(0), 220);
 		if (!situation.IsEmpty())
 			text += "\n" + situation;
 		text += "\nFull report: map > journal. H = show again.";

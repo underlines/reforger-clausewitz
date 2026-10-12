@@ -11,16 +11,17 @@ class CLW_ForceKind
 	static const string MECH = "mech";					// armed vehicle with cargo + infantry
 	static const string ARMOR = "armor";				// armed vehicle without cargo (tanks from mod packs)
 	static const string ARMORED_RECON = "armored_recon";
+	static const string LOGISTICS = "logistics";			// unarmed supply truck (M3 phase L): never fights, convoys only (CLW_Convoys); cargo = CLW_ForceEntry.m_iCargo
 
 	static bool IsKnown(string kind)
 	{
-		return kind == INFANTRY || kind == RECON || kind == MOTORIZED || kind == LIGHT || kind == MECH || kind == ARMOR || kind == ARMORED_RECON;
+		return kind == INFANTRY || kind == RECON || kind == MOTORIZED || kind == LIGHT || kind == MECH || kind == ARMOR || kind == ARMORED_RECON || kind == LOGISTICS;
 	}
 
 	// True for kinds that are normally built from a vehicle (profile entries may still omit it).
 	static bool IsVehicleKind(string kind)
 	{
-		return kind == MOTORIZED || kind == LIGHT || kind == MECH || kind == ARMOR || kind == ARMORED_RECON;
+		return kind == MOTORIZED || kind == LIGHT || kind == MECH || kind == ARMOR || kind == ARMORED_RECON || kind == LOGISTICS;
 	}
 
 	// Short tag used in generated entity names (US_Mech1).
@@ -38,6 +39,8 @@ class CLW_ForceKind
 			return "Arm";
 		if (kind == ARMORED_RECON)
 			return "ARcn";
+		if (kind == LOGISTICS)
+			return "Log";
 
 		return "Inf";
 	}
@@ -77,6 +80,9 @@ class CLW_ForceEntry
 
 	[Attribute("1", UIWidgets.CheckBox, "Entry can be bought")]
 	bool m_bEnabled;
+
+	[Attribute("0", UIWidgets.EditBox, "Supply cargo in supplies a convoy truck carries (kind logistics). 0 = not a supply truck")]
+	int m_iCargo;
 
 	[Attribute("0", UIWidgets.CheckBox, "Anti-armour team: the rule commander buys it first when enemy vehicles are known")]
 	bool m_bAntiArmor;
@@ -155,6 +161,7 @@ class CLW_ForceEntry
 		copy.m_iWeight = m_iWeight;
 		copy.m_bEnabled = m_bEnabled;
 		copy.m_bAntiArmor = m_bAntiArmor;
+		copy.m_iCargo = m_iCargo;
 		copy.m_sSource = m_sSource;
 		copy.m_iCargoSeats = m_iCargoSeats;
 		copy.m_iCrewSeats = m_iCrewSeats;
@@ -167,11 +174,94 @@ class CLW_ForceEntry
 	}
 }
 
+// The closed set of base service kinds (M3 design section 3). Data (CLW_ServiceEntry) maps a kind to a composition prefab.
+class CLW_ServiceKind
+{
+	static const string COMMAND_POST = "command_post";	// HQ composition: base logic, spawn, radio
+	static const string VEHICLE_DEPOT = "vehicle_depot";
+	static const string ARSENAL = "arsenal";
+	static const string MEDICAL = "medical";
+	static const string REPAIR = "repair";
+	static const string SUPPLY = "supply";				// supply cache (stock the arsenal draws from)
+
+	static bool IsKnown(string kind)
+	{
+		return kind == COMMAND_POST || kind == VEHICLE_DEPOT || kind == ARSENAL || kind == MEDICAL || kind == REPAIR || kind == SUPPLY;
+	}
+
+	// The important structures of a base that get a map marker by default (command post, arsenal, vehicle depot / requests, supply cache).
+	// Field hospital and repair bay stay off the map unless the service entry says m_iMapMarker = 1.
+	static bool DefaultMapMarker(string kind)
+	{
+		return kind == COMMAND_POST || kind == ARSENAL || kind == VEHICLE_DEPOT || kind == SUPPLY;
+	}
+
+	// Default footprint radius (m) of the composition, used by the free-spot search when the data gives none.
+	static float DefaultRadius(string kind)
+	{
+		if (kind == COMMAND_POST)
+			return 10;
+		if (kind == MEDICAL)
+			return 13;
+		if (kind == VEHICLE_DEPOT || kind == REPAIR)
+			return 9;
+		if (kind == SUPPLY)
+			return 9;
+
+		return 3;	// arsenal box
+	}
+}
+
+// One base service of a faction: kind -> composition prefab (+ optional placement).
+[BaseContainerProps()]
+class CLW_ServiceEntry
+{
+	[Attribute("", UIWidgets.EditBox, "Kind: command_post, vehicle_depot, arsenal, medical, repair, supply")]
+	string m_sKind;
+
+	[Attribute("", UIWidgets.ResourceNamePicker, "Composition prefab spawned for this service", "et")]
+	ResourceName m_Prefab;
+
+	[Attribute("0 0 0", UIWidgets.EditBox, "Optional offset from the base anchor (x y z, y ignored, surface snapped). 0 0 0 = automatic free spot around the base")]
+	vector m_vOffset;
+
+	[Attribute("-1", UIWidgets.EditBox, "Heading in degrees (Enforce yaw). Negative = automatic: facing the base centre")]
+	float m_fYaw;
+
+	[Attribute("0", UIWidgets.EditBox, "Footprint radius (m) for the free-spot search. 0 = default of the kind")]
+	float m_fRadius;
+
+	[Attribute("0 0 0", UIWidgets.EditBox, "Footprint for the collision-free placement: half width X, height Y, half depth Z (m). 0 0 0 = derived from the prefab's child objects (no spawn needed), else a square from the radius")]
+	vector m_vFootprint;
+
+	[Attribute("1", UIWidgets.CheckBox, "Service is spawned")]
+	bool m_bEnabled;
+
+	[Attribute("-1", UIWidgets.EditBox, "Own-side map marker: -1 = by kind (command_post, arsenal, vehicle_depot, supply yes; medical, repair no), 0 = none, 1 = marker")]
+	int m_iMapMarker;
+
+	bool ShowsMapMarker()
+	{
+		if (m_iMapMarker >= 0)
+			return m_iMapMarker > 0;
+
+		return CLW_ServiceKind.DefaultMapMarker(m_sKind);
+	}
+}
+
 [BaseContainerProps(configRoot: true)]
 class CLW_FactionProfile
 {
 	[Attribute("", UIWidgets.EditBox, "Faction key this profile is for (e.g. US). Profiles are looked up by this key")]
 	string m_sFactionKey;
+
+	// Base services (command post, depot, arsenal, ...) as composition prefabs. Empty = the services of the kin faction below,
+	// else of a friendly faction that has some.
+	[Attribute()]
+	ref array<ref CLW_ServiceEntry> m_aServices;
+
+	[Attribute("", UIWidgets.EditBox, "Faction key whose services this faction uses when it has none of its own (e.g. a pack faction naming the vanilla faction it is built on). Empty = automatic friendly faction")]
+	string m_sServiceFallbackFaction;
 
 	[Attribute("1", UIWidgets.CheckBox, "Also add entries auto-discovered from the faction's entity catalogs that the list below does not cover (mod packs that extend the vanilla catalogs show up as kind armor, mech, ...)")]
 	bool m_bIncludeDiscovered;
@@ -194,6 +284,8 @@ class CLW_FactionProfile
 
 		if (!profile.m_aEntries)
 			profile.m_aEntries = {};
+		if (!profile.m_aServices)
+			profile.m_aServices = {};
 
 		return profile;
 	}

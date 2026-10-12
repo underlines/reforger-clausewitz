@@ -132,6 +132,44 @@ class CLW_WorldInfo
 		return SCR_MapEntity.GetMapInstance();
 	}
 
+	protected GenericTerrainEntity m_FoundTerrain;
+	protected bool m_bTerrainSizeLogged;
+
+	// Terrain bounds in world coordinates (the terrain entity is looked up once among the loaded entities).
+	protected bool FindTerrainBounds(out vector tMin, out vector tMax)
+	{
+		BaseWorld world = GetGame().GetWorld();
+		if (!world)
+			return false;
+
+		// the sphere query did not return the terrain on the DS (2026-10-12): walk the loaded entities once, the result is kept
+		if (!m_FoundTerrain)
+		{
+			for (int scene = 0; scene < world.GetNumSubScenes() && !m_FoundTerrain; scene++)
+			{
+				int count = world.GetNumEntities(scene);
+				for (int i = 0; i < count; i++)
+				{
+					GenericTerrainEntity terrain = GenericTerrainEntity.Cast(world.FindEntityByID(world.GetEntity(scene, i)));
+					if (terrain)
+					{
+						m_FoundTerrain = terrain;
+						break;
+					}
+				}
+			}
+		}
+
+		if (!m_FoundTerrain)
+		{
+			Print("CLW: world no terrain entity found: dashboard map extent falls back to the entity bounds", LogLevel.WARNING);
+			return false;
+		}
+
+		m_FoundTerrain.GetTerrainBoundBox(tMin, tMax);
+		return tMax[0] > tMin[0] && tMax[2] > tMin[2];
+	}
+
 	// "{GUID}Prefabs/x.et" -> "Prefabs/x.et"
 	protected string StripGuid(string name)
 	{
@@ -168,6 +206,21 @@ class CLW_WorldInfo
 			vector size = mapEnt.Size();
 			mapOffset = "[" + Num(offset[0]) + "," + Num(offset[2]) + "]";
 			mapSize = "[" + Num(size[0]) + "," + Num(size[2]) + "]";
+		}
+
+		// a dedicated server never initialises the map UI: Size() is 0, the sidecar fell back to the ENTITY bounds (-130..3913) and
+		// the dashboard overlay drifted ~10 % to the top right against the map image (DS e2e 2026-10-12). The terrain covers the map.
+		if (mapSize == "[0,0]")
+		{
+			vector tMin, tMax;
+			if (FindTerrainBounds(tMin, tMax))
+			{
+				mapOffset = "[" + Num(tMin[0]) + "," + Num(tMin[2]) + "]";
+				mapSize = "[" + Num(tMax[0] - tMin[0]) + "," + Num(tMax[2] - tMin[2]) + "]";
+				if (!m_bTerrainSizeLogged)
+					Print(string.Format("CLW: world map size from the terrain: offset %1 size %2", mapOffset, mapSize), LogLevel.NORMAL);
+				m_bTerrainSizeLogged = true;
+			}
 		}
 
 		string body = string.Format("{\"worldFile\":\"%1\",\"mapPrefab\":\"%2\",\"mapOffset\":%3,\"mapSize\":%4,", CLW_RuleCommander.JsonEscape(GetGame().GetWorldFile()), CLW_RuleCommander.JsonEscape(mapPrefab), mapOffset, mapSize);

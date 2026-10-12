@@ -456,6 +456,40 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall, act = "a
         if (layers.labels) { ctx.font = "bold 11px system-ui, sans-serif"; ctx.lineWidth = 3.5; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(8,11,16,.9)"; ctx.strokeText(b.faction + " base", x + 12, y); ctx.fillStyle = col; ctx.fillText(b.faction + " base", x + 12, y); ctx.lineJoin = "miter"; ctx.font = "11px system-ui, sans-serif"; }
         h.push({ x, y, r: 12, title: `${b.faction} main base`, lines: [`at ${Math.round(b.pos[0])}, ${Math.round(b.pos[1])}`] });
       }
+      // Convoys (M3 phase L): supply trucks between bases, a small square with the cargo; hollow while loading, red when lost
+      for (const [fk, fe] of Object.entries(st.factions ?? {})) for (const c of Array.isArray(fe.situation?.convoys) ? fe.situation.convoys : []) {
+        if (!c || !Array.isArray(c.pos) || !num(c.pos[0]) || !num(c.pos[1]) || c.state === "failed") continue;
+        const x = sx(c.pos[0]), y = sy(c.pos[1]), col = c.state === "lost" ? "#ff5a4d" : colorOf(fk), moving = c.state === "en_route";
+        ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2; ctx.beginPath(); ctx.rect(x - 5, y - 5, 10, 10); if (moving) ctx.fill(); ctx.stroke();
+        if (layers.labels) { const txt = `${c.id} ${num(c.cargo) ? c.cargo : 0}`; ctx.font = "bold 10px system-ui, sans-serif"; ctx.lineWidth = 3; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(8,11,16,.9)"; ctx.strokeText(txt, x + 9, y + 3); ctx.fillStyle = col; ctx.fillText(txt, x + 9, y + 3); ctx.lineJoin = "miter"; ctx.font = "11px system-ui, sans-serif"; }
+        h.push({ x, y, r: 10, title: `${fk} convoy ${c.id}`, lines: [`${c.from} -> ${c.to}, ${c.state}`, `cargo ${dash(c.cargo)}`] });
+      }
+      // FOBs (M3 phase F): each faction's own situation lists its FOBs; a diamond, hollow while planned / moving / building
+      for (const [fk, fe] of Object.entries(st.factions ?? {})) for (const f of Array.isArray(fe.situation?.fobs) ? fe.situation.fobs : []) {
+        if (!f || !Array.isArray(f.pos) || !num(f.pos[0]) || !num(f.pos[1]) || f.state === "lost") continue;
+        const x = sx(f.pos[0]), y = sy(f.pos[1]), col = colorOf(fk), up = f.state === "active";
+        ctx.globalAlpha = f.underAttack ? 0.5 + 0.5 * Math.sin(t / 200) : 1; ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.moveTo(x, y - 9); ctx.lineTo(x + 9, y); ctx.lineTo(x, y + 9); ctx.lineTo(x - 9, y); ctx.closePath();
+        if (up) ctx.fill(); ctx.stroke(); ctx.globalAlpha = 1;
+        if (layers.labels) { const txt = `${f.id}${up ? "" : " " + f.state + (f.state === "building" ? " " + Math.round(f.build ?? 0) + "%" : "")}${num(f.stock) ? " [" + Math.round(f.stock) + "]" : ""}`; ctx.font = "bold 11px system-ui, sans-serif"; ctx.lineWidth = 3.5; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(8,11,16,.9)"; ctx.strokeText(txt, x + 12, y); ctx.fillStyle = col; ctx.fillText(txt, x + 12, y); ctx.lineJoin = "miter"; ctx.font = "11px system-ui, sans-serif"; }
+        h.push({ x, y, r: 12, title: `${fk} FOB ${f.id}${f.name ? " " + f.name : ""}`, lines: [...(num(f.stock) ? [`stock ${Math.round(f.stock)} supplies`] : []), `state ${f.state}${f.state === "building" ? " " + Math.round(f.build ?? 0) + "%" : ""}, tier ${dash(f.tier)}${f.underAttack ? " (UNDER ATTACK)" : ""}`, `services: ${Array.isArray(f.services) && f.services.length ? f.services.join(", ") : "-"}`, `at ${Math.round(f.pos[0])}, ${Math.round(f.pos[1])}`] });
+      }
+    }
+    if (layers.structures) { // base / FOB structures (arsenal, depot, ...): situation.structures[] of each faction, a small lettered square
+      const GLYPH = { command_post: "C", arsenal: "A", vehicle_depot: "V", supply: "S", medical: "+", repair: "R" };
+      for (const [fk, fe] of Object.entries(st.factions ?? {})) {
+        if (faction !== "all" && fk !== faction) continue;
+        for (const s of Array.isArray(fe.situation?.structures) ? fe.situation.structures : []) {
+          if (!s || !Array.isArray(s.pos) || !num(s.pos[0]) || !num(s.pos[1])) continue;
+          const x = sx(s.pos[0]), y = sy(s.pos[1]), col = colorOf(fk);
+          if (x < -50 || x > r.width + 50 || y < -50 || y > r.height + 50) continue;
+          ctx.fillStyle = "rgba(8,11,16,.85)"; ctx.strokeStyle = col; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.rect(x - 6, y - 6, 12, 12); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = col; ctx.font = "bold 9px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillText(GLYPH[s.kind] ?? "?", x, y + 3); ctx.textAlign = "start";
+          if (layers.labels && v.s > 0.1) { const txt = String(s.label ?? s.kind); ctx.font = "10px system-ui, sans-serif"; ctx.lineWidth = 3; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(8,11,16,.9)"; ctx.strokeText(txt, x + 9, y + 3); ctx.fillStyle = col; ctx.fillText(txt, x + 9, y + 3); ctx.lineJoin = "miter"; ctx.font = "11px system-ui, sans-serif"; }
+          h.push({ x, y, r: 9, title: `${fk} ${s.label ?? s.kind}`, lines: [`${dash(s.kind)} at ${dash(s.base)}`, `grid ${dash(s.grid)}`, `at ${Math.round(s.pos[0])}, ${Math.round(s.pos[1])}`] });
+        }
+      }
     }
     const shown =Object.keys(st.factions ?? {}).filter((f) => faction === "all" || f === faction);
     for (const f of shown) {
@@ -879,7 +913,7 @@ function useWorld() {
 
 // ---------- views ----------
 const LAYER_KEY = "clw.mapLayers";
-const LAYER_DEFAULTS = { image: true, roads: true, buildings: true, objects: true, places: true, grid: true, objectives: true, squads: true, contacts: true, orders: true, labels: true, flip: false, dim: 0.8 };
+const LAYER_DEFAULTS = { image: true, structures: true, roads: true, buildings: true, objects: true, places: true, grid: true, objectives: true, squads: true, contacts: true, orders: true, labels: true, flip: false, dim: 0.8 };
 function loadLayers() {
   try { return { ...LAYER_DEFAULTS, ...JSON.parse(localStorage.getItem(LAYER_KEY) ?? "{}") }; } catch { return { ...LAYER_DEFAULTS }; }
 }
@@ -940,7 +974,7 @@ function MapView({ st, faction, rows, sel, onSel, layers, setLayers, world, act,
   return html`<main class="view">
     <div class="toolbar">
       <${ActFilter} act=${act} setAct=${setAct} rows=${rows} /><${ActLegend} names=${names} rows=${rows} />
-      <div class="toggles nomargin">${["grid", "objectives", "squads", "contacts", "orders", "labels"].map(tog)}</div>
+      <div class="toggles nomargin">${["grid", "objectives", "structures", "squads", "contacts", "orders", "labels"].map(tog)}</div>
       <div class="toggles" title="Map background: toggles, image opacity; flip = image y axis inverted (calibration)">
         ${["image", "roads", "buildings", "objects", "places", "flip"].map(tog)}
         <span class="muted" title="Objects key: diamond = base, triangle over a bar = airport, ring = port. Buildings: grey = house, large = bigger than 250 m2, orange = military / industrial">◆ base ▲ airport ◎ port</span>
@@ -1064,8 +1098,91 @@ function MissionsView({ st, faction, rows, sel, onSel, layers, world, act }) {
     </div></main>`;
 }
 
+
+// ---- player requests (M3 phase Q): situation.requests[] of every faction, newest first ----
+function RequestsView({ st, faction }) {
+  const rows = [];
+  for (const [f, fs] of Object.entries(st.factions ?? {})) {
+    if (faction !== "all" && f !== faction) continue;
+    const sit = fs?.situation;
+    const ts = fs?.ts ?? 0;
+    for (const r of Array.isArray(sit?.requests) ? sit.requests : []) rows.push({ ...r, faction: f, at: ts - (num(r.ageSec) ? r.ageSec * 1000 : 0) });
+  }
+  rows.sort((a, b) => b.at - a.at);
+  const granted = rows.filter((r) => r.status === "granted").length;
+  return html`<main class="view">
+    <section class="panel"><h2>Player requests <span class="sub">${rows.length} recent, ${granted} granted; chat /request, request terminal; HQ rules decide</span></h2><div class="scroll"><table>
+      <thead><tr><th>Time</th><th>Faction</th><th>Player</th><th>Role</th><th>Request</th><th>Status</th><th>Answer</th></tr></thead><tbody>
+      ${rows.map((r, i) => html`<tr key=${r.faction + r.id + i}><td class="mono muted">${r.at ? new Date(r.at).toLocaleTimeString() : "-"}</td><td class=${facClass(r.faction)}>${r.faction}</td><td><b>${dash(r.player)}</b></td><td>${dash(r.role)}</td>
+        <td><b>${dash(r.kind)}</b> <span class="mono muted">${dash(r.args)}</span></td><td><span class=${"badge " + (r.status === "granted" ? "ok" : "bad")}>${dash(r.status)}</span></td><td class="wrap muted">${dash(r.reason)}</td></tr>`)}</tbody></table>
+      ${!rows.length && html`<div class="empty">No player requests yet (the war must run with the <code>requests</code> capability; try <code>/request</code> in game chat).</div>`}</div></section>
+  </main>`;
+}
+
+// ---- HQ chat (M3 phase A): /hq <text> messages answered by the sidecar agent turn (tool calls, queued actions, reply, cost) ----
+function HqChatView({ st, faction }) {
+  const [open, setOpen] = useState(null);
+  const all = Array.isArray(st.hq) ? st.hq : [];
+  const rows = faction === "all" ? all : all.filter((h) => h.faction === faction);
+  const cost = rows.reduce((a, h) => a + (h.usage?.cost ?? 0), 0);
+  const state = (h) => (h.state === "running" ? ["warn", "running"] : h.ok ? ["ok", "answered"] : ["bad", h.error?.startsWith("fallback") ? "fallback" : "failed"]);
+  return html`<main class="view">
+    <section class="panel"><h2>HQ chat <span class="sub">${rows.length} message(s), ${usd4(cost)} total; players write /hq &lt;text&gt;; the agent queues requests, the game rules grant them</span></h2><div class="scroll"><table>
+      <thead><tr><th>Time</th><th>Faction</th><th>Player</th><th>Message</th><th>Tools</th><th>Actions</th><th>Reply</th><th>State</th><th>Cost</th><th>Latency</th></tr></thead><tbody>
+      ${rows.flatMap((h, i) => {
+        const [cls, label] = state(h), calls = (h.steps ?? []).flatMap((s) => s.toolCalls ?? []), key = h.faction + h.msg.id + h.ts;
+        return [html`<tr key=${key} class=${"sqrow" + (open === key ? " sel" : "")} onClick=${() => setOpen(open === key ? null : key)}>
+          <td class="mono muted">${new Date(h.ts).toLocaleTimeString()}</td><td class=${facClass(h.faction)}>${h.faction}</td>
+          <td><b>${h.msg.player}</b> <span class="muted">${h.msg.role}${h.msg.grid ? ", " + h.msg.grid : ""}</span></td><td class="wrap">${h.msg.text}</td>
+          <td class="mono">${(h.steps ?? []).length} step(s), ${calls.length} call(s)</td>
+          <td class="mono wrap">${(h.actions ?? []).map((a) => a.action + "(" + (a.args ?? []).map((x) => x.name + "=" + x.value).join(", ") + ")").join("; ") || "-"}</td>
+          <td class="wrap">${dash(h.reply || h.error)}</td><td><span class=${"badge " + cls}>${label}</span></td>
+          <td class="mono">${h.usage?.cost ? usd4(h.usage.cost) : "-"}</td><td class="mono">${h.latencyMs != null ? h.latencyMs + " ms" : "-"}</td></tr>`,
+        open === key && html`<tr key=${key + "d"}><td colspan="10"><div class="cfgbody">
+          <div class="muted">${h.provider}${h.model ? " / " + h.model : ""}; ${(h.tools ?? []).length} tools offered; tokens in ${h.usage?.input ?? 0} / out ${h.usage?.output ?? 0}</div>
+          ${(h.steps ?? []).map((s) => html`<div key=${s.n} class="wrap"><b>Step ${s.n}</b> <span class="muted">${s.finishReason}</span>
+            ${(s.toolCalls ?? []).map((c, j) => html`<div key=${j} class="mono wrap">&rarr; ${c.name}(${JSON.stringify(c.input)}) = ${JSON.stringify(c.output)}</div>`)}
+            ${s.text && html`<div>${s.text}</div>`}</div>`)}
+          ${h.error && html`<div class="wrap"><span class="badge bad">${h.error}</span></div>`}</div></td></tr>`];
+      })}</tbody></table>
+      ${!rows.length && html`<div class="empty">No HQ chat messages yet (in game: <code>/hq I need a truck at the camp</code>, needs the LLM engine and the <code>requests</code> capability).</div>`}</div></section>
+  </main>`;
+}
+
+// ---- debug log: the game's CLW_Debug lines (not shown in game chat by default), newest first ----
+function DebugView({ st }) {
+  const [q, setQ] = useState("");
+  const all = Array.isArray(st.debugLog) ? st.debugLog : [];
+  const needle = q.trim().toLowerCase();
+  const rows = (needle ? all.filter((d) => String(d.msg).toLowerCase().includes(needle)) : all).slice(0, 300);
+  const clock = (sec) => { const s = Math.max(0, Math.round(sec)), p = (v) => String(v).padStart(2, "0"); return `${p(Math.floor(s / 3600))}:${p(Math.floor((s % 3600) / 60))}:${p(s % 60)}`; };
+  return html`<main class="view"><section class="panel"><h2>Debug log <span class="sub">game debug lines, newest first, ${rows.length} of ${all.length}</span></h2>
+    <div class="cfgbody"><label class="field"><span>Filter</span><input type="text" value=${q} placeholder="e.g. mission, spawn, captured" onInput=${(e) => setQ(e.target.value)} /></label></div>
+    <div class="scroll"><table><tbody>
+      ${rows.map((d, i) => html`<tr key=${i}><td class="mono muted">${new Date(d.ts).toLocaleTimeString()}</td><td class="mono muted">${clock(d.t)}</td><td class="wrap">${d.msg}</td></tr>`)}</tbody></table>
+      ${!rows.length && html`<div class="empty">${all.length ? "No line matches the filter." : "No debug lines yet. They arrive with the game's situation posts while a war runs."}</div>`}</div></section></main>`;
+}
+
+// ---- action manifest (protocol v3): what each faction's game offers HQ in this war mode, read-only ----
+function ManifestTable({ title, rows }) {
+  return html`<h3 class="cfgh">${title} <span class="muted">(${rows.length})</span></h3>
+    ${rows.length ? html`<div class="scroll"><table><thead><tr><th>Name</th><th>Reply key</th><th>Authority</th><th>Requires</th><th>Parameters</th><th>Description</th></tr></thead><tbody>
+      ${rows.map((e) => html`<tr key=${e.name}><td><b>${e.name}</b></td><td class="mono">${e.channel}</td><td>${e.authority}</td><td class="mono">${(e.requires ?? []).join(", ") || "-"}</td>
+        <td class="mono wrap">${(e.params ?? []).map((p) => p.name + (p.required ? "*" : "") + ":" + p.type).join(", ")}</td><td class="wrap muted">${e.desc}</td></tr>`)}</tbody></table></div>` : html`<div class="empty">none</div>`}`;
+}
+function ActionsView({ st }) {
+  const ms = st.manifests ?? { factions: {}, builtin: null };
+  const names = Object.keys(ms.factions ?? {}).sort();
+  return html`<main class="view">
+    ${names.map((n) => { const m = ms.factions[n]; return html`<section class="panel" key=${n}><h2>${n} <span class="sub">manifest ${m.hash}, mode ${m.mode || "?"}, received ${new Date(m.receivedAt).toLocaleTimeString()}</span></h2>
+      <div class="cfgbody"><div class="muted">Capabilities on: <b>${(m.capabilities ?? []).join(", ") || "none"}</b></div>
+      <${ManifestTable} title="Intents (strategic tick)" rows=${m.intents ?? []} /><${ManifestTable} title="Primitives (agent turns)" rows=${m.primitives ?? []} /></div></section>`; })}
+    ${!names.length && ms.builtin && html`<section class="panel"><h2>Built-in manifest <span class="sub">no game manifest received yet; the sidecar uses this one</span></h2><div class="cfgbody"><${ManifestTable} title="Intents" rows=${ms.builtin.intents ?? []} /></div></section>`}
+  </main>`;
+}
+
 // ---- tabs ----
-const TABS = [["overview", "Overview"], ["map", "Map"], ["forces", "Forces"], ["hq", "HQ / LLM"], ["missions", "Missions"], ["usage", "Usage & Config"]];
+const TABS = [["overview", "Overview"], ["map", "Map"], ["forces", "Forces"], ["hq", "HQ / LLM"], ["missions", "Missions"], ["requests", "Requests"], ["hqchat", "HQ chat"], ["actions", "Actions"], ["debug", "Debug log"], ["usage", "Usage & Config"]];
 const TAB_KEY = "clw.tab", INACT_KEY = "clw.showInactive";
 const tabOf = (s) => { const k = String(s ?? "").replace(/^#/, ""), t = k === "config" ? "usage" : k; return TABS.some(([id]) => id === t) ? t : null; };
 function loadTab() {
@@ -1295,12 +1412,16 @@ function App() {
       <nav>${TABS.map(([id, label]) => html`<a key=${id} href=${"#" + id} class=${tab === id ? "active" : ""} onClick=${go(id)}>${label}</a>`)}</nav>
       <${Strip} st=${st} toast=${toast} refresh=${refresh} />
     </header>
-    ${tab !== "usage" && html`<div class="subwrap"><${FactionBar} names=${names} faction=${fac} setFaction=${setFaction} hidden=${st.hidden ?? []} showInactive=${showInactive} setShowInactive=${setShowInactive} /></div>`}
+    ${tab !== "usage" && tab !== "debug" && tab !== "actions" && html`<div class="subwrap"><${FactionBar} names=${names} faction=${fac} setFaction=${setFaction} hidden=${st.hidden ?? []} showInactive=${showInactive} setShowInactive=${setShowInactive} /></div>`}
     ${tab === "overview" && html`<${Overview} ...${common} />`}
     ${tab === "map" && html`<${MapView} ...${common} layers=${layers} setLayers=${setLayers} world=${world} />`}
     ${tab === "forces" && html`<${ForcesView} ...${common} />`}
     ${tab === "hq" && html`<${HqView} ...${common} />`}
     ${tab === "missions" && html`<${MissionsView} ...${common} layers=${layers} world=${world} />`}
+    ${tab === "requests" && html`<${RequestsView} st=${st} faction=${fac} />`}
+    ${tab === "hqchat" && html`<${HqChatView} st=${st} faction=${fac} />`}
+    ${tab === "actions" && html`<${ActionsView} st=${st} />`}
+    ${tab === "debug" && html`<${DebugView} st=${st} />`}
     ${tab === "usage" && html`<${Config} st=${st} toast=${toast} refresh=${refresh} />`}
     <div class="toasts">${toasts.map((t) => html`<div class=${"toast " + t.kind} key=${t.id}>${t.text}</div>`)}</div>
   </div>`;

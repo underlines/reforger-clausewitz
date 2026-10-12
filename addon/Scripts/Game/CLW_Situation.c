@@ -1,4 +1,4 @@
-// Protocol v2 situation builder (spec section 8): serialises one faction's view of the war as the sidecar's POST /orders body.
+// Protocol v3 (= v2 + manifest hash, added by CLW_RemoteCommander) situation builder (spec section 8): serialises one faction's view of the war as the sidecar's POST /orders body.
 // Server only. Pure read access to the war systems; the only side effect is draining the faction's event queue.
 // Keys, kinds, catalog types and objective ids all come from the data, nothing is hard-wired.
 class CLW_Situation
@@ -74,7 +74,7 @@ class CLW_Situation
 		}
 
 		// concatenate: string.Format truncates its result at ~8 KB
-		string head = "{\"v\":2,\"faction\":\"" + Escape(m_sFaction) + "\",\"side\":" + SideIndex(m_sFaction);
+		string head = "{\"v\":3,\"faction\":\"" + Escape(m_sFaction) + "\",\"side\":" + SideIndex(m_sFaction);
 		head += ",\"identity\":\"" + Escape(CLW_ScenarioConfig.GetIdentityText(m_sFaction)) + "\",\"time\":" + Math.Round(now) + ",\"timeLeftSec\":" + war.GetTimeLeftSec();
 		json = head + ",\"war\":" + warJson + ",\"objectives\":[" + objectivesJson + "],\"bases\":[" + basesJson + "],\"catalog\":[" + catalogJson + "],\"squads\":[" + squadsJson + "],\"contacts\":[" + contactsJson + "],\"events\":[" + eventsJson + "]}";
 		if (json.Length() > MAX_BODY)
@@ -86,7 +86,56 @@ class CLW_Situation
 			Print(string.Format("CLW: situation %1 body trimmed to %2 bytes (catalog descriptions and contacts dropped)", m_sFaction, json.Length()), LogLevel.WARNING);
 		}
 
+		AppendFobBlocks(json);
+		AppendLogistics(json);
+		AppendRequests(json);
+		AppendStructures(json);
 		return squadCount;
+	}
+
+	// Own base/FOB structures (structures[]: base, kind, label, pos [x,z], grid) for the dashboard map. Appended after the trim.
+	protected void AppendStructures(inout string json)
+	{
+		if (json.Length() < 2)
+			return;
+
+		string structures = CLW_StructureMarkers.StructuresJson(m_sFaction);
+		if (structures.IsEmpty())
+			return;
+
+		json = CLW_Str.DropLast(json) + ",\"structures\":[" + structures + "]}";
+	}
+
+	// M3 phase Q: recent player requests of this faction (requests[], needs the `requests` capability). Appended after the trim.
+	protected void AppendRequests(inout string json)
+	{
+		if (json.Length() < 2 || !CLW_Capabilities.Has("requests"))
+			return;
+
+		json = CLW_Str.DropLast(json) + ",\"requests\":" + CLW_RequestService.GetJson(m_sFaction) + "}";
+	}
+
+	// M3 phase L: convoys[] and logisticsRules (only with the `logistics` capability and a supply truck in the catalog). Appended after the trim.
+	protected void AppendLogistics(inout string json)
+	{
+		if (json.Length() < 2 || !CLW_Capabilities.Has("logistics") || !CLW_Convoys.HasTruckData(m_sFaction))
+			return;
+
+		string extra = ",\"convoys\":[" + CLW_Convoys.ConvoysJson(m_sFaction) + "],\"logisticsRules\":" + CLW_Convoys.RulesJson(m_sFaction);
+		json = CLW_Str.DropLast(json) + extra + "}";
+	}
+
+	// M3 phase F: own FOBs, candidate sites and the FOB rules (only with the `fob` capability and at least one FOB allowed).
+	// Appended after the trim so the blocks (a few hundred bytes) are always sent.
+	protected void AppendFobBlocks(inout string json)
+	{
+		if (json.Length() < 2 || !CLW_Capabilities.Has("fob") || CLW_FobManager.GetMax() <= 0)
+			return;
+
+		string fobsJson = CLW_FobManager.FobsJson(m_sFaction);
+		string sitesJson = CLW_FobManager.SitesJson(m_sFaction);
+		string extra = ",\"fobs\":[" + fobsJson + "],\"fobSites\":[" + sitesJson + "],\"fobRules\":" + CLW_FobManager.RulesJson(m_sFaction);
+		json = CLW_Str.DropLast(json) + extra + "}";
 	}
 
 	// ---- parts ----
@@ -114,8 +163,20 @@ class CLW_Situation
 		string phase = war.GetPhaseName();
 		phase.ToLower();
 		string text = "{\"tickets\":" + war.GetTickets(m_sFaction) + ",\"enemyTickets\":" + war.GetTickets(enemy) + ",\"supplies\":" + war.GetSupplies(m_sFaction);
+		if (CLW_Capabilities.Has("logistics"))
+			text += ",\"supplyTotal\":" + CLW_SupplyStore.GetTotal(m_sFaction);	// supplies = HQ stock; the total adds the FOB stocks
 		text += ",\"income\":" + incomePerMinute + ",\"liveAI\":" + liveAI + ",\"aiCap\":" + war.GetAiCap(m_sFaction);
 		text += ",\"vehicles\":" + vehicles + ",\"vehicleCap\":" + war.GetVehicleCap(m_sFaction);
+		int engineActive;
+		int engineLimit;
+		if (CLW_ForceSpawner.GetEngineAI(engineActive, engineLimit))
+		{
+			int headroom = engineLimit - engineActive - CLW_WarConfig.ENGINE_AI_MARGIN;
+			if (spawner)
+				headroom = spawner.GetEngineHeadroom();
+			text += ",\"engineAI\":{\"active\":" + engineActive + ",\"limit\":" + engineLimit + ",\"headroom\":" + Math.Max(0, headroom) + "}";
+		}
+
 		text += ",\"mode\":" + modeJson + ",\"phase\":\"" + phase + "\",\"sides\":[" + BuildSides(war) + "]}";
 		return text;
 	}
@@ -187,7 +248,10 @@ class CLW_Situation
 
 			if (!text.IsEmpty())
 				text += ",";
-			text += "{\"faction\":\"" + Escape(key) + "\",\"pos\":[" + Math.Round(pos[0]) + "," + Math.Round(pos[2]) + "]}";
+			text += "{\"id\":\"" + CLW_Services.BASE_HQ + "\",\"faction\":\"" + Escape(key) + "\",\"pos\":[" + Math.Round(pos[0]) + "," + Math.Round(pos[2]) + "]";
+			if (key == m_sFaction && CLW_Capabilities.Has("logistics"))
+				text += ",\"stock\":" + CLW_SupplyStore.Get(key, CLW_Services.BASE_HQ);
+			text += "}";
 		}
 
 		return text;
@@ -377,6 +441,9 @@ class CLW_Situation
 			text += "{\"id\":\"" + Escape(id) + "\",\"kind\":\"" + Escape(kind) + "\",\"type\":\"" + Escape(CLW_SquadInfo.TypeName(group)) + "\",\"pos\":[" + Math.Round(pos[0]) + "," + Math.Round(pos[1]) + "," + Math.Round(pos[2]) + "]";
 			text += ",\"agents\":" + alive + ",\"startAgents\":" + start + ",\"vehicle\":" + vehicleJson + ",\"humanLed\":" + BoolText(human);
 			text += ",\"wounded\":" + wounded + ",\"health\":" + avgHealth.ToString(-1, 2) + ",\"speed\":" + speed.ToString(-1, 1) + ",\"heading\":" + headingDeg + ",\"state\":\"" + stateText + "\",\"dormant\":" + BoolText(dormant);
+			string reservedFor = CLW_FobManager.ReservedFor(id);
+			if (!reservedFor.IsEmpty())
+				text += ",\"reserved\":\"" + Escape(reservedFor) + "\"";	// M3 phase F: tied up building a FOB, orders are refused
 			text += ",\"objective\":" + objectiveJson + ",\"mission\":" + missionJson + "}";
 			squadCount++;
 		}

@@ -58,6 +58,43 @@ class CLW_PlayerSquad
 		Begin(squad, playerId, false);
 	}
 
+	// Reinforcements (player request, CLW_RequestService): move the living AI of a freshly spawned group into the player's squad
+	// (master group first; Establish then moves them on into the slave group the player commands). Server only. Returns how many moved.
+	static int AdoptAI(SCR_AIGroup playerSquad, SCR_AIGroup from, int playerId)
+	{
+		if (!Replication.IsServer() || !playerSquad || !from || playerSquad == from)
+			return 0;
+
+		array<AIAgent> agents = {};
+		from.GetAgents(agents);
+		array<SCR_ChimeraCharacter> toMove = {};
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent)
+				continue;
+
+			SCR_ChimeraCharacter character = SCR_ChimeraCharacter.Cast(agent.GetControlledEntity());
+			if (!character || GetGame().GetPlayerManager().GetPlayerIdFromControlledEntity(character) > 0)
+				continue;
+
+			CharacterControllerComponent charController = CharacterControllerComponent.Cast(character.FindComponent(CharacterControllerComponent));
+			if (charController && charController.GetLifeState() == ECharacterLifeState.DEAD)
+				continue;
+
+			toMove.Insert(character);
+		}
+
+		foreach (SCR_ChimeraCharacter ai : toMove)
+		{
+			from.RemoveAgentFromControlledEntity(ai);
+			playerSquad.AddAgentFromControlledEntity(ai);
+		}
+
+		Print(string.Format("CLW: PlayerSquad AdoptAI player=%1 squad=%2 from=%3: %4 AI moved in", playerId, playerSquad, from, toMove.Count()), LogLevel.NORMAL);
+		Establish(playerSquad, playerId);	// idempotent: moves the new AI on into the slave group
+		return toMove.Count();
+	}
+
 	protected static string KeyOf(SCR_AIGroup squad, int playerId)
 	{
 		return string.Format("%1/%2", playerId, squad);

@@ -6,6 +6,7 @@ class CLW_Bases
 	protected ref array<vector> m_aPos = {};
 	protected ref array<SCR_SpawnPoint> m_aOwnSpawns = {};	// our own spawned points (same order as m_aKeys, may hold null)
 	protected ref array<ref CLW_BasePlacement> m_aPlace = {};	// placement state per base (same order as m_aKeys)
+	protected ref array<SCR_SpawnPoint> m_aFobSpawns = {};	// spawn points of established FOBs (CLW_BuildExecutor)
 	protected bool m_bStarted;
 	protected float m_fSeparationScale = 1;		// battle size distance scale (ApplyLayout)
 	protected float m_fAuthoredDistance;		// HQ distance of the authored (scenario) layout
@@ -358,6 +359,35 @@ class CLW_Bases
 		return m_aOwnSpawns[i];
 	}
 
+	// Spawn point of a FOB: same prefab and radius as the faction's base spawn point (respawn there costs tickets like at the base).
+	// Null when the faction setup has no spawn point prefab.
+	SCR_SpawnPoint SpawnFobPoint(string factionKey, vector pos)
+	{
+		CLW_ScenarioConfig scenario = CLW_ScenarioConfig.Get();
+		if (!scenario)
+			return null;
+
+		CLW_FactionSetup setup = scenario.FindFaction(factionKey);
+		if (!setup)
+			return null;
+
+		SCR_SpawnPoint point = SpawnBasePoint(setup, pos);
+		if (point)
+			m_aFobSpawns.Insert(point);
+
+		return point;
+	}
+
+	void RemoveFobPoint(SCR_SpawnPoint point)
+	{
+		if (!point)
+			return;
+
+		m_aFobSpawns.RemoveItem(point);
+		point.SetSpawnPointEnabled_S(false);
+		SCR_EntityHelper.DeleteEntityAndChildren(point);
+	}
+
 	protected bool IsWater(BaseWorld world, vector pos)
 	{
 		return pos[1] <= world.GetOceanHeight(pos[0], pos[2]) + CLW_WarConfig.WATER_MARGIN_M;
@@ -404,7 +434,7 @@ class CLW_Bases
 		int disabled;
 		foreach (SCR_SpawnPoint point : all)
 		{
-			if (!point || m_aOwnSpawns.Contains(point))
+			if (!point || m_aOwnSpawns.Contains(point) || m_aFobSpawns.Contains(point))
 				continue;
 
 			if (!m_aKeys.Contains(point.GetFactionKey()))

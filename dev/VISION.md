@@ -231,7 +231,9 @@ Commands are first-class objects with an ID, state (pending, active, done, faile
 
 ## 5a. Freeform agent tools (open decision: A vs B)
 
-> **Status: OPEN DECISION.** Two candidate approaches, not yet chosen: **(A)** extend the fixed vocabulary (section 5) with a handful of player-request commands (`FORM_SQUAD <composition>`, `REQUEST_RESUPPLY`, `REQUEST_RECON`, ...) that HQ grants or refuses under the same ledger, authority and validation rules; **(B)** the tool registry described below (optionally with the raw-command escape hatch). Evaluate both before committing: compare player experience, implementation cost, safety and token cost, ideally with a small prototype of (A) after M2 and a look at what Game Master functions are scriptable. Until decided, design the validator/executor so either can plug in.
+> **Status: DECIDED 2026-10-12 (owner approved):** both, layered: one action registry as the mechanism, a small intent vocabulary for the strategic tick, primitives only in a capped LLM agent turn (Vercel AI SDK in the sidecar), fixed requests as the player fast path. See `notes/decision-command-tools.md`. Original framing below.
+>
+> Two candidate approaches, not yet chosen: **(A)** extend the fixed vocabulary (section 5) with a handful of player-request commands (`FORM_SQUAD <composition>`, `REQUEST_RESUPPLY`, `REQUEST_RECON`, ...) that HQ grants or refuses under the same ledger, authority and validation rules; **(B)** the tool registry described below (optionally with the raw-command escape hatch). Evaluate both before committing: compare player experience, implementation cost, safety and token cost, ideally with a small prototype of (A) after M2 and a look at what Game Master functions are scriptable. Until decided, design the validator/executor so either can plug in.
 
 Section 5 is the **predictable core**: a small fixed set of commands the Rules commander and the LLM both use for the war itself. Humans asking HQ things in natural language (chat now, voice later) need more: *"Can I get a jeep and 3 infantry for a recon?"* HQ must be able to reason, decide, and act with a broad set of game functions, as an agent (reason -> act -> observe -> reply). Example: grant the request by spawning or reassigning a jeep and three infantry, forming a new squad, handing it to the player as leader, and answering by chat.
 
@@ -271,6 +273,25 @@ Open questions: which Game Master functions are scriptable from a mod; how to de
 - **Building**: Reforger's campaign building system is script-drivable server-side (community-confirmed). Preferred: real engineer behaviour (an AI moves to a site and "builds"). Acceptable fallback: **fake it** - a timed progress bar and a script that spawns the composition (still consuming the supplies, still requiring the engineer/trucks on site). Both modes should hide behind one interface (`IBuildExecutor`).
 - **Fortifications**: sandbags, bunkers, trenches, AT positions, vehicle hull-down spots from compositions; AI units garrison / use them as defend positions `[verify AI actually uses placed fortifications well]`.
 - Depot supply, vehicle repair/refuel/rearm: stretch goals; at minimum track them abstractly.
+
+### 6a. Own base structures instead of vanilla Conflict compositions (owner feedback 2026-10-12, backlog)
+The vanilla Conflict compositions are mostly dead weight outside Conflict: the HQ whiteboard "start building" needs the Campaign building
+manager, the field hospital only offers a few first-aid items, the depot menu needs Campaign supply links. Keep only what matters and give
+it our own interaction:
+- **Structures:** HQ (command post), arsenal, vehicle request point, supply container (stock of that base/FOB). Optional later: repair/rearm
+  pad, medical station with real function (heal / respawn bonus). Small own prefabs (vanilla props as visuals + our `ActionsManagerComponent`
+  + our actions), placed by `CLW_FreeSpot`; no hidden Conflict systems, so nothing half-works.
+- **HQ menu (F at the command post):** one larger custom menu (own layout, not a list of 10 user actions): tabs Request (vehicle / squad /
+  resupply / reinforce / recon with costs, cooldowns and the reason when refused), Squad (join/leave HQ squads, SITREP), Base (stock, FOB
+  list, convoys in flight), Report (contact report with map pick). Every button calls the same registry entries as `/request`, so rules,
+  costs and logging stay in one place.
+- **Natural language stays:** `/hq <text>` goes to the agent turn with the same registry tools; the menu is the fast path, chat the flexible
+  one. Requirement: the reply always reaches the player in game (HQ hint + chat line + radio sound), and the dashboard HQ chat tab shows it.
+- **Agent coverage check:** a small eval set of typical player requests ("armour at my position", "medevac", "ammo to grid 024-027",
+  "recon the ridge") with expected registry calls, run per OpenRouter model, so new menu functions are also reachable by `/hq`.
+- **Supply container:** shows the base/FOB stock (vanilla supply UI or our own), loads/unloads supply trucks (convoys, player logistics).
+- **Vehicle delivery near the player:** `/request vehicle` far from a depot already parks on the nearest road / open ground; add a radio
+  "vehicle delivered, grid ..." and a temporary map marker for the requester.
 
 ---
 
@@ -325,6 +346,13 @@ progress), HQ intent from the SITREP. Enemy side: only what the faction already 
     that the server sends only to that faction's players every 5-10 s, the same path as the SITREP delivery (`CLW_SitrepStore` /
     player-controller RPC). No enemy leak, low bandwidth, updates smoothly.
 - Toggle per layer in the map legend (squads, orders, objectives); off by default for realism-focused servers (server setting).
+- **Friendly marker level as a setup-menu option (owner request 2026-10-12):** "See friendly map markers": `off` | `me` (own
+  position only) | `my group` (members of the player's squad) | `all groups` (one symbol per friendly group, at its leader / centre) |
+  `all units` (every friendly soldier and vehicle individually). A war-mode param like the others (setup menu, `CLW_ModeParam` choice),
+  applied per faction on the client layer above; enemies never shown beyond known contacts. Higher levels cost more bandwidth: `all units`
+  sends positions per character, so throttle and cap it (e.g. 5 s interval, LOD by distance) and measure with the 128-AI wars.
+- **Base structures:** own-side map markers for every placed service (command post, arsenal, depot/requests, supply, hospital) and FOB
+  services, plus the dashboard structures layer: implemented 2026-10-12 (`CLW_StructureMarkers`), see PROGRESS.
 - Shared spec with the dashboard (symbols, colours, active/dormant shading) so both read the same.
 
 ---
@@ -375,6 +403,29 @@ The mod must not hard-code vanilla prefabs. Instead:
 - A **role classifier** (labels, weapon/vehicle type, seats, armour/weapon data) maps arbitrary prefabs to the mod's roles; an override JSON allows manual fixes per mod pack.
 - RHS / WCS and other packs are **optional dependencies**; ship only soft compatibility data (mappings), no hard requirement.
 - Everything the LLM sees about a faction is generated from this profile (so it knows what it has).
+
+### 10a. Prop / structure resolution: admin > preferred packs > vanilla (owner idea 2026-10-12, refined)
+Fortifications (HESCO, sandbags, bunkers), base structures (HQ, arsenal, vehicle request, supply, medical) and later decor come from
+optional packs when present, vanilla otherwise, and the server admin decides last. No pack is ever required.
+- **Roles, not prefabs:** code only asks for a role (`service.arsenal`, `fort.wall_long`, `fort.sandbag_round`, `fort.gate`...). Each role
+  carries its data (footprint, clearance, height, cost) so placement (`CLW_FreeSpot`) works whatever prefab resolves.
+- **Style sets:** candidates are grouped into sets (e.g. `vanilla`, `wcs`, `rhs`) so one base does not mix looks; a set can be bound per
+  faction/side (desert vs woodland) and may leave roles empty (falls back per role to the next set).
+- **Resolution chain per role, at war start:** admin override (`$profile:Clausewitz/overrides.json`: per role, per set, or "vanilla only")
+  > our shipped preference list (`.conf` data: ordered sets with `{GUID}path` candidates; only used if that addon is loaded) > vanilla
+  default. Every candidate is validated at runtime (prefab loads, footprint known); a missing/renamed pack prefab falls through with a log
+  line instead of breaking the base.
+- **Visible:** log + dashboard list "role -> prefab (source: admin|preferred:<set>|vanilla, reason)" so admins see what they got.
+- **Side pools for vehicles, groups, loadouts (arsenal already works this way):** the chosen faction + its kin factions (vanilla friendly
+  lists + explicit kin list in config, e.g. RHS_USAF + US incl. vanilla/WCS US content) form one pool per role (MBT, IFV, truck, supply
+  truck...). Priority, not exclusivity: own faction > preferred packs (shipped order) > vanilla. Dedupe by role + model (variants of one
+  vehicle = one entry), costs normalised per role. Never content of the enemy side.
+- **Admin overrides** (`overrides.json`, always win): per side "own faction only", "exclude pack X", "role -> fixed prefab". Every
+  candidate validated at war start (prefab loads, crew seats...), fallback down the chain to vanilla, source shown in log + dashboard.
+- FOB layouts use the same roles (layout = list of roles with relative positions, not prefabs).
+- **Dashboard config editor (later):** the running game reports everything available (factions, catalogs, loaded packs, style sets, what
+  each role resolved to); the admin edits overrides WYSIWYG (pick/exclude/reorder per role, side, set), saves `overrides.json`, restarts
+  and plays.
 
 ---
 
@@ -437,8 +488,8 @@ Own game mode `CLW_GameMode` (see `notes/decision-game-mode.md`). Live status: `
 | **M1 - LLM bridge** | REST spike (POST/headers/polling), sidecar, RemoteCommander, schema validation, fallback to Rules | LLM loop |
 | **M1.5 - Dashboard** | Read-only web dashboard served by the sidecar (section 12a basic); editing/commands later | Observability |
 | **M2 - Real war + mechanized** (design: `notes/m2-design.md`) | Control points, tickets + bleed, win conditions, supplies ledger + income, bases/respawn, force purchases, mechanized/motorized units (mount, dismount, overwatch, stuck watchdog), objective-driven rule commander, protocol v2 for the LLM, mission offers for player squad leaders; all content as data (scenario + faction profiles, auto-discovery) so mod packs work | AI vs AI with economy and vehicles |
-| **M3 - Logistics & intel** | Player requests via chat, approach to be chosen (section 5a, option A or B); supply convoys, FOBs; player reports, setup screen | Logistics, humans in the loop |
-| **M4 - Scale & realism** | Chain-of-command echelons with delayed reports, population manager (cleanup, collapse/expand), FOBs | Size of war |
+| **M3 - Logistics, bases & requests** (draft: `notes/m3-design.md`) | Action registry (section 5a), base services (command post, vehicle depot, arsenal, medical/repair), FOBs and supply convoys gated by war-mode capabilities, player requests (fast path + LLM agent turn), player reports, arsenals/loadouts with RHS/WCS/GRS | Logistics, humans in the loop |
+| **M4 - Scale & realism** | Chain-of-command echelons with delayed reports, population manager (cleanup, collapse/expand) | Size of war |
 | **M5 - Content compat** | RHS / WCS profiles + compat addons, classifier tuning (the data model and auto-discovery land in M2) | Custom factions |
 | **Later** | Story mode (section 3a), Squad-leader LLM agents (section 4a), Voice/radio, virtual battlefield (experimental), Conflict adapter | - |
 

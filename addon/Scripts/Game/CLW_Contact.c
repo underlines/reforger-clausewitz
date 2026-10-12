@@ -15,6 +15,8 @@ class CLW_Contact
 	int m_iInfantry;		// live characters that are not inside a vehicle
 	float m_fLastSeen;		// world time (s) of the newest target report
 	string m_sKind = "unknown";	// "vehicle" if any live target of the cluster is a vehicle, "infantry" if only characters, else "unknown"
+	string m_sSource = "ai";	// "ai" (group perception) or "human" (player report / enemy map marker, CLW_Reports)
+	float m_fConfidence = 1;	// 0..1: how much the report is trusted (AI sightings 1)
 
 	bool IsVehicle()
 	{
@@ -40,7 +42,10 @@ class CLW_Contact
 	string Describe()
 	{
 		// m_fLastSeen is world time in seconds (target timestamps), GetWorldTime() is ms
-		return string.Format("observer=%1 enemy=%2 kind=%3 count=%4 (veh %5, inf %6) pos=%7 age_s=%8", m_sObserver, m_sEnemyFaction, m_sKind, m_iCount, m_iVehicles, m_iInfantry, m_vPos.ToString(), Math.Round(GetGame().GetWorld().GetWorldTime() * 0.001 - m_fLastSeen));
+		string text = string.Format("observer=%1 enemy=%2 kind=%3 count=%4 (veh %5, inf %6) pos=%7 age_s=%8", m_sObserver, m_sEnemyFaction, m_sKind, m_iCount, m_iVehicles, m_iInfantry, m_vPos.ToString(), Math.Round(GetGame().GetWorld().GetWorldTime() * 0.001 - m_fLastSeen));
+		if (m_sSource != "ai")
+			text += " source=" + m_sSource + " conf=" + m_fConfidence.ToString(-1, 2);
+		return text;
 	}
 
 	// Build one contact per target cluster in the group's perception. Server only.

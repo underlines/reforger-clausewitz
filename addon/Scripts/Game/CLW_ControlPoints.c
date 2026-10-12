@@ -540,15 +540,20 @@ class CLW_ControlPoints
 			if (basePos == vector.Zero)
 				continue;
 
+			// the HQ location is visible to its own side only (enemy bases stay hidden)
+			int sideFlag = SideFlag(setup.m_sKey);
+			if (sideFlag == 0)
+				continue;
+
 			string label = setup.m_sBaseLabel;
 			if (label.IsEmpty())
 				label = setup.m_sKey + " HQ";
-			SCR_MapMarkerBase marker = BuildMarker(manager, flags, setup.m_sKey, basePos, label, EMilitarySymbolIcon.MOBILEHQ);
+			SCR_MapMarkerBase marker = BuildMarker(manager, sideFlag, setup.m_sKey, basePos, label, EMilitarySymbolIcon.MOBILEHQ);
 			if (marker)
 			{
 				m_aBaseMarkerKeys.Insert(setup.m_sKey);
 				m_aBaseMarkers.Insert(marker);
-				Print(string.Format("CLW: points base marker %1 '%2' at %3", setup.m_sKey, label, basePos), LogLevel.NORMAL);
+				Print(string.Format("CLW: points base marker %1 '%2' at %3 (own side only, flags %4)", setup.m_sKey, label, basePos, sideFlag), LogLevel.NORMAL);
 			}
 		}
 	}
@@ -565,6 +570,20 @@ class CLW_ControlPoints
 		marker.SetCustomText(text);
 		manager.InsertStaticMarker(marker, false, true);
 		return marker;
+	}
+
+	// Faction flag of one side (own-side-only markers); 0 when the faction is not known yet.
+	protected int SideFlag(string factionKey)
+	{
+		FactionManager factionManager = GetGame().GetFactionManager();
+		if (!factionManager)
+			return 0;
+
+		Faction faction = factionManager.GetFactionByKey(factionKey);
+		if (!faction)
+			return 0;
+
+		return 1 << factionManager.GetFactionIndex(faction);
 	}
 
 	// Bit mask with both scenario factions: visible to everyone playing (public markers). [verify] 0 may already mean "all"

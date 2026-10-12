@@ -31,9 +31,12 @@ class CLW_SpawnJob
 	bool m_bCrewCanceled;
 	ref array<IEntity> m_aCrew;	// occupants reported by the callback (weak entity pointers)
 	string m_sFailure;
+	string m_sTag;				// owner tag of a tagged purchase (CLW_ForceSpawner.BuyTagged), "" = none
 	int m_iMounted;
 	int m_iVerifyPass;			// 0: first check (then retry with explicit slots), 1: final check
 	int m_iRetried;
+	int m_iMemberRetries;		// spawn re-requests for a group that stayed empty (active-AI limit dropped the request)
+	int m_iRequester = -1;		// player id whose request (CLW_RequestService) bought this infantry group, -1 = none
 }
 
 // Spawns forces at the base: purchases (supplies) and start forces (free). Server only. Vehicles get a crew from
@@ -47,6 +50,10 @@ class CLW_ForceSpawner
 	protected CLW_SquadRegistry m_Registry;		// weak
 	protected CLW_VehicleManager m_Vehicles;	// weak
 	protected bool m_bTicking;
+	protected string m_sNextTag;				// tag handed to the job Start() creates (BuyTagged)
+	protected ref ScriptInvoker m_OnTagged;		// (string tag, string unitId): a tagged purchase finished (unitId = registry id) or failed (unitId empty)
+	protected int m_iNextRequester = -1;		// set by BuyFor for the job Start creates
+	protected vector m_vNextAnchor;				// set by BuyFor: infantry forms near this position (a depot) instead of the HQ spawn zone
 
 	void Init(CLW_ForceCatalog catalog, CLW_SquadRegistry registry, CLW_VehicleManager vehicles)
 	{
@@ -67,6 +74,36 @@ class CLW_ForceSpawner
 	bool Buy(string factionKey, string typeId, string reason, out string error)
 	{
 		return Start(factionKey, typeId, reason, false, error);
+	}
+
+	// Purchase for a player request (CLW_RequestService): like Buy, and when the infantry group is complete it is handed to
+	// CLW_RequestService.OnSquadReady (the AI join the requester's squad). Infantry types only.
+	bool BuyFor(string factionKey, string typeId, string reason, int requesterId, out string error, vector anchor = vector.Zero)
+	{
+		m_iNextRequester = requesterId;
+		m_vNextAnchor = anchor;
+		bool started = Start(factionKey, typeId, reason, false, error);
+		m_iNextRequester = -1;
+		m_vNextAnchor = vector.Zero;
+		return started;
+	}
+
+	// Purchase for an owner system (FOB builders): same as Buy, and GetOnTagged() fires with (tag, unit id) when the unit is READY
+	// (id = the registry id of the unit, the crew group for a vehicle) or (tag, "") when the purchase failed (also when this returns false).
+	bool BuyTagged(string factionKey, string typeId, string reason, string tag, out string error)
+	{
+		m_sNextTag = tag;
+		bool started = Start(factionKey, typeId, reason, false, error);
+		m_sNextTag = "";
+		return started;
+	}
+
+	ScriptInvoker GetOnTagged()
+	{
+		if (!m_OnTagged)
+			m_OnTagged = new ScriptInvoker();
+
+		return m_OnTagged;
 	}
 
 	// Same without charging supplies and without the AI/vehicle caps (start forces are part of the scenario).
@@ -188,6 +225,36 @@ class CLW_ForceSpawner
 		return total;
 	}
 
+	// Engine-wide active AI count and limit (false when there is no AI world).
+	static bool GetEngineAI(out int active, out int limit)
+	{
+		ChimeraAIWorld aiWorld = ChimeraAIWorld.Cast(GetGame().GetAIWorld());
+		if (!aiWorld)
+			return false;
+
+		active = aiWorld.GetCurrentNumOfActiveAIs();
+		limit = aiWorld.GetLimitOfActiveAIs();
+		return limit > 0;
+	}
+
+	// AI the engine can still activate for new purchases: limit - active - margin - AI of purchases still spawning (all sides).
+	// A large number when the limit is unknown.
+	int GetEngineHeadroom()
+	{
+		int active;
+		int limit;
+		if (!GetEngineAI(active, limit))
+			return 100000;
+
+		int pending;
+		foreach (CLW_SpawnJob job : m_aJobs)
+		{
+			pending += job.m_Entry.ExpectedAI();
+		}
+
+		return limit - active - CLW_WarConfig.ENGINE_AI_MARGIN - pending;
+	}
+
 	int GetPendingCount()
 	{
 		return m_aJobs.Count();
@@ -240,6 +307,16 @@ class CLW_ForceSpawner
 			return false;
 		}
 
+		if (!free && GetEngineHeadroom() < expected)
+		{
+			int engineActive;
+			int engineLimit;
+			GetEngineAI(engineActive, engineLimit);
+			error = string.Format("engine AI limit (active %1/%2, needs %3, margin %4)", engineActive, engineLimit, expected, CLW_WarConfig.ENGINE_AI_MARGIN);
+			Print(string.Format("CLW: spawn %1 %2 %3 refused: %4", label, factionKey, typeId, error), LogLevel.NORMAL);
+			return false;
+		}
+
 		if (!free && source.HasVehicle())
 		{
 			int vehicleCap = war.GetVehicleCap(factionKey);
@@ -266,7 +343,18 @@ class CLW_ForceSpawner
 				placed = bases.FindVehicleSpot(factionKey, CLW_WarConfig.SPAWN_RADIUS_M, CLW_WarConfig.SPAWN_VEHICLE_CYLINDER_R, CLW_WarConfig.SPAWN_VEHICLE_CYLINDER_H, spot, spotYaw, via);
 			}
 			else
-				placed = bases.FindInfantrySpot(factionKey, CLW_WarConfig.SPAWN_RADIUS_M, spot, via);
+			{
+				// player squad request: form beside the vehicle depot (clear ground, CLW_FreeSpot), else the HQ spawn zone
+				if (m_vNextAnchor != vector.Zero)
+				{
+					placed = CLW_FreeSpot.FindSmall("squad " + factionKey, m_vNextAnchor, 6, 35, 4, 2.2, spot, spotYaw);
+					if (placed)
+						via = "depot";
+				}
+
+				if (!placed)
+					placed = bases.FindInfantrySpot(factionKey, CLW_WarConfig.SPAWN_RADIUS_M, spot, via);
+			}
 		}
 		if (!placed)
 		{
@@ -280,7 +368,10 @@ class CLW_ForceSpawner
 		job.m_sFaction = factionKey;
 		job.m_Entry = source.CloneEntry();
 		job.m_sReason = reason;
+		job.m_sTag = m_sNextTag;
 		job.m_bFree = free;
+		if (!source.HasVehicle())
+			job.m_iRequester = m_iNextRequester;
 		job.m_vPos = spot;
 		job.m_fYaw = spotYaw;
 		job.m_sVia = via;
@@ -361,7 +452,34 @@ class CLW_ForceSpawner
 		}
 
 		group.SetDeleteWhenEmpty(true);
+		// The engine's spawn queue admits a group only while the active AI count is below a share of the global limit that
+		// depends on the group importance (LOW 50 %, NORMAL 70 %, HIGH 90 %, CRITICAL 100 %); a refused request is DROPPED and
+		// the group stays empty. HQ purchases must not lose against ambient AI, so they get the full limit.
+		group.SetImportance(SCR_EAISpawnImportance.CRITICAL);
 		return group;
+	}
+
+	// "active AI 90/128" of the engine's global limit, for the spawn logs.
+	protected static string ActiveAINote()
+	{
+		ChimeraAIWorld aiWorld = ChimeraAIWorld.Cast(GetGame().GetAIWorld());
+		if (!aiWorld)
+			return "active AI n/a";
+
+		return string.Format("active AI %1/%2", aiWorld.GetCurrentNumOfActiveAIs(), aiWorld.GetLimitOfActiveAIs());
+	}
+
+	// Group still empty after the timeout: ask the spawn queue again. True = re-requested (keep waiting).
+	protected bool RetryMembers(CLW_SpawnJob job, SCR_AIGroup group, int slots)
+	{
+		if (job.m_iMemberRetries >= CLW_WarConfig.SPAWN_MEMBERS_RETRIES)
+			return false;
+
+		job.m_iMemberRetries++;
+		job.m_fStateAge = 0;
+		Print(string.Format("CLW: spawn %1 group %2 still empty after %3 s (%4): re-requesting members (retry %5/%6, dormant alive %7)", job.m_sFaction, job.m_sUnitId, CLW_WarConfig.SPAWN_MEMBERS_TIMEOUT_SEC, ActiveAINote(), job.m_iMemberRetries, CLW_WarConfig.SPAWN_MEMBERS_RETRIES, group.GetDormantAliveCount()), LogLevel.WARNING);
+		group.RequestSpawn(slots);
+		return true;
 	}
 
 	// Name a group (so its registry id is the name) and tell the registry what it is. If the registry already adopted
@@ -425,13 +543,13 @@ class CLW_ForceSpawner
 
 		if (!complete)
 		{
-			if (job.m_fStateAge >= CLW_WarConfig.SPAWN_MEMBERS_TIMEOUT_SEC)
-				Fail(job, "no members arrived");
+			if (job.m_fStateAge >= CLW_WarConfig.SPAWN_MEMBERS_TIMEOUT_SEC && !RetryMembers(job, job.m_Group, job.m_Entry.m_iGroupMembers))
+				Fail(job, "no members arrived (" + ActiveAINote() + ")");
 
 			return;
 		}
 
-		Finish(job, string.Format("%1 members", members));
+		Finish(job, string.Format("%1 members (%2)", members, ActiveAINote()));
 	}
 
 	// ---- vehicles ----
@@ -618,6 +736,7 @@ class CLW_ForceSpawner
 		CLW_ForceEntry entry = job.m_Entry;
 		job.m_Group = crew;
 		crew.SetDeleteWhenEmpty(true);
+		crew.SetImportance(SCR_EAISpawnImportance.CRITICAL);
 		ReaffiliateCrew(job, crew);
 		job.m_sUnitId = NameAndTag(crew, NextName(job.m_sFaction, entry.m_sKind), entry.m_sKind, entry.m_sName, entry.m_sType, false);
 		Print(string.Format("CLW: spawn %1 crew group %2 has %3 agents (%4 occupants)", job.m_sFaction, job.m_sUnitId, crew.GetAgentsCount(), job.m_aCrew.Count()), LogLevel.NORMAL);
@@ -666,6 +785,9 @@ class CLW_ForceSpawner
 
 		int members = job.m_Cargo.GetAgentsCount();
 		bool complete = members >= job.m_Entry.m_iCargoMembers;
+		if (!complete && members <= 0 && job.m_fStateAge >= CLW_WarConfig.SPAWN_MEMBERS_TIMEOUT_SEC && RetryMembers(job, job.m_Cargo, job.m_Entry.m_iCargoMembers))
+			return;
+
 		if (!complete && job.m_fStateAge >= CLW_WarConfig.SPAWN_MEMBERS_TIMEOUT_SEC)
 		{
 			Print(string.Format("CLW: spawn %1 embarked members timeout: %2/%3 present, continuing", job.m_sUnitId, members, job.m_Entry.m_iCargoMembers), LogLevel.WARNING);
@@ -840,6 +962,12 @@ class CLW_ForceSpawner
 		Print(string.Format("CLW: spawn %1 %2 (%3) READY as %4: %5", job.m_sFaction, entry.m_sType, entry.m_sName, job.m_sUnitId, detail), LogLevel.NORMAL);
 		if (war)
 			war.PushEvent(job.m_sFaction, job.m_sUnitId + " arrived: " + entry.m_sName);
+
+		if (!job.m_sTag.IsEmpty() && m_OnTagged)
+			m_OnTagged.Invoke(job.m_sTag, job.m_sUnitId);
+
+		if (job.m_iRequester >= 0 && job.m_Group)
+			CLW_RequestService.OnSquadReady(job.m_iRequester, job.m_Group, job.m_sUnitId, entry.m_sName);
 	}
 
 	// Clean up everything the job spawned, refund, tell the war.
@@ -864,6 +992,9 @@ class CLW_ForceSpawner
 
 			war.PushEvent(job.m_sFaction, job.m_sFaction + " purchase failed: " + job.m_Entry.m_sName);
 		}
+
+		if (!job.m_sTag.IsEmpty() && m_OnTagged)
+			m_OnTagged.Invoke(job.m_sTag, "");
 	}
 
 	protected string RefundNote(CLW_SpawnJob job)

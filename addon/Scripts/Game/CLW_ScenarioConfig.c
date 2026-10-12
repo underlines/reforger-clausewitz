@@ -141,6 +141,9 @@ class CLW_ScenarioConfig
 	[Attribute()]
 	ref CLW_EconomySetup m_Economy;
 
+	[Attribute(desc: "Candidate FOB sites (M3 phase F, CLW_FobSites): absolute positions or positions relative to the HQ line, validated at war start. Optional, a few are computed when empty")]
+	ref array<ref CLW_FobSiteSetup> m_aFobSites;
+
 	[Attribute("", UIWidgets.ResourceNamePicker, "Faction profiles (CLW_FactionProfile) available in this scenario, looked up by the profile's faction key. A faction without one uses catalog auto-discovery", "conf")]
 	ref array<ResourceName> m_aProfileConfigs;
 

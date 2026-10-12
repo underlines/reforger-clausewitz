@@ -37,6 +37,21 @@
 //     catalog type, integer count 1..3, max 3 entries, running cost <= war.supplies; missions: only humanLed squads without an accepted
 //     mission, max 3 offers per squad, target = objective id or pos. A model reply with "keep":true and nothing else = keep orders.
 //
+//   Protocol v3 ("v":3; M3 phase R, design: dev/notes/decision-command-tools.md) = v2 + the action manifest. POST /manifest:
+//     {"v":3,"faction","hash","mode","capabilities":["services",..],
+//      "intents":[{"name":"ATTACK","layer":"intent","channel":"orders|buy|missions","authority":"hq","cost":0,"tags":[],"requires":[<capability>],
+//                  "desc","params":[{"name","type":"string|int|enum|position|unit|base","required","enum":[],"hint"}]}],
+//      "primitives":[...same shape, layer "primitive"...]}  -> 200 {"ok":true,"hash"}. The game sends it at war start and on every change
+//     (mode / capability / faction); entries with unmet capabilities are not in it. Every v3 situation carries "manifest":"<hash>".
+//     The prompt's command list, the order/buy/mission validation and the fake provider come from the manifest of that hash (the built-in
+//     one mirrors Actions.conf). Unknown hash (sidecar restarted) -> built-in manifest + the reply carries "needManifest":true and the
+//     game resends. v2 posts (no hash) keep working with the built-in manifest. GET /api/state has "manifests" (dashboard Actions tab).
+//     M3 phase Q: the situation carries "requests":[{"id","player","role":"leader|soldier","kind":"vehicle|squad|resupply|reinforce|recon","args",
+//     "status":"granted|refused","reason","ageSec"}] (recent player requests the game's rules decided; fast path, no LLM). Passed through
+//     unchanged: GET /api/state factions[<name>].situation.requests (dashboard Requests tab). Protocol stays v3.
+//     Base structures: the situation carries "structures":[{"base","kind","label","pos":[x,z],"grid"}] (own side, one per placed service, same set as the in-game map markers). Dashboard map layer only (GET /api/state factions[<name>].situation.structures); stripped from the LLM prompt.
+//     Reply channels: orders / buy / missions (same command JSON as v2) + "fobs" (M3 phase F: [{"command":"ESTABLISH_FOB","site":"<fobSites id>"} or {"command":"UPGRADE_FOB","fob":"<fobs id>"}], max 1; phase L adds {"command":"RESUPPLY","fob":"<fobs id>"} and {"command":"CONVOY","origin":"<base id>","dest":"<base id>"}, max 3 per reply in total, only with the logistics capability + blocks convoys[] / logisticsRules; situation blocks fobs[] / fobSites[] / fobRules). New channels need game + sidecar support.
+//
 //   Faction SITREP (design: dev/notes/sitrep-design.md). The game POST may carry "sitrep": the rules SITREP the game built from the
 //     same fog-limited picture {scope,unit,source:"rules",warTimeSec,headline,situation,enemy,mission,execution,logistics}; the sidecar
 //     removes it before the model call. When the config "sitrep" group is enabled the model is asked, inside the SAME commander call
@@ -88,12 +103,12 @@ import { fileURLToPath } from "node:url";
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const DASH_DIR = path.join(DIR, "dashboard");
-const CONFIG_FILE = path.join(DIR, "sidecar-config.json");
+const CONFIG_FILE = process.env.CLW_CONFIG ? path.resolve(process.env.CLW_CONFIG) : path.join(DIR, "sidecar-config.json"); // CLW_CONFIG: a second instance (tests) keeps its own settings file
 const PORT = Number(process.env.CLW_PORT) || 8788;
+const HOST = process.env.CLW_HOST || "127.0.0.1";	// 0.0.0.0 = reachable in the LAN (dashboard for other devices)
 const COMMANDS = new Set(["MOVE", "ATTACK", "DEFEND"]);
-const COMMANDS_V2 = new Set(["MOVE", "ATTACK", "DEFEND", "RECON", "FALL_BACK"]);
 const MISSION_KINDS = new Set(["CAPTURE", "DEFEND", "RECON", "DESTROY"]);
-const isV2 = (sit) => sit?.v === 2;
+const isV2 = (sit) => sit?.v === 2 || sit?.v === 3; // v3 = v2 + manifest hash
 const PROVIDERS = ["fake", "anthropic", "openai-compatible", "openrouter"];
 // HQ engine: llm = LLM provider decides; rules = sidecar answers {"orders":[]} so the game's rule commander drives (no LLM calls);
 // model = future trained decision-model tier (not implemented: treated like rules, logged once).
@@ -125,19 +140,78 @@ DOCTRINE
 - Combined arms: motorized/mech/light/armor units (fast, firepower) cover distance and support; infantry takes and holds objectives. Send recon first to unknown or fogged objectives.
 - Concentrate force: 2-3 units per target, never split into penny packets. Prefer one clear plan over many small moves. Keep a small reserve at the base.
 - AT teams (or armed vehicles) when enemy vehicles are in contacts. Weak squads (agents well below startAgents or vehicle.health below 0.4) FALL_BACK, do not attack. health and vehicle.health are fractions 0..1: 1 = undamaged / full health, 0 = destroyed.
-- Buy when supplies are rich but keep a reserve (~40). Respect the caps (liveAI<aiCap, vehicles<vehicleCap) and the catalog costs.
+- Buy when supplies are rich but keep a reserve (~40). Respect the caps (liveAI<aiCap, vehicles<vehicleCap) and the catalog costs. Do not buy when war.engineAI.headroom is below the unit size (engine AI near its limit): the buy is refused.
 - Do not re-order squads that already execute a sensible order (objective.status active, young ageSec).
 SITUATION FIELDS
 war: your tickets, enemyTickets, supplies, income per minute, liveAI/aiCap, vehicles/vehicleCap; timeLeftSec = time limit (absent or -1 = no limit); tickets -1 = not used by this mode. war.mode {id,name,params} holds the rules of the chosen war mode (time limit, start tickets, ...): follow them; war.phase is "running" while you are consulted. objectives: id, name, pos [x,z], radius m, value, owner ("none" or a faction key), contested, progress (-100..100 toward the capturer). bases: base positions per faction. catalog: what you may buy (type, kind, cost, desc). squads: kind (infantry|recon|motorized|light|mech|armor|armored_recon), type, pos [x,y,z], agents/startAgents, vehicle {type,health,mounted,state} or null, humanLed, objective (its current order and status), mission (for human-led squads). contacts: pos, kind, desc, ageSec. events: what happened since your last decision. wake: why you are consulted now.
-COMMANDS (orders, one per squad, only for squads with humanLed=false)
-MOVE (redeploy), ATTACK (assault; on an objective = capture it), DEFEND (hold), RECON (go there and observe, no assault), FALL_BACK (retreat; no target = own base).
-Each order has "target": an objective id from the situation, or "pos": [x, z].
-HUMAN-LED SQUADS (humanLed=true) are never ordered. You may offer them up to 3 missions: kind CAPTURE|DEFEND|RECON|DESTROY with "target" (objective id) or "pos" [x, z] and a "brief" (max 240 chars, in the voice of HQ). Skip squads whose mission.state is "accepted".
-REPLY with ONLY one JSON object, no prose, no code fences:
-{"orders":[{"squad":"<id>","command":"ATTACK","target":"C","reason":"short"},{"squad":"<id>","command":"MOVE","pos":[x,z],"reason":"short"}],
- "buy":[{"type":"<catalog type>","count":1,"reason":"short"}],
- "missions":[{"squad":"<human-led id>","offers":[{"kind":"CAPTURE","target":"D","brief":"..."}]}]}
-orders/buy/missions may be empty or omitted. buy: max 3 entries, count 1-3, total cost <= war.supplies. {"keep":true} alone = keep all current orders.`;
+`;
+// The COMMANDS / REPLY part of the v2 prompt is appended by commandsSection(manifest): the game's action manifest decides what exists.
+
+// Built-in manifest: used for v2 posts and when a v3 post names a manifest hash the sidecar does not know (it then asks the game to
+// resend with needManifest). Mirrors the game's Configs/CLW/Actions/Actions.conf at the time of protocol v3.
+const ORDER_PARAMS = [
+  { name: "squad", type: "unit", required: true, hint: "squad id from the situation, humanLed=false, one order per squad" },
+  { name: "target", type: "string", required: false, hint: "objective id from the situation" },
+  { name: "pos", type: "position", required: false, hint: "[x, z]; alternative to target" },
+  { name: "reason", type: "string", required: false, hint: "short text" },
+];
+const orderEntry = (name, desc, tags) => ({ name, layer: "intent", channel: "orders", authority: "hq", cost: 0, tags, requires: [], desc, params: ORDER_PARAMS });
+const DEFAULT_MANIFEST = {
+  hash: "builtin", faction: "", mode: "", capabilities: [], builtin: true,
+  intents: [
+    orderEntry("MOVE", "Redeploy the squad to the objective or position.", ["movement"]),
+    orderEntry("ATTACK", "Assault the objective or position (on an objective = capture it).", ["offence"]),
+    orderEntry("DEFEND", "Hold the objective or position.", ["defence"]),
+    orderEntry("RECON", "Go there and observe, no assault.", ["recon"]),
+    orderEntry("FALL_BACK", "Retreat. No target = own base.", ["defence"]),
+    { name: "BUY", layer: "intent", channel: "buy", authority: "hq", cost: 0, tags: ["economy"], requires: [], desc: "Buy new units from the catalog (max 3 entries per reply, total cost within war.supplies).",
+      params: [{ name: "type", type: "string", required: true, hint: "catalog type from the situation" }, { name: "count", type: "int", required: false, hint: "1 to 3" }, { name: "reason", type: "string", required: false, hint: "short text" }] },
+    { name: "OFFER_MISSION", layer: "intent", channel: "missions", authority: "hq", cost: 0, tags: ["missions"], requires: [], desc: "Offer up to 3 missions to a human-led squad (humanLed=true): each offer has kind CAPTURE|DEFEND|RECON|DESTROY, a target (objective id) or pos [x, z], and a brief (max 240 chars, in the voice of HQ). Skip squads whose mission.state is accepted.",
+      params: [{ name: "squad", type: "unit", required: true, hint: "human-led squad id from the situation" }] },
+  ],
+  primitives: [],
+};
+
+// Reply channels of the command JSON (orders / buy / missions) with their entries. Later phases add channels here and in the game.
+const channelOf = (m, ch) => (Array.isArray(m?.intents) ? m.intents : []).filter((e) => (e.channel ?? "orders") === ch);
+const orderNamesOf = (m) => new Set(channelOf(m, "orders").map((e) => e.name));
+const fieldsText = (e) => (Array.isArray(e.params) ? e.params : []).map((p) => `${p.name}${p.required ? "*" : ""}${Array.isArray(p.enum) && p.enum.length ? "=" + p.enum.join("|") : ""}${p.hint ? " (" + p.hint + ")" : ""}`).join(", ");
+const sentence = (t) => String(t ?? "").trim().replace(/\.$/, "");
+
+// FOB paragraph (M3 phase F): added to the prompt only when the manifest contains FOB intents (capability fob on, fobMax > 0).
+const FOB_PROMPT = "FOBS: a FOB is a forward base (spawn point, command post, supply cache, arsenal) that a transport builds at a site you pick from fobSites (pos, grid, place); it costs fobRules.cost supplies up front (refunded if it fails), takes time to build and is lost if the enemy holds the zone. Establish one toward the front when supplies allow (keep ~100 for units), fobRules.live < fobRules.max and fobRules.inProgress = 0; fobs[] lists yours (state planned|moving|building|active|lost, build %, tier, underAttack). Upgrade an active tier-1 FOB (vehicle depot, medical) when supplies are plentiful. Squads with a reserved field are building a FOB: do not order them.\n";
+
+// Logistics paragraph (M3 phase L): added only when the manifest contains RESUPPLY (capability logistics on, FOBs allowed, a supply truck in the catalog).
+const LOGISTICS_PROMPT = "LOGISTICS: stock is per base. war.supplies is the HQ stock (income lands there, units and FOBs are paid from it); each FOB has its own fobs[].stock, which its arsenal, requests and upgrade draw from, and a new FOB starts empty. A supply truck convoy (convoys[]: id, from, to, cargo, state loading|en_route|delivered|lost, pos, grid) loads min(truck capacity logisticsRules.truckCargo, source stock) at departure, drives to the destination and adds it to that stock on arrival; a destroyed truck loses its cargo. Keep every active FOB above logisticsRules.lowStock with RESUPPLY (HQ -> FOB) while the HQ can spare a load (keep ~50), one convoy at a time per FOB and at most logisticsRules.convoyMax in flight; CONVOY moves stock between two bases. Do not order squads that have a reserved field (convoy trucks).\n";
+
+// COMMANDS + REPLY paragraphs of the v2/v3 prompt, generated from the manifest (entries with unmet capabilities are not in it).
+function commandsSection(m) {
+  const orders = channelOf(m, "orders"), buys = channelOf(m, "buy"), offers = channelOf(m, "missions"), fobs = channelOf(m, "fob");
+  let t = "";
+  if (orders.length) {
+    t += "COMMANDS (orders, one per squad, only for squads with humanLed=false)\n";
+    t += orders.map((e) => `${e.name} (${sentence(e.desc).replace(/^[A-Z](?![A-Z])/, (c) => c.toLowerCase()).replace(/. /g, "; ")})`).join(", ") + ".\n";
+    t += `Order fields ("command" is the name above; * = required): ${fieldsText(orders[0])}.\n`;
+  }
+  if (buys.length) t += buys.map((e) => `${e.name}: ${sentence(e.desc)}. Fields: ${fieldsText(e)}.\n`).join("");
+  if (fobs.length) t += FOB_PROMPT + fobs.map((e) => `${e.name}: ${sentence(e.desc)}. Fields: ${fieldsText(e)}.\n`).join("");
+  if (fobs.some((e) => e.name === "RESUPPLY")) t += LOGISTICS_PROMPT;
+  t += offers.length
+    ? "HUMAN-LED SQUADS (humanLed=true) are never ordered. " + offers.map((e) => sentence(e.desc)).join(". ") + ".\n"
+    : "HUMAN-LED SQUADS (humanLed=true) are never ordered and get no missions.\n";
+  const parts = [], keys = [];
+  if (orders.length) {
+    const a = orders[0].name, b = (orders[1] ?? orders[0]).name;
+    parts.push(`"orders":[{"squad":"<id>","command":"${a}","target":"C","reason":"short"},{"squad":"<id>","command":"${b}","pos":[x,z],"reason":"short"}]`);
+    keys.push("orders");
+  }
+  if (buys.length) { parts.push('"buy":[{"type":"<catalog type>","count":1,"reason":"short"}]'); keys.push("buy"); }
+  if (fobs.length) { parts.push('"fobs":[{"command":"ESTABLISH_FOB","site":"<fobSites id>","reason":"short"}]'); keys.push("fobs"); }
+  if (offers.length) { parts.push('"missions":[{"squad":"<human-led id>","offers":[{"kind":"CAPTURE","target":"D","brief":"..."}]}]'); keys.push("missions"); }
+  t += "REPLY with ONLY one JSON object, no prose, no code fences:\n{" + parts.join(",\n ") + "}\n";
+  t += (keys.length ? `${keys.join("/")} may be empty or omitted. ` : "") + (buys.length ? "buy: max 3 entries, count 1-3, total cost <= war.supplies. " : "") + (fobs.length ? "fobs: at most 3 entries per reply, at most 1 of them ESTABLISH_FOB or UPGRADE_FOB. " : "") + '{"keep":true} alone = keep all current orders.';
+  return t;
+}
 
 // The wakeup paragraph is appended only when the model may choose its next wakeup.
 function wakeupText(w) {
@@ -164,8 +238,8 @@ Style:
 Example (invented): {"headline":"Holding two of five points; enemy armor massing north, push on Delta now.","situation":"We hold Alpha and Bravo; Charlie is contested. Tickets are bleeding slowly but we remain ahead.","enemy":"Platoon-sized mechanized force with dismounts moving south through Harbor Bridge just now. Squad-sized element at Delta, last few minutes.","mission":"Defeat the enemy at Charlie Mill and secure Delta to deny him the crossing.","execution":"Main effort: mechanized platoon to Charlie. Supporting effort: two rifle elements fix Delta. Reserve: AT team at Bravo. Players: join a squad moving on Charlie.","logistics":"Supplies healthy, income steady, replacements ordered. One element is thin and falling back."}`;
 
 // System prompt incl. the wakeup paragraph. v2 = protocol v2 situation. sitrep = ask for the SITREP object too.
-function systemPrompt(c, v2 = false, sitrep = false) {
-  let base = v2 ? SYSTEM_V2 : SYSTEM;
+function systemPrompt(c, v2 = false, sitrep = false, manifest = DEFAULT_MANIFEST) {
+  let base = v2 ? SYSTEM_V2 + commandsSection(manifest ?? DEFAULT_MANIFEST) : SYSTEM;
   if (c.wakeup?.dynamic) base += wakeupText(c.wakeup);
   if (v2 && sitrep) base += SITREP_PROMPT;
   return base;
@@ -193,11 +267,14 @@ const cfg = {
     objectiveChanged: true, ticketsDropPct: 10, unitSpawned: true, missionEvent: true },
   // faction SITREP written by the model inside the commander reply: asked on the first call, every intervalSec at most, and on big events
   sitrep: { enabled: true, intervalSec: 120 },
+  // HQ chat (/hq <text>): AI SDK agent turn per player message, see agent/agentTurn.mjs and "HQ chat" below
+  agent: { enabled: true, maxSteps: 4, timeoutSec: 40, maxConcurrent: 3 },
 };
 
 // Group settings: "bool" or [min, max] number range per key. Partial objects are merged onto the current group.
 const GROUP_SPECS = {
   sitrep: { enabled: "bool", intervalSec: [30, 3600] },
+  agent: { enabled: "bool", maxSteps: [1, 8], timeoutSec: [5, 120], maxConcurrent: [1, 10] },
   wakeup: { dynamic: "bool", defaultSec: [5, 3600], minSec: [5, 3600], maxSec: [5, 7200], budgetStretch: "bool" },
   triggers: { enabled: "bool", newContact: "bool", contactNearSquadM: [0, 5000], casualties: [0, 1000], squadLost: "bool", strengthDropPct: [0, 100], objectiveReached: "bool", squadChange: "bool", cooldownSec: [0, 600],
     objectiveChanged: "bool", ticketsDropPct: [0, 100], unitSpawned: "bool", missionEvent: "bool" },
@@ -268,6 +345,7 @@ function validateConfig(inp) {
         out.mapMaxSize = v; break;
       case "wakeup":
       case "sitrep":
+      case "agent":
       case "triggers": {
         const g = validateGroup(k, v);
         if (g.error) return g;
@@ -310,7 +388,22 @@ const state = {
   exchanges: [],  // newest first, max RING_MAX
   counters: { requests: 0, gated: 0, skipped: 0, errors: 0, fallbacks: 0, inputTokens: 0, outputTokens: 0 },
   lastRequestTs: 0,
+  debugLog: [],   // game debug lines (CLW_Debug), newest first, max DEBUG_MAX, deduped across the factions' posts
 };
+const DEBUG_MAX = 300;
+const debugSeen = new Set();
+function addDebugLines(lines) {
+  if (!Array.isArray(lines)) return;
+  for (const l of lines.slice(0, 50)) {
+    if (!l || typeof l.msg !== "string") continue;
+    const msg = l.msg.slice(0, 200), t = isNum(l.t) ? l.t : 0, key = `${l.id}|${t}|${msg}`;
+    if (debugSeen.has(key)) continue;
+    debugSeen.add(key);
+    state.debugLog.unshift({ ts: Date.now(), t, msg });
+  }
+  if (state.debugLog.length > DEBUG_MAX) state.debugLog.length = DEBUG_MAX;
+  if (debugSeen.size > DEBUG_MAX * 4) { debugSeen.clear(); for (const d of state.debugLog) debugSeen.add(`|${d.t}|${d.msg}`); }
+}
 
 // ---------- OpenRouter usage / budget ----------
 const POLL_MS = 10 * 60 * 1000, POLL_REACHED_MS = 60 * 1000;
@@ -550,8 +643,9 @@ function fakeOrders(sit) {
 // Fake provider, protocol v2: simple doctrine, content-agnostic (everything from the situation).
 const xz = (p) => (Array.isArray(p) ? (p.length > 2 ? [p[0], p[2]] : [p[0], p[1]]) : [NaN, NaN]);
 const dist2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
-function fakeV2(sit) {
-  const me = sit.faction, out = { orders: [], buy: [], missions: [] };
+function fakeV2(sit, manifest = DEFAULT_MANIFEST) {
+  const me = sit.faction, out = { orders: [], buy: [], missions: [], fobs: [] };
+  const names = orderNamesOf(manifest), canBuy = channelOf(manifest, "buy").length > 0, canOffer = channelOf(manifest, "missions").length > 0;
   const objs = (Array.isArray(sit.objectives) ? sit.objectives : []).filter((o) => o && typeof o.id === "string" && okPos(o.pos));
   const squads = (Array.isArray(sit.squads) ? sit.squads : []).filter((s) => s && typeof s.id === "string" && okPos(s.pos));
   const contacts = (Array.isArray(sit.contacts) ? sit.contacts : []).filter((c) => c && okPos(c.pos));
@@ -561,7 +655,7 @@ function fakeV2(sit) {
 
   // buy: the cheapest entry of every kind, rotated by game time; keep a 100 reserve
   const catalog = (Array.isArray(sit.catalog) ? sit.catalog : []).filter((e) => e && typeof e.type === "string" && isNum(e.cost) && e.cost > 0);
-  if (supplies > 200 && catalog.length && !(isNum(war.aiCap) && isNum(war.liveAI) && war.liveAI >= war.aiCap)) {
+  if (canBuy && supplies > 200 && catalog.length && !(isNum(war.aiCap) && isNum(war.liveAI) && war.liveAI >= war.aiCap) && !(war.engineAI && isNum(war.engineAI.headroom) && war.engineAI.headroom < 3)) {
     const cheapest = new Map();
     for (const e of catalog) if (!cheapest.has(e.kind) || e.cost < cheapest.get(e.kind).cost) cheapest.set(e.kind, e);
     const list = [...cheapest.values()].sort((a, b) => a.cost - b.cost);
@@ -576,13 +670,33 @@ function fakeV2(sit) {
     }
   }
 
-  const ai = squads.filter((s) => !s.humanLed);
+  // FOBs (M3 phase F): when affordable, on a rotating minute so it does not happen on every poll; then upgrade an active tier-1 FOB
+  const fobNames = new Set(channelOf(manifest, "fob").map((e) => e.name)), fobRules = sit.fobRules ?? {};
+  if (fobNames.size && isNum(fobRules.cost) && isNum(fobRules.max)) {
+    const minute = Math.floor((isNum(sit.time) ? sit.time : 0) / 60);
+    const mine = Array.isArray(sit.fobs) ? sit.fobs : [], sites = Array.isArray(sit.fobSites) ? sit.fobSites : [];
+    if (fobNames.has("ESTABLISH_FOB") && sites[0] && fobRules.live < fobRules.max && !fobRules.inProgress && supplies >= fobRules.cost + 100 && minute % 3 === 1)
+      out.fobs.push({ command: "ESTABLISH_FOB", site: sites[0].id, reason: `fake provider: forward base at ${sites[0].name ?? sites[0].id}` });
+    else if (fobNames.has("UPGRADE_FOB") && isNum(fobRules.upgradeCost) && supplies >= fobRules.upgradeCost + 150 && minute % 3 === 2) {
+      const up = mine.find((f) => f?.state === "active" && f.tier < 2);
+      if (up) out.fobs.push({ command: "UPGRADE_FOB", fob: up.id, reason: "fake provider: depot and medical" });
+    }
+  }
+  // Logistics (M3 phase L): RESUPPLY an active FOB whose stock is low, when the HQ can spare a load and no convoy is on its way there
+  const logiRules = sit.logisticsRules ?? {};
+  if (fobNames.has("RESUPPLY") && isNum(logiRules.lowStock) && (logiRules.inFlight ?? 0) < (logiRules.convoyMax ?? 2) && supplies >= (logiRules.minCargo ?? 40) + 40) {
+    const convoys = Array.isArray(sit.convoys) ? sit.convoys : [];
+    const low = (Array.isArray(sit.fobs) ? sit.fobs : []).find((f) => f?.state === "active" && isNum(f.stock) && f.stock < logiRules.lowStock && !convoys.some((c) => c?.to === f.id && ["planned", "loading", "en_route"].includes(c.state)));
+    if (low) out.fobs.push({ command: "RESUPPLY", fob: low.id, reason: `fake provider: ${low.id} stock ${low.stock} is low` });
+  }
+
+  const ai = squads.filter((s) => !s.humanLed && !s.reserved);
   const assigned = new Set();
   const give = (s, command, tgt, reason) => { assigned.add(s.id); out.orders.push(tgt.id ? { squad: s.id, command, target: tgt.id, reason } : { squad: s.id, command, pos: tgt.pos, reason }); };
   const weak = (s) => isNum(s.agents) && isNum(s.startAgents) && s.startAgents > 0 && s.agents < s.startAgents * 0.5;
-  for (const s of ai) if (weak(s)) give(s, "FALL_BACK", { pos: base }, "weak unit, falling back to base");
+  if (names.has("FALL_BACK")) for (const s of ai) if (weak(s)) give(s, "FALL_BACK", { pos: base }, "weak unit, falling back to base");
   // defend own objectives with a contact within 400 m
-  for (const o of objs.filter((o) => o.owner === me)) {
+  if (names.has("DEFEND")) for (const o of objs.filter((o) => o.owner === me)) {
     const near = contacts.filter((c) => dist2(xz(c.pos), xz(o.pos)) <= 400);
     if (!near.length) continue;
     const free = ai.filter((s) => !assigned.has(s.id)).sort((a, b) => dist2(xz(a.pos), xz(o.pos)) - dist2(xz(b.pos), xz(o.pos)));
@@ -590,13 +704,13 @@ function fakeV2(sit) {
   }
   // attack the objective not owned by us that is nearest to our base, with up to 2 units
   const targets = objs.filter((o) => o.owner !== me).sort((a, b) => dist2(xz(a.pos), base) - dist2(xz(b.pos), base));
-  if (targets[0]) {
+  if (names.has("ATTACK") && targets[0]) {
     const t = targets[0];
     const free = ai.filter((s) => !assigned.has(s.id)).sort((a, b) => dist2(xz(a.pos), xz(t.pos)) - dist2(xz(b.pos), xz(t.pos)));
     for (const s of free.slice(0, 2)) give(s, "ATTACK", { id: t.id }, `nearest objective not ours: ${t.name ?? t.id}`);
   }
   // offers for human-led squads that have no accepted mission
-  for (const s of squads.filter((s) => s.humanLed && s.mission?.state !== "accepted")) {
+  if (canOffer) for (const s of squads.filter((s) => s.humanLed && s.mission?.state !== "accepted")) {
     const p = xz(s.pos), offers = [];
     const byDist = (a, b) => dist2(xz(a.pos), p) - dist2(xz(b.pos), p);
     const nonOwned = objs.filter((o) => o.owner !== me).sort(byDist), own = objs.filter((o) => o.owner === me).sort(byDist);
@@ -618,7 +732,7 @@ function extractOrders(text, v2 = false) {
   const obj = JSON.parse(text.slice(a, b + 1));
   if (!obj || typeof obj !== "object" || Array.isArray(obj)) throw new Error("reply is not a JSON object");
   if (v2) {
-    if (!["orders", "buy", "missions"].some((k) => Array.isArray(obj[k])) && obj.keep !== true && !(obj.sitrep && typeof obj.sitrep === "object")) throw new Error("reply has no orders/buy/missions array");
+    if (!["orders", "buy", "missions", "fobs"].some((k) => Array.isArray(obj[k])) && obj.keep !== true && !(obj.sitrep && typeof obj.sitrep === "object")) throw new Error("reply has no orders/buy/missions/fobs array");
   } else if (!Array.isArray(obj.orders)) throw new Error("reply has no orders array");
   return obj;
 }
@@ -626,7 +740,8 @@ function extractOrders(text, v2 = false) {
 const SITREP_EXTRA_TOKENS = 450; // room for the SITREP object on top of the configured maxTokens
 // Returns {raw, usage:{input,output}}. Throws Error on transport/HTTP failure.
 async function callProvider(c, sit, opts = {}) {
-  const userMsg = "Current situation:\n" + JSON.stringify(sit);
+  const { structures: _structures, ...llmSit } = sit ?? {}; // situation.structures[] (base markers, dashboard map only) is not sent to the model
+  const userMsg = "Current situation:\n" + JSON.stringify(llmSit);
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), c.timeoutSec * 1000);
   try {
@@ -635,14 +750,14 @@ async function callProvider(c, sit, opts = {}) {
       if (!c.apiKey) throw new Error("API key not set");
       url = (c.baseUrl || "https://api.anthropic.com") + "/v1/messages";
       headers = { "x-api-key": c.apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" };
-      body = { model: c.model, max_tokens: c.maxTokens + (opts.sitrep ? SITREP_EXTRA_TOKENS : 0), system: systemPrompt(c, isV2(sit), opts.sitrep), messages: [{ role: "user", content: userMsg }] };
+      body = { model: c.model, max_tokens: c.maxTokens + (opts.sitrep ? SITREP_EXTRA_TOKENS : 0), system: systemPrompt(c, isV2(sit), opts.sitrep, opts.manifest), messages: [{ role: "user", content: userMsg }] };
     } else {
       const base = c.provider === "openrouter" ? (c.baseUrl || OR_BASE) : c.baseUrl;
       if (!base) throw new Error("baseUrl not set");
       url = base + "/chat/completions";
       headers = { "content-type": "application/json" };
       if (c.apiKey) headers.authorization = "Bearer " + c.apiKey;
-      body = { model: c.model, max_tokens: c.maxTokens + (opts.sitrep ? SITREP_EXTRA_TOKENS : 0), messages: [{ role: "system", content: systemPrompt(c, isV2(sit), opts.sitrep) },{ role: "user", content: userMsg }] };
+      body = { model: c.model, max_tokens: c.maxTokens + (opts.sitrep ? SITREP_EXTRA_TOKENS : 0), messages: [{ role: "system", content: systemPrompt(c, isV2(sit), opts.sitrep, opts.manifest) },{ role: "user", content: userMsg }] };
       if (c.provider === "openrouter") body.usage = { include: true };
     }
     const r = await fetch(url, { method: "POST", signal: ac.signal, headers, body: JSON.stringify(body) });
@@ -685,7 +800,8 @@ function validate(raw, sit, dropped = []) {
 }
 
 // Protocol v2 validation. Returns {orders, buy, missions}; every dropped item goes to `dropped` with a reason.
-function validateV2(obj, sit, dropped = []) {
+function validateV2(obj, sit, dropped = [], manifest = DEFAULT_MANIFEST) {
+  const orderNames = orderNamesOf(manifest), buyOk = channelOf(manifest, "buy").length > 0, missionsOk = channelOf(manifest, "missions").length > 0;
   const drop = (key, item, reason) => { console.log(`  dropped ${key}: ${reason}`); dropped.push({ [key]: item, reason }); };
   const squads = new Map((Array.isArray(sit.squads) ? sit.squads : []).filter((s) => s && typeof s.id === "string").map((s) => [s.id, s]));
   const objIds = new Set((Array.isArray(sit.objectives) ? sit.objectives : []).filter((o) => o && typeof o.id === "string").map((o) => o.id));
@@ -699,7 +815,7 @@ function validateV2(obj, sit, dropped = []) {
     if (o.pos !== undefined && o.pos !== null) return xzOk(o.pos) ? { pos: [o.pos[0], o.pos[1]] } : { error: "bad pos" };
     return {};
   };
-  const res = { orders: [], buy: [], missions: [] };
+  const res = { orders: [], buy: [], missions: [], fobs: [] };
 
   const seen = new Set();
   for (const o of Array.isArray(obj.orders) ? obj.orders : []) {
@@ -708,8 +824,9 @@ function validateV2(obj, sit, dropped = []) {
     const why = !o || typeof o !== "object" ? "not an object"
       : !s ? `unknown squad ${o.squad}`
       : s.humanLed ? `${o.squad} is human-led: no orders, only missions`
+      : s.reserved ? `${o.squad} is reserved (${s.reserved})`
       : seen.has(o.squad) ? `duplicate order for ${o.squad}`
-      : !COMMANDS_V2.has(o.command) ? `bad command ${o.command}`
+      : !orderNames.has(o.command) ? `bad command ${o.command}`
       : a.error ? a.error
       : !a.target && !a.pos && o.command !== "FALL_BACK" ? "order needs a target or pos"
       : o.reason !== undefined && typeof o.reason !== "string" ? "bad reason" : null;
@@ -720,10 +837,49 @@ function validateV2(obj, sit, dropped = []) {
 
   const catalog = new Map((Array.isArray(sit.catalog) ? sit.catalog : []).filter((e) => e && typeof e.type === "string" && isNum(e.cost)).map((e) => [e.type, e]));
   let left = isNum(sit.war?.supplies) ? sit.war.supplies : 0;
+
+  // FOB intents (channel "fob"): at most 1 per reply; the game validates again (cap, one in progress, site, supplies)
+  const fobNames = new Set(channelOf(manifest, "fob").map((e) => e.name));
+  const fobSites = new Set((Array.isArray(sit.fobSites) ? sit.fobSites : []).filter((x) => x && typeof x.id === "string").map((x) => x.id));
+  const myFobs = new Map((Array.isArray(sit.fobs) ? sit.fobs : []).filter((x) => x && typeof x.id === "string").map((x) => [x.id, x]));
+  const fr = sit.fobRules ?? {}, lr = sit.logisticsRules ?? {};
+  const baseIds = new Set(["HQ", ...[...myFobs.values()].filter((x) => x.state === "active").map((x) => x.id)]);
+  for (const f of Array.isArray(obj.fobs) ? obj.fobs : []) {
+    const cmd = f && typeof f === "object" ? (typeof f.command === "string" && f.command ? f.command.toUpperCase() : f.site ? "ESTABLISH_FOB" : f.fob ? "UPGRADE_FOB" : "") : "";
+    const mine = cmd === "UPGRADE_FOB" && f ? myFobs.get(f.fob) : null;
+    const why = !f || typeof f !== "object" ? "not an object"
+      : !fobNames.size ? "FOBs are not available in this war mode"
+      : !fobNames.has(cmd) ? `bad fob command ${f.command}`
+      : res.fobs.length >= 3 ? "more than 3 fob entries per reply"
+      : (cmd === "ESTABLISH_FOB" || cmd === "UPGRADE_FOB") && res.fobs.some((x) => x.command === "ESTABLISH_FOB" || x.command === "UPGRADE_FOB") ? "more than 1 ESTABLISH_FOB/UPGRADE_FOB per reply"
+      : cmd === "RESUPPLY" ? (!myFobs.get(f.fob) ? `unknown fob ${f.fob}` : myFobs.get(f.fob).state !== "active" ? `${f.fob} is not active`
+        : isNum(lr.convoyMax) && isNum(lr.inFlight) && lr.inFlight + res.fobs.filter((x) => x.command === "RESUPPLY" || x.command === "CONVOY").length >= lr.convoyMax ? "convoy limit reached"
+        : res.fobs.some((x) => x.command === "RESUPPLY" && x.fob === f.fob) ? `${f.fob} already gets a convoy in this reply`
+        : (Array.isArray(sit.convoys) ? sit.convoys : []).some((c) => c?.to === f.fob && ["loading", "planned", "en_route"].includes(c.state)) ? `a convoy is already on its way to ${f.fob}`
+        : isNum(lr.minCargo) && left < lr.minCargo ? `HQ stock ${left} is below the minimum load ${lr.minCargo}` : null)
+      : cmd === "CONVOY" ? (!baseIds.has(f.origin) || !baseIds.has(f.dest) ? `unknown or inactive base ${f.origin} -> ${f.dest}` : f.origin === f.dest ? "origin and destination are the same"
+        : isNum(lr.convoyMax) && isNum(lr.inFlight) && lr.inFlight + res.fobs.filter((x) => x.command === "RESUPPLY" || x.command === "CONVOY").length >= lr.convoyMax ? "convoy limit reached" : null)
+      : cmd === "ESTABLISH_FOB" ? (!fobSites.has(f.site) ? `unknown fob site ${f.site}`
+        : isNum(fr.live) && isNum(fr.max) && fr.live >= fr.max ? "FOB limit reached"
+        : fr.inProgress > 0 ? "another FOB is still being established"
+        : isNum(fr.cost) && fr.cost > left ? `FOB cost ${fr.cost} exceeds remaining supplies ${left}` : null)
+      : (!mine ? `unknown fob ${f.fob}` : mine.state !== "active" ? `${f.fob} is not active` : mine.tier >= 2 ? `${f.fob} is already tier 2`
+        : isNum(fr.upgradeCost) && isNum(mine.stock) && fr.upgradeCost > mine.stock ? `upgrade cost ${fr.upgradeCost} exceeds the stock of ${f.fob} (${mine.stock}); RESUPPLY it first`
+        : !isNum(mine.stock) && isNum(fr.upgradeCost) && fr.upgradeCost > left ? `upgrade cost ${fr.upgradeCost} exceeds remaining supplies ${left}` : null);
+    if (why) { drop("fob", f, why); continue; }
+    if (cmd === "ESTABLISH_FOB") left -= fr.cost ?? 0;
+    else if (cmd === "UPGRADE_FOB" && !isNum(mine?.stock)) left -= fr.upgradeCost ?? 0;
+    else if (cmd === "RESUPPLY" || (cmd === "CONVOY" && f.origin === "HQ")) left -= Math.min(isNum(lr.truckCargo) ? lr.truckCargo : 0, Math.max(0, left)); // the load leaves the HQ stock (approximation for CONVOY from a FOB)
+    const out = cmd === "ESTABLISH_FOB" ? { site: f.site } : cmd === "CONVOY" ? { origin: f.origin, dest: f.dest } : { fob: f.fob };
+    res.fobs.push({ command: cmd, ...out, reason: typeof f.reason === "string" ? f.reason.slice(0, 120) : "" });
+  }
+
+  // buys after the FOB/logistics entries: the game applies them in that order too (a FOB is not starved by buys in the same reply)
   for (const b of Array.isArray(obj.buy) ? obj.buy : []) {
     const e = b && typeof b === "object" ? catalog.get(b.type) : null;
     const cost = e ? e.cost * b.count : 0;
     const why = !b || typeof b !== "object" ? "not an object"
+      : !buyOk ? "buy is not available in this war mode"
       : res.buy.length >= 3 ? "more than 3 buy entries"
       : !e ? `unknown catalog type ${b.type}`
       : !Number.isInteger(b.count) || b.count < 1 || b.count > 3 ? "count must be an integer 1..3"
@@ -738,6 +894,7 @@ function validateV2(obj, sit, dropped = []) {
     const s = m && typeof m === "object" ? squads.get(m.squad) : null;
     const why = !m || typeof m !== "object" ? "not an object"
       : !s ? `unknown squad ${m.squad}`
+      : !missionsOk ? "missions are not available in this war mode"
       : !s.humanLed ? `${m.squad} is not human-led: missions are for human-led squads only`
       : s.mission?.state === "accepted" ? `${m.squad} already has an accepted mission`
       : offered.has(m.squad) ? `duplicate missions entry for ${m.squad}`
@@ -766,7 +923,7 @@ let cooldownUntil = 0;
 
 // Runs one situation through the given config. Never throws.
 async function computeOrders(c, sit, isTest = false, opts = {}) {
-  const r = { orders: [], buy: [], missions: [], keep: false, dropped: [], rawReply: null, usage: null, ok: true, reason: null };
+  const r = { orders: [], buy: [], missions: [], fobs: [], keep: false, dropped: [], rawReply: null, usage: null, ok: true, reason: null };
   try {
     if (!isTest && c.provider !== "fake" && Date.now() < cooldownUntil) throw new Error(`provider cooling down after rate limit/server error (${Math.ceil((cooldownUntil - Date.now()) / 1000)}s left)`);
     if (!sit || typeof sit !== "object" || !Array.isArray(sit.squads)) throw new Error("no squads array");
@@ -774,7 +931,7 @@ async function computeOrders(c, sit, isTest = false, opts = {}) {
     let raw;
     if (v2) {
       let obj;
-      if (c.provider === "fake") { obj = fakeV2(sit); if (opts.sitrep) obj.sitrep = fakeSitrep(sit, obj); }
+      if (c.provider === "fake") { obj = fakeV2(sit, opts.manifest); if (opts.sitrep) obj.sitrep = fakeSitrep(sit, obj); }
       else {
         session.requests++;
         const p = await callProvider(c, sit, opts);
@@ -783,8 +940,8 @@ async function computeOrders(c, sit, isTest = false, opts = {}) {
         obj = extractOrders(p.raw, true);
         if (isNum(obj.next_check_sec)) r.nextCheck = { sec: Math.round(obj.next_check_sec), reason: typeof obj.next_check_reason === "string" ? obj.next_check_reason.slice(0, 120) : "" };
       }
-      Object.assign(r, validateV2(obj, sit, r.dropped));
-      r.keep = (obj.keep === true || (!r.orders.length && !r.buy.length && !r.missions.length && !!obj.sitrep && !Array.isArray(obj.orders) && !Array.isArray(obj.buy) && !Array.isArray(obj.missions))) && !r.orders.length && !r.buy.length && !r.missions.length;
+      Object.assign(r, validateV2(obj, sit, r.dropped, opts.manifest));
+      r.keep = (obj.keep === true || (!r.orders.length && !r.buy.length && !r.missions.length && !r.fobs.length && !!obj.sitrep && !Array.isArray(obj.orders) && !Array.isArray(obj.buy) && !Array.isArray(obj.missions) && !Array.isArray(obj.fobs))) && !r.orders.length && !r.buy.length && !r.missions.length && !r.fobs.length;
       if (obj.sitrep !== undefined) {
         r.sitrep = normSitrep(obj.sitrep);
         if (!r.sitrep) { console.log("  dropped sitrep: not a usable object"); r.dropped.push({ sitrep: obj.sitrep, reason: "not a usable sitrep object" }); }
@@ -806,7 +963,7 @@ async function computeOrders(c, sit, isTest = false, opts = {}) {
     if (e?.cooldownMs && !isTest) cooldownUntil = Date.now() + e.cooldownMs;
     r.ok = false;
     r.reason = e?.name === "AbortError" ? "timeout" : String(e?.message ?? e);
-    r.orders = []; r.buy = []; r.missions = []; r.keep = false;
+    r.orders = []; r.buy = []; r.missions = []; r.fobs = []; r.keep = false;
     console.log(`  error: ${r.reason}`);
   }
   return r;
@@ -856,6 +1013,125 @@ function unchanged(a, b, pendingEvents = 0) {
   return true;
 }
 const lastCall = {}; // faction -> {ts of last provider attempt}
+
+// ---------- action manifest (protocol v3) ----------
+// The game POSTs /manifest {v:3,faction,hash,mode,capabilities,intents,primitives} at war start and whenever it changes (mode /
+// capability / faction change); every v3 situation carries the hash. Unknown hash (e.g. sidecar restarted) -> the built-in manifest
+// is used and the reply says needManifest:true, the game then resends. Kept per faction in memory only.
+const manifests = {}; // faction -> {hash, faction, mode, capabilities, intents, primitives, receivedAt}
+const strList = (a, max = 40, len = 80) => (Array.isArray(a) ? a.filter((x) => typeof x === "string").slice(0, max).map((x) => x.slice(0, len)) : []);
+function cleanEntry(e) {
+  if (!e || typeof e !== "object" || typeof e.name !== "string" || !e.name || e.name.length > 60) return null;
+  const params = (Array.isArray(e.params) ? e.params : []).slice(0, 20).filter((p) => p && typeof p.name === "string" && p.name).map((p) => ({
+    name: p.name.slice(0, 40), type: typeof p.type === "string" ? p.type.slice(0, 20) : "string", required: p.required === true,
+    ...(Array.isArray(p.enum) && p.enum.length ? { enum: strList(p.enum, 40, 60) } : {}), hint: typeof p.hint === "string" ? p.hint.slice(0, 200) : "" }));
+  return { name: e.name, layer: e.layer === "primitive" ? "primitive" : "intent", channel: typeof e.channel === "string" && e.channel ? e.channel.slice(0, 20) : "orders",
+    authority: typeof e.authority === "string" ? e.authority.slice(0, 12) : "hq", cost: isNum(e.cost) ? e.cost : 0, tags: strList(e.tags), requires: strList(e.requires),
+    ...(Array.isArray(e.steps) ? { steps: strList(e.steps) } : {}), desc: typeof e.desc === "string" ? e.desc.slice(0, 700) : "", params };
+}
+function cleanManifest(m) {
+  if (!m || typeof m !== "object" || typeof m.faction !== "string" || !m.faction || typeof m.hash !== "string" || !m.hash || m.hash.length > 64) return null;
+  const list = (a) => (Array.isArray(a) ? a.slice(0, 200).map(cleanEntry).filter(Boolean) : []);
+  return { hash: m.hash, faction: m.faction, mode: typeof m.mode === "string" ? m.mode.slice(0, 40) : "", capabilities: strList(m.capabilities), intents: list(m.intents), primitives: list(m.primitives) };
+}
+async function handleManifest(req, res) {
+  let raw;
+  try { raw = JSON.parse(await readBody(req, 300_000)); } catch { return send(res, 400, { error: "invalid JSON" }); }
+  const m = cleanManifest(raw);
+  if (!m) return send(res, 400, { error: "bad manifest (needs faction, hash, intents[])" });
+  manifests[m.faction] = { ...m, receivedAt: Date.now() };
+  console.log(`manifest faction=${m.faction} hash=${m.hash} mode=${m.mode || "?"} intents=${m.intents.length} primitives=${m.primitives.length} capabilities=[${m.capabilities.join(",")}]`);
+  send(res, 200, { ok: true, hash: m.hash });
+}
+
+// ---------- HQ chat (M3 phase A: /hq <free text>) ----------
+// The situation carries hq:[{id,player,role,squad,grid,pos:[x,z],text,ageSec}] = the faction's pending player messages (re-sent every
+// poll until the game has an answer). Each new message starts ONE agent turn (agent/agentTurn.mjs, AI SDK ToolLoopAgent, <= agent.maxSteps
+// steps) in the background; at most agent.maxConcurrent run at once. The result waits in hqOut[faction] and rides on the NEXT reply for that
+// faction: hqActions [{msgId,id,action,args:[{name,value}]}] (the game runs them through its action registry as the player) and
+// hqReplies [{msgId,text,fallback?}] (fallback:true = no answer, the game shows its /request menu hint). The SDK is loaded lazily, so the
+// strategic tick keeps working without node_modules.
+const HQ_MAX = 60, HQ_SEEN_MAX = 400, HQ_MAX_AGE_SEC = 90;
+const hqLog = [];            // newest first: dashboard "HQ chat" view
+const hqSeen = new Set();    // faction|id|player|text
+const hqOut = {};            // faction -> {actions:[], replies:[]}
+const hqWaiting = [];        // jobs waiting for a free slot
+let hqRunning = 0, agentMod = null;
+const hqOutFor = (f) => (hqOut[f] ??= { actions: [], replies: [] });
+async function loadAgent() { return (agentMod ??= await import("./agent/agentTurn.mjs")); }
+
+function cleanHqMessage(m) {
+  if (!m || typeof m !== "object" || !isNum(m.id) || typeof m.text !== "string" || !m.text.trim()) return null;
+  const str = (v, n) => (typeof v === "string" ? v.slice(0, n) : "");
+  return { id: m.id, player: str(m.player, 60) || "player", role: m.role === "leader" ? "leader" : "soldier", squad: str(m.squad, 60), grid: str(m.grid, 20),
+    pos: Array.isArray(m.pos) && m.pos.length >= 2 && m.pos.every(isNum) ? m.pos.slice(0, 3) : null, text: m.text.trim().slice(0, 400), ageSec: isNum(m.ageSec) ? m.ageSec : 0 };
+}
+function hqFallbackReason(c) {
+  if (!c.enabled) return "sidecar disabled";
+  if (c.engine !== "llm") return "engine " + c.engine;
+  if (!c.agent?.enabled) return "agent turns disabled";
+  if (paused) return "HQ paused";
+  if (budgetStopped(c)) return "budget limit reached";
+  if (!["fake", "openrouter", "openai-compatible"].includes(c.provider)) return `provider ${c.provider} has no agent turn`;
+  return null;
+}
+function hqFinish(entry, faction, r) {
+  const out = hqOutFor(faction);
+  entry.state = "done"; entry.ok = r.ok; entry.error = r.error ?? null; entry.latencyMs = r.latencyMs; entry.usage = r.usage; entry.steps = r.steps; entry.tools = r.tools;
+  entry.actions = r.actions; entry.reply = r.ok ? r.replyText : "";
+  if (r.ok) {
+    for (const a of r.actions) out.actions.push({ msgId: entry.msg.id, id: a.id, action: a.action, args: a.args });
+    out.replies.push({ msgId: entry.msg.id, text: r.replyText });
+  } else out.replies.push({ msgId: entry.msg.id, text: "", fallback: true });
+  console.log(`hq faction=${faction} msg=${entry.msg.id} player=${entry.msg.player} ${r.ok ? `actions=${r.actions.length} steps=${r.steps.length}` : "FAILED " + r.error} ${r.latencyMs}ms${r.usage?.cost ? ` cost=$${r.usage.cost.toFixed(5)}` : ""}`);
+}
+async function hqRun(job) {
+  hqRunning++;
+  const { faction, entry, sit, manifest } = job, c = job.cfg;
+  try {
+    const mod = await loadAgent();
+    if (c.provider !== "fake") { session.requests++; }
+    const r = await mod.runAgentTurn({ manifest, situation: sit, message: entry.msg, config: c, agentConfig: { maxSteps: c.agent.maxSteps, timeoutSec: c.agent.timeoutSec } });
+    if (c.provider === "openrouter") recordUsage(c.model, faction, r.usage);
+    hqFinish(entry, faction, r);
+  } catch (e) {
+    hqFinish(entry, faction, { ok: false, error: String(e?.message ?? e).slice(0, 300), replyText: "", actions: [], steps: [], tools: [], usage: null, latencyMs: Date.now() - entry.ts });
+  } finally {
+    hqRunning--;
+    while (hqRunning < Math.max(1, job.cfg.agent.maxConcurrent) && hqWaiting.length) void hqRun(hqWaiting.shift());
+  }
+}
+// Called by handleOrders with the faction's situation (hq already cut out of it).
+function hqIngest(faction, sit, list, manifest, c) {
+  if (!Array.isArray(list)) return;
+  for (const raw of list.slice(0, 10)) {
+    const msg = cleanHqMessage(raw);
+    if (!msg) continue;
+    const key = `${faction}|${msg.id}|${msg.player}|${msg.text}`;
+    if (hqSeen.has(key)) continue;
+    hqSeen.add(key);
+    if (hqSeen.size > HQ_SEEN_MAX) { const first = hqSeen.values().next().value; hqSeen.delete(first); }
+    const entry = { ts: Date.now(), faction, msg, provider: c.provider, model: c.provider === "fake" ? null : c.model, state: "running", ok: null, error: null, steps: [], tools: [], actions: [], reply: "", usage: null, latencyMs: null };
+    hqLog.unshift(entry); if (hqLog.length > HQ_MAX) hqLog.length = HQ_MAX;
+    const why = hqFallbackReason(c) ?? (msg.ageSec > HQ_MAX_AGE_SEC ? "message too old" : null);
+    if (why) {
+      entry.state = "done"; entry.ok = false; entry.error = "fallback: " + why;
+      hqOutFor(faction).replies.push({ msgId: msg.id, text: "", fallback: true });
+      console.log(`hq faction=${faction} msg=${msg.id} player=${msg.player}: fallback (${why})`);
+      continue;
+    }
+    const job = { faction, entry, sit, manifest, cfg: { ...c, agent: { ...c.agent } } };
+    if (hqRunning < Math.max(1, c.agent.maxConcurrent)) void hqRun(job); else hqWaiting.push(job);
+  }
+}
+// Results of finished turns for the next reply (each delivered once).
+function hqDrain(faction) {
+  const o = hqOut[faction];
+  if (!o || (!o.actions.length && !o.replies.length)) return {};
+  const res = { ...(o.actions.length ? { hqActions: o.actions } : {}), ...(o.replies.length ? { hqReplies: o.replies } : {}) };
+  hqOut[faction] = { actions: [], replies: [] };
+  return res;
+}
 
 // ---------- HQ scheduler ----------
 // Per faction the LLM is called on: first request, scheduled due time (default/model-chosen interval), a trigger
@@ -1012,8 +1288,14 @@ function serveStatic(res, name) {
   });
 }
 
-const LOCAL_HOST = /^(localhost|127\.0\.0\.1)(:\d+)?$/i;
-const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
+// CLW_HOST=0.0.0.0 opens the dashboard to the LAN: then private-network addresses pass the host/origin checks too
+// (anyone in the LAN can then pause the sidecar or change its config; the API key is never sent to the browser).
+const LAN = HOST !== "127.0.0.1" && HOST !== "localhost";
+const HOST_NAMES = LAN
+  ? "localhost|127\\.0\\.0\\.1|10\\.\\d+\\.\\d+\\.\\d+|192\\.168\\.\\d+\\.\\d+|172\\.(1[6-9]|2\\d|3[01])\\.\\d+\\.\\d+|[\\w-]+(\\.local|\\.lan)?"
+  : "localhost|127\\.0\\.0\\.1";
+const LOCAL_HOST = new RegExp(`^(${HOST_NAMES})(:\\d+)?$`, "i");
+const LOCAL_ORIGIN = new RegExp(`^https?:\\/\\/(${HOST_NAMES})(:\\d+)?$`, "i");
 const hostOk = (req) => LOCAL_HOST.test(req.headers.host ?? "");
 const originOk = (req) => !req.headers.origin || LOCAL_ORIGIN.test(req.headers.origin);
 
@@ -1029,12 +1311,26 @@ function readBody(req, limit = 2_000_000) {
 // ---------- handlers ----------
 async function handleOrders(req, res) {
   let sit;
-  try { sit = JSON.parse(await readBody(req)); } catch { return send(res, 400, { error: "invalid JSON" }); }
+  let rawBody = "";
+  try { rawBody = await readBody(req); sit = JSON.parse(rawBody); } catch (e) {
+    const at = Number(/position (\d+)/.exec(e.message)?.[1]) || 0; // show where the game's JSON broke
+    console.log("  orders: invalid JSON (" + e.message + "): " + rawBody.slice(Math.max(0, at - 200), at + 200));
+    return send(res, 400, { error: "invalid JSON" });
+  }
   let gameSitrep = null; // the game's rules SITREP rides along; it never goes to the model
   if (sit && typeof sit === "object" && "sitrep" in sit) { gameSitrep = sit.sitrep; delete sit.sitrep; }
+  if (sit && typeof sit === "object" && "debug" in sit) { addDebugLines(sit.debug); delete sit.debug; } // game debug lines: dashboard only, never the model
+  let manifestHash = null; // protocol v3: hash of the action manifest the situation was built for; never goes to the model
+  if (sit && typeof sit === "object" && "manifest" in sit) { manifestHash = typeof sit.manifest === "string" && sit.manifest ? sit.manifest.slice(0, 64) : null; delete sit.manifest; }
+  let hqList = null; // pending HQ chat messages (M3 phase A): they start agent turns, they never go to the strategic model
+  if (sit && typeof sit === "object" && "hq" in sit) { hqList = sit.hq; delete sit.hq; }
   const t0 = Date.now();
   const snapshot = { ...cfg };
   const faction = typeof sit?.faction === "string" ? sit.faction : "?";
+  const known = manifestHash ? manifests[faction] : null;
+  const manifest = known && known.hash === manifestHash ? known : DEFAULT_MANIFEST;
+  if (hqList) hqIngest(faction, sit, hqList, manifests[faction] ?? DEFAULT_MANIFEST, snapshot);
+  const needManifest = !!manifestHash && manifest === DEFAULT_MANIFEST; // v3 post with an unknown hash: ask the game to resend
   const lc = (lastCall[faction] ??= { ts: 0, sit: null });
   const valid = !!sit && Array.isArray(sit.squads);
   const sc = schedFor(faction);
@@ -1081,7 +1377,7 @@ async function handleOrders(req, res) {
       if (valid) sc.pendingEvents = [];
       const srCfg = snapshot.sitrep, srSt = srFor(faction);
       const wantSitrep = v2 && !!srCfg?.enabled && (!srSt.lastAt || Date.now() - srSt.lastAt >= srCfg.intervalSec * 1000 || dec.reason === "manual" || dec.triggers.some((t) => /objective|tickets|lost/i.test(t)));
-      r = await computeOrders(snapshot, callSit, false, { sitrep: wantSitrep });
+      r = await computeOrders(snapshot, callSit, false, { sitrep: wantSitrep, manifest });
       if (r.sitrep) {
         srSt.lastAt = Date.now();
         srSt.llm = { value: r.sitrep, generatedAt: srSt.lastAt, warTimeSec: isNum(sit.time) ? sit.time : 0 };
@@ -1102,7 +1398,7 @@ async function handleOrders(req, res) {
     state.counters.requests++;
     if (r.skipped) state.counters.skipped++;
     if (!r.ok && r.reason !== "disabled" && r.reason !== "budget limit reached") state.counters.errors++;
-    if (!r.skipped && !r.keep && (!r.ok || (r.orders.length === 0 && !r.buy?.length && !r.missions?.length))) state.counters.fallbacks++;
+    if (!r.skipped && !r.keep && (!r.ok || (r.orders.length === 0 && !r.buy?.length && !r.missions?.length && !r.fobs?.length))) state.counters.fallbacks++;
     if (r.usage) { state.counters.inputTokens += r.usage.input; state.counters.outputTokens += r.usage.output; }
   }
   state.lastRequestTs = Date.now();
@@ -1122,22 +1418,25 @@ async function handleOrders(req, res) {
     // war epoch (read-only bookkeeping for activeFactions): a faction whose game time went backwards starts a new epoch, unless it
     // is catching up with an epoch another faction already started.
     if (old && (old.epoch ?? 0) === (state.epoch ?? 0) && isNum(old.situation?.time) && isNum(sit.time) && sit.time < old.situation.time - 5) state.epoch = (state.epoch ?? 0) + 1;
-    state.factions[faction] = { ts: state.lastRequestTs, epoch: state.epoch ?? 0, situation: sit, side: isNum(sit.side) ? sit.side : null, identity: typeof sit.identity === "string" ? sit.identity : null, sitrep: composeSitrep(faction, sit, gameSitrep), orders: keepOld ? (old?.orders ?? []) : r.orders,
-      buy: keepOld ? (old?.buy ?? []) : (r.buy ?? []), missions: keepOld ? (old?.missions ?? []) : (r.missions ?? []), eventLog, prevPos, orderTs };
+    state.factions[faction] = { ts: state.lastRequestTs, epoch: state.epoch ?? 0, situation: sit, side: isNum(sit.side) ? sit.side : null, identity: typeof sit.identity === "string" ? sit.identity : null, manifest: manifestHash ? { hash: manifestHash, known: !needManifest } : null, sitrep: composeSitrep(faction, sit, gameSitrep), orders: keepOld ? (old?.orders ?? []) : r.orders,
+      buy: keepOld ? (old?.buy ?? []) : (r.buy ?? []), missions: keepOld ? (old?.missions ?? []) : (r.missions ?? []), fobs: keepOld ? (old?.fobs ?? []) : (r.fobs ?? []), eventLog, prevPos, orderTs };
   }
   if (!r.gated) state.exchanges.unshift({
     ts: state.lastRequestTs, faction, provider: snapshot.enabled ? snapshot.provider : "disabled",
     model: snapshot.provider === "fake" ? null : snapshot.model,
-    request: sit, rawReply: r.rawReply, orders: r.orders, buy: r.buy ?? [], missions: r.missions ?? [], keep: !!r.keep, sitrep: r.sitrep ?? null, dropped: r.dropped,
+    request: sit, rawReply: r.rawReply, orders: r.orders, buy: r.buy ?? [], missions: r.missions ?? [], fobs: r.fobs ?? [], keep: !!r.keep, sitrep: r.sitrep ?? null, dropped: r.dropped,
     latencyMs, ok: r.ok, reason: r.reason, usage: r.usage,
     wake, nextCheck: r.nextCheck ?? null, intervalSec: interval,
   });
   if (state.exchanges.length > RING_MAX) state.exchanges.length = RING_MAX;
 
   const nContacts = Array.isArray(sit?.contacts) ? sit.contacts.length : 0;
-  if (!r.gated) console.log(`orders faction=${faction} squads=${sit?.squads?.length ?? 0} contacts=${nContacts} orders=${r.orders.length}${v2 ? ` buy=${r.buy?.length ?? 0} missions=${r.missions?.length ?? 0}` : ""} ${latencyMs}ms${r.skipped ? " (" + r.reason + ")" : ""}${wake ? " wake=" + wake.reason + (wake.triggers.length ? " [" + wake.triggers.join("; ") + "]" : "") : ""}${r.nextCheck ? " next=" + r.nextCheck.sec + "s" : ""}`);
-  send(res, 200, r.rules ? { orders: [] } : r.paused || r.phaseGate ? { orders: [], keep: true } : r.gated && sc.failed ? { orders: [] } : r.skipped || r.keep ? { orders: [], keep: true, ...(r.sitrep ? { sitrep: r.sitrep } : {}) }
-    : v2 ? { orders: r.orders, buy: r.buy ?? [], missions: r.missions ?? [], ...(r.sitrep ? { sitrep: r.sitrep } : {}) } : { orders: r.orders });
+  if (!r.gated) console.log(`orders faction=${faction} squads=${sit?.squads?.length ?? 0} contacts=${nContacts} orders=${r.orders.length}${v2 ? ` buy=${r.buy?.length ?? 0} missions=${r.missions?.length ?? 0}${r.fobs?.length ? ` fobs=${r.fobs.length}` : ""}` : ""} ${latencyMs}ms${r.skipped ? " (" + r.reason + ")" : ""}${wake ? " wake=" + wake.reason + (wake.triggers.length ? " [" + wake.triggers.join("; ") + "]" : "") : ""}${r.nextCheck ? " next=" + r.nextCheck.sec + "s" : ""}`);
+  const reply = r.rules ? { orders: [] } : r.paused || r.phaseGate ? { orders: [], keep: true } : r.gated && sc.failed ? { orders: [] } : r.skipped || r.keep ? { orders: [], keep: true, ...(r.sitrep ? { sitrep: r.sitrep } : {}) }
+    : v2 ? { orders: r.orders, buy: r.buy ?? [], missions: r.missions ?? [], ...(r.fobs?.length ? { fobs: r.fobs } : {}), ...(r.sitrep ? { sitrep: r.sitrep } : {}) } : { orders: r.orders };
+  if (needManifest) reply.needManifest = true;
+  Object.assign(reply, hqDrain(faction));
+  send(res, 200, reply);
 }
 
 // ---------- world info, map image, vector overlay (roads, locations) ----------
@@ -1341,6 +1640,11 @@ function activeFactions() {
   return live.sort((x, y) => sideOf(x[1]) - sideOf(y[1]) || x[0].localeCompare(y[0])).map(([n]) => n);
 }
 
+// Manifests for the dashboard (what each faction's game last sent) plus the built-in fallback.
+function manifestsView() {
+  return { factions: manifests, builtin: DEFAULT_MANIFEST };
+}
+
 async function handleApi(req, res, url) {
   if (!hostOk(req)) return send(res, 403, { error: "forbidden host" });
   if (handleWorldApi(req, res, url) !== false) return;
@@ -1348,7 +1652,7 @@ async function handleApi(req, res, url) {
     return send(res, 200, {
       now: Date.now(), startedAt: state.startedAt, lastRequestTs: state.lastRequestTs,
       factions: state.factions, activeFactions: activeFactions(), staleAfterSec: STALE_FACTION_MS / 1000,
-      exchanges: state.exchanges, counters: state.counters, config: publicConfig(), usage: usageView(), scheduler: schedulerView(), paused,
+      exchanges: state.exchanges, hq: hqLog, debugLog: state.debugLog, manifests: manifestsView(), counters: state.counters, config: publicConfig(), usage: usageView(), scheduler: schedulerView(), paused,
     });
   }
   if (req.method === "POST" && url === "/api/pause") {
@@ -1414,6 +1718,9 @@ async function handleApi(req, res, url) {
 http.createServer((req, res) => {
   const url = (req.url ?? "/").split("?")[0];
   if (req.method === "GET" && url === "/health") return send(res, 200, { ok: true, mode: cfg.provider });
+  if (req.method === "POST" && url === "/manifest") {
+    return void handleManifest(req, res).catch((e) => { if (!res.headersSent) send(res, 500, { error: String(e?.message ?? e) }); });
+  }
   if (req.method === "POST" && url === "/orders") {
     return void handleOrders(req, res).catch((e) => { console.log(`  handler error: ${e?.message ?? e}`); if (!res.headersSent) send(res, 500, { error: "internal" }); });
   }
@@ -1433,7 +1740,7 @@ http.createServer((req, res) => {
     if (m && !m[1].includes("..") && MIME[path.extname(m[1]).toLowerCase()]) return serveStatic(res, "vendor/" + m[1]);
   }
   send(res, 404, { error: "not found" });
-}).listen(PORT, "127.0.0.1", () => {
-  console.log(`clausewitz llm sidecar (${cfg.provider}${cfg.enabled ? "" : ", DISABLED"}) on http://127.0.0.1:${PORT}  (dashboard at /)`);
+}).listen(PORT, HOST, () => {
+  console.log(`clausewitz llm sidecar (${cfg.provider}${cfg.enabled ? "" : ", DISABLED"}) on http://${HOST}:${PORT}  (dashboard at /${LAN ? ", open to the LAN" : ""})`);
   void pollKey();
 });

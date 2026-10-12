@@ -157,6 +157,7 @@ class CLW_WarState
 		m_sStartedMode = mode.GetId();
 		m_sStartedParams = mode.ValuesText();
 		mode.OnWarStart(this);
+		LogEngineLimitHint();
 		GetGame().GetCallqueue().CallLater(Tick, CLW_WarConfig.WAR_TICK_MS, true);
 		CLW_Debug.Say(string.Format("WAR STARTED mode=%1 (%2) by player %3 values=%4", mode.GetId(), mode.GetName(), byPlayerId, m_sStartedParams));
 		LogSummary();
@@ -164,6 +165,27 @@ class CLW_WarState
 			m_OnWarStarted.Invoke();
 		NotifyStatus();
 		return true;
+	}
+
+	// Hint only (caps are never changed silently): both AI caps together should fit under the engine's active-AI limit.
+	protected void LogEngineLimitHint()
+	{
+		int active;
+		int limit;
+		if (!CLW_ForceSpawner.GetEngineAI(active, limit))
+			return;
+
+		int capSum;
+		foreach (string key : m_aKeys)
+		{
+			capSum += GetAiCap(key);
+		}
+
+		int usable = limit - CLW_WarConfig.ENGINE_AI_MARGIN;
+		if (capSum > usable)
+			Print(string.Format("CLW: WARNING war aiCap sum %1 exceeds the engine active-AI limit %2 minus margin %3: purchases will be refused near the limit. Suggest lowering the battle size / aiCap, or raising the server -activeAILimit", capSum, limit, CLW_WarConfig.ENGINE_AI_MARGIN), LogLevel.WARNING);
+		else
+			Print(string.Format("CLW: war aiCap sum %1 fits the engine active-AI limit %2 (margin %3)", capSum, limit, CLW_WarConfig.ENGINE_AI_MARGIN), LogLevel.NORMAL);
 	}
 
 	// The scenario sides were assigned other factions (CLW_Sides.Apply, SETUP only): rebuild the keyed ledgers.
@@ -697,7 +719,8 @@ class CLW_WarState
 		m_sWinner = winnerKey;
 		NotifyStatus();
 		GetGame().GetCallqueue().Remove(Tick);
-		CLW_Debug.Say(string.Format("WAR OVER: winner=%1 (%2)", winnerKey, why));
+		CLW_Services.OnWarEnded();
+		CLW_Debug.Announce(string.Format("WAR OVER: winner=%1 (%2)", winnerKey, why));
 		LogSummary();
 
 		int winnerIndex = -1;

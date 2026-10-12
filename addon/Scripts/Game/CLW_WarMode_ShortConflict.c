@@ -29,6 +29,19 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 		m_aParams.Insert(CLW_ModeParam.CreateChoice("battleSize", "Battle size", "Caps for live AI and vehicles per side; bigger battles also get more income.", sizes, config.m_sBattleSize));
 		m_aParams.Insert(CLW_ModeParam.CreateBool("ticketBleed", "Ticket bleed", "The side holding fewer points loses tickets over time.", config.m_bTicketBleed));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("holdAllWinMin", "Hold-all win (min)", "Holding every point this long wins. 0 = off.", CLW_ModeParam.TYPE_INT, 0, 15, 1, config.m_iHoldAllWinMin));
+		// capability switches (CLW_Capabilities.Has): declared in GetCapabilities, "cap_<name>" turns one off in the setup menu
+		// FOBs (M3 phase F, CLW_FobManager): the intent ESTABLISH_FOB drops out of the manifest when fobMax is 0
+		array<string> fobBuildModes = {"instant", "timed"};
+		string fobBuildDefault = config.m_sFobBuild;
+		if (fobBuildDefault.IsEmpty())
+			fobBuildDefault = "timed";
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("fobMax", "Max FOBs per side", "Forward bases a side may hold at once. 0 = no FOBs.", CLW_ModeParam.TYPE_INT, 0, 4, 1, config.m_iFobMax));
+		m_aParams.Insert(CLW_ModeParam.CreateChoice("fobBuild", "FOB build", "instant: the FOB stands as soon as the builder arrives. timed: it is built over the build time while the builder is on site.", fobBuildModes, fobBuildDefault));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("fobCost", "FOB cost (supplies)", "Paid when the FOB is ordered; refunded when it fails before it stands.", CLW_ModeParam.TYPE_INT, 0, 1000, 25, config.m_iFobCost));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("fobBuildSec", "FOB build time (s)", "Timed build: seconds of the builder on site until the FOB stands.", CLW_ModeParam.TYPE_INT, 10, 600, 10, config.m_iFobBuildSec));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("convoyMax", "Max convoys per side", "Supply convoys a side may have on the road at once (logistics only).", CLW_ModeParam.TYPE_INT, 1, 4, 1, 2));
+		m_aParams.Insert(CLW_ModeParam.CreateBool("cap_logistics", "Logistics", "Per-base supplies and convoys. Off: one supply pool per side.", true));
+		m_aParams.Insert(CLW_ModeParam.CreateBool("cap_kitCost", "Kit cost", "Arsenal items cost supplies. Off: kits are free.", true));
 	}
 
 	override string GetId()
@@ -44,6 +57,16 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 	override string GetDescription()
 	{
 		return "Tickets drain with losses and from holding fewer points; win by tickets, by holding all points, or by tickets at the time limit.";
+	}
+
+	override void GetCapabilities(notnull array<string> caps)
+	{
+		caps.Insert("services");
+		caps.Insert("fob");
+		caps.Insert("logistics");
+		caps.Insert("requests");
+		caps.Insert("reports");
+		caps.Insert("kitCost");
 	}
 
 	override float GetDistanceScale()
@@ -261,7 +284,7 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 		if (holder != m_sHoldFaction)
 		{
 			if (!holder.IsEmpty() && Param("holdAllWinMin").GetInt() > 0)
-				CLW_Debug.Say(holder + " holds every point: wins in " + Param("holdAllWinMin").GetInt() + " min if kept");
+				CLW_Debug.Announce(holder + " holds every point: wins in " + Param("holdAllWinMin").GetInt() + " min if kept");
 			else if (!m_sHoldFaction.IsEmpty())
 				Print("CLW: war hold-all by " + m_sHoldFaction + " broken", LogLevel.NORMAL);
 			m_sHoldFaction = holder;

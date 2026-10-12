@@ -48,6 +48,8 @@ class CLW_WarConfig
 	static const int SPAWN_STAGGER_SEC = 3;				// start forces are spawned this many seconds apart
 	static const float SPAWN_CREW_TIMEOUT_SEC = 30;
 	static const float SPAWN_MEMBERS_TIMEOUT_SEC = 20;	// wait for the members of a spawned group
+	static const int SPAWN_MEMBERS_RETRIES = 2;			// group still has 0 members after the timeout (engine dropped the spawn request, typically the active-AI limit): re-request this often before giving up
+	static const int ENGINE_AI_MARGIN = 6;				// purchases keep this many AI free below the engine's active-AI limit (other spawns, crews, rounding)
 	static const float SPAWN_JOB_TIMEOUT_SEC = 120;		// whole purchase
 
 	// ---- Placement (CLW_Placement / CLW_BasePlacement) ----
@@ -63,6 +65,12 @@ class CLW_WarConfig
 	static const float PLACE_BASE_NAVMESH_TOL_M = 12;	// base validation tolerance
 	static const float PLACE_BASE_ROAD_WARN_M = 120;	// base further than this from any road is reported as unusable for vehicles
 	static const int PLACE_GROUND_ATTEMPTS = 40;
+	static const float FOB_MIN_OBJECTIVE_DIST_M = 250;	// a FOB site keeps this far from an objective's capture radius edge (fights happen there)
+	static const float FOB_STALL_SEC = 120;				// builder made no progress (>= FOB_STALL_IMPROVE_M closer) this long = stalled
+	static const float FOB_STALL_IMPROVE_M = 15;
+	static const float FOB_RELOCATE_MAX_M = 300;		// stalled builder this close to the site: build near the builder instead
+	static const float FOB_RELOCATE_SEARCH_M = 250;		// free-ground search radius around the stalled builder
+	static const int FOB_MAX_STALLS = 3;				// stalls before the FOB fails
 	static const float PLACE_CHAR_CLEAR_M = 1.5;		// infantry spot: no other character closer than this
 	static const float PLACE_SLOT_CHAR_CLEAR_M = 2.5;	// a character this close to a vehicle slot blocks it
 	static const float PLACE_CARGO_MIN_M = 5;			// cargo group ring around its vehicle
@@ -163,4 +171,6 @@ class CLW_WarConfig
 	static const int ACTIVITY_SCORE_CONTESTED = 50;
 	static const int ACTIVITY_SCORE_ORDER = 40;
 	static const int ACTIVITY_SCORE_HELD = 10;
+	static const int ACTIVITY_SCORE_NEW = 20;			// score shown for a new group inside its grace period
+	static const float ACTIVITY_NEW_GRACE_SEC = 60;		// a newly adopted group is exempt from the budget (kept active) this long
 }

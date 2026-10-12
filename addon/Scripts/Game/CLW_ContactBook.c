@@ -17,6 +17,15 @@ class CLW_ContactBook
 			CLW_Contact known = FindNear(sighting);
 			if (known)
 			{
+				// a human report never overwrites what an AI group sees; it only keeps that contact alive
+				if (sighting.m_sSource != "ai" && known.m_sSource == "ai")
+				{
+					known.m_fLastSeen = Math.Max(known.m_fLastSeen, sighting.m_fLastSeen);
+					continue;
+				}
+
+				known.m_sSource = sighting.m_sSource;
+				known.m_fConfidence = sighting.m_fConfidence;
 				known.m_vPos = sighting.m_vPos;
 				known.m_iCount = sighting.m_iCount;
 				known.m_iVehicles = sighting.m_iVehicles;

@@ -30,3 +30,13 @@ defaults to tell "missing" from "set").
 ## Scenario `.conf`
 `m_aOverrides` of the scenario takes `CLW_CatalogOverride` objects with the same fields (`m_sMatch`, `m_sFaction`, `m_sKind`,
 `m_iCost`, `m_iWeight`, `m_iEnabled` -1/0/1, `m_sName`, `m_iAntiArmor` -1/0/1; -1 / empty = unchanged).
+
+## Debug chat (`debugChat`)
+Top-level key of the same file: `{"debugChat":true,"entries":[...]}`. Default `false` (absent = off). Read once at the first debug line
+(restart the server/mission to change it; logged as `CLW: debug chat true`).
+- `false`: `CLW_Debug.Say` debug lines (spawns, orders, mission lines, new contacts, point captures, HQ replies, build stamp, ...) are NOT shown in
+  player chat. They still go to the console/log (`CLW: ...`) and, via a ring buffer (last 50 lines, 160 chars each), with the situation
+  POST to the sidecar (`debug: [{id,t,msg}]`), where the dashboard tab "Debug log" lists them (`/api/state` `debugLog`).
+- `true`: the lines also appear in every player's chat as before.
+Player-facing messages (setup menu, `/war` and `/sitrep` replies, mission popups, SITREP hints, war over, hold-all countdown) are never gated
+(`CLW_Debug.Show` / `CLW_Debug.Announce`).

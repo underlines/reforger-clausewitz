@@ -20,6 +20,60 @@ class CLW_WarMode
 		return "";
 	}
 
+	// ---- capabilities (see CLW_Capabilities) ----
+
+	// Capability names this mode declares (services, fob, logistics, requests, reports, kitCost, ...). Append to caps.
+	void GetCapabilities(notnull array<string> caps)
+	{
+	}
+
+	// Declared AND not switched off by a bool mode param "cap_<name>" (only when the mode defines such a param).
+	bool HasCapability(string name)
+	{
+		array<string> caps = {};
+		GetCapabilities(caps);
+		if (!caps.Contains(name))
+			return false;
+
+		CLW_ModeParam toggle = FindIn(m_aParams, "cap_" + name);
+		if (toggle && toggle.m_eType == CLW_ModeParam.TYPE_BOOL && !toggle.GetBool())
+			return false;
+
+		return true;
+	}
+
+	// All capabilities that are on right now.
+	void GetActiveCapabilities(notnull array<string> outNames)
+	{
+		array<string> caps = {};
+		GetCapabilities(caps);
+		foreach (string cap : caps)
+		{
+			if (HasCapability(cap))
+				outNames.Insert(cap);
+		}
+	}
+
+	// Current value of an INT / FLOAT / BOOL / CHOICE-index parameter, 'fallback' when the mode has no such parameter.
+	int GetIntParam(string id, int fallback)
+	{
+		CLW_ModeParam param = FindIn(m_aParams, id);
+		if (!param)
+			return fallback;
+
+		return param.GetInt();
+	}
+
+	// Current choice text of a CHOICE parameter, "" when the mode has no such parameter.
+	string GetChoiceParam(string id)
+	{
+		CLW_ModeParam param = FindIn(m_aParams, id);
+		if (!param)
+			return "";
+
+		return param.GetChoice();
+	}
+
 	// Live parameter list (definitions + current values).
 	void GetParams(notnull array<ref CLW_ModeParam> outParams)
 	{
