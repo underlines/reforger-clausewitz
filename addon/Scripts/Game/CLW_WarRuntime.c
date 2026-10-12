@@ -358,6 +358,7 @@ class CLW_WarRuntime
 		EnsureChat();
 
 		EnsurePerception();
+		CheckMapMarkers();
 
 		Step("respawn system", SCR_RespawnSystemComponent.GetInstance() != null, "spawn points now " + SCR_SpawnPoint.CountSpawnPoints().ToString() + " (base points are made by CLW_Bases)");
 		Step("commanding manager", SCR_CommandingManagerComponent.GetInstance() != null);
@@ -408,6 +409,35 @@ class CLW_WarRuntime
 			Step("spawn logic", true, "replaced " + previousName + " -> CLW_SpawnLogic");
 		else
 			Step("spawn logic", false, reason + " (previous " + previousName + ": vanilla deploy menu stays)");
+	}
+
+	// Our own-side structure / objective markers are static military markers of the game mode's SCR_MapMarkerManagerComponent: it needs a marker
+	// config with the PLACED_MILITARY entry (PrepareMilitaryMarker probe), and the player map needs the markers UI (map config of the game mode).
+	protected void CheckMapMarkers()
+	{
+		SCR_MapMarkerManagerComponent manager = SCR_MapMarkerManagerComponent.GetInstance();
+		if (!manager)
+		{
+			Step("map markers", false, "no SCR_MapMarkerManagerComponent on " + m_Owner.ClassName() + ": no structure / objective markers");
+			return;
+		}
+
+		SCR_MapMarkerConfig config = manager.GetMarkerConfig();
+		if (!config)
+		{
+			Step("map markers", false, "marker manager has no marker config (m_sMarkerCfgPath did not load)");
+			return;
+		}
+
+		string mapConfig = "no SCR_MapConfigComponent";
+		SCR_MapConfigComponent mapConfigComponent = SCR_MapConfigComponent.Cast(m_Owner.FindComponent(SCR_MapConfigComponent));
+		if (mapConfigComponent)
+			mapConfig = "gadget map config " + mapConfigComponent.GetGadgetMapConfig();
+
+		SCR_MapMarkerEntryMilitary military = SCR_MapMarkerEntryMilitary.Cast(config.GetMarkerEntryConfigByType(SCR_EMapMarkerType.PLACED_MILITARY));
+		SCR_MapMarkerBase probe = manager.PrepareMilitaryMarker(EMilitarySymbolIdentity.INDFOR, EMilitarySymbolDimension.INSTALLATION, EMilitarySymbolIcon.MOBILEHQ);
+		string detail = string.Format("%1 entry configs, military entry %2, installation marker probe %3, %4 static markers, %5", config.GetMarkerEntryConfigs().Count(), military != null, probe != null, manager.GetStaticMarkers().Count(), mapConfig);
+		Step("map markers", military != null && probe != null, detail);
 	}
 
 	// AI perception needs a PerceptionManager in the world (Cain's GM world may lack one): spawn the vanilla prefab when none exists.

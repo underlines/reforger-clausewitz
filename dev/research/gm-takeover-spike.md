@@ -258,3 +258,32 @@ timers; and 12 s later `spawn points after start` (per side), `war state`, `join
 - Client side Clausewitz rules (arsenal pool, commanding limit) switch on when the first war status RPC arrives, not at world load.
 - GM rights / voting / editor stay vanilla; the GM can spawn AI which the registry adopts.
 - Pack factions: not in the GM world (same as any wrapper); other spawn logics than `SCR_MenuSpawnLogic` (a map mod with its own GM prefab) are not handled.
+### Map markers (own-side structure / objective markers missing on the client, 2026-10-12)
+
+Symptom: DS log shows every marker created, the player map in `GM_Eden` shows none. Facts, all **[read]** from the vanilla pak unless noted:
+- **Same marker manager and config in both worlds.** `SCR_MapMarkerManagerComponent` sits on `Prefabs/MP/Modes/GameMode_Base.et` (default `m_sMarkerCfgPath` =
+  `Configs/Map/MapMarkerConfig.conf`, nothing overridden); `GameMode_Editor.et` / `GameMode_Editor_Full.et` (GM) and our `CLW_GameMode.et` all inherit it unchanged. The
+  `PLACED_MILITARY` entry that `PrepareMilitaryMarker` needs is therefore present in the GM world (and the server log proves it: markers were built).
+- **Same player map config.** `SCR_MapConfigComponent` is also only on `GameMode_Base.et`, default gadget map `Configs/Map/MapFullscreen.conf`, which lists `SCR_MapMarkersUI`.
+  No GM override (the GM-only `MapEditor.conf` is the editor map). So neither the marker type nor the map UI differs.
+- **Faction flags are right and are recomputed after the re-key.** Flag = `1 << FactionManager.GetFactionIndex(faction)` (server; list order is the prefab's, US=0 ... RHS_AFRF=4,
+  RHS_USAF=5, USSR=6). The "flags 1 / flags 64" lines are the SETUP markers of US / USSR; `CLW_ControlPoints.Rekey` removes the base markers and resets `m_sMarkerOwner`, so
+  `SyncMarkers` rebuilds HQ + objective markers with the new keys. `CLW_StructureMarkers` is created after the re-key (keys RHS_*). Objective markers use both side flags.
+- **Root cause (client filter, vanilla).** `SCR_MapMarkerManagerComponent.OnAddSynchedMarker` (runs on every client when the server broadcasts a marker) removes a marker whose flags
+  do not include the LOCAL player's faction, permanently (`m_aStaticMarkers.RemoveItem; return`). `SCR_MapMarkersUI.CreateStaticMarkers` (map open) filters the same way and treats a
+  missing local faction as "show nothing". `OnPlayerFactionChanged` later only deletes more markers ("Note: ... incomplete list! TODO"), it never restores dropped ones.
+  Sequence in a takeover with a re-key: player spawns in SETUP on the default side (US) -> StartWar -> `CLW_Sides.Apply` -> server inserts all RHS_USAF / RHS_AFRF markers ->
+  the client is still US, so it drops every one of them -> `MovePlayers` switches the client to RHS_USAF seconds later, nothing comes back. Objective markers (flags RHS_USAF|RHS_AFRF)
+  are hit the same way, so they were most likely missing too (not reported). On wrapper worlds with the scenario's default sides there is no re-key and no faction change, which is
+  why M3 looked fine. The GM world is not special here; any war whose sides are re-keyed while a client is connected loses its markers. [inferred from the code, not yet seen in a client log]
+- Not the cause: marker type, map config, flag arithmetic, faction index mismatch (the faction list comes from the same prefab on both sides).
+
+Fix: `CLW_MapMarkerClient.c`, a `modded class SCR_MapMarkerManagerComponent` (component class, safe to mod): `OnAddSynchedMarker` keeps every server marker that vanilla dropped because of the
+local faction (by marker ID), `OnPlayerFactionChanged` first keeps the currently listed faction markers, lets vanilla filter, then re-inserts the kept ones that are for the new faction (and creates the
+widgets when the map is open); `OnRemoveSynchedMarker` also drops the kept copy. Client only (`System.IsConsoleApp()` skips the DS).
+
+Log lines: per created marker, server: `CLW: markers <side> <base> '<label>' at <pos> (grid ..) type=PLACED_MILITARY cfg=<dim*100+identity> icon=<icon> flags=<n> -> <faction keys>`,
+`CLW: points marker '<text>' type=... flags=<n> -> RHS_USAF|RHS_AFRF`, `CLW: markers contact <id> '<text>' type=... flags=...` (`CLW_MarkerLog.Describe`, "flags 0" = visible to all).
+Takeover: `CLW: takeover step <n> map markers ok|FAILED <entry configs, military entry, installation probe, static markers, gadget map config>`.
+Client (`Client` log of the player): `CLW: markers client kept back marker <id> '<text>' (not for the local faction): type=... flags=..`, then after the switch
+`CLW: markers client faction RHS_USAF: restored <n> kept marker(s), <m> still kept for other factions`. Expect "kept back" lines at war start and one "restored" line after the player is moved.
