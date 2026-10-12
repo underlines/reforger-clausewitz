@@ -130,6 +130,9 @@ class CLW_ScenarioConfig
 	[Attribute()]
 	ref array<ref CLW_WarModeConfig> m_aModes;
 
+	[Attribute(desc: "Faction keys never offered in the setup menu (civilians, renegades, ...)")]
+	ref array<string> m_aIgnoreFactions;
+
 	protected static ref CLW_ScenarioConfig s_Active;
 	protected bool m_bValid;
 

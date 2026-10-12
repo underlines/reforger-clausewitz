@@ -60,6 +60,8 @@ class CLW_WarState
 		Print(string.Format("CLW: war SETUP phase: %1 modes, default '%2', autoStartSec=%3", m_aModes.Count(), scenario.m_sDefaultMode, scenario.m_iAutoStartSec), LogLevel.NORMAL);
 		if (scenario.m_iAutoStartSec > 0)
 			GetGame().GetCallqueue().CallLater(AutoStart, scenario.m_iAutoStartSec * 1000);
+
+		CLW_SetupServer.Start(this, scenario);		// setup menu driver (CLW_SetupServer.c)
 	}
 
 	// ---- lifecycle ----
@@ -169,6 +171,15 @@ class CLW_WarState
 		return m_iSetupOwner;
 	}
 
+	// Setup menu driver: hand the owner role to another player (owner left).
+	void SetSetupOwner(int playerId)
+	{
+		if (m_ePhase != CLW_EWarPhase.SETUP)
+			return;
+
+		m_iSetupOwner = playerId;
+	}
+
 	// All modes with their parameters (definitions + current values) as JSON, for the setup menu / dashboard.
 	string GetModesJson()
 	{
@@ -183,6 +194,20 @@ class CLW_WarState
 			json += mode.ToJson();
 		}
 		return json + "]}";
+	}
+
+	// Mode list access for the setup menu (CLW_SetupServer).
+	int GetModeCount()
+	{
+		return m_aModes.Count();
+	}
+
+	CLW_WarMode GetModeAt(int index)
+	{
+		if (index < 0 || index >= m_aModes.Count())
+			return null;
+
+		return m_aModes[index];
 	}
 
 	CLW_WarMode GetMode()
