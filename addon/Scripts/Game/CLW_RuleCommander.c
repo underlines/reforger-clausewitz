@@ -22,6 +22,7 @@ class CLW_RuleCommander
 {
 	// ---- doctrine knobs ----
 	static const int MAX_BUYS_PER_THINK = 2;
+	static const int BUY_MIN_PRIORITY = 200;			// only tasks at or above this get purchases (garrison tasks of "all objectives held" are 100 and below)
 	static const int SUPPLY_RESERVE = 40;				// never spend below this
 	static const int RESERVE_RICH_SUPPLIES = 300;		// above this no reserve is held back
 	static const float BUY_PENDING_SEC = 90;			// a purchase counts toward the mix this long (it needs time to arrive)
@@ -55,7 +56,7 @@ class CLW_RuleCommander
 	protected ref CLW_Situation m_Situation = new CLW_Situation();
 	protected ref array<string> m_aSquads = {};		// commandable ids of this faction (registry order), kept in sync by Sync()
 	protected int m_iSeenVersion = -1;
-	protected string m_sReserve;					// unit held back at the base
+	protected string m_sBuyState;					// last logged purchase state (log once per change)
 	protected ref array<int> m_aBuyCategory = {};	// recent purchases (not arrived yet)
 	protected ref array<float> m_aBuyTime = {};
 	protected float m_fLastSetupLog = -1000;
@@ -114,13 +115,16 @@ class CLW_RuleCommander
 			if (group && CLW_SquadInfo.AliveCount(group) > 0)
 				continue;	// only hidden / re-adopted, not lost
 
+			if (CLW_BaseWatch.WasStoodDown(gone))
+			{
+				Print(string.Format("CLW: RuleCommander %1: unit %2 stood down (idle at the base, not a loss)", m_sFaction, gone), LogLevel.NORMAL);
+				continue;
+			}
+
 			Print(string.Format("CLW: RuleCommander %1: unit %2 lost", m_sFaction, gone), LogLevel.NORMAL);
 			if (war && war.IsRunning())
 				war.PushEvent(m_sFaction, gone + " lost");
 		}
-
-		if (!m_sReserve.IsEmpty() && !ids.Contains(m_sReserve))
-			m_sReserve = "";
 
 		if (!m_sMissionSquad.IsEmpty() && !ids.Contains(m_sMissionSquad))
 		{
@@ -208,8 +212,9 @@ class CLW_RuleCommander
 
 		CLW_FobDoctrine.Think(this, m_sFaction, war);	// M3 phase F: before Spend, which would use up the supplies a FOB needs
 		CLW_LogisticsDoctrine.Think(this, m_sFaction, war);	// M3 phase L: RESUPPLY a FOB that runs low
-		Spend(war, contacts);
-		Plan(war, contacts);
+		array<ref CLW_Task> tasks = {};
+		Plan(war, contacts, tasks);		// the units on hand take the tasks first ...
+		Spend(war, contacts, tasks);	// ... and units are bought only for what is still unmet (each carries its order)
 		ThinkHumanLed();
 	}
 
@@ -239,7 +244,11 @@ class CLW_RuleCommander
 		return MIX_INFANTRY;
 	}
 
-	protected void Spend(CLW_WarState war, notnull array<CLW_Contact> contacts)
+	// Buys for concrete needs only (owner playtest 2026-10-12: no idle AI waiting at the base). Plan has assigned the units on hand; every task
+	// that is still short of units gets one purchase per missing unit (at most MAX_BUYS_PER_THINK per think), the category picked by the
+	// mix deficit, and each purchase carries its first order (CLW_PendingOrders): the new unit goes straight to the task when it is ready.
+	// No unmet task means no purchase. A kind that was stood down as idle a moment ago is not bought again (CLW_BaseWatch).
+	protected void Spend(CLW_WarState war, notnull array<CLW_Contact> contacts, notnull array<ref CLW_Task> tasks)
 	{
 		CLW_ForceSpawner spawner = CLW_GameMode.GetForceSpawner();
 		CLW_ForceCatalog catalog = CLW_GameMode.GetForceCatalog();
@@ -258,6 +267,26 @@ class CLW_RuleCommander
 			}
 			return;
 		}
+
+		// the tasks the units on hand (and the purchases already on their way) cannot cover
+		array<CLW_Task> needs = {};
+		int missingTotal;
+		foreach (CLW_Task need : tasks)
+		{
+			if (need.m_iPriority < BUY_MIN_PRIORITY || need.m_iCovered >= need.m_iDemand)
+				continue;
+
+			needs.Insert(need);
+			missingTotal += need.m_iDemand - need.m_iCovered;
+		}
+
+		if (needs.IsEmpty())
+		{
+			LogBuyState("noneed", string.Format("CLW: RuleCommander %1: no purchase, no unmet task (units on hand cover every task); supplies %2", m_sFaction, war.GetSupplies(m_sFaction)));
+			return;
+		}
+
+		LogBuyState("need", string.Format("CLW: RuleCommander %1: %2 unmet task(s), %3 unit(s) missing, first: %4", m_sFaction, needs.Count(), missingTotal, needs[0].m_sReason));
 
 		// a buy was refused for the AI cap: wait until the live AI count drops or CAP_BLOCK_SEC passed
 		if (m_fCapBlockTime >= 0)
@@ -321,99 +350,120 @@ class CLW_RuleCommander
 
 		array<string> excluded = {};
 		int bought;
-		for (int attempt = 0; attempt < MAX_BUYS_PER_THINK + 3 && bought < MAX_BUYS_PER_THINK; attempt++)
+		foreach (CLW_Task goal : needs)
 		{
-			int spendable = war.GetSupplies(m_sFaction) - SUPPLY_RESERVE;
-			if (spendable <= 0)
-				return;
-
-			int total = counts[0] + counts[1] + counts[2] + counts[3];
-			// categories by deficit (largest first), only those with an affordable entry
-			CLW_ForceEntry pick;
-			array<int> order = {};
-			array<float> deficits = {};
-			for (int c = 0; c < 4; c++)
+			int missing = goal.m_iDemand - goal.m_iCovered;
+			int tries;
+			while (missing > 0 && bought < MAX_BUYS_PER_THINK && tries < MAX_BUYS_PER_THINK + 3)
 			{
-				float share = 0;
-				if (total > 0)
-					share = counts[c] * 1.0 / total;
-				float deficit = MixShare(c) - share;
-				int at = order.Count();
-				for (int k = 0; k < order.Count(); k++)
+				tries++;
+				int spendable = war.GetSupplies(m_sFaction) - SUPPLY_RESERVE;
+				if (spendable <= 0)
+					return;
+
+				int total = counts[0] + counts[1] + counts[2] + counts[3];
+				// categories by deficit (largest first), only those with an affordable entry
+				CLW_ForceEntry pick;
+				array<int> order = {};
+				array<float> deficits = {};
+				for (int c = 0; c < 4; c++)
 				{
-					if (deficit > deficits[k])
+					float share = 0;
+					if (total > 0)
+						share = counts[c] * 1.0 / total;
+					float deficit = MixShare(c) - share;
+					int at = order.Count();
+					for (int k = 0; k < order.Count(); k++)
 					{
-						at = k;
+						if (deficit > deficits[k])
+						{
+							at = k;
+							break;
+						}
+					}
+					order.InsertAt(c, at);
+					deficits.InsertAt(deficit, at);
+				}
+
+				string why;
+				pick = null;
+				foreach (int cat : order)
+				{
+					pick = PickEntry(entries, cat, spendable, excluded, enemyVehicles, goal.m_bReconOnly, why);
+					if (pick)
 						break;
-					}
 				}
-				order.InsertAt(c, at);
-				deficits.InsertAt(deficit, at);
-			}
 
-			string why;
-			foreach (int cat : order)
-			{
-				pick = PickEntry(entries, cat, spendable, excluded, enemyVehicles, why);
-				if (pick)
+				if (!pick)
+				{
+					LogBuyState("saving", string.Format("CLW: RuleCommander %1: saving (supplies %2, reserve %3, nothing affordable or allowed for %4 %5)", m_sFaction, war.GetSupplies(m_sFaction), SUPPLY_RESERVE, CLW_Command.ToName(goal.m_eCommand), goal.m_sTarget));
 					break;
-			}
-
-			if (!pick)
-			{
-				Print(string.Format("CLW: RuleCommander %1: saving (supplies %2, reserve %3, nothing affordable or allowed)", m_sFaction, war.GetSupplies(m_sFaction), SUPPLY_RESERVE), LogLevel.NORMAL);
-				return;
-			}
-
-			string reason = string.Format("mix inf=%1 mot=%2 mech=%3 light=%4: %5", counts[0], counts[1], counts[2], counts[3], why);
-			string error;
-			if (spawner.Buy(m_sFaction, pick.m_sType, reason, error))
-			{
-				int pickedCat = CategoryOf(pick.m_sKind);
-				counts[pickedCat] = counts[pickedCat] + 1;
-				m_aBuyCategory.Insert(pickedCat);
-				m_aBuyTime.Insert(now);
-				bought++;
-				Print(string.Format("CLW: RuleCommander %1: BUY %2 (%3, cost %4, supplies left %5): %6", m_sFaction, pick.m_sType, pick.m_sKind, pick.m_iCost, war.GetSupplies(m_sFaction), reason), LogLevel.NORMAL);
-			}
-			else
-			{
-				if (error.IndexOf("engine AI limit") == 0)
-				{
-					Print(string.Format("CLW: RuleCommander %1: buy %2 refused: %3", m_sFaction, pick.m_sType, error), LogLevel.NORMAL);
-					return;
 				}
 
-				if (error.IndexOf("AI cap") == 0)
+				string reason = string.Format("%1: %2 (mix inf=%3 mot=%4 mech=%5 light=%6)", goal.m_sReason, why, counts[0], counts[1], counts[2], counts[3]);
+				string tag = CLW_PendingOrders.Add(m_sFaction, CLW_Command.ToName(goal.m_eCommand), goal.m_sTarget, vector.Zero, goal.m_sReason, CLW_Orders.SOURCE_RULES);
+				string error;
+				if (spawner.BuyTagged(m_sFaction, pick.m_sType, reason, tag, error))
 				{
-					m_fCapBlockTime = now;
-					m_iCapBlockLive = spawner.GetLiveAI(m_sFaction) + spawner.GetPendingAI(m_sFaction);
-					if (now - m_fLastCapLog >= 60)
-					{
-						m_fLastCapLog = now;
-						Print(string.Format("CLW: RuleCommander %1: buy %2 refused: %3; no further buys until the AI count drops or %4 s", m_sFaction, pick.m_sType, error, CAP_BLOCK_SEC), LogLevel.NORMAL);
-					}
-					return;
-				}
-
-				Print(string.Format("CLW: RuleCommander %1: buy %2 refused: %3", m_sFaction, pick.m_sType, error), LogLevel.NORMAL);
-				if (error.IndexOf("vehicle cap") == 0)
-				{
-					foreach (CLW_ForceEntry vehicleEntry : entries)
-					{
-						if (vehicleEntry.HasVehicle())
-							excluded.Insert(vehicleEntry.m_sType);
-					}
+					int pickedCat = CategoryOf(pick.m_sKind);
+					counts[pickedCat] = counts[pickedCat] + 1;
+					m_aBuyCategory.Insert(pickedCat);
+					m_aBuyTime.Insert(now);
+					bought++;
+					missing--;
+					goal.m_iCovered = goal.m_iCovered + 1;
+					Print(string.Format("CLW: RuleCommander %1: BUY %2 (%3, cost %4, supplies left %5) for %6 %7: %8", m_sFaction, pick.m_sType, pick.m_sKind, pick.m_iCost, war.GetSupplies(m_sFaction), CLW_Command.ToName(goal.m_eCommand), goal.m_sTarget, reason), LogLevel.NORMAL);
 				}
 				else
-					excluded.Insert(pick.m_sType);
+				{
+					CLW_PendingOrders.Remove(tag);
+					if (error.IndexOf("engine AI limit") == 0)
+					{
+						Print(string.Format("CLW: RuleCommander %1: buy %2 refused: %3", m_sFaction, pick.m_sType, error), LogLevel.NORMAL);
+						return;
+					}
+
+					if (error.IndexOf("AI cap") == 0)
+					{
+						m_fCapBlockTime = now;
+						m_iCapBlockLive = spawner.GetLiveAI(m_sFaction) + spawner.GetPendingAI(m_sFaction);
+						if (now - m_fLastCapLog >= 60)
+						{
+							m_fLastCapLog = now;
+							Print(string.Format("CLW: RuleCommander %1: buy %2 refused: %3; no further buys until the AI count drops or %4 s", m_sFaction, pick.m_sType, error, CAP_BLOCK_SEC), LogLevel.NORMAL);
+						}
+						return;
+					}
+
+					Print(string.Format("CLW: RuleCommander %1: buy %2 refused: %3", m_sFaction, pick.m_sType, error), LogLevel.NORMAL);
+					if (error.IndexOf("vehicle cap") == 0)
+					{
+						foreach (CLW_ForceEntry vehicleEntry : entries)
+						{
+							if (vehicleEntry.HasVehicle())
+								excluded.Insert(vehicleEntry.m_sType);
+						}
+					}
+					else
+						excluded.Insert(pick.m_sType);
+				}
 			}
 		}
 	}
 
+	// One log line per change of the buy state (not every think).
+	protected void LogBuyState(string key, string line)
+	{
+		if (key == m_sBuyState)
+			return;
+
+		m_sBuyState = key;
+		Print(line, LogLevel.NORMAL);
+	}
+
 	// An affordable, allowed entry of the category: weighted random by the entry weights; against enemy vehicles anti-armour
 	// infantry first. Null when the category has none.
-	protected CLW_ForceEntry PickEntry(notnull array<CLW_ForceEntry> entries, int category, int spendable, notnull array<string> excluded, bool enemyVehicles, out string why)
+	protected CLW_ForceEntry PickEntry(notnull array<CLW_ForceEntry> entries, int category, int spendable, notnull array<string> excluded, bool enemyVehicles, bool reconOnly, out string why)
 	{
 		array<CLW_ForceEntry> pool = {};
 		foreach (CLW_ForceEntry entry : entries)
@@ -423,6 +473,12 @@ class CLW_RuleCommander
 
 			if (CategoryOf(entry.m_sKind) != category || entry.m_iCost > spendable || excluded.Contains(entry.m_sType))
 				continue;
+
+			if (reconOnly && !IsReconKind(entry.m_sKind))
+				continue;
+
+			if (CLW_BaseWatch.KindRecentlyDespawned(m_sFaction, entry.m_sKind, CLW_BaseWatch.DESPAWN_BUY_BLOCK_SEC))
+				continue;	// stood down as idle a moment ago: do not buy the same kind again (no buy -> despawn loop)
 
 			pool.Insert(entry);
 		}
@@ -695,7 +751,7 @@ class CLW_RuleCommander
 			Print(string.Format("CLW: RuleCommander %1: FALL_BACK %2 refused: %3", m_sFaction, id, error), LogLevel.WARNING);
 	}
 
-	protected void Plan(CLW_WarState war, notnull array<CLW_Contact> contacts)
+	protected void Plan(CLW_WarState war, notnull array<CLW_Contact> contacts, notnull array<ref CLW_Task> tasks)
 	{
 		// AI-only, living units
 		array<string> candidates = {};
@@ -707,6 +763,12 @@ class CLW_RuleCommander
 
 			if (CLW_FobManager.IsReserved(id))
 				continue;	// builder / escort of a FOB being established (CLW_FobManager gives its orders)
+
+			if (CLW_BaseWatch.IsGarrison(id))
+				continue;	// the HQ garrison keeps its standing DEFEND (CLW_BaseWatch)
+
+			if (CLW_PendingOrders.IsPendingUnit(id))
+				continue;	// a purchase whose first order is about to be applied
 
 			if (KindOf(id) == CLW_ForceKind.LOGISTICS)
 				continue;	// supply trucks only move on convoy orders (M3 phase L)
@@ -720,46 +782,7 @@ class CLW_RuleCommander
 			candidates.Insert(id);
 		}
 
-		array<ref CLW_Task> tasks = {};
 		BuildTasks(contacts, tasks);
-		bool threat;
-		foreach (CLW_Task task : tasks)
-		{
-			if (task.m_eCommand == CLW_ECommand.DEFEND && task.m_iPriority >= 1000)
-				threat = true;
-		}
-
-		// reserve: the newest free infantry unit stays at the base while supplies are short and nothing is threatened
-		CLW_Bases bases = CLW_GameMode.GetBases();
-		bool rich = war.GetSupplies(m_sFaction) > RESERVE_RICH_SUPPLIES;
-		if (rich || threat)
-		{
-			if (!m_sReserve.IsEmpty())
-				Print(string.Format("CLW: RuleCommander %1: reserve %2 released (%3)", m_sFaction, m_sReserve, rich_or_threat(rich, threat)), LogLevel.NORMAL);
-			m_sReserve = "";
-		}
-		else if ((m_sReserve.IsEmpty() || !candidates.Contains(m_sReserve)) && bases)
-		{
-			m_sReserve = "";
-			for (int r = candidates.Count() - 1; r >= 0; r--)
-			{
-				string reserveId = candidates[r];
-				CLW_UnitOrder reserveOrder = m_Orders.GetOrder(reserveId);
-				bool free = !reserveOrder || reserveOrder.m_sStatus != CLW_Orders.STATUS_ACTIVE;
-				if (free && KindOf(reserveId) == CLW_ForceKind.INFANTRY)
-				{
-					m_sReserve = reserveId;
-					break;
-				}
-			}
-		}
-
-		if (!m_sReserve.IsEmpty() && bases)
-		{
-			string reserveError;
-			m_Orders.Issue(m_sReserve, CLW_ECommand.DEFEND, "", bases.GetBasePos(m_sFaction), "reserve at the base (supplies " + war.GetSupplies(m_sFaction) + ", no threat)", CLW_Orders.SOURCE_RULES, reserveError);
-			candidates.RemoveItem(m_sReserve);
-		}
 
 		// who serves which task already
 		array<string> serving = {};
@@ -785,6 +808,12 @@ class CLW_RuleCommander
 			bool retreating = order.m_eCommand == CLW_ECommand.FALL_BACK;
 			if (counted || adHoc || retreating)
 				serving.Insert(unitId);
+		}
+
+		// units bought for a task whose order is still waiting for the new unit count as coverage (no second purchase for it)
+		foreach (CLW_Task pendingTask : tasks)
+		{
+			pendingTask.m_iCovered = pendingTask.m_iCovered + CLW_PendingOrders.CountFor(m_sFaction, CLW_Command.ToName(pendingTask.m_eCommand), pendingTask.m_sTarget);
 		}
 
 		// assignable: not serving and allowed to get a new order (no order / finished / old enough)
@@ -881,15 +910,7 @@ class CLW_RuleCommander
 			}
 		}
 
-		Print(string.Format("CLW: RuleCommander %1: think units=%2 tasks=%3 assigned=%4 unassigned=%5 reserve='%6' supplies=%7 contacts=%8", m_sFaction, candidates.Count(), tasks.Count(), assigned, assignable.Count(), m_sReserve, war.GetSupplies(m_sFaction), contacts.Count()), LogLevel.NORMAL);
-	}
-
-	protected string rich_or_threat(bool rich, bool threat)
-	{
-		if (threat)
-			return "point threatened";
-
-		return "supplies are rich";
+		Print(string.Format("CLW: RuleCommander %1: think units=%2 tasks=%3 assigned=%4 unassigned=%5 garrison=%6 pending=%7 supplies=%8 contacts=%9", m_sFaction, candidates.Count(), tasks.Count(), assigned, assignable.Count(), CLW_BaseWatch.GarrisonCount(m_sFaction), CLW_PendingOrders.Count(m_sFaction), war.GetSupplies(m_sFaction), contacts.Count()), LogLevel.NORMAL);
 	}
 
 	// ---- external orders (LLM) ----
@@ -898,6 +919,12 @@ class CLW_RuleCommander
 	// FALL_BACK may have neither = own base). False (why set) for unknown / human-led / dead squads, bad command or target,
 	// or an order that is still stable.
 	bool ApplyOrder(string squadId, string commandName, string targetId, vector pos, string reason, out string why)
+	{
+		return ApplyOrderAs(squadId, commandName, targetId, pos, reason, CLW_Orders.SOURCE_LLM, why);
+	}
+
+	// Same with an explicit source (the first order of a purchased unit, CLW_PendingOrders). Garrison squads are refused: they defend the HQ.
+	bool ApplyOrderAs(string squadId, string commandName, string targetId, vector pos, string reason, string source, out string why)
 	{
 		CLW_ECommand command;
 		if (!CLW_Command.FromName(commandName, command))
@@ -926,13 +953,13 @@ class CLW_RuleCommander
 			return false;
 		}
 
-		if (!m_Orders.Issue(squadId, command, targetId, pos, reason, CLW_Orders.SOURCE_LLM, why))
+		if (CLW_BaseWatch.IsGarrison(squadId))
+		{
+			why = "garrison squad (defends the HQ, not available for orders)";
 			return false;
+		}
 
-		if (m_sReserve == squadId)
-			m_sReserve = "";
-
-		return true;
+		return m_Orders.Issue(squadId, command, targetId, pos, reason, source, why);
 	}
 
 	// ---- human-led squads: missions ----

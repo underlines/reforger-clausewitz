@@ -108,6 +108,7 @@ const PORT = Number(process.env.CLW_PORT) || 8788;
 const HOST = process.env.CLW_HOST || "127.0.0.1";	// 0.0.0.0 = reachable in the LAN (dashboard for other devices)
 const COMMANDS = new Set(["MOVE", "ATTACK", "DEFEND"]);
 const MISSION_KINDS = new Set(["CAPTURE", "DEFEND", "RECON", "DESTROY"]);
+const BUY_COMMANDS = new Set(["MOVE", "ATTACK", "DEFEND", "RECON"]); // assignment of bought units (spawn on assignment)
 const isV2 = (sit) => sit?.v === 2 || sit?.v === 3; // v3 = v2 + manifest hash
 const PROVIDERS = ["fake", "anthropic", "openai-compatible", "openrouter"];
 // HQ engine: llm = LLM provider decides; rules = sidecar answers {"orders":[]} so the game's rule commander drives (no LLM calls);
@@ -138,9 +139,9 @@ const SYSTEM_V2 = `You are the HQ commander of one faction in a tactical war sim
 GOAL: win the war. Objectives (map points) decide it: the side holding fewer/less valuable objectives loses tickets over time (bleed), and tickets are also lost with every dead soldier and destroyed vehicle. Tickets at 0 = defeat. Supplies buy new units. So: hold or take objectives, preserve your tickets, spend supplies.
 DOCTRINE
 - Combined arms: motorized/mech/light/armor units (fast, firepower) cover distance and support; infantry takes and holds objectives. Send recon first to unknown or fogged objectives.
-- Concentrate force: 2-3 units per target, never split into penny packets. Prefer one clear plan over many small moves. Keep a small reserve at the base.
+- Concentrate force: 2-3 units per target, never split into penny packets. Prefer one clear plan over many small moves. Do NOT keep units idle at the base: the game keeps a small garrison there itself (squads with garrison=true, never order them), and a squad that stands at the base without an order for baseRules.idleDespawnMin minutes is stood down and refunded (baseRules.recentlyDespawned counts them). Every unit should have a job.
 - AT teams (or armed vehicles) when enemy vehicles are in contacts. Weak squads (agents well below startAgents or vehicle.health below 0.4) FALL_BACK, do not attack. health and vehicle.health are fractions 0..1: 1 = undamaged / full health, 0 = destroyed.
-- Buy when supplies are rich but keep a reserve (~40). Respect the caps (liveAI<aiCap, vehicles<vehicleCap) and the catalog costs. Do not buy when war.engineAI.headroom is below the unit size (engine AI near its limit): the buy is refused.
+- SPAWN ON ASSIGNMENT: buy only for a concrete need (an objective to take or defend that has too few units, a recon target) and put the assignment into the same buy entry: "command" (MOVE|ATTACK|DEFEND|RECON) plus "target" (objective id) or "pos"; the new units get that order the moment they are ready. A buy entry without an assignment is dropped. Never buy "to have reserves". Squads with idleSec (seconds without an order) need an order now; give every unordered non-garrison squad a task in your reply or accept that it will be stood down. Keep supplies ~40 in reserve and respect the caps. Respect the caps (liveAI<aiCap, vehicles<vehicleCap) and the catalog costs. Do not buy when war.engineAI.headroom is below the unit size (engine AI near its limit): the buy is refused.
 - Do not re-order squads that already execute a sensible order (objective.status active, young ageSec).
 SITUATION FIELDS
 war: your tickets, enemyTickets, supplies, income per minute, liveAI/aiCap, vehicles/vehicleCap; timeLeftSec = time limit (absent or -1 = no limit); tickets -1 = not used by this mode. war.mode {id,name,params} holds the rules of the chosen war mode (time limit, start tickets, ...): follow them; war.phase is "running" while you are consulted. objectives: id, name, pos [x,z], radius m, value, owner ("none" or a faction key), contested, progress (-100..100 toward the capturer). bases: base positions per faction. catalog: what you may buy (type, kind, cost, desc). squads: kind (infantry|recon|motorized|light|mech|armor|armored_recon), type, pos [x,y,z], agents/startAgents, vehicle {type,health,mounted,state} or null, humanLed, objective (its current order and status), mission (for human-led squads). contacts: pos, kind, desc, ageSec. events: what happened since your last decision. wake: why you are consulted now.
@@ -179,7 +180,7 @@ const fieldsText = (e) => (Array.isArray(e.params) ? e.params : []).map((p) => `
 const sentence = (t) => String(t ?? "").trim().replace(/\.$/, "");
 
 // FOB paragraph (M3 phase F): added to the prompt only when the manifest contains FOB intents (capability fob on, fobMax > 0).
-const FOB_PROMPT = "FOBS: a FOB is a forward base (spawn point, command post, supply cache, arsenal) that a transport builds at a site you pick from fobSites (pos, grid, place); it costs fobRules.cost supplies up front (refunded if it fails), takes time to build and is lost if the enemy holds the zone. Establish one toward the front when supplies allow (keep ~100 for units), fobRules.live < fobRules.max and fobRules.inProgress = 0; fobs[] lists yours (state planned|moving|building|active|lost, build %, tier, underAttack). Upgrade an active tier-1 FOB (vehicle depot, medical) when supplies are plentiful. Squads with a reserved field are building a FOB: do not order them.\n";
+const FOB_PROMPT = "FOBS: a FOB is a forward base (spawn point, command post, supply cache, arsenal) that a transport builds at a site you pick from fobSites (pos, grid, place, front, toFront); it costs fobRules.cost supplies up front (refunded if it fails), takes time to build and is lost if the enemy holds the zone. TIMING: establish a FOB only after the opening phase, toward the front you are fighting for, when it shortens reinforcement paths - never at war start. fobRules.ready says whether the game accepts one now (fobRules.earliestSec of war time must have passed AND you must know the front: an enemy contact, a contested or lost objective); while ready is false read fobRules.readyReason and do not send ESTABLISH_FOB (it is dropped). Prefer the first fobSites entry (best toward the front) once a front objective is clear and the FOB is worth fobRules.cost; keep ~100 supplies for units; fobRules.live < fobRules.max and fobRules.inProgress = 0; fobs[] lists yours (state planned|moving|building|active|lost, build %, tier, underAttack). Upgrade an active tier-1 FOB (vehicle depot, medical) when supplies are plentiful. Squads with a reserved field are building a FOB: do not order them.\n";
 
 // Logistics paragraph (M3 phase L): added only when the manifest contains RESUPPLY (capability logistics on, FOBs allowed, a supply truck in the catalog).
 const LOGISTICS_PROMPT = "LOGISTICS: stock is per base. war.supplies is the HQ stock (income lands there, units and FOBs are paid from it); each FOB has its own fobs[].stock, which its arsenal, requests and upgrade draw from, and a new FOB starts empty. A supply truck convoy (convoys[]: id, from, to, cargo, state loading|en_route|delivered|lost, pos, grid) loads min(truck capacity logisticsRules.truckCargo, source stock) at departure, drives to the destination and adds it to that stock on arrival; a destroyed truck loses its cargo. Keep every active FOB above logisticsRules.lowStock with RESUPPLY (HQ -> FOB) while the HQ can spare a load (keep ~50), one convoy at a time per FOB and at most logisticsRules.convoyMax in flight; CONVOY moves stock between two bases. Do not order squads that have a reserved field (convoy trucks).\n";
@@ -205,11 +206,11 @@ function commandsSection(m) {
     parts.push(`"orders":[{"squad":"<id>","command":"${a}","target":"C","reason":"short"},{"squad":"<id>","command":"${b}","pos":[x,z],"reason":"short"}]`);
     keys.push("orders");
   }
-  if (buys.length) { parts.push('"buy":[{"type":"<catalog type>","count":1,"reason":"short"}]'); keys.push("buy"); }
+  if (buys.length) { parts.push('"buy":[{"type":"<catalog type>","count":1,"command":"ATTACK","target":"C","reason":"short"}]'); keys.push("buy"); }
   if (fobs.length) { parts.push('"fobs":[{"command":"ESTABLISH_FOB","site":"<fobSites id>","reason":"short"}]'); keys.push("fobs"); }
   if (offers.length) { parts.push('"missions":[{"squad":"<human-led id>","offers":[{"kind":"CAPTURE","target":"D","brief":"..."}]}]'); keys.push("missions"); }
   t += "REPLY with ONLY one JSON object, no prose, no code fences:\n{" + parts.join(",\n ") + "}\n";
-  t += (keys.length ? `${keys.join("/")} may be empty or omitted. ` : "") + (buys.length ? "buy: max 3 entries, count 1-3, total cost <= war.supplies. " : "") + (fobs.length ? "fobs: at most 3 entries per reply, at most 1 of them ESTABLISH_FOB or UPGRADE_FOB. " : "") + '{"keep":true} alone = keep all current orders.';
+  t += (keys.length ? `${keys.join("/")} may be empty or omitted. ` : "") + (buys.length ? "buy: max 3 entries, count 1-3, total cost <= war.supplies, every entry with command + target/pos (the order of the new units). " : "") + (fobs.length ? "fobs: at most 3 entries per reply, at most 1 of them ESTABLISH_FOB or UPGRADE_FOB. " : "") + '{"keep":true} alone = keep all current orders.';
   return t;
 }
 
@@ -264,7 +265,7 @@ const cfg = {
   wakeup: { dynamic: true, defaultSec: 60, minSec: 20, maxSec: 300, budgetStretch: true },
   // events that wake the HQ before its scheduled time (each tunable; 0 / false = off)
   triggers: { enabled: true, newContact: true, contactNearSquadM: 300, casualties: 2, squadLost: true, strengthDropPct: 25, objectiveReached: true, squadChange: true, cooldownSec: 15,
-    objectiveChanged: true, ticketsDropPct: 10, unitSpawned: true, missionEvent: true },
+    objectiveChanged: true, ticketsDropPct: 10, unitSpawned: true, missionEvent: true, idleUnits: true, idleSec: 90 },
   // faction SITREP written by the model inside the commander reply: asked on the first call, every intervalSec at most, and on big events
   sitrep: { enabled: true, intervalSec: 120 },
   // HQ chat (/hq <text>): AI SDK agent turn per player message, see agent/agentTurn.mjs and "HQ chat" below
@@ -277,7 +278,7 @@ const GROUP_SPECS = {
   agent: { enabled: "bool", maxSteps: [1, 8], timeoutSec: [5, 120], maxConcurrent: [1, 10] },
   wakeup: { dynamic: "bool", defaultSec: [5, 3600], minSec: [5, 3600], maxSec: [5, 7200], budgetStretch: "bool" },
   triggers: { enabled: "bool", newContact: "bool", contactNearSquadM: [0, 5000], casualties: [0, 1000], squadLost: "bool", strengthDropPct: [0, 100], objectiveReached: "bool", squadChange: "bool", cooldownSec: [0, 600],
-    objectiveChanged: "bool", ticketsDropPct: [0, 100], unitSpawned: "bool", missionEvent: "bool" },
+    objectiveChanged: "bool", ticketsDropPct: [0, 100], unitSpawned: "bool", missionEvent: "bool", idleUnits: "bool", idleSec: [0, 3600] },
 };
 function validateGroup(name, v) {
   if (!v || typeof v !== "object" || Array.isArray(v)) return { error: `${name} must be an object` };
@@ -662,11 +663,14 @@ function fakeV2(sit, manifest = DEFAULT_MANIFEST) {
     const vehFull = isNum(war.vehicles) && isNum(war.vehicleCap) && war.vehicles >= war.vehicleCap;
     let budget = supplies - 100;
     const rot = list.length ? Math.floor((isNum(sit.time) ? sit.time : 0) / 60) % list.length : 0;
-    for (let i = 0; i < list.length && out.buy.length < 3; i++) {
+    // spawn on assignment: buy only for an objective that is not ours, and only when no unordered non-garrison squad could take it
+    const idleOwn = (Array.isArray(sit.squads) ? sit.squads : []).filter((s) => s && !s.humanLed && !s.garrison && !s.reserved && !s.objective);
+    const buyTarget = (Array.isArray(sit.objectives) ? sit.objectives : []).filter((o) => o && typeof o.id === "string" && o.owner !== me)[0];
+    for (let i = 0; i < list.length && out.buy.length < 3 && buyTarget && !idleOwn.length; i++) {
       const e = list[(i + rot) % list.length];
       if (e.cost > budget || (vehFull && e.kind !== "infantry" && e.kind !== "recon")) continue;
       budget -= e.cost;
-      out.buy.push({ type: e.type, count: 1, reason: `cheapest ${e.kind} entry, supplies ${supplies}` });
+      out.buy.push({ type: e.type, count: 1, command: "ATTACK", target: buyTarget.id, reason: "cheapest " + e.kind + " entry for " + buyTarget.id + ", supplies " + supplies });
     }
   }
 
@@ -675,7 +679,7 @@ function fakeV2(sit, manifest = DEFAULT_MANIFEST) {
   if (fobNames.size && isNum(fobRules.cost) && isNum(fobRules.max)) {
     const minute = Math.floor((isNum(sit.time) ? sit.time : 0) / 60);
     const mine = Array.isArray(sit.fobs) ? sit.fobs : [], sites = Array.isArray(sit.fobSites) ? sit.fobSites : [];
-    if (fobNames.has("ESTABLISH_FOB") && sites[0] && fobRules.live < fobRules.max && !fobRules.inProgress && supplies >= fobRules.cost + 100 && minute % 3 === 1)
+    if (fobNames.has("ESTABLISH_FOB") && fobRules.ready !== false && sites[0] && fobRules.live < fobRules.max && !fobRules.inProgress && supplies >= fobRules.cost + 100 && minute % 3 === 1)
       out.fobs.push({ command: "ESTABLISH_FOB", site: sites[0].id, reason: `fake provider: forward base at ${sites[0].name ?? sites[0].id}` });
     else if (fobNames.has("UPGRADE_FOB") && isNum(fobRules.upgradeCost) && supplies >= fobRules.upgradeCost + 150 && minute % 3 === 2) {
       const up = mine.find((f) => f?.state === "active" && f.tier < 2);
@@ -690,7 +694,7 @@ function fakeV2(sit, manifest = DEFAULT_MANIFEST) {
     if (low) out.fobs.push({ command: "RESUPPLY", fob: low.id, reason: `fake provider: ${low.id} stock ${low.stock} is low` });
   }
 
-  const ai = squads.filter((s) => !s.humanLed && !s.reserved);
+  const ai = squads.filter((s) => !s.humanLed && !s.reserved && !s.garrison);
   const assigned = new Set();
   const give = (s, command, tgt, reason) => { assigned.add(s.id); out.orders.push(tgt.id ? { squad: s.id, command, target: tgt.id, reason } : { squad: s.id, command, pos: tgt.pos, reason }); };
   const weak = (s) => isNum(s.agents) && isNum(s.startAgents) && s.startAgents > 0 && s.agents < s.startAgents * 0.5;
@@ -824,6 +828,7 @@ function validateV2(obj, sit, dropped = [], manifest = DEFAULT_MANIFEST) {
     const why = !o || typeof o !== "object" ? "not an object"
       : !s ? `unknown squad ${o.squad}`
       : s.humanLed ? `${o.squad} is human-led: no orders, only missions`
+      : s.garrison ? "squad " + o.squad + " is the HQ garrison (defends the HQ, not available for orders)"
       : s.reserved ? `${o.squad} is reserved (${s.reserved})`
       : seen.has(o.squad) ? `duplicate order for ${o.squad}`
       : !orderNames.has(o.command) ? `bad command ${o.command}`
@@ -859,7 +864,9 @@ function validateV2(obj, sit, dropped = [], manifest = DEFAULT_MANIFEST) {
         : isNum(lr.minCargo) && left < lr.minCargo ? `HQ stock ${left} is below the minimum load ${lr.minCargo}` : null)
       : cmd === "CONVOY" ? (!baseIds.has(f.origin) || !baseIds.has(f.dest) ? `unknown or inactive base ${f.origin} -> ${f.dest}` : f.origin === f.dest ? "origin and destination are the same"
         : isNum(lr.convoyMax) && isNum(lr.inFlight) && lr.inFlight + res.fobs.filter((x) => x.command === "RESUPPLY" || x.command === "CONVOY").length >= lr.convoyMax ? "convoy limit reached" : null)
-      : cmd === "ESTABLISH_FOB" ? (!fobSites.has(f.site) ? `unknown fob site ${f.site}`
+      : cmd === "ESTABLISH_FOB" ? (fr.ready === false ? "too early for a FOB: " + (fr.readyReason ?? "not ready") + (isNum(fr.earliestSec) ? " (earliest " + fr.earliestSec + " s, elapsed " + (fr.elapsedSec ?? "?") + " s)" : "")
+        : isNum(fr.earliestSec) && isNum(fr.elapsedSec) && fr.elapsedSec < fr.earliestSec ? "too early for a FOB: earliestSec " + fr.earliestSec + " not reached (elapsed " + fr.elapsedSec + ")"
+        : !fobSites.has(f.site) ? `unknown fob site ${f.site}`
         : isNum(fr.live) && isNum(fr.max) && fr.live >= fr.max ? "FOB limit reached"
         : fr.inProgress > 0 ? "another FOB is still being established"
         : isNum(fr.cost) && fr.cost > left ? `FOB cost ${fr.cost} exceeds remaining supplies ${left}` : null)
@@ -884,9 +891,15 @@ function validateV2(obj, sit, dropped = [], manifest = DEFAULT_MANIFEST) {
       : !e ? `unknown catalog type ${b.type}`
       : !Number.isInteger(b.count) || b.count < 1 || b.count > 3 ? "count must be an integer 1..3"
       : cost > left ? `cost ${cost} exceeds remaining supplies ${left}` : null;
-    if (why) { drop("buy", b, why); continue; }
+    // spawn on assignment: the units must come with their first order (command + objective target or position)
+    const ba = why || !b ? {} : aim(b);
+    const bwhy = why ? why
+      : !BUY_COMMANDS.has(b.command) ? "a buy needs an assignment: command MOVE|ATTACK|DEFEND|RECON (got " + b.command + ")"
+      : ba.error ? "bad assignment: " + ba.error
+      : !ba.target && !ba.pos ? "a buy needs an assignment: target (objective id) or pos [x, z]" : null;
+    if (bwhy) { drop("buy", b, bwhy); continue; }
     left -= cost;
-    res.buy.push({ type: b.type, count: b.count, reason: typeof b.reason === "string" ? b.reason.slice(0, 120) : "" });
+    res.buy.push({ type: b.type, count: b.count, command: b.command, ...(ba.target ? { target: ba.target } : { pos: ba.pos }), reason: typeof b.reason === "string" ? b.reason.slice(0, 120) : "" });
   }
 
   const offered = new Set();
@@ -1178,7 +1191,19 @@ function evalTriggers(t, base, sit, events = []) {
       for (const e of events) if (MISSION_EVENT.test(String(e))) out.push(`event: ${String(e).slice(0, 80)}`);
     }
   }
-  const bs =new Map((base.squads ?? []).map((s) => [s?.id, s]));
+  // squads the game stood down as idle (event "<id> stood down ...") are not losses
+  const down = new Set();
+  for (const e of events) { const m = /^(\S+) stood down/.exec(String(e)); if (m) down.add(m[1]); }
+  if (isV2(sit) && isV2(base) && t.idleUnits && t.idleSec > 0) {
+    const bi = new Map((base.squads ?? []).map((s) => [s?.id, s]));
+    for (const s of sit.squads ?? []) {
+      if (!s?.id || s.garrison || s.humanLed || s.reserved || !isNum(s.idleSec) || s.idleSec < t.idleSec) continue;
+      const was = bi.get(s.id);
+      if (isNum(was?.idleSec) && was.idleSec >= t.idleSec) continue; // already known idle at the last call
+      out.push(s.id + " idle " + s.idleSec + "s without an order");
+    }
+  }
+  const bs = new Map((base.squads ?? []).filter((s) => !down.has(s?.id)).map((s) => [s?.id, s]));
   const cs = new Map((sit.squads ?? []).map((s) => [s?.id, s]));
   const bc = (Array.isArray(base.contacts) ? base.contacts : []).filter((c) => okPos(c?.pos));
   const cc = (Array.isArray(sit.contacts) ? sit.contacts : []).filter((c) => okPos(c?.pos));

@@ -70,8 +70,9 @@ class CLW_Action_UpgradeFob : CLW_ActionExecutor
 }
 
 // Rule commander doctrine (called from CLW_RuleCommander.Think before it spends): with the `fob` capability on, fewer FOBs than fobMax,
-// none in progress and supplies for the cost plus the doctrine reserve, establish one at the first candidate site (frontline, toward the
-// contested centre). An active FOB at tier 1 is upgraded when supplies are plentiful. Same registry entries as the LLM.
+// none in progress, the timing gate open (CLW_FobManager.IsReady: fobEarliestMin of war time + front knowledge), a front objective far
+// enough from the HQ to need a forward base, and supplies for the cost plus the doctrine reserve, establish one at the first candidate
+// site (CLW_FobSites.PickSites: toward the front objective, not behind the HQ). An active FOB at tier 1 is upgraded when supplies are plentiful. Same registry entries as the LLM.
 class CLW_FobDoctrine
 {
 	static const float START_DELAY_SEC = 45;		// the start forces field first
@@ -79,6 +80,7 @@ class CLW_FobDoctrine
 	static const int UPGRADE_EXTRA_SUPPLIES = 100;	// kept on top of the upgrade cost and the reserve
 
 	protected static ref map<string, float> s_mLast = new map<string, float>();
+	protected static ref map<string, string> s_mState = new map<string, string>();
 
 	static void Think(CLW_RuleCommander rules, string side, CLW_WarState war)
 	{
@@ -108,12 +110,32 @@ class CLW_FobDoctrine
 			if (war.GetSupplies(side) < needed)
 				return;
 
+			string gateWhy;
+			if (!CLW_FobManager.IsReady(side, gateWhy))
+				return;	// the gate logs its state once per change
+
+			// a FOB only pays off when the front is far from the HQ (the existing scaled FOB distance logic)
+			CLW_ControlPoint front = CLW_FobSites.FrontObjective(side);
+			CLW_Bases bases = CLW_GameMode.GetBases();
+			if (front && bases)
+			{
+				float frontDist = vector.DistanceXZ(front.m_vPos, bases.GetBasePos(side));
+				float frontMin = bases.ScaleDistance(CLW_FobManager.FRONT_MIN_M);
+				if (frontDist < frontMin)
+				{
+					LogDoctrine(side, "near", string.Format("front objective %1 is only %2 m from the HQ (needs %3 m): no FOB needed yet", front.m_sId, Math.Round(frontDist), Math.Round(frontMin)));
+					return;
+				}
+			}
+
 			array<CLW_FobSite> sites = {};
 			if (CLW_FobSites.PickSites(side, 1, sites) == 0)
 			{
-				Print(string.Format("CLW: fob doctrine %1: wants a FOB but no site is usable now", side), LogLevel.NORMAL);
+				LogDoctrine(side, "nosite", "wants a FOB but no site is usable now");
 				return;
 			}
+
+			s_mState.Set(side, "go");
 
 			CLW_ActionCall call = NewCall("ESTABLISH_FOB", side, rules);
 			call.SetString("site", sites[0].m_sId);
@@ -152,6 +174,17 @@ class CLW_FobDoctrine
 
 			return;
 		}
+	}
+
+	// Doctrine state log, once per change per side.
+	protected static void LogDoctrine(string side, string key, string text)
+	{
+		string last;
+		if (s_mState.Find(side, last) && last == key)
+			return;
+
+		s_mState.Set(side, key);
+		Print(string.Format("CLW: fob doctrine %1: %2", side, text), LogLevel.NORMAL);
 	}
 
 	protected static CLW_ActionCall NewCall(string action, string side, CLW_RuleCommander rules)

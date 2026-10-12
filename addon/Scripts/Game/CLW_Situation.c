@@ -87,6 +87,7 @@ class CLW_Situation
 		}
 
 		AppendFobBlocks(json);
+		AppendBaseRules(json);
 		AppendLogistics(json);
 		AppendRequests(json);
 		AppendStructures(json);
@@ -123,6 +124,16 @@ class CLW_Situation
 
 		string extra = ",\"convoys\":[" + CLW_Convoys.ConvoysJson(m_sFaction) + "],\"logisticsRules\":" + CLW_Convoys.RulesJson(m_sFaction);
 		json = CLW_Str.DropLast(json) + extra + "}";
+	}
+
+	// Spawn on assignment (owner playtest 2026-10-12): garrison size, idle stand-down time and the recent stand-downs of this side
+	// (baseRules). Appended after the trim.
+	protected void AppendBaseRules(inout string json)
+	{
+		if (json.Length() < 2)
+			return;
+
+		json = CLW_Str.DropLast(json) + ",\"baseRules\":" + CLW_BaseWatch.RulesJson(m_sFaction) + "}";
 	}
 
 	// M3 phase F: own FOBs, candidate sites and the FOB rules (only with the `fob` capability and at least one FOB allowed).
@@ -444,6 +455,11 @@ class CLW_Situation
 			string reservedFor = CLW_FobManager.ReservedFor(id);
 			if (!reservedFor.IsEmpty())
 				text += ",\"reserved\":\"" + Escape(reservedFor) + "\"";	// M3 phase F: tied up building a FOB, orders are refused
+			if (CLW_BaseWatch.IsGarrison(id))
+				text += ",\"garrison\":true";	// defends the HQ with a standing order: do not order it (refused)
+			int idleSec = CLW_BaseWatch.IdleSec(id);
+			if (idleSec > 0)
+				text += ",\"idleSec\":" + idleSec;	// seconds without an active order; at the base it is stood down after baseRules.idleDespawnMin
 			text += ",\"objective\":" + objectiveJson + ",\"mission\":" + missionJson + "}";
 			squadCount++;
 		}
