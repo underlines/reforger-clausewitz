@@ -1,0 +1,17 @@
+MetaFileClass {
+ Name "{7B3E1D5A90C42F68}Configs/CLW/Placement/ClearRules.conf"
+ Configurations {
+  ConfigurationClass PC {
+  }
+  ConfigurationClass XBOX_ONE : PC {
+  }
+  ConfigurationClass XBOX_SERIES : PC {
+  }
+  ConfigurationClass PS4 : PC {
+  }
+  ConfigurationClass PS5 : PC {
+  }
+  ConfigurationClass HEADLESS : PC {
+  }
+ }
+}

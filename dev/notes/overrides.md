@@ -188,3 +188,33 @@ Log: `CLW: overrides sidesDefault: ...`, `CLW: overrides sides '<key>': ... kinF
 `CLW: sidepool <side>: role <kind> added (own role present, kinFill all) from <kin>: kin_<type> (<vehicle>) cost=.. cargo=.. weight=..` (one line per
 imported entry; roles the side lacked keep `filled from <kin>`). `/request vehicle`, the HQ menu, the AI buy pool and the LLM catalog manifest all read
 `CLW_ForceCatalog.GetEntries`, so imported entries appear everywhere.
+
+## Urban base placement (WP11): HQ in villages, clearing small obstacles
+Random / auto start positions now prefer HQs in or at the edge of villages and towns, 8-30 m beside a vehicle road. Code: `CLW_RandomLayout.FindHqUrban`, `CLW_PlaceClear`, `CLW_FreeSpot.CheckPose` (clear mode).
+**HQ site search** (scenario `m_RandomLayout` block, all new fields optional: 0 / missing = built-in default; `m_bNoUrban 1` = old open-ground rules; the relaxed second search always uses the old rules):
+| field | default | meaning |
+|---|---|---|
+| `m_fUrbanCoreHalfM` | 12 | half size of the clear core (compact base, command post ~20x21 m) |
+| `m_fRoadPreferMinM` / `m_fRoadPreferMaxM` | 8 / 30 | preferred distance to the nearest vehicle road (cost 0.5 per metre outside the band) |
+| `m_fRoadRejectM` | 60 | farther from a vehicle road = rejected |
+| `m_fPlaceNearM` | 250 | within this of a village/town centre (`m_aSnapTypes`) costs <= 1, farther costs 1 + extra/50 |
+| `m_fUrbanPlaceRadiusM` | 130 | a place wish is taken within this of the centre (0 = inside the village) |
+| `m_fUrbanRingInnerM` / `m_fUrbanRingOuterM`, `m_iUrbanRingMinFree` | 12 / 45 / 5 | room check: of `m_iRingSamples` service-sized spots on this ring at least this many are clear (clearable objects count as clear) |
+| `m_iUrbanMaxBuildings` | 150 | max buildings within `m_fTownRadiusM` (dense town centres stay out) |
+| `m_iSiteSamples` / `m_iSiteValid` | 60 / 5 | candidates tried per HQ / valid ones scored before the best is taken |
+| `m_fWeightRoad` / `m_fWeightPlace` / `m_fWeightRoom` | 1 / 1 / 1 | cost weights |
+Score (lower = better) = road cost + place cost + room cost (8 * missing share of the ring) + density (0.03 per building over 40) + 4 if off the navmesh (unknown = 0) + 2 per metre of height range + 0.005 per metre moved from the wish.
+Logs: `CLW: layout HQ <A|B> site score <s> at <pos> grid <g> (wish moved .., N valid of M samples, k settlements near the wish): road=.. m (cost ..) place='<name>' .. m (cost ..) room=a/b clear samples (cost ..) buildings=.. (cost ..) navmesh=.. clearable objects in the core=..`, per-site rejects in the existing `CLW: layout random rejections (...)` line as `site <reason>=n` (`site road too far`, `site core object-norpl`, `site service ring too small`, `site too many buildings`, ...).
+
+**Clearing small obstacles** (`Configs/CLW/Placement/ClearRules.conf`, class `CLW_ClearRules`, loaded by path): an object under a service footprint no longer blocks the spot when it may be deleted; the objects under the FINAL pose are deleted (server only) just before the service is spawned.
+| key | meaning |
+|---|---|
+| `m_bEnabled` | master switch (0 = nothing is cleared, only free spots are used) |
+| `m_bRequireReplicated` | 1 (default): only entities with an `RplComponent` are cleared. A world object without it would be deleted on the server only and stay (visible + solid) on every client, so it keeps blocking (reject reason `object-norpl`) |
+| `m_fMaxRadiusM`, `m_fMaxHeightM`, `m_iMaxPerSpot` | global bounding radius (3 m) and height (8 m) limit of a clearable object, max objects removed per footprint (60) |
+| `m_aNeverPathContains`, `m_aNeverClassNames` | prefab path substrings / class names that are never cleared (houses, buildings, bridges, roads, power lines, vehicles ...) |
+| `m_aRules` | allow-list: `m_sKind`, `m_bEnabled`, `m_bAnyTree` (every BaseTree/TreeEntity), `m_aPathContains`, `m_aClassNames`, `m_fMaxRadiusM` (0 = global). The first matching rule decides; an object matching no rule is never touched |
+Always protected in code: characters, vehicles, `Building`, terrain, our own placed services (`CLW_PlaceClear.Protect`). Classification uses the ROOT entity of the queried object.
+Logs: `CLW: place clear rules loaded: ..`, `CLW: place clear <kind> removed <n> objects: <prefab>, ... (<side> <base> <kind>)`; the place line gets `clear=<n>`.
+
+**Depot**: `DEPOT_ROAD_M` 40 -> 60; in road mode the depot faces the road point (face target = road point), log `depot road search: ... facing the road`.
