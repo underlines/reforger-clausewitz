@@ -142,3 +142,17 @@ runs the war inside it; `CLW_GameMode` worlds are unaffected either way. The com
 (`CLW: takeover of <class> in <world> (switch: cli|overrides)`). The scenario of a taken-over world: command line `-clwScenario <name>`
 (`Configs/CLW/Scenarios/<name>.conf`), else the world file name without a leading `GM_` (`GM_Arland` -> `Arland.conf`), else by-world / by-listing / auto.
 Recipe: `dev/notes/maps.md` ("Run a Game Master world with takeover"). Code: `CLW_WarRuntime.TakeoverSwitch`.
+
+## Rematch (`rematch`, `rematchDelaySec`) - M4 round 3 WP4
+Top-level keys of the same file, read again at every war end (SERVER only). What happens after the war is over:
+```json
+{"rematch":"inPlace","rematchDelaySec":60}
+```
+| key | values | meaning |
+|---|---|---|
+| `rematch` | `"inPlace"` (default) | no engine game end, no world reload: results stay `rematchDelaySec` s, then the war entities are deleted, runtime state is reset and the session is back in the SETUP phase (setup menu for the setup owner, the `setup` preset with `autoStartSec` starts the next war). Players are switched to the default side and respawned through the setup flow. |
+| | `"reload"` | the old behaviour: `EndGameMode`, the server reloads the world about 30 s later (clients may fail to rejoin with `JIP_ERROR`). The war runtime statics are cleared in the game mode's `OnGameEnd`. |
+| | `"off"` | the war stays ENDED, nothing happens afterwards (restart the server for a new war). |
+| `rematchDelaySec` | number, default 60, minimum 5 | seconds the results (HUD winner label, `WAR OVER` + countdown announcements) stay before the reset. |
+Without `EndGameMode` there is no vanilla end screen; the results are the HUD (phase ENDED shows "<faction> wins"), the announcements and the log.
+Log lines: `CLW: rematch: choice ...`, `war over, results for <n> s`, `reset <manager> (<n> entities)`, `census before/after`, `back to setup (round <k>)`. Code: `CLW_Rematch.c`.

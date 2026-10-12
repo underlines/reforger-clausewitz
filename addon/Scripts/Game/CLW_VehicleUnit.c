@@ -1341,4 +1341,47 @@ class CLW_VehicleManager
 			Print(string.Format("CLW: vehicle %1 RTB timeout after %2 s, transport removed without refund", job.m_sId, Math.Round(job.m_fAge)), LogLevel.WARNING);
 		}
 	}
+
+	// Rematch (CLW_Rematch.c): stop the tick, delete every vehicle unit (cargo, crew, vehicle), returning transports and abandoned vehicles.
+	// Returns the number of vehicles deleted.
+	int RematchReset()
+	{
+		GetGame().GetCallqueue().Remove(Tick);
+		int deleted;
+		foreach (CLW_VehicleUnit unit : m_aUnits)
+		{
+			CLW_ForceSpawner.DeleteGroupAndMembers(unit.GetCargoGroup());
+			CLW_ForceSpawner.DeleteGroupAndMembers(unit.GetCrewGroup());
+			IEntity unitVehicle = unit.GetVehicle();
+			if (unitVehicle)
+			{
+				SCR_EntityHelper.DeleteEntityAndChildren(unitVehicle);
+				deleted++;
+			}
+		}
+
+		foreach (CLW_ReturnJob returnJob : m_aReturns)
+		{
+			CLW_ForceSpawner.DeleteGroupAndMembers(returnJob.m_Crew);
+			if (returnJob.m_Vehicle)
+			{
+				SCR_EntityHelper.DeleteEntityAndChildren(returnJob.m_Vehicle);
+				deleted++;
+			}
+		}
+
+		foreach (CLW_AbandonJob abandonJob : m_aAbandoned)
+		{
+			if (abandonJob.m_Vehicle)
+			{
+				SCR_EntityHelper.DeleteEntityAndChildren(abandonJob.m_Vehicle);
+				deleted++;
+			}
+		}
+
+		m_aUnits.Clear();
+		m_aReturns.Clear();
+		m_aAbandoned.Clear();
+		return deleted;
+	}
 }

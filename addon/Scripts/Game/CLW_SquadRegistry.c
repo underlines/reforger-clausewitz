@@ -579,4 +579,33 @@ class CLW_SquadRegistry
 
 		Print("" + line, LogLevel.NORMAL);	// Print(variable) would log "string line = ..."
 	}
+
+	// Rematch (CLW_Rematch.c): stop the sweep, free the humans and delete every adopted squad (AI members, slave group, group). Returns the squads deleted.
+	int RematchReset()
+	{
+		GetGame().GetCallqueue().Remove(Sweep);
+		int deleted;
+		for (int i = m_aRecords.Count() - 1; i >= 0; i--)
+		{
+			SCR_AIGroup group = m_aRecords[i].m_Group;
+			if (group)
+			{
+				CLW_SquadJoin.OnSquadReleased(group);	// unregisters from the vanilla lists, frees the humans
+				SCR_AIGroup slave = group.GetSlave();
+				CLW_ForceSpawner.DeleteGroupAndMembers(group);
+				if (slave)
+					SCR_EntityHelper.DeleteEntityAndChildren(slave);
+				deleted++;
+			}
+
+			m_aRecords.Remove(i);
+		}
+
+		m_mCounters.Clear();
+		m_mTags.Clear();
+		m_mGenericCount.Clear();
+		m_iVersion++;
+		m_iSweeps = 0;
+		return deleted;
+	}
 }

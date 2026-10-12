@@ -419,4 +419,20 @@ class CLW_BaseWatch
 		Print(string.Format("CLW: idle squad %1 despawned after %2 min at base, refund %3 (%4, %5)", id, minutes, refund, kind, displayType), LogLevel.NORMAL);
 		CLW_Debug.Say(string.Format("%1 stood down idle %2 (%3 min), refund %4", faction, id, minutes, refund));
 	}
+
+	// Rematch (CLW_Rematch.c): forget the idle / garrison state of every faction (Reset(faction) only knows the factions of the new war).
+	static void RematchReset()
+	{
+		s_mGarrison.Clear();
+		s_mNoOrderSince.Clear();
+		s_mCost.Clear();
+		s_mGarrisonOrderAt.Clear();
+		s_mLastThink.Clear();
+		s_mStoodDown.Clear();
+		s_aDespawnAt.Clear();
+		s_aDespawnFaction.Clear();
+		s_aDespawnKind.Clear();
+		s_aDespawnUnit.Clear();
+		s_aDespawnRefund.Clear();
+	}
 }

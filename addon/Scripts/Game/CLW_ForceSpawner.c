@@ -1028,4 +1028,29 @@ class CLW_ForceSpawner
 
 		SCR_EntityHelper.DeleteEntityAndChildren(group);
 	}
+
+	// Rematch (CLW_Rematch.c): stop the tick and the scheduled start forces, delete what the purchases in progress spawned (no refund). Returns the jobs dropped.
+	int RematchReset()
+	{
+		GetGame().GetCallqueue().Remove(Tick);
+		GetGame().GetCallqueue().Remove(StartForceLater);
+		int dropped;
+		foreach (CLW_SpawnJob job : m_aJobs)
+		{
+			DeleteGroupAndMembers(job.m_Cargo);
+			DeleteGroupAndMembers(job.m_Group);
+			if (job.m_Vehicle)
+				SCR_EntityHelper.DeleteEntityAndChildren(job.m_Vehicle);
+			dropped++;
+		}
+
+		m_aJobs.Clear();
+		m_mCounters.Clear();
+		m_sNextTag = "";
+		m_iNextRequester = -1;
+		m_vNextAnchor = vector.Zero;
+		m_OnTagged = null;
+		m_bTicking = false;
+		return dropped;
+	}
 }

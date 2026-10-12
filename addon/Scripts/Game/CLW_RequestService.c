@@ -878,4 +878,32 @@ class CLW_RequestService
 
 		return "[" + text + "]";
 	}
+
+	// Rematch (CLW_Rematch.c): delete the vehicles and boxes issued to players, remove the delivery markers, forget history and cooldowns
+	// (OnGameStart also resets reports, /hq chat and deliveries). Returns the entities deleted.
+	static int RematchReset()
+	{
+		int deleted;
+		foreach (IEntity issued : s_aIssuedVehicles)
+		{
+			if (issued)
+			{
+				SCR_EntityHelper.DeleteEntityAndChildren(issued);
+				deleted++;
+			}
+		}
+
+		foreach (IEntity box : s_aBoxes)
+		{
+			if (box)
+			{
+				SCR_EntityHelper.DeleteEntityAndChildren(box);
+				deleted++;
+			}
+		}
+
+		CLW_VehicleDelivery.RematchReset();
+		OnGameStart();
+		return deleted;
+	}
 }

@@ -248,6 +248,23 @@ class CLW_WarRuntime
 		if (RUN_ORDER_SPIKE)
 			GetGame().GetCallqueue().CallLater(SpikeOrderLoop, 15000);
 
+		BootWar(false);
+
+		// one-time hooks of this game mode entity (a rematch does not repeat them)
+		m_Owner.GetOnPlayerRegistered().Insert(OnClwPlayerRegistered);
+		GetGame().GetCallqueue().CallLater(CLW_WorldInfo.Start, 5000);
+		GetGame().GetCallqueue().CallLater(SayBuild, 8000);
+
+		if (m_bTakeover)
+			GetGame().GetCallqueue().CallLater(TakeoverHealth, TAKEOVER_CHECK_MS);
+	}
+
+	// The war systems of one round, in order: action registry, scenario, bases, control points, war state, forces, mission board, squad join,
+	// registry, faction objects, timers. Called once at the game start (restart false) and again by every rematch (restart true) after the
+	// war entities were deleted and the managers reset (CLW_Rematch.c); then the existing manager objects are re-initialised and the war
+	// state goes back to SETUP. Returns false when no scenario could be resolved.
+	protected bool BootWar(bool restart)
+	{
 		CLW_Services.Reset();	// base services of a previous session (statics survive a Play restart)
 		CLW_FobManager.Reset();	// FOBs of a previous session
 		CLW_Convoys.Reset();	// M3 phase L: convoys + per-base stock of a previous session
@@ -260,35 +277,51 @@ class CLW_WarRuntime
 		Step("action registry", true);
 
 		// 1. scenario data (factions, bases, objectives, economy)
+		CLW_ScenarioConfig previous = CLW_ScenarioConfig.Get();
 		CLW_ScenarioConfig scenario;
 		if (m_bTakeover)
 			scenario = LoadTakeoverScenario();
 		else
-			scenario = LoadScenario(CLW_GameMode.Cast(owner).GetScenarioAttribute());
+			scenario = LoadScenario(CLW_GameMode.Cast(m_Owner).GetScenarioAttribute());
+
+		if (restart && scenario && scenario == previous)
+			Print("CLW: rematch WARNING the scenario loader returned the previous (mutated) instance: sides and layout of the last round may leak into this one", LogLevel.WARNING);
 
 		if (scenario)
 		{
 			Step("scenario " + scenario.m_sName, true);
 			// 2. bases + respawn points, 3. control points, 4. war state
-			m_Bases = new CLW_Bases();
+			if (!m_Bases)
+				m_Bases = new CLW_Bases();
 			m_Bases.Init(scenario);
 			Step("bases", true);
-			m_Points = new CLW_ControlPoints();
+			if (!m_Points)
+				m_Points = new CLW_ControlPoints();
 			m_Points.Init(scenario);
 			Step("control points", true);
-			m_War = new CLW_WarState();
-			m_War.Init(scenario, m_Points);
+			if (restart && m_War)
+			{
+				m_War.Restart(scenario, m_Points);
+			}
+			else
+			{
+				m_War = new CLW_WarState();
+				m_War.Init(scenario, m_Points);
+			}
 			Step("war state", true);
 			// 5. forces: catalog (built at war start), vehicle units, spawner; start forces when the war starts
 			m_Catalog = new CLW_ForceCatalog();
 			m_Registry.SetCatalog(m_Catalog);
-			m_Vehicles = new CLW_VehicleManager();
+			if (!m_Vehicles)
+				m_Vehicles = new CLW_VehicleManager();
 			m_Vehicles.Init(m_Registry);
-			m_Spawner = new CLW_ForceSpawner();
+			if (!m_Spawner)
+				m_Spawner = new CLW_ForceSpawner();
 			m_Spawner.Init(m_Catalog, m_Registry, m_Vehicles);
+			m_War.GetOnWarStarted().Remove(OnWarStarted);
 			m_War.GetOnWarStarted().Insert(OnWarStarted);
 			Step("forces (catalog, vehicles, spawner)", true);
-			// 6. missions for human squad leaders (replaces the rule commander's legacy forced task)
+			// 6. missions for human squad leaders (replaces the rule commander's legacy forced task; Install cleans the previous board up)
 			CLW_MissionBoard.Install();
 			Step("mission board", true);
 		}
@@ -301,7 +334,6 @@ class CLW_WarRuntime
 		// Squad join service: vanilla group events -> commandable squads; HQ squads are the only player groups.
 		CLW_SquadJoin.Init();
 		CLW_SquadGroups.LockNewGroups();
-		m_Owner.GetOnPlayerRegistered().Insert(OnClwPlayerRegistered);
 		GetGame().GetCallqueue().CallLater(PruneVanillaGroups, 3000);	// after the groups manager made its predefined groups
 		Step("squad join + group lock", true);
 
@@ -312,18 +344,66 @@ class CLW_WarRuntime
 		if (scenario)
 			BuildFactionObjects();
 
-		GetGame().GetCallqueue().CallLater(CLW_WorldInfo.Start, 5000);
-		GetGame().GetCallqueue().CallLater(SayBuild, 8000);
 		if (scenario)
 		{
+			GetGame().GetCallqueue().Remove(PollContacts);
+			GetGame().GetCallqueue().Remove(ThinkCommanders);
 			GetGame().GetCallqueue().CallLater(PollContacts, 20000, true);
 			m_Activity.Start();
 			GetGame().GetCallqueue().CallLater(ThinkCommanders, 10000, true);
 			Step("timers (contacts, activity, commanders)", true);
 		}
 
-		if (m_bTakeover)
-			GetGame().GetCallqueue().CallLater(TakeoverHealth, TAKEOVER_CHECK_MS);
+		return scenario != null;
+	}
+
+	// ---- rematch (CLW_Rematch.c) ----
+
+	// Rematch step 1: stop what plans or buys (contact poll, commander think, activity tick), remove the contact markers and drop the
+	// per-faction objects (rebuilt by BootWar). Returns the number of commanders dropped.
+	int RematchStop()
+	{
+		GetGame().GetCallqueue().Remove(PollContacts);
+		GetGame().GetCallqueue().Remove(ThinkCommanders);
+		m_Activity.RematchReset();
+		foreach (string markerKey, CLW_ContactMarkers markers : m_mMarkers)
+		{
+			if (markers)
+				markers.RemoveAll();
+		}
+
+		int commanders = m_mCommanders.Count();
+		m_mBooks.Clear();
+		m_mMarkers.Clear();
+		m_mCommanders.Clear();
+		m_aBuiltKeys.Clear();
+		return commanders;
+	}
+
+	// Rematch last step: the war systems of a new round (scenario reloaded, war state back in SETUP). False when no scenario resolved.
+	bool RematchRestart()
+	{
+		return BootWar(true);
+	}
+
+	// The game mode ends (world shutdown / reload, every machine): forget the holder so a reloaded world starts clean. A stale holder
+	// kept a dead game mode entity and its timers across the reload (statics survive it).
+	static void OnGameModeEnd(SCR_BaseGameMode mode)
+	{
+		s_bClientSeen = false;
+		if (!s_Instance || s_Instance.m_Owner != mode)
+			return;
+
+		Print("CLW: game mode ended: war runtime released (statics cleared for a world reload)", LogLevel.NORMAL);
+		if (Replication.IsServer())
+		{
+			s_Instance.RematchStop();
+			GetGame().GetCallqueue().Remove(s_Instance.TakeoverHealth);
+			GetGame().GetCallqueue().Remove(s_Instance.PruneVanillaGroups);
+			CLW_Rematch.ClearStatics();
+		}
+
+		s_Instance = null;
 	}
 
 	// Takeover only: what the foreign world has and lacks. Never aborts (a missing piece is logged, the bootstrap goes on).
