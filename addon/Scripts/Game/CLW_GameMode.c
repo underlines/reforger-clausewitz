@@ -295,7 +295,20 @@ class CLW_GameMode : SCR_BaseGameMode
 		string worldName = CLW_AutoScenario.WorldName();
 		Print(string.Format("CLW: scenario selection: world file '%1' (name '%2'), attribute '%3'", GetGame().GetWorldFile(), worldName, m_ScenarioConfig), LogLevel.NORMAL);
 		CLW_ScenarioConfig scenario;
-		if (!m_ScenarioConfig.IsEmpty())
+		// The game mode PREFAB carries Arland's scenario, so every world inherits the attribute: it only counts when the scenario's world
+		// list is empty (legacy) or names this world; otherwise this world gets its own / the auto scenario (Everon got Arland's sea HQs).
+		bool useAttribute = !m_ScenarioConfig.IsEmpty();
+		if (useAttribute)
+		{
+			CLW_ScenarioConfig peeked = CLW_ScenarioConfig.Peek(m_ScenarioConfig);
+			if (peeked && peeked.m_aWorlds && !peeked.m_aWorlds.IsEmpty() && !peeked.ListsWorld(worldName))
+			{
+				Print(string.Format("CLW: scenario attribute %1 is for other worlds, not '%2': ignored", m_ScenarioConfig, worldName), LogLevel.NORMAL);
+				useAttribute = false;
+			}
+		}
+
+		if (useAttribute)
 		{
 			scenario = CLW_ScenarioConfig.Load(m_ScenarioConfig);
 			if (scenario)

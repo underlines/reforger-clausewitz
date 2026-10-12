@@ -291,6 +291,7 @@ modded class SCR_EntityCatalogManagerComponent
 				int fullKin, fullRule, fullBlocked;
 				CLW_ExtendPool(faction, everything, -1, -1, -1, -1, fullDetail, fullKin, fullRule, fullBlocked);
 				CLW_ArsenalPool.LogOnce(factionKey, string.Format("own=%1 kin=%2 rules=%3 blocked=%4 total=%5 |%6", ownCount, fullKin, fullRule, fullBlocked, everything.Count(), fullDetail));
+				CLW_SelfTestLookup(faction, everything, ownCount);
 			}
 		}
 
@@ -298,6 +299,40 @@ modded class SCR_EntityCatalogManagerComponent
 			return result;
 
 		return !arsenalItems.IsEmpty();
+	}
+
+	// One-time self-test per faction (log only): a pool-only item (index >= ownCount, a "spear" item preferred) must resolve through the
+	// per-item lookup the arsenal request uses, else pool items could be listed but not taken. Log "CLW: services arsenal pool lookup".
+	protected void CLW_SelfTestLookup(notnull SCR_Faction faction, notnull array<SCR_ArsenalItem> everything, int ownCount)
+	{
+		SCR_ArsenalItem probe;
+		for (int i = ownCount; i < everything.Count(); i++)
+		{
+			SCR_ArsenalItem candidate = everything[i];
+			if (!candidate)
+				continue;
+
+			if (!probe)
+				probe = candidate;
+
+			string lower = candidate.GetItemResourceName();
+			lower.ToLower();
+			if (lower.Contains("spear"))
+			{
+				probe = candidate;
+				break;
+			}
+		}
+
+		if (!probe)
+			return;
+
+		ResourceName prefab = probe.GetItemResourceName();
+		SCR_EntityCatalogEntry entry = GetEntryWithPrefabFromFactionCatalog(EEntityCatalogType.ITEM, prefab, faction);
+		string result = "NOT FOUND (pool item cannot be taken)";
+		if (entry)
+			result = "ok";
+		Print(string.Format("CLW: services arsenal pool lookup %1: %2 -> %3", faction.GetFactionKey(), prefab, result), LogLevel.NORMAL);
 	}
 
 	// The same pool for the per-item lookup: vanilla RpcAsk_ArsenalRequestItem_ and the WCS Loadout Editor accept an arsenal request (and

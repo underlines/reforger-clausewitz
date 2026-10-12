@@ -32,6 +32,7 @@ class CLW_Convoy
 	string m_sReason;
 	CLW_EConvoyState m_eState;
 	int m_iCargo;				// supplies on the truck (0 until loaded)
+	int m_iGoneChecks;			// consecutive failed truck checks before loading (a fresh truck can fail one check right after spawn)
 	string m_sTruckId;			// registry id of the truck unit
 	string m_sTag;				// tagged purchase in flight
 	bool m_bLoaded;
@@ -77,6 +78,7 @@ class CLW_Convoys
 {
 	static const int TICK_MS = 3000;
 	static const string ORDER_SOURCE = "convoy";		// CLW_Orders source of the truck orders
+	static const int GONE_CHECKS_MAX = 4;				// failed truck checks in a row before a planned convoy gives up
 	static const float ARRIVE_M = 60;					// truck this close to a base = arrived (load / unload)
 	static const int MIN_CARGO = 40;					// smaller loads are not worth a convoy
 	static const int DEFAULT_MAX = 2;
@@ -592,17 +594,33 @@ class CLW_Convoys
 		return fallback.m_iCargo;
 	}
 
-	protected static bool TruckAlive(CLW_Convoy convoy, CLW_Orders orders, out vector pos)
+	protected static bool TruckAlive(CLW_Convoy convoy, CLW_Orders orders, out vector pos, out string why)
 	{
+		why = "";
 		if (convoy.m_sTruckId.IsEmpty() || !orders)
+		{
+			why = "no truck id / orders";
 			return false;
+		}
 
 		CLW_SquadRegistry registry = CLW_GameMode.GetRegistry();
 		if (!registry || !registry.Find(convoy.m_sTruckId))
+		{
+			why = "not in the squad registry";
 			return false;
+		}
 
-		if (orders.UnitAlive(convoy.m_sTruckId) <= 0 || !orders.UnitPos(convoy.m_sTruckId, pos))
+		if (orders.UnitAlive(convoy.m_sTruckId) <= 0)
+		{
+			why = "no crew alive";
 			return false;
+		}
+
+		if (!orders.UnitPos(convoy.m_sTruckId, pos))
+		{
+			why = "no position";
+			return false;
+		}
 
 		// captured: the vehicle changed to the ENEMY side. (A kin truck from the side pool may carry the kin faction's key, not the side's own:
 		// that is not a capture, so only the enemy key counts.)
@@ -612,7 +630,10 @@ class CLW_Convoys
 		{
 			string owner = war.GetEntityFactionKey(unit.GetVehicle());
 			if (!owner.IsEmpty() && owner == war.GetEnemyKey(convoy.m_sSide))
+			{
+				why = "captured by " + owner;
 				return false;
+			}
 		}
 
 		return true;
@@ -744,11 +765,20 @@ class CLW_Convoys
 	{
 		CLW_Orders orders = OrdersOf(convoy.m_sSide);
 		vector pos;
-		if (!TruckAlive(convoy, orders, pos))
+		string truckWhy;
+		if (!TruckAlive(convoy, orders, pos, truckWhy))
 		{
-			End(convoy, CLW_EConvoyState.FAILED, "the supply truck is gone before loading");
+			convoy.m_iGoneChecks++;
+			if (convoy.m_iGoneChecks < GONE_CHECKS_MAX)
+			{
+				Print(string.Format("CLW: convoy %1 truck %2 not usable yet (%3), check %4 of %5", convoy.m_sId, convoy.m_sTruckId, truckWhy, convoy.m_iGoneChecks, GONE_CHECKS_MAX), LogLevel.NORMAL);
+				return;	// StepPlanned calls again next tick
+			}
+
+			End(convoy, CLW_EConvoyState.FAILED, "the supply truck is gone before loading (" + truckWhy + ")");
 			return;
 		}
+		convoy.m_iGoneChecks = 0;
 
 		float dist = vector.DistanceXZ(pos, fromPos);
 		if (Arrived(convoy, orders, dist))
@@ -781,9 +811,10 @@ class CLW_Convoys
 
 		CLW_Orders orders = OrdersOf(convoy.m_sSide);
 		vector pos;
-		if (!TruckAlive(convoy, orders, pos))
+		string truckWhy;
+		if (!TruckAlive(convoy, orders, pos, truckWhy))
 		{
-			End(convoy, CLW_EConvoyState.FAILED, "the supply truck was lost on the way to the source");
+			End(convoy, CLW_EConvoyState.FAILED, "the supply truck was lost on the way to the source (" + truckWhy + ")");
 			return;
 		}
 
@@ -955,9 +986,10 @@ class CLW_Convoys
 	{
 		CLW_Orders orders = OrdersOf(convoy.m_sSide);
 		vector pos;
-		if (!TruckAlive(convoy, orders, pos))
+		string truckWhy;
+		if (!TruckAlive(convoy, orders, pos, truckWhy))
 		{
-			End(convoy, CLW_EConvoyState.LOST, "the truck was destroyed or captured");
+			End(convoy, CLW_EConvoyState.LOST, "the truck was destroyed or captured (" + truckWhy + ")");
 			return;
 		}
 
