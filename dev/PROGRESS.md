@@ -84,9 +84,10 @@ Local DS in `D:\GitHub\ReforgerMods\_dedicated\` (junction to `addon/`, no pack 
   tab; real LLM orders move units. Owner verified all green (2026-10-12, build #40).
 - [ ] Fake LLM provider: units seemed not to move (owner, build #40); check the fake orders path.
 
-## Current milestone: M4 - Any map, any pack
-**Next: round 3, see `notes/m4-round3-plan.md` (handover: owner test results, WP0-WP8, checklist).**
-Design: `notes/m4-design.md` (2026-10-12). Branch `feature/m4-any-map` (not merged yet: HQ menu needs a client test). Built by six
+## Current milestone: M4 - Any map, any pack (released as v1.0.0)
+**Next: round 3, see `notes/m4-round3-plan.md` (handover: owner test results, WP0-WP8, checklist). Work on a new branch from `main`.**
+Design: `notes/m4-design.md` (2026-10-12). Branch `feature/m4-any-map` merged into `main` and tagged v1.0.0 (2026-10-12, owner's call; the
+owner client checklist below is still open). Built by six
 subagents (WP1 maps + auto scenario, WP2 wrapper worlds + generator, WP3 side pools + props, WP4 HQ menu, WP5 FOB/convoys, WP6 GM spike).
 Verified on the dedicated server, unattended (builds #67-#71, packs RHS + WCS + GRS + WCS Loadout Editor, setup preset RHS_USAF vs RHS_AFRF):
 - [x] setup preset auto start (no human), invalid preset never replaced by defaults
@@ -157,3 +158,4 @@ Open:
 - 2026-10-11: Read-only web panel added to the sidecar (VISION 12a basic): http://127.0.0.1:8788/ with HQ view (map, SITREP, exchange log, status strip) and Configuration view (provider fake|anthropic|openai-compatible, model, base URL, key, timeout, max tokens, enabled switch, Test connection). Files in `dev/tools/dashboard/`; settings persist to `dev/tools/sidecar-config.json` (git-ignored). Verified end-to-end (2026-10-12).
 - 2026-10-12: Dynamic squad sweep: `CLW_SquadRegistry` (AIWorld.GetAIAgents -> parent groups, 5 s sweep) replaces the hardcoded squad names; commanders keep per-squad state by id (`CLW_SquadState`). Verified end-to-end (2026-10-12). See VISION 4b.
 - 2026-10-12: Adaptive HQ wakeup (VISION 1b basic): game polls every 10 s (rule fallback throttled to 25 s), sidecar scheduler per faction (scheduled / trigger / manual wake, `next_check_sec` from the model, budget stretch), config groups `wakeup` and `triggers`, `POST /api/wake`, dashboard countdown chips + Wakeup/Triggers settings. Verified end-to-end (2026-10-12).
+- 2026-10-12: M4 (any map, any pack: auto scenario, wrapper worlds + generator, GM takeover, side pools, prop sets, HQ menu, FOB kit + timing gate, garrison) merged into `main` and released as v1.0.0 (local tag). Round 3 (`notes/m4-round3-plan.md`) and the owner client checklist are next.

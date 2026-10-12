@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Clausewitz. Format: [Keep a Changelog](https://keepachangelog.com/), versioning: [SemVer](https://semver.org/) (pre-1.0: MINOR = features, may break; PATCH = fixes).
+All notable changes to Clausewitz. Format: [Keep a Changelog](https://keepachangelog.com/), versioning: [SemVer](https://semver.org/) (from 1.0: MAJOR = breaking for saved configs/scenarios or the sidecar protocol, MINOR = features, PATCH = fixes).
 Add a line under `[Unreleased]` with every user-visible change; `_tools/release.ps1` rolls it into a version.
 
 ## [Unreleased]
@@ -17,6 +17,9 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 - Start ownership (`CLW_ScenarioConfig.m_sStartOwnership` authored|nearest|none, `m_iStartOwnedPerSide`) and setup parameter "Start objectives" (`startObjectives`: scenario|none|1|2|3). Owners are resolved at war start AFTER the battle-size layout: "nearest" gives each side the kept objectives closest to its own HQ (relative distance), at least one stays neutral. The auto scenario uses "nearest"; an authored scenario with random start positions switches to "nearest" with its authored count. Log `CLW: points start owner ...`.
 - RHS prop style sets: RHS_USAF, RHS_AFRF and RHS_ION get their own RHS arsenal boxes (base arsenal and FOB kit); other roles fall back as before (RHS ships no own compositions). Research `dev/research/rhs-prop-sets.md`.
 - Map wrapper generator: checks that every `{GUID}` reference of the generated files is registered (map, Clausewitz, base game) and prints a ready-to-paste block for the local dedicated server (junctions, packs file, start line). First generated wrapper (Takistan) verified on the dedicated server.
+- Server setup preset (`setup` in `$profile:Clausewitz/overrides.json`): mode, factions and mode parameters for an unattended war start on a dedicated server (`autoStartSec`, `-1` = only pre-fill the menu); the values are also the setup menu defaults; an invalid preset keeps the war in setup with `CLW: ERROR setup preset ...`.
+- FOB timing gate: a side may establish a FOB only after `fobEarliestMin` minutes (default 6, 0 = off) and once it knows the front (an enemy contact, a contested objective or an objective that changed hands); the refusal ("too early for a FOB: ...") is the same for the LLM, the rule commander and the HQ menu. Sites are ranked by closeness to the front objective. Sidecar prompt, validator and fake provider follow (`fobRules.ready`).
+- HQ garrison and idle stand-down: `garrisonSquads` (default 1) infantry squads per side defend the HQ and are never sent away; a squad idling at the base without orders for `idleDespawnMin` minutes (default 6, 0 = off) is stood down and its cost refunded. Purchases carry their order (the rule commander buys only for unmet tasks, LLM `buy` entries need `command` + `target`/`pos`), applied when the unit is ready.
 
 ### Fixed
 - Auto scenario start owners were picked among the central objectives only, so with a bigger battle an owned objective could lie further from its HQ than a neutral one (Everon: C owned by US while B was further out).
@@ -28,10 +31,14 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 - AI purchases of vehicles without a default crew (RHS K-17, K-4386 variants) no longer fail and refund.
 - Duplicated spawn points in the deploy menu / map: the scene-placed spawn points (`SpawnPoint_US` / `_USSR`, named "US Point") were only disabled, never removed, and a disabled point still shows next to ours (and after a side re-key they kept the old faction key and were not even touched). `CLW_Bases.PruneForeignSpawns` now deletes every plain spawn point that is not the base or FOB point (at start, 4 s later, after a re-key and after a FOB is built); log `CLW: bases spawn points deleted=N (foreign), now per side: ...`.
 - Spawn points now have a readable name that replicates to clients: the base point uses the scenario base label ("US HQ"), a FOB point "FOB1 <site name>"; the HQ point is the default pick in the deploy menu.
+- Arsenal pool items (kin pool / pack rules) could not be taken and showed no price: the catalog entry lookup now uses the pool.
+- GM takeover: supplies are switched on (Game Master modes disable them, so arsenals had no prices and kits were free).
+- Clients lost the own-side map markers created during the setup-to-war faction switch (vanilla drops markers of a foreign faction for good); they are now kept and restored when the client's faction changes.
 
 ### Changed
 - A new FOB is no longer just an invisible spawn point: a compact kit stands at the spawn point (small arsenal box, supply box linked to the FOB stock like the base supply, five sandbag segments in an arc), placed on clear ground within 14 m of the site and removed with the FOB. Data: `m_aFobKit` in the faction profiles (US, USSR, FIA ship one; sides without a kit use the kin faction's, else the old tier-1 services). Arsenal and supply box get map markers; the extra "FOB1" location marker is only used when no kit piece exists. Tier 2 (`UPGRADE_FOB`) is unchanged. A kit FOB has no command post, so it is no longer lost by destroying one (enemy presence still loses it).
 - New `CLW_PropResolver`: one choke point that resolves a role ("service.arsenal", "fob.supply_box", "fort.sandbag_long", ...) of a side to a prefab (own profile, named fallback faction, kin faction); the base services and the FOB kit both use it. Log `CLW: props <side> <role> -> <prefab> (source ...)`.
+- Base services stand compactly around the HQ (rings start at footprint + 5 m, 3 m gaps; an authored offset is tried first). The vehicle depot is affiliated with its side, lists that side's vehicle catalog (kin faction fallback) and pays from the base supply stock.
 
 ## [0.5.0] - 2026-10-12
 
