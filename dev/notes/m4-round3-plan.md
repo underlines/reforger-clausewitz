@@ -17,7 +17,7 @@ Written for a fresh session with no prior context. Read this file, then `dev/PRO
 - Rematch in place after victory (no world reload). Keep per-base supply stock: FOB arsenals use FOB-local stock, convoys carry it.
 - Vehicle depot may stay at its current distance; everything else 30 % tighter. FOB shown with a base marker + arrows, never as an objective.
 - HQ memory: compact journal (WP5), togglable in the dashboard. Last step: modern vehicle packs (WP8).
-- At handover the DS, the owner's client and the sidecar may still be running: , close the client, kill the node sidecar before the first build.
+- At handover the DS, the owner's client and the sidecar may still be running: run `_dedicated\stop-server.ps1`, close the client, kill the node sidecar before the first build.
 
 ## 2. Working rules (owner's, learned the hard way)
 - Implementation by **Sonnet subagents** (`model: sonnet`), code only (no Workbench/DS/e2e); disjoint file ownership per work package; I merge, compile and test on the DS.
