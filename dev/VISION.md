@@ -404,6 +404,21 @@ The mod must not hard-code vanilla prefabs. Instead:
 - RHS / WCS and other packs are **optional dependencies**; ship only soft compatibility data (mappings), no hard requirement.
 - Everything the LLM sees about a faction is generated from this profile (so it knows what it has).
 
+### 10a. Prop / structure resolution: admin > preferred packs > vanilla (owner idea 2026-10-12, refined)
+Fortifications (HESCO, sandbags, bunkers), base structures (HQ, arsenal, vehicle request, supply, medical) and later decor come from
+optional packs when present, vanilla otherwise, and the server admin decides last. No pack is ever required.
+- **Roles, not prefabs:** code only asks for a role (`service.arsenal`, `fort.wall_long`, `fort.sandbag_round`, `fort.gate`...). Each role
+  carries its data (footprint, clearance, height, cost) so placement (`CLW_FreeSpot`) works whatever prefab resolves.
+- **Style sets:** candidates are grouped into sets (e.g. `vanilla`, `wcs`, `rhs`) so one base does not mix looks; a set can be bound per
+  faction/side (desert vs woodland) and may leave roles empty (falls back per role to the next set).
+- **Resolution chain per role, at war start:** admin override (`$profile:Clausewitz/overrides.json`: per role, per set, or "vanilla only")
+  > our shipped preference list (`.conf` data: ordered sets with `{GUID}path` candidates; only used if that addon is loaded) > vanilla
+  default. Every candidate is validated at runtime (prefab loads, footprint known); a missing/renamed pack prefab falls through with a log
+  line instead of breaking the base.
+- **Visible:** log + dashboard list "role -> prefab (source: admin|preferred:<set>|vanilla, reason)" so admins see what they got.
+- Same mechanism later for vehicles/units fallbacks (already partly the catalog override) and for FOB layouts (a layout = list of roles
+  with relative positions, not prefabs).
+
 ---
 
 ## 11. Humans: chat, voice and radio
