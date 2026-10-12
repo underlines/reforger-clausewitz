@@ -4,7 +4,7 @@ Written for a fresh session with no prior context. Read this file, then `dev/PRO
 
 ## 1. Context in 12 lines
 - Mod: Clausewitz (Arma Reforger, Enforce script + Node LLM sidecar `dev/tools/llm_sidecar.mjs` with web dashboard on http://127.0.0.1:8788/).
-  Repo `D:\GitHub\ReforgerMods\Clausewitz` (own git repo, nested in the workspace repo). Branch **`feature/m4-any-map`** (not merged to `main`; release via `reforger-release` skill only).
+  Repo `D:\GitHub\ReforgerMods\Clausewitz` (own git repo, nested in the workspace repo). M4 is merged and released as v1.0.0; round 3 works on a new branch **`feature/m4-round3`** from `main` (release via `reforger-release` skill only).
 - Runtime test = local dedicated server (DS), skill `reforger-workbench-test`. Workspace tools `D:\GitHub\ReforgerMods\_dedicated\`:
   `start-server.ps1 -World <world> -Packs <file> [-Extra "-clwTakeover"]`, `stop-server.ps1`, `start-client.ps1 -Packs <same file>` (the owner's game client, joins 127.0.0.1).
   Server log: `_dedicated\profile\logs\<latest>\console.log`; client log: `C:\Users\Jan\Documents\My Games\ArmaReforger\logs\<latest>\console.log`.
@@ -21,7 +21,7 @@ Written for a fresh session with no prior context. Read this file, then `dev/PRO
 
 ## 2. Working rules (owner's, learned the hard way)
 - Implementation by **Sonnet subagents** (`model: sonnet`), code only (no Workbench/DS/e2e); disjoint file ownership per work package; I merge, compile and test on the DS.
-- **Create each subagent's worktree myself**: `git -C D:\GitHub\ReforgerMods\Clausewitz worktree add .claude/worktrees/<wp> -b wp/<wp> feature/m4-any-map` and pass the absolute path.
+- **Create each subagent's worktree myself**: `git -C D:\GitHub\ReforgerMods\Clausewitz worktree add .claude/worktrees/<wp> -b wp/<wp> feature/m4-round3` and pass the absolute path.
   Never `isolation:"worktree"` from a cwd outside the Clausewitz repo (it worktrees the outer repo; the harness deleted one with a whole refactor in it).
 - Tell subagents not to kill node processes (one killed the owner's sidecar).
 - Enforce gotchas: `.claude/skills/reforger-script-dev/SKILL.md` (no `func` params, never `modded class` a vanilla [BaseContainerProps] class used by prefabs, ...).
