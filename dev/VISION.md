@@ -409,6 +409,21 @@ Because the game already talks to the sidecar over HTTP, the sidecar can serve a
 
 - **Basic (early, read-only):** per faction: map with own squads, known contacts (age/confidence) and active orders; squad list (strength, mode, human/AI led); latest situation sent, raw LLM reply, validation drops, fallback events; request latency and token/cost counters. Fed by the `/orders` traffic the sidecar already sees (keep a ring buffer of recent situations/replies), served as a static page + JSON/SSE endpoint on the sidecar port.
 - **Advanced (later, editable):** pause/resume the LLM per faction, switch commander mode (Rules / LLM), edit the prompt or settings live, issue or cancel orders by hand from the map, approve/reject LLM orders before execution, replay a timeline of the war. Needs an authenticated command channel back to the game (game polls the sidecar for queued commands, section 1) and must respect the same validation rules as LLM orders.
+- **Far future: player accounts and a soldier's "battle tablet" view (owner idea 2026-10-12).**
+  - **Two roles:** *admin* login (today's full dashboard: both factions, LLM exchange, config, usage, write access) vs. *user*
+    registration/login. A user links their **SteamID** (Reforger identity, `BackendApi.GetPlayerIdentityId` / platform id), so the server knows
+    which player and therefore which faction and squad the account is. The faction comes from the live game, not from the account, so a
+    side switch changes the view.
+  - **Fog of war in the web UI:** a user sees only their own faction: its SITREP (later the squad briefing, section 4), own forces and the
+    contacts their faction knows. The other faction is blinded completely (no tickets breakdown beyond what the in-game HUD shows, no
+    positions, no orders, no LLM data). Filtering happens on the server per request, never in the browser.
+  - **Much less data:** what a modern soldier would see on a rugged Android tablet / field laptop running a real-time battle management
+    system (ATAK-like: blue-force tracking, own unit and neighbours, reported enemy markers with age, tasking, objectives, chat/SITREP
+    feed, grid tool). No staff-level analytics, no raw model output, no exact strengths of other units beyond need-to-know.
+  - **Few write paths for users:** e.g. acknowledge a mission, send a contact report (same `Contact` pipeline as section 8), request
+    support/resupply, maybe pick a saved loadout (loadout plan L5). Everything else stays admin-only.
+  - **Needs:** accounts + sessions in the sidecar (or a separate service), SteamID verification (at least: the game confirms the link
+    in-game, e.g. a `/link <code>` chat command), HTTPS when exposed beyond localhost, per-user rate limits, and a mobile-first UI.
 
 ---
 
