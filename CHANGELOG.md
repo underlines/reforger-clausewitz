@@ -5,6 +5,13 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 
 ## [Unreleased]
 
+### Added
+- Control points: own capture logic (progress, contested, neutralise-then-capture), public map markers for points and bases.
+- War state with pluggable war modes: "short conflict" (tickets, bleed for the side holding fewer points, win by tickets / holding all points / time limit). The war waits in a SETUP phase until started (auto start after N s from the scenario).
+- Supplies ledger with income from held points (TrySpend / Refund / AddSupplies API for later phases).
+- Bases and respawn: per-faction spawn point spawned at the base position, scene spawn points of the scenario factions disabled; respawn gated by tickets.
+- Scenario config data (`Configs/CLW/Scenarios/Arland.conf`): factions, bases, objectives, economy and war mode defaults; no hard-wired factions or coordinates in code.
+
 ## [0.2.0] - 2026-10-12
 
 ### Added

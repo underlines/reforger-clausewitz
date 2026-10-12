@@ -75,13 +75,10 @@ class CLW_ContactMarkers
 
 	protected EMilitarySymbolIdentity GetIdentity(string factionKey)
 	{
-		// same mapping as the vanilla SCR_AIEnemyMarkingSystem
-		if (factionKey == "US")
-			return EMilitarySymbolIdentity.BLUFOR;
+		// identity comes from the scenario data (faction setup), unknown factions show as INDFOR
+		if (!CLW_ScenarioConfig.IsClwFaction(factionKey))
+			return EMilitarySymbolIdentity.INDFOR;
 
-		if (factionKey == "USSR")
-			return EMilitarySymbolIdentity.OPFOR;
-
-		return EMilitarySymbolIdentity.INDFOR;
+		return CLW_ScenarioConfig.GetIdentity(factionKey);
 	}
 }

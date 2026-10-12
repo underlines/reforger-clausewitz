@@ -21,8 +21,6 @@ class CLW_SquadRecord
 // Enumeration: AIWorld.GetAIAgents (every spawned agent: scene-placed, Game Master and script-spawned) -> parent group.
 class CLW_SquadRegistry
 {
-	static const string FACTION_US = "US";
-	static const string FACTION_USSR = "USSR";
 	static const bool ADOPT_RUNTIME_GROUPS = true;	// false: only groups with an entity name (placed in the scene) are adopted
 	static const string IGNORE_PREFIX = "CLW_IGNORE_";
 	static const int SWEEP_MS = 5000;
@@ -36,7 +34,8 @@ class CLW_SquadRegistry
 
 	static bool IsClwFaction(string factionKey)
 	{
-		return factionKey == FACTION_US || factionKey == FACTION_USSR;
+		// the factions are the scenario's (data), nothing is adopted before it is loaded
+		return CLW_ScenarioConfig.IsClwFaction(factionKey);
 	}
 
 	// Run an immediate sweep, then repeat. Server only.
@@ -301,7 +300,10 @@ class CLW_SquadRegistry
 	protected void LogSummary()
 	{
 		string line = "CLW: registry";
-		array<string> keys = {FACTION_US, FACTION_USSR};
+		array<string> keys = {};
+		CLW_ScenarioConfig scenario = CLW_ScenarioConfig.Get();
+		if (scenario)
+			scenario.GetFactionKeys(keys);
 		foreach (string key : keys)
 		{
 			array<string> ids = {};

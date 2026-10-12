@@ -10,6 +10,19 @@ class CLW_GameMode : SCR_BaseGameMode
 	protected static const bool RUN_ORDER_SPIKE = false;
 	protected static const bool RUN_REST_SPIKE = true;
 
+	[Attribute("", UIWidgets.ResourceNamePicker, "Scenario config: factions, bases, objectives, economy (spec 0a). Empty = CLW_WarConfig.DEFAULT_SCENARIO", "conf")]
+	protected ResourceName m_ScenarioConfig;
+
+	protected static CLW_GameMode s_Instance;
+
+	// M2 war systems (server only, started in this order: scenario -> bases -> control points -> war state -> registry/commanders).
+	protected ref CLW_Bases m_Bases;
+	protected ref CLW_ControlPoints m_Points;
+	protected ref CLW_WarState m_War;
+	// The two scenario faction keys; the commander/book/marker sets below belong to them in order (First = *US fields, Second = *USSR fields).
+	protected string m_sKeyFirst;
+	protected string m_sKeySecond;
+
 	// Which AI groups HQ commands (scene-placed and added at runtime, e.g. from Game Master); the commanders and markers query it.
 	protected ref CLW_SquadRegistry m_Registry = new CLW_SquadRegistry();
 	// One contact picture, marker set and rule commander per faction.
@@ -19,11 +32,45 @@ class CLW_GameMode : SCR_BaseGameMode
 	protected ref CLW_ContactMarkers m_MarkersUSSR = new CLW_ContactMarkers();
 	protected ref CLW_RemoteCommander m_CommanderUS = new CLW_RemoteCommander();
 	protected ref CLW_RemoteCommander m_CommanderUSSR = new CLW_RemoteCommander();
-	protected static const ResourceName WAYPOINT_MOVE = "{750A8D1695BD6998}Prefabs/AI/Waypoints/AIWaypoint_Move.et";
+
+	static CLW_GameMode GetInstance()
+	{
+		return s_Instance;
+	}
+
+	static CLW_ScenarioConfig GetScenario()
+	{
+		return CLW_ScenarioConfig.Get();
+	}
+
+	static CLW_Bases GetBases()
+	{
+		if (!s_Instance)
+			return null;
+
+		return s_Instance.m_Bases;
+	}
+
+	static CLW_ControlPoints GetControlPoints()
+	{
+		if (!s_Instance)
+			return null;
+
+		return s_Instance.m_Points;
+	}
+
+	static CLW_WarState GetWarState()
+	{
+		if (!s_Instance)
+			return null;
+
+		return s_Instance.m_War;
+	}
 
 	protected override void OnGameStart()
 	{
 		super.OnGameStart();
+		s_Instance = this;
 		Print("CLW: build " + CLW_Build.STAMP, LogLevel.NORMAL);
 		Print("CLW: game mode started", LogLevel.NORMAL);
 		CLW_PlayerSquad.ApplyCommandingLimit();
@@ -34,21 +81,139 @@ class CLW_GameMode : SCR_BaseGameMode
 				GetGame().GetCallqueue().CallLater(CLW_RestSpike.Run, 10000);
 			if (RUN_ORDER_SPIKE)
 				GetGame().GetCallqueue().CallLater(SpikeOrderLoop, 15000);
+
+			// 1. scenario data (factions, bases, objectives, economy)
+			CLW_ScenarioConfig scenario = LoadScenario();
+			if (scenario)
+			{
+				m_sKeyFirst = scenario.GetFactionKey(0);
+				m_sKeySecond = scenario.GetFactionKey(1);
+				// 2. bases + respawn points, 3. control points, 4. war state
+				m_Bases = new CLW_Bases();
+				m_Bases.Init(scenario);
+				m_Points = new CLW_ControlPoints();
+				m_Points.Init(scenario);
+				m_War = new CLW_WarState();
+				m_War.Init(scenario, m_Points);
+			}
+			else
+			{
+				Print("CLW: NO SCENARIO: war systems, registry adoption and commanders are disabled", LogLevel.ERROR);
+			}
+
 			// Adopt the scene-placed squads now (before the first commander tick), then keep sweeping for new/lost groups.
 			m_Registry.Start();
 			// The commanders take their squads from the registry; human-led squads get missions instead of waypoints.
-			m_CommanderUS.Init(CLW_SquadRegistry.FACTION_US, m_BookUS, m_Registry);
-			m_CommanderUSSR.Init(CLW_SquadRegistry.FACTION_USSR, m_BookUSSR, m_Registry);
-			array<vector> patrolUS = {Vector(2030, 0, 2630), Vector(2150, 0, 2630)};
-			array<vector> patrolUSSR = {Vector(2030, 0, 3030), Vector(2150, 0, 3030)};
-			m_CommanderUS.SetPatrolPoints(patrolUS);
-			m_CommanderUSSR.SetPatrolPoints(patrolUSSR);
+			if (scenario)
+			{
+				m_CommanderUS.Init(m_sKeyFirst, m_BookUS, m_Registry);
+				m_CommanderUSSR.Init(m_sKeySecond, m_BookUSSR, m_Registry);
+				// Patrol points come from data: the two objectives nearest to each faction's base.
+				m_CommanderUS.SetPatrolPoints(NearestObjectivePositions(scenario, m_sKeyFirst, 2));
+				m_CommanderUSSR.SetPatrolPoints(NearestObjectivePositions(scenario, m_sKeySecond, 2));
+			}
 
 			GetGame().GetCallqueue().CallLater(CLW_WorldInfo.Start, 5000);
 			GetGame().GetCallqueue().CallLater(SayBuild, 8000);
-			GetGame().GetCallqueue().CallLater(PollContacts, 20000, true);
-			GetGame().GetCallqueue().CallLater(ThinkCommanders, 10000, true);
+			if (scenario)
+			{
+				GetGame().GetCallqueue().CallLater(PollContacts, 20000, true);
+				GetGame().GetCallqueue().CallLater(ThinkCommanders, 10000, true);
+			}
 		}
+	}
+
+	// Scenario from the prefab attribute, else the default path (logged).
+	protected CLW_ScenarioConfig LoadScenario()
+	{
+		CLW_ScenarioConfig scenario;
+		if (!m_ScenarioConfig.IsEmpty())
+		{
+			scenario = CLW_ScenarioConfig.Load(m_ScenarioConfig);
+			if (scenario)
+				return scenario;
+
+			Print("CLW: scenario attribute failed, trying the default path", LogLevel.WARNING);
+		}
+		else
+		{
+			Print("CLW: no scenario attribute on the game mode prefab, using the default path", LogLevel.WARNING);
+		}
+
+		return CLW_ScenarioConfig.Load(CLW_WarConfig.DEFAULT_SCENARIO);
+	}
+
+	// Positions (surface Y) of the objectives nearest to a faction's base, nearest first.
+	protected array<vector> NearestObjectivePositions(CLW_ScenarioConfig scenario, string factionKey, int count)
+	{
+		array<vector> result = {};
+		if (!m_Bases || !scenario.m_aObjectives)
+			return result;
+
+		vector basePos = m_Bases.GetBasePos(factionKey);
+		array<CLW_ObjectiveSetup> pool = {};
+		foreach (CLW_ObjectiveSetup objective : scenario.m_aObjectives)
+		{
+			pool.Insert(objective);
+		}
+
+		while (result.Count() < count && !pool.IsEmpty())
+		{
+			int best = 0;
+			float bestDist = 1000000000;
+			foreach (int i, CLW_ObjectiveSetup candidate : pool)
+			{
+				float dist = vector.DistanceXZ(basePos, candidate.m_vPos);
+				if (dist < bestDist)
+				{
+					bestDist = dist;
+					best = i;
+				}
+			}
+
+			vector pos = pool[best].m_vPos;
+			pos[1] = GetGame().GetWorld().GetSurfaceY(pos[0], pos[2]);
+			result.Insert(pos);
+			pool.Remove(best);
+		}
+
+		return result;
+	}
+
+	// Respawn gate: a faction without tickets (or a finished war) cannot spawn players.
+	override bool CanPlayerSpawn_S(SCR_SpawnRequestComponent requestComponent, SCR_SpawnHandlerComponent handlerComponent, SCR_SpawnData data, out SCR_ESpawnResult result = SCR_ESpawnResult.SPAWN_NOT_ALLOWED)
+	{
+		if (!super.CanPlayerSpawn_S(requestComponent, handlerComponent, data, result))
+			return false;
+
+		if (!m_War || !requestComponent)
+			return true;
+
+		Faction faction = SCR_FactionManager.SGetPlayerFaction(requestComponent.GetPlayerId());
+		if (faction && CLW_ScenarioConfig.IsClwFaction(faction.GetFactionKey()) && !m_War.CanFactionSpawn(faction.GetFactionKey()))
+		{
+			Print(string.Format("CLW: respawn denied for player %1 faction %2 (no tickets / war over)", requestComponent.GetPlayerId(), faction.GetFactionKey()), LogLevel.NORMAL);
+			result = SCR_ESpawnResult.SPAWN_NOT_ALLOWED;
+			return false;
+		}
+
+		return true;
+	}
+
+	// Kill accounting: every destroyed controllable (AI, player, vehicle) costs its faction tickets.
+	protected override void OnControllableDestroyedEx(notnull SCR_InstigatorContextData instigatorContextData)
+	{
+		super.OnControllableDestroyedEx(instigatorContextData);
+		if (m_War && Replication.IsServer())
+			m_War.OnEntityDestroyed(instigatorContextData.GetVictimEntity(), instigatorContextData.GetVictimPlayerID());
+	}
+
+	// Players: the war state de-duplicates against OnControllableDestroyedEx by entity.
+	protected override void OnPlayerKilledEx(notnull SCR_InstigatorContextData instigatorContextData)
+	{
+		super.OnPlayerKilledEx(instigatorContextData);
+		if (m_War && Replication.IsServer())
+			m_War.OnEntityDestroyed(instigatorContextData.GetVictimEntity(), instigatorContextData.GetVictimPlayerID());
 	}
 
 	protected void SayBuild()
@@ -59,8 +224,8 @@ class CLW_GameMode : SCR_BaseGameMode
 	// Perception -> contact book -> map markers, for both factions.
 	protected void PollContacts()
 	{
-		UpdateFaction(CLW_SquadRegistry.FACTION_US, m_BookUS, m_MarkersUS);
-		UpdateFaction(CLW_SquadRegistry.FACTION_USSR, m_BookUSSR, m_MarkersUSSR);
+		UpdateFaction(m_sKeyFirst, m_BookUS, m_MarkersUS);
+		UpdateFaction(m_sKeySecond, m_BookUSSR, m_MarkersUSSR);
 	}
 
 	protected void UpdateFaction(string factionKey, CLW_ContactBook book, CLW_ContactMarkers markers)
@@ -134,14 +299,24 @@ class CLW_GameMode : SCR_BaseGameMode
 		int playerId = GetGame().GetPlayerManager().GetPlayerIdFromControlledEntity(entity);
 		Faction faction = SCR_FactionManager.SGetPlayerFaction(playerId);
 		Print(string.Format("CLW: player %1 spawned faction=%2 at %3", playerId, faction, entity.GetOrigin()), LogLevel.NORMAL);
+		if (m_War)
+			m_War.OnHumanPlayerSpawned(playerId);
 		if (!faction)
 			return;
 
 		// Pick the player's squad from the registry (sweep first: the squads may have spawned after the last sweep); the "_1" squad is preferred.
 		m_Registry.Sweep();
-		string preferredSquad = "CLW_Squad_" + faction.GetFactionKey() + "_1";
+		// preferred squad entity name comes from the scenario faction setup (empty = first free squad)
+		string preferredSquad;
+		CLW_ScenarioConfig scenario = CLW_ScenarioConfig.Get();
+		if (scenario)
+		{
+			CLW_FactionSetup factionSetup = scenario.FindFaction(faction.GetFactionKey());
+			if (factionSetup)
+				preferredSquad = factionSetup.m_sPreferredSquad;
+		}
 		SCR_AIGroup squad = m_Registry.FindPlayerSquad(faction.GetFactionKey(), preferredSquad);
-		if (!squad)
+		if (!squad && !preferredSquad.IsEmpty())
 			squad = FindSquad(preferredSquad);	// not adopted yet (no living AI member): Join retries until it is ready
 		SCR_GroupsManagerComponent groups = SCR_GroupsManagerComponent.GetInstance();
 		if (!squad || !groups)
@@ -206,7 +381,7 @@ class CLW_GameMode : SCR_BaseGameMode
 		params.TransformMode = ETransformMode.WORLD;
 		params.Transform[3] = target;
 
-		AIWaypoint waypoint = AIWaypoint.Cast(GetGame().SpawnEntityPrefab(Resource.Load(WAYPOINT_MOVE), GetGame().GetWorld(), params));
+		AIWaypoint waypoint = AIWaypoint.Cast(GetGame().SpawnEntityPrefab(Resource.Load(CLW_WarConfig.WAYPOINT_MOVE), GetGame().GetWorld(), params));
 		if (!waypoint)
 		{
 			Print("CLW: failed to spawn move waypoint", LogLevel.ERROR);

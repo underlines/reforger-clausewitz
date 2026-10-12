@@ -16,4 +16,5 @@ CLW_GameMode : "{0F307326459A1395}Prefabs/MP/Modes/GameMode_Base.et" {
   }
  }
  m_bUseSpawnPreload 0
+ m_ScenarioConfig "{6B1E4C7A29D35F80}Configs/CLW/Scenarios/Arland.conf"
 }
