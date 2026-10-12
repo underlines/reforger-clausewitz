@@ -850,6 +850,7 @@ class CLW_FobManager
 		if (!found.IsEmpty())
 		{
 			fob.m_sBuilderId = found;
+			SetTeamRole(found, true);
 			Print(string.Format("CLW: fob %1 truck assigned: %2 (free unit)", fob.m_sId, found), LogLevel.NORMAL);
 			BeginMove(fob);
 			return;
@@ -914,7 +915,11 @@ class CLW_FobManager
 
 		fob.m_sTagBuilder = fob.m_sId + "_builder";
 		string error;
-		if (!spawner.BuyTagged(fob.m_sSide, pick.m_sType, "build " + fob.m_sId, fob.m_sTagBuilder, error))
+		bool canBuy = CLW_EconomyGuard.CanAiSpend(fob.m_sSide, pick.m_iCost, error);	// HQ reserve floor (error = why)
+		if (canBuy)
+			canBuy = spawner.BuyTagged(fob.m_sSide, pick.m_sType, "build " + fob.m_sId, fob.m_sTagBuilder, error);
+
+		if (!canBuy)
 		{
 			fob.m_sTagBuilder = "";
 			if (fob.m_eState != CLW_EFobState.PLANNED)
@@ -930,6 +935,7 @@ class CLW_FobManager
 			}
 
 			fob.m_sBuilderId = walker;
+			SetTeamRole(walker, true);
 			Print(string.Format("CLW: fob %1 builder: %2 walks (purchase refused: %3)", fob.m_sId, walker, error), LogLevel.NORMAL);
 			BeginMove(fob);
 			return;
@@ -953,6 +959,7 @@ class CLW_FobManager
 				else if (fob.IsInProgress())
 				{
 					fob.m_sBuilderId = unitId;
+					SetTeamRole(unitId, true);
 					Print(string.Format("CLW: fob %1 truck ready: %2", fob.m_sId, unitId), LogLevel.NORMAL);
 				}
 
@@ -1266,13 +1273,33 @@ class CLW_FobManager
 
 		fob.m_sTagEscort = fob.m_sId + "_escort";
 		string error;
-		if (spawner.BuyTagged(fob.m_sSide, cheapest.m_sType, "escort " + fob.m_sId, fob.m_sTagEscort, error))
+		bool escortOk = CLW_EconomyGuard.CanAiSpend(fob.m_sSide, cheapest.m_iCost, error);	// HQ reserve floor (error = why)
+		if (escortOk)
+			escortOk = spawner.BuyTagged(fob.m_sSide, cheapest.m_sType, "escort " + fob.m_sId, fob.m_sTagEscort, error);
+
+		if (escortOk)
 			Print(string.Format("CLW: fob %1 escort: bought %2", fob.m_sId, cheapest.m_sType), LogLevel.NORMAL);
 		else
 			Print(string.Format("CLW: fob %1 escort: none (%2), the builder goes alone", fob.m_sId, error), LogLevel.NORMAL);
 	}
 
 	// ---- moving / building ----
+
+	// WP1 naming: the builder squad shows as "FOB Team N" while it is reserved; "" gives back its kind name. Escorts keep their kind name.
+	protected static void SetTeamRole(string unitId, bool on)
+	{
+		if (unitId.IsEmpty())
+			return;
+
+		CLW_SquadRegistry registry = CLW_GameMode.GetRegistry();
+		if (!registry)
+			return;
+
+		if (on)
+			registry.SetRole(unitId, CLW_SquadRegistry.ROLE_FOB_TEAM);
+		else
+			registry.SetRole(unitId, "");
+	}
 
 	protected static bool BuilderAlive(CLW_Fob fob, CLW_Orders orders)
 	{
@@ -1296,6 +1323,7 @@ class CLW_FobManager
 			return;
 		}
 
+		SetTeamRole(fob.m_sBuilderId, false);
 		fob.m_sBuilderId = "";
 		fob.m_sTagBuilder = "";
 		SetState(fob, CLW_EFobState.PLANNED, "looking for a new builder (progress " + Math.Round(fob.m_fBuild) + " % kept)");
@@ -1661,6 +1689,7 @@ class CLW_FobManager
 
 		fob.m_iSwaps++;
 		fob.m_iStalls = 0;
+		SetTeamRole(old, false);
 		fob.m_sBuilderId = "";
 		fob.m_sTagBuilder = "";
 		fob.m_bLeg = false;
@@ -1855,6 +1884,7 @@ class CLW_FobManager
 			}
 		}
 
+		SetTeamRole(fob.m_sBuilderId, false);
 		Print(string.Format("CLW: fob %1 released builder='%2' escort='%3' (garrison=%4)", fob.m_sId, fob.m_sBuilderId, fob.m_sEscortId, garrison), LogLevel.NORMAL);
 	}
 
