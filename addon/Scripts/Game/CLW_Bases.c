@@ -8,6 +8,7 @@ class CLW_Bases
 	protected ref array<ref CLW_BasePlacement> m_aPlace = {};	// placement state per base (same order as m_aKeys)
 	protected ref array<SCR_SpawnPoint> m_aFobSpawns = {};	// spawn points of established FOBs (CLW_BuildExecutor)
 	protected bool m_bStarted;
+	static const int HQ_PRIORITY = 10;	// default pick in the deploy menu; FOB points keep 0
 	protected float m_fSeparationScale = 1;		// battle size distance scale (ApplyLayout)
 	protected float m_fAuthoredDistance;		// HQ distance of the authored (scenario) layout
 	protected float m_fHqDistance;				// HQ distance after the layout
@@ -64,14 +65,17 @@ class CLW_Bases
 			Print(string.Format("CLW: bases %1 base at %2: navmesh=%3 nearestRoad=%4 (%5)", setup.m_sKey, pos, nav, roadDist, setup.m_sBaseLabel), LogLevel.NORMAL);
 		}
 
-		DisableSceneSpawns();
 		foreach (int i, CLW_FactionSetup spawnSetup : scenario.m_aFactions)
 		{
-			m_aOwnSpawns[i] = SpawnBasePoint(spawnSetup, m_aPos[i]);
+			m_aOwnSpawns[i] = SpawnBasePoint(spawnSetup, m_aPos[i], BaseName(spawnSetup));
+			if (m_aOwnSpawns[i])
+				m_aOwnSpawns[i].SetPriority(HQ_PRIORITY);	// preselected in the deploy menu
 		}
 
+		// every other plain spawn point (scene-placed, composition) is deleted: exactly one point per base
+		PruneForeignSpawns();
 		// scene entities may finish initialising after us: second pass
-		GetGame().GetCallqueue().CallLater(DisableSceneSpawns, CLW_WarConfig.SCENE_SPAWN_RECHECK_MS);
+		GetGame().GetCallqueue().CallLater(PruneForeignSpawns, CLW_WarConfig.SCENE_SPAWN_RECHECK_MS);
 		// AI agents (needed to ask the navmesh) may not exist yet at Init: validate once more, log only
 		GetGame().GetCallqueue().CallLater(RecheckBases, CLW_WarConfig.SCENE_SPAWN_RECHECK_MS * 2);
 	}
@@ -124,18 +128,28 @@ class CLW_Bases
 			if (own)
 			{
 				own.SetFactionKey(setup.m_sKey);
+				own.SetSpawnPointName(BaseName(setup));
 				own.SetSpawnPointEnabled_S(true);
 			}
 			else if (!setup.m_SpawnPointPrefab.IsEmpty())
 			{
-				m_aOwnSpawns[i] = SpawnBasePoint(setup, m_aPos[i]);
+				m_aOwnSpawns[i] = SpawnBasePoint(setup, m_aPos[i], BaseName(setup));
 			}
 
 			Print(string.Format("CLW: bases side %1 re-keyed %2 -> %3 (spawn point %4)", i, oldKey, setup.m_sKey, m_aOwnSpawns[i]), LogLevel.NORMAL);
 		}
 
-		DisableSceneSpawns();
-		GetGame().GetCallqueue().CallLater(DisableSceneSpawns, CLW_WarConfig.SCENE_SPAWN_RECHECK_MS);
+		PruneForeignSpawns();
+		GetGame().GetCallqueue().CallLater(PruneForeignSpawns, CLW_WarConfig.SCENE_SPAWN_RECHECK_MS);
+	}
+
+	// Readable name of a base spawn point: the scenario's base label ("US HQ"), else "HQ".
+	protected string BaseName(CLW_FactionSetup setup)
+	{
+		if (!setup.m_sBaseLabel.IsEmpty())
+			return setup.m_sBaseLabel;
+
+		return CLW_Services.BASE_HQ;
 	}
 
 	// ---- battle layout (HQ separation scales with the battle size) ----
@@ -361,7 +375,7 @@ class CLW_Bases
 
 	// Spawn point of a FOB: same prefab and radius as the faction's base spawn point (respawn there costs tickets like at the base).
 	// Null when the faction setup has no spawn point prefab.
-	SCR_SpawnPoint SpawnFobPoint(string factionKey, vector pos)
+	SCR_SpawnPoint SpawnFobPoint(string factionKey, vector pos, string name = "")
 	{
 		CLW_ScenarioConfig scenario = CLW_ScenarioConfig.Get();
 		if (!scenario)
@@ -371,7 +385,7 @@ class CLW_Bases
 		if (!setup)
 			return null;
 
-		SCR_SpawnPoint point = SpawnBasePoint(setup, pos);
+		SCR_SpawnPoint point = SpawnBasePoint(setup, pos, name);
 		if (point)
 			m_aFobSpawns.Insert(point);
 
@@ -393,7 +407,7 @@ class CLW_Bases
 		return pos[1] <= world.GetOceanHeight(pos[0], pos[2]) + CLW_WarConfig.WATER_MARGIN_M;
 	}
 
-	protected SCR_SpawnPoint SpawnBasePoint(CLW_FactionSetup setup, vector pos)
+	protected SCR_SpawnPoint SpawnBasePoint(CLW_FactionSetup setup, vector pos, string name)
 	{
 		if (setup.m_SpawnPointPrefab.IsEmpty())
 			return null;
@@ -418,35 +432,44 @@ class CLW_Bases
 		point.SetFactionKey(setup.m_sKey);
 		if (setup.m_fSpawnRadius > 0)
 			point.SetSpawnRadius(setup.m_fSpawnRadius);
+		if (!name.IsEmpty())
+			point.SetSpawnPointName(name);	// RplProp: shown in the deploy menu list and on the deploy map (GetSpawnPointName)
 		point.SetSpawnPointEnabled_S(true);
-		Print(string.Format("CLW: bases spawn point for %1 created at %2 radius=%3", setup.m_sKey, pos, point.GetSpawnRadius()), LogLevel.NORMAL);
+		Print(string.Format("CLW: bases spawn point for %1 created at %2 radius=%3 name='%4'", setup.m_sKey, pos, point.GetSpawnRadius(), point.GetSpawnPointName()), LogLevel.NORMAL);
 		return point;
 	}
 
-	// Scene-placed spawn points of the scenario factions are switched off (ours stay on).
-	protected void DisableSceneSpawns()
+	// Exactly one spawn point per base / FOB: every plain SCR_SpawnPoint that is not ours (scene-placed SpawnPoint_US / _USSR, points
+	// inside placed compositions) is DELETED, whatever its faction key (after a side re-key the scene points keep the old key). A
+	// disabled point still showed in the deploy list and on the deploy map (named by its prefab, e.g. "US Point") next to ours, which was
+	// unnamed: the "duplicates". Subclasses (deployable / player / radio spawn points) are left alone. Safe to call repeatedly.
+	void PruneForeignSpawns()
 	{
 		array<SCR_SpawnPoint> all = {};
 		array<SCR_SpawnPoint> source = SCR_SpawnPoint.GetSpawnPoints();
 		if (source)
 			all.Copy(source);
 
-		int disabled;
+		int deleted;
 		foreach (SCR_SpawnPoint point : all)
 		{
 			if (!point || m_aOwnSpawns.Contains(point) || m_aFobSpawns.Contains(point))
 				continue;
 
-			if (!m_aKeys.Contains(point.GetFactionKey()))
+			if (point.Type() != SCR_SpawnPoint)
 				continue;
 
-			if (point.IsSpawnPointEnabled())
-			{
-				point.SetSpawnPointEnabled_S(false);
-				disabled++;
-			}
+			point.SetSpawnPointEnabled_S(false);
+			SCR_EntityHelper.DeleteEntityAndChildren(point);
+			deleted++;
 		}
 
-		Print(string.Format("CLW: bases scene spawn points disabled=%1 (total spawn points %2)", disabled, all.Count()), LogLevel.NORMAL);
+		string perSide;
+		foreach (string key : m_aKeys)
+		{
+			perSide += string.Format(" %1=%2", key, SCR_SpawnPoint.GetSpawnPointCountForFaction(key));
+		}
+
+		Print(string.Format("CLW: bases spawn points deleted=%1 (foreign), now per side:%2 (fob points %3, total %4)", deleted, perSide, m_aFobSpawns.Count(), SCR_SpawnPoint.CountSpawnPoints()), LogLevel.NORMAL);
 	}
 }

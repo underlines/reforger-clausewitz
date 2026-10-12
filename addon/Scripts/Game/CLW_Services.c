@@ -52,6 +52,7 @@ class CLW_Services
 		CLW_ArsenalPool.Reset();
 		CLW_RequestTerminals.Reset();
 		CLW_StructureMarkers.Reset();
+		CLW_PropResolver.Reset();
 	}
 
 	// War SETUP -> RUNNING (CLW_GameMode.OnWarStarted, before the start forces are fielded, after the battle layout moved the HQs).
@@ -283,12 +284,109 @@ class CLW_Services
 		return spawned;
 	}
 
+	// FOB kit (owner request 2026-10-12: a FOB was an invisible spawn point): a compact cluster around 'center' (the FOB spawn point):
+	// arsenal box, supply box (the FOB stock, linked like the base supply so the arsenal draws from it), sandbags. The entries come from
+	// the profile's m_aFobKit (CLW_PropResolver.CollectKit), the prefab of every entry from CLW_PropResolver.Resolve(role). Offsets are in
+	// the cluster frame (x right, z forward) turned by clusterYaw; no search per piece: the whole cluster spot was chosen free by the caller.
+	// The pieces are registered as services of the FOB (kind arsenal / supply / fortification), so RemoveBase deletes them with the FOB.
+	// Returns the number spawned, 0 when the side has no kit.
+	static int SpawnFobKit(string sideKey, string fobId, vector center, float clusterYaw)
+	{
+		if (!Replication.IsServer())
+			return 0;
+
+		array<ref CLW_ServiceEntry> kit = {};
+		string kitSource = CLW_PropResolver.CollectKit(sideKey, kit);
+		if (kit.IsEmpty())
+			return 0;
+
+		float rad = clusterYaw * Math.DEG2RAD;
+		float c = Math.Cos(rad);
+		float s = Math.Sin(rad);
+		int spawned;
+		foreach (CLW_ServiceEntry entry : kit)
+		{
+			string role = entry.GetRole();
+			string propSource;
+			string sourceKey;
+			CLW_ServiceEntry resolved = CLW_PropResolver.ResolveEntry(sideKey, role, propSource, sourceKey);
+			if (!resolved)
+				continue;
+
+			Resource resource = Resource.Load(resolved.m_Prefab);
+			if (!resource || !resource.IsValid())
+			{
+				Print(string.Format("CLW: services ERROR %1 %2 %3: cannot load prefab %4", sideKey, fobId, role, resolved.m_Prefab), LogLevel.ERROR);
+				continue;
+			}
+
+			vector spot = Vector(center[0] + entry.m_vOffset[0] * c + entry.m_vOffset[2] * s, 0, center[2] - entry.m_vOffset[0] * s + entry.m_vOffset[2] * c);
+			CLW_Placement.SurfaceAt(spot);
+			float yaw = entry.m_fYaw;
+			if (yaw < 0)
+				yaw = CLW_Placement.YawFromDir(center[0] - spot[0], center[2] - spot[2]);
+			else
+				yaw += clusterYaw;
+
+			EntitySpawnParams params = new EntitySpawnParams();
+			params.TransformMode = ETransformMode.WORLD;
+			Math3D.AnglesToMatrix(Vector(yaw, 0, 0), params.Transform);
+			params.Transform[3] = spot;
+			IEntity entity = GetGame().SpawnEntityPrefab(resource, GetGame().GetWorld(), params);
+			if (!entity)
+			{
+				Print(string.Format("CLW: services ERROR %1 %2 %3: spawn failed (%4)", sideKey, fobId, role, resolved.m_Prefab), LogLevel.ERROR);
+				continue;
+			}
+
+			float radius = entry.m_fRadius;
+			if (radius <= 0)
+				radius = CLW_ServiceKind.DefaultRadius(entry.m_sKind);
+
+			CLW_ServiceInstance inst = new CLW_ServiceInstance();
+			inst.m_sSide = sideKey;
+			inst.m_sBase = fobId;
+			inst.m_sKind = entry.m_sKind;
+			inst.m_sSource = sourceKey;
+			inst.m_Prefab = resolved.m_Prefab;
+			inst.m_Entity = entity;
+			inst.m_vPos = spot;
+			inst.m_fRadius = radius;
+			s_aInst.Insert(inst);
+
+			array<IEntity> tree = {};
+			CollectHierarchy(entity, tree);
+			AdoptFaction(tree, sourceKey, sideKey);
+			DisableSpawnPoints(tree);
+			if (entry.m_sKind != CLW_ServiceKind.FORTIFICATION)
+				CLW_StructureMarkers.Add(sideKey, fobId, entry.m_sKind, spot, entry.ShowsMapMarker());
+
+			spawned++;
+			Print(string.Format("CLW: services fob kit %1 %2 %3 at %4 yaw=%5 (%6)", sideKey, fobId, role, spot, Math.Round(yaw), propSource), LogLevel.NORMAL);
+		}
+
+		if (spawned > 0)
+		{
+			GetGame().GetCallqueue().CallLater(LinkBase, LINK_DELAY_MS, false, sideKey, fobId, 0);
+			GetGame().GetCallqueue().CallLater(SetupArsenals, ARSENAL_DELAY_MS, false, sideKey, fobId);
+		}
+
+		Print(string.Format("CLW: services fob kit %1 %2: %3 of %4 pieces placed around %5 (kit of %6)", sideKey, fobId, spawned, kit.Count(), center, kitSource), LogLevel.NORMAL);
+		return spawned;
+	}
+
 	protected static bool SpawnOne(string sideKey, string baseId, vector anchor, CLW_ServiceEntry entry, string source, float keepClear, notnull array<vector> placedPos, notnull array<float> placedRad)
 	{
-		Resource resource = Resource.Load(entry.m_Prefab);
+		// the prefab of the role comes from the resolver (single choke point, CLW_PropResolver); the entry only carries the placement data
+		string propSource;
+		ResourceName prefabName = CLW_PropResolver.Resolve(sideKey, CLW_PropResolver.SERVICE_PREFIX + entry.m_sKind, propSource);
+		if (prefabName.IsEmpty())
+			prefabName = entry.m_Prefab;
+
+		Resource resource = Resource.Load(prefabName);
 		if (!resource || !resource.IsValid())
 		{
-			Print(string.Format("CLW: services ERROR %1 %2: cannot load prefab %3", sideKey, entry.m_sKind, entry.m_Prefab), LogLevel.ERROR);
+			Print(string.Format("CLW: services ERROR %1 %2: cannot load prefab %3", sideKey, entry.m_sKind, prefabName), LogLevel.ERROR);
 			return false;
 		}
 
@@ -300,7 +398,7 @@ class CLW_Services
 		float height = CLW_SpotConfig.COMPOSITION_HEIGHT_M;
 		if (entry.m_sKind == CLW_ServiceKind.ARSENAL)
 			height = 2.5;
-		CLW_Footprint foot = CLW_FreeSpot.FootprintOf(entry.m_Prefab, entry.m_vFootprint, radius, height);
+		CLW_Footprint foot = CLW_FreeSpot.FootprintOf(prefabName, entry.m_vFootprint, radius, height);
 		radius = Math.Max(radius, foot.Radius());
 		Print(string.Format("CLW: place %1 %2 %3 footprint half %4 x %5 (offset %6 %7) height %8 from %9", sideKey, baseId, entry.m_sKind, Math.Round(foot.m_fHalfX * 10) / 10, Math.Round(foot.m_fHalfZ * 10) / 10, Math.Round(foot.m_fOffsetX), Math.Round(foot.m_fOffsetZ), foot.m_fHeight, foot.m_sSource), LogLevel.NORMAL);
 
@@ -327,7 +425,7 @@ class CLW_Services
 		IEntity entity = GetGame().SpawnEntityPrefab(resource, GetGame().GetWorld(), params);
 		if (!entity)
 		{
-			Print(string.Format("CLW: services ERROR %1 %2: spawn failed (%3)", sideKey, entry.m_sKind, entry.m_Prefab), LogLevel.ERROR);
+			Print(string.Format("CLW: services ERROR %1 %2: spawn failed (%3)", sideKey, entry.m_sKind, prefabName), LogLevel.ERROR);
 			return false;
 		}
 
@@ -336,7 +434,7 @@ class CLW_Services
 		inst.m_sBase = baseId;
 		inst.m_sKind = entry.m_sKind;
 		inst.m_sSource = source;
-		inst.m_Prefab = entry.m_Prefab;
+		inst.m_Prefab = prefabName;
 		inst.m_Entity = entity;
 		inst.m_vPos = spot;
 		inst.m_fRadius = radius;
@@ -351,7 +449,7 @@ class CLW_Services
 		CLW_StructureMarkers.Add(sideKey, baseId, entry.m_sKind, spot, entry.ShowsMapMarker());	// map marker (own side, important structures only) + dashboard structures (all)
 		CLW_RequestTerminals.OnServicePlaced(sideKey, baseId, entry.m_sKind, spot, radius);	// M3 phase Q: request terminal next to the command post / depot
 		Print(string.Format("CLW: services placed %1 %2 %3 at %4 yaw=%5 r=%6 via=%7 grid=%8", sideKey, baseId, entry.m_sKind, spot, Math.Round(yaw), radius, via, CLW_Places.Grid(spot)), LogLevel.NORMAL);
-		Print(string.Format("CLW: services   %1 %2 entities=%3 reaffiliated=%4 spawnPointsOff=%5 prefab=%6", sideKey, entry.m_sKind, tree.Count(), reaffiliated, spawnPoints, entry.m_Prefab.GetPath()), LogLevel.NORMAL);
+		Print(string.Format("CLW: services   %1 %2 entities=%3 reaffiliated=%4 spawnPointsOff=%5 prefab=%6", sideKey, entry.m_sKind, tree.Count(), reaffiliated, spawnPoints, prefabName.GetPath()), LogLevel.NORMAL);
 		return true;
 	}
 

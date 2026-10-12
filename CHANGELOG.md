@@ -5,6 +5,14 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 
 ## [Unreleased]
 
+### Fixed
+- Duplicated spawn points in the deploy menu / map: the scene-placed spawn points (`SpawnPoint_US` / `_USSR`, named "US Point") were only disabled, never removed, and a disabled point still shows next to ours (and after a side re-key they kept the old faction key and were not even touched). `CLW_Bases.PruneForeignSpawns` now deletes every plain spawn point that is not the base or FOB point (at start, 4 s later, after a re-key and after a FOB is built); log `CLW: bases spawn points deleted=N (foreign), now per side: ...`.
+- Spawn points now have a readable name that replicates to clients: the base point uses the scenario base label ("US HQ"), a FOB point "FOB1 <site name>"; the HQ point is the default pick in the deploy menu.
+
+### Changed
+- A new FOB is no longer just an invisible spawn point: a compact kit stands at the spawn point (small arsenal box, supply box linked to the FOB stock like the base supply, five sandbag segments in an arc), placed on clear ground within 14 m of the site and removed with the FOB. Data: `m_aFobKit` in the faction profiles (US, USSR, FIA ship one; sides without a kit use the kin faction's, else the old tier-1 services). Arsenal and supply box get map markers; the extra "FOB1" location marker is only used when no kit piece exists. Tier 2 (`UPGRADE_FOB`) is unchanged. A kit FOB has no command post, so it is no longer lost by destroying one (enemy presence still loses it).
+- New `CLW_PropResolver`: one choke point that resolves a role ("service.arsenal", "fob.supply_box", "fort.sandbag_long", ...) of a side to a prefab (own profile, named fallback faction, kin faction); the base services and the FOB kit both use it. Log `CLW: props <side> <role> -> <prefab> (source ...)`.
+
 ## [0.5.0] - 2026-10-12
 
 ### Added

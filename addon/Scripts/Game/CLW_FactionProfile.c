@@ -183,10 +183,11 @@ class CLW_ServiceKind
 	static const string MEDICAL = "medical";
 	static const string REPAIR = "repair";
 	static const string SUPPLY = "supply";				// supply cache (stock the arsenal draws from)
+	static const string FORTIFICATION = "fortification";	// FOB kit only: sandbags etc., no stock, no marker, no request terminal
 
 	static bool IsKnown(string kind)
 	{
-		return kind == COMMAND_POST || kind == VEHICLE_DEPOT || kind == ARSENAL || kind == MEDICAL || kind == REPAIR || kind == SUPPLY;
+		return kind == COMMAND_POST || kind == VEHICLE_DEPOT || kind == ARSENAL || kind == MEDICAL || kind == REPAIR || kind == SUPPLY || kind == FORTIFICATION;
 	}
 
 	// The important structures of a base that get a map marker by default (command post, arsenal, vehicle depot / requests, supply cache).
@@ -208,6 +209,9 @@ class CLW_ServiceKind
 		if (kind == SUPPLY)
 			return 9;
 
+		if (kind == FORTIFICATION)
+			return 1.5;
+
 		return 3;	// arsenal box
 	}
 }
@@ -216,7 +220,7 @@ class CLW_ServiceKind
 [BaseContainerProps()]
 class CLW_ServiceEntry
 {
-	[Attribute("", UIWidgets.EditBox, "Kind: command_post, vehicle_depot, arsenal, medical, repair, supply")]
+	[Attribute("", UIWidgets.EditBox, "Kind: command_post, vehicle_depot, arsenal, medical, repair, supply, fortification (FOB kit)")]
 	string m_sKind;
 
 	[Attribute("", UIWidgets.ResourceNamePicker, "Composition prefab spawned for this service", "et")]
@@ -240,6 +244,17 @@ class CLW_ServiceEntry
 	[Attribute("-1", UIWidgets.EditBox, "Own-side map marker: -1 = by kind (command_post, arsenal, vehicle_depot, supply yes; medical, repair no), 0 = none, 1 = marker")]
 	int m_iMapMarker;
 
+	[Attribute("", UIWidgets.EditBox, "Role id (CLW_PropResolver): fob.arsenal_box, fob.supply_box, fort.sandbag_long, ... Empty = 'service.' + kind. Data for the kit entries; the prefab is the current candidate for the role")]
+	string m_sRole;
+
+	string GetRole()
+	{
+		if (!m_sRole.IsEmpty())
+			return m_sRole;
+
+		return "service." + m_sKind;
+	}
+
 	bool ShowsMapMarker()
 	{
 		if (m_iMapMarker >= 0)
@@ -259,6 +274,12 @@ class CLW_FactionProfile
 	// else of a friendly faction that has some.
 	[Attribute()]
 	ref array<ref CLW_ServiceEntry> m_aServices;
+
+	// FOB kit (compact cluster at a new FOB: arsenal box, supply box, sandbags). Offsets are relative to the cluster centre (= the FOB
+	// spawn point), x = right, z = forward, y ignored; yaw relative to the cluster, negative = facing the centre. Empty = kin/fallback
+	// faction's kit; no kit anywhere = the tier-1 services (m_aServices) as before.
+	[Attribute()]
+	ref array<ref CLW_ServiceEntry> m_aFobKit;
 
 	[Attribute("", UIWidgets.EditBox, "Faction key whose services this faction uses when it has none of its own (e.g. a pack faction naming the vanilla faction it is built on). Empty = automatic friendly faction")]
 	string m_sServiceFallbackFaction;
@@ -286,6 +307,8 @@ class CLW_FactionProfile
 			profile.m_aEntries = {};
 		if (!profile.m_aServices)
 			profile.m_aServices = {};
+		if (!profile.m_aFobKit)
+			profile.m_aFobKit = {};
 
 		return profile;
 	}
