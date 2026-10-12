@@ -170,6 +170,20 @@ Not only HQ decides: AI **squad leaders can run their own LLM agent loop**, givi
 - HQ stays in charge of the big picture: it can reassign or recall a leader, and receives its reports and requests as SITREPs (section 4).
 - Builds on M1 (LLM bridge) and the M2 order/mission model; fits the "full chain" echelon setting of M4.
 
+### 4b. Dynamic force structure: later
+
+Now: `CLW_SquadRegistry` polls all AI groups every 5 s and adopts every living, non-slave group of a CLW faction under a stable id (entity name, else `<FACTION>_G<n>`); opt out with the `CLW_IGNORE_` name prefix. Ideas to grow it, in rough order:
+
+- **Event-driven adoption**: react to group created / destroyed / member-count events instead of polling (keep a slow sweep as safety net).
+- **Vehicles and crews as units**: a vehicle plus its crew (and embarked squad) is one unit with a type (APC, tank, truck), with its own commands and loss rules.
+- **Role classification** by composition (AT, MG, sniper, recon, engineer, medic) feeding the situation `type`, so the LLM knows what a squad is good at.
+- **Hierarchy**: platoons / company above squads; attach small groups to a bigger one and merge them (and split again) when casualties leave fragments.
+- **GM authority per group**: commanded / info-only / ignored, set via a Game Master attribute or entity tag (generalises `CLW_IGNORE_`).
+- **Human override**: when the admin gives a group a manual waypoint, HQ yields for a while (detect a foreign waypoint) instead of overwriting it.
+- **Reinforcements and respawns**: spawned waves and replacements re-baseline start strength; a refilled squad is not "weak" forever.
+- **Caps and prioritisation** when more squads exist than fit the prompt: per-faction cap, cluster by sector, summarise quiet squads, detail only the ones in contact.
+- **Persistence**: keep registry ids stable across mission save/load so dashboard history and LLM context survive.
+
 ---
 
 ## 5. Command vocabulary (repeatable meta-commands)

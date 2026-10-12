@@ -618,7 +618,10 @@ async function handleOrders(req, res) {
   const valid = !!sit && Array.isArray(sit.squads);
   const sc = schedFor(faction);
   let r, wake = null, interval = null;
-  if (snapshot.enabled && snapshot.engine !== "llm") {
+  if (valid && sit.squads.length === 0) {
+    // faction has no squads left: just record the (empty) situation so the dashboard stops showing the last survivors; no LLM call
+    r = { orders: [], dropped: [], rawReply: null, usage: null, ok: true, reason: "no squads left", gated: true, rules: true };
+  } else if (snapshot.enabled && snapshot.engine !== "llm") {
     // rules/model engine: game's rule commander drives; not an exchange, only counted as gated
     if (snapshot.engine === "model" && !modelEngineLogged) { modelEngineLogged = true; console.log("engine 'model' is not implemented yet: behaving like 'rules'"); }
     r = { orders: [], dropped: [], rawReply: null, usage: null, ok: true, reason: "engine: " + snapshot.engine, gated: true, rules: true };

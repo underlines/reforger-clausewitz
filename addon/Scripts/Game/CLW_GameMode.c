@@ -9,9 +9,9 @@ class CLW_GameMode : SCR_BaseGameMode
 {
 	protected static const bool RUN_ORDER_SPIKE = false;
 	protected static const bool RUN_REST_SPIKE = true;
-	protected static const ref array<string> SQUADS_US = {"CLW_Squad_US_1", "CLW_Squad_US_2"};
-	protected static const ref array<string> SQUADS_USSR = {"CLW_Squad_USSR_1", "CLW_Squad_USSR_2"};
 
+	// Which AI groups HQ commands (scene-placed and added at runtime, e.g. from Game Master); the commanders and markers query it.
+	protected ref CLW_SquadRegistry m_Registry = new CLW_SquadRegistry();
 	// One contact picture, marker set and rule commander per faction.
 	protected ref CLW_ContactBook m_BookUS = new CLW_ContactBook();
 	protected ref CLW_ContactBook m_BookUSSR = new CLW_ContactBook();
@@ -34,11 +34,11 @@ class CLW_GameMode : SCR_BaseGameMode
 				GetGame().GetCallqueue().CallLater(CLW_RestSpike.Run, 10000);
 			if (RUN_ORDER_SPIKE)
 				GetGame().GetCallqueue().CallLater(SpikeOrderLoop, 15000);
-			// RuleCommander drives only AI-only squads; each side's first squad is the player squad.
-			array<string> commandedUS = {"CLW_Squad_US_1", "CLW_Squad_US_2"};
-			array<string> commandedUSSR = {"CLW_Squad_USSR_1", "CLW_Squad_USSR_2"};
-			m_CommanderUS.Init("US", m_BookUS, commandedUS);
-			m_CommanderUSSR.Init("USSR", m_BookUSSR, commandedUSSR);
+			// Adopt the scene-placed squads now (before the first commander tick), then keep sweeping for new/lost groups.
+			m_Registry.Start();
+			// The commanders take their squads from the registry; human-led squads get missions instead of waypoints.
+			m_CommanderUS.Init(CLW_SquadRegistry.FACTION_US, m_BookUS, m_Registry);
+			m_CommanderUSSR.Init(CLW_SquadRegistry.FACTION_USSR, m_BookUSSR, m_Registry);
 			array<vector> patrolUS = {Vector(2030, 0, 2630), Vector(2150, 0, 2630)};
 			array<vector> patrolUSSR = {Vector(2030, 0, 3030), Vector(2150, 0, 3030)};
 			m_CommanderUS.SetPatrolPoints(patrolUS);
@@ -59,15 +59,17 @@ class CLW_GameMode : SCR_BaseGameMode
 	// Perception -> contact book -> map markers, for both factions.
 	protected void PollContacts()
 	{
-		UpdateFaction("US", SQUADS_US, m_BookUS, m_MarkersUS);
-		UpdateFaction("USSR", SQUADS_USSR, m_BookUSSR, m_MarkersUSSR);
+		UpdateFaction(CLW_SquadRegistry.FACTION_US, m_BookUS, m_MarkersUS);
+		UpdateFaction(CLW_SquadRegistry.FACTION_USSR, m_BookUSSR, m_MarkersUSSR);
 	}
 
-	protected void UpdateFaction(string factionKey, array<string> squads, CLW_ContactBook book, CLW_ContactMarkers markers)
+	protected void UpdateFaction(string factionKey, CLW_ContactBook book, CLW_ContactMarkers markers)
 	{
+		array<string> squads = {};
+		m_Registry.GetIds(factionKey, squads);
 		foreach (string name : squads)
 		{
-			SCR_AIGroup group = FindSquad(name);
+			SCR_AIGroup group = m_Registry.Find(name);
 			if (!group)
 				continue;
 
@@ -100,6 +102,8 @@ class CLW_GameMode : SCR_BaseGameMode
 				Print(string.Format("CLW: squad %1 slave=none groupId=%2", name, group.GetGroupID()), LogLevel.NORMAL);
 			}
 			PrintFormat("CLW: squad %1 agents=%2 alive=%3 aiMembers=%4 maxDist=%5", name, group.GetAgentsCount(), CLW_SquadInfo.AliveCount(group), members.Count(), Math.Round(maxDist), level: LogLevel.NORMAL);
+			if (CLW_SquadInfo.AliveCount(group) <= 2)
+				CLW_SquadInfo.LogMembers(name, group);
 		}
 
 		array<int> removed = {};
@@ -133,7 +137,12 @@ class CLW_GameMode : SCR_BaseGameMode
 		if (!faction)
 			return;
 
-		SCR_AIGroup squad = FindSquad("CLW_Squad_" + faction.GetFactionKey() + "_1");
+		// Pick the player's squad from the registry (sweep first: the squads may have spawned after the last sweep); the "_1" squad is preferred.
+		m_Registry.Sweep();
+		string preferredSquad = "CLW_Squad_" + faction.GetFactionKey() + "_1";
+		SCR_AIGroup squad = m_Registry.FindPlayerSquad(faction.GetFactionKey(), preferredSquad);
+		if (!squad)
+			squad = FindSquad(preferredSquad);	// not adopted yet (no living AI member): Join retries until it is ready
 		SCR_GroupsManagerComponent groups = SCR_GroupsManagerComponent.GetInstance();
 		if (!squad || !groups)
 		{

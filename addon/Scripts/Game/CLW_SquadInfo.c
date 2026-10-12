@@ -92,6 +92,31 @@ class CLW_SquadInfo
 		return null;
 	}
 
+	// One log line per member (prefab, life state, health, position, player id): for "alive count does not match the world" reports.
+	static void LogMembers(string label, notnull SCR_AIGroup group)
+	{
+		array<IEntity> members = Members(group);
+		foreach (IEntity member : members)
+		{
+			if (!member)
+				continue;
+
+			string life = "nocontroller";
+			CharacterControllerComponent controller = CharacterControllerComponent.Cast(member.FindComponent(CharacterControllerComponent));
+			if (controller)
+				life = typename.EnumToString(ECharacterLifeState, controller.GetLifeState());
+			float health = -1;
+			DamageManagerComponent damage = DamageManagerComponent.Cast(member.FindComponent(DamageManagerComponent));
+			if (damage)
+				health = damage.GetHealthScaled();
+			string prefab;
+			EntityPrefabData data = member.GetPrefabData();
+			if (data)
+				prefab = data.GetPrefabName();
+			Print(string.Format("CLW: member %1 %2 life=%3 health=%4 pos=%5 player=%6 prefab=%7", label, member, life, health, member.GetOrigin(), GetGame().GetPlayerManager().GetPlayerIdFromControlledEntity(member), prefab), LogLevel.NORMAL);
+		}
+	}
+
 	// Living AI members. group.GetAgentsCount() still counts agents whose body is dead (a corpse leader keeps the squad "alive" at 1/6).
 	static int AliveCount(notnull SCR_AIGroup group)
 	{

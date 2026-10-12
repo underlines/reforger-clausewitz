@@ -63,10 +63,10 @@ class CLW_RemoteCommander
 	protected float m_fLastKeepAt = -1000;
 	protected float m_fLastRulesAt = -1000;
 
-	void Init(string factionKey, CLW_ContactBook book, notnull array<string> squadNames)
+	void Init(string factionKey, CLW_ContactBook book, CLW_SquadRegistry registry)
 	{
 		m_sFaction = factionKey;
-		m_Rules.Init(factionKey, book, squadNames);
+		m_Rules.Init(factionKey, book, registry);
 	}
 
 	void SetPatrolPoints(notnull array<vector> points)
@@ -98,10 +98,7 @@ class CLW_RemoteCommander
 		string body;
 		int squads = m_Rules.BuildSituation(body);
 		if (squads <= 0)
-		{
-			ThinkRules();
-			return;
-		}
+			ThinkRules();	// still POST the empty situation below: the sidecar/dashboard must learn the faction has no squads left
 
 		RestContext ctx = GetGame().GetRestApi().GetContext(BASE_URL);
 		if (!ctx)

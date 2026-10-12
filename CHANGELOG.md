@@ -19,6 +19,7 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 - Dashboard map: real map background read from your own game install (never redistributed; override `dev/tools/maps/<World>.png` + `.json` for modded terrains), plus road and place-name overlay sent by the game (`CLW_WorldInfo`), with layer toggles and image opacity.
 
 - Dashboard map: heading/speed arrow per moving squad; objective arrows also for rule-commander and human-led squads (not only LLM orders).
+- HQ picks up AI groups added at runtime (e.g. from Game Master) via a squad registry that sweeps every 5 s; opt a group out with the entity-name prefix `CLW_IGNORE_`.
 
 ### Fixed
 - Situation JSON and world uploads are built by concatenation (`string.Format` cut them at 8 KB).
