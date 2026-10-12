@@ -163,7 +163,7 @@ class CLW_Situation
 				owner = point.m_sOwner;
 			if (!text.IsEmpty())
 				text += ",";
-			text += "{\"id\":\"" + Escape(point.m_sId) + "\",\"name\":\"" + Escape(point.m_sName) + "\",\"pos\":[" + Math.Round(point.m_vPos[0]) + "," + Math.Round(point.m_vPos[2]) + "],\"radius\":" + Math.Round(point.m_fRadius);
+			text += "{\"id\":\"" + Escape(point.m_sId) + "\",\"name\":\"" + Escape(point.m_sName) + "\",\"pos\":[" + Math.Round(point.m_vPos[0]) + "," + Math.Round(point.m_vPos[2]) + "],\"grid\":\"" + CLW_Places.Grid(point.m_vPos) + "\",\"radius\":" + Math.Round(point.m_fRadius);
 			text += ",\"value\":" + point.m_iValue + ",\"owner\":\"" + Escape(owner) + "\",\"contested\":" + BoolText(point.m_bContested) + ",\"progress\":" + Math.Round(points.ProgressFor(point, m_sFaction)) + "}";
 		}
 
@@ -233,6 +233,7 @@ class CLW_Situation
 			sorted.InsertAt(contact, at);
 		}
 
+		CLW_ControlPoints points = CLW_GameMode.GetControlPoints();
 		string text = "";
 		int written;
 		foreach (CLW_Contact seen : sorted)
@@ -242,8 +243,11 @@ class CLW_Situation
 
 			if (written > 0)
 				text += ",";
-			string desc = seen.m_iCount.ToString() + "x " + seen.m_sEnemyFaction + " " + seen.m_sKind;
-			text += "{\"pos\":[" + Math.Round(seen.m_vPos[0]) + "," + Math.Round(seen.m_vPos[1]) + "," + Math.Round(seen.m_vPos[2]) + "],\"desc\":\"" + Escape(desc) + "\",\"kind\":\"" + Escape(seen.m_sKind) + "\",\"ageSec\":" + Math.Round(Math.Max(0, now - seen.m_fLastSeen)) + "}";
+			// size in words ("a vehicle platoon with dismounts"), counts split into vehicles / infantry, nearest objective or named place, 1 km map grid
+			string size = CLW_Places.SizeText(seen.m_iVehicles, seen.m_iInfantry, seen.m_iCount);
+			text += "{\"pos\":[" + Math.Round(seen.m_vPos[0]) + "," + Math.Round(seen.m_vPos[1]) + "," + Math.Round(seen.m_vPos[2]) + "],\"size\":\"" + Escape(size) + "\",\"kind\":\"" + Escape(seen.m_sKind) + "\"";
+			text += ",\"vehicles\":" + seen.m_iVehicles + ",\"infantry\":" + seen.m_iInfantry + ",\"place\":\"" + Escape(CLW_Places.PlaceLabel(seen.m_vPos, points)) + "\",\"grid\":\"" + CLW_Places.Grid(seen.m_vPos) + "\"";
+			text += ",\"ageSec\":" + Math.Round(Math.Max(0, now - seen.m_fLastSeen)) + "}";
 			written++;
 		}
 

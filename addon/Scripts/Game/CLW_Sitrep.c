@@ -3,7 +3,7 @@
 // Template (modelled on the US/NATO SITREP, the SMEAC five-paragraph order and the SALUTE enemy report; kept short):
 //   headline   one line: faction, war time, tickets, objectives, unit/contact counts
 //   situation  S: where the war stands (objectives held / contested / lost, tickets, time)
-//   enemy      E: known enemy, SALUTE-condensed (size, activity/kind, location, age); only what this faction has seen
+//   enemy      E: "Intel" in game, known enemy in words (size, area, grid, age); only what this faction has seen
 //   mission    M: HQ intent and main effort
 //   execution  X: what our units are doing now / next, and what players can do
 //   logistics  L: supplies and income, force cap, weak or wounded units
@@ -34,7 +34,7 @@ class CLW_SitrepTemplate
 		switch (index)
 		{
 			case 0: return "Situation";
-			case 1: return "Enemy";
+			case 1: return "Intel";
 			case 2: return "Mission";
 			case 3: return "Execution";
 			case 4: return "Logistics";
