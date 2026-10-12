@@ -10,7 +10,7 @@ CLW_GameMode : "{0F307326459A1395}Prefabs/MP/Modes/GameMode_Base.et" {
    m_fRespawnTime 10
   }
   SCR_RespawnSystemComponent "{56B2B4793051E7C9}" {
-   m_SpawnLogic CLW_AutoSpawnLogic "{6C1A5E7B0A2D4F31}" {
+   m_SpawnLogic CLW_SpawnLogic "{7D2B6F8C1B3E5A42}" {
     m_sForcedFaction ""
    }
   }

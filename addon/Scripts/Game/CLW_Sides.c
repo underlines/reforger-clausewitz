@@ -220,7 +220,7 @@ class CLW_Sides
 
 	// ---- players ----
 
-	// Faction players are put on by the auto spawn logic (forced faction). False when no scenario is active (vanilla behaviour).
+	// Default side of the scenario: where CLW_SpawnLogic auto-spawns players during SETUP (forced faction). False when no scenario is active.
 	static bool GetPlayerFaction(out Faction faction)
 	{
 		CLW_ScenarioConfig scenario = CLW_ScenarioConfig.Get();
@@ -240,7 +240,7 @@ class CLW_Sides
 	}
 
 	// Players of a faction that is neither side (spawned during SETUP on a default side that was replaced): remove their
-	// character; the auto spawn logic respawns them on the default player side at its base. Best effort, every step logged.
+	// character; CLW_SpawnLogic then opens the deploy menu (the two real sides). Best effort, every step logged.
 	protected static void MovePlayers()
 	{
 		CLW_ScenarioConfig scenario = CLW_ScenarioConfig.Get();
@@ -265,37 +265,5 @@ class CLW_Sides
 			if (entity)
 				SCR_EntityHelper.DeleteEntityAndChildren(entity);	// [verify] -> OnPlayerEntityLost_S -> DoSpawn_S with the new forced faction
 		}
-	}
-}
-
-// Players join the default side of the scenario (data: m_iDefaultPlayerSide) instead of a fixed faction in the game mode
-// prefab; the loadout is a spawnable one of that faction (never the saved-arsenal entry). Vanilla behaviour when no
-// Clausewitz scenario is active. Own subclass (set as m_SpawnLogic in CLW_GameMode.et): a modded SCR_AutoSpawnLogic made the
-// class unknown to the prefab loader ("Unknown class 'SCR_AutoSpawnLogic'", 2026-10-12).
-[BaseContainerProps(category: "Respawn")]
-class CLW_AutoSpawnLogic : SCR_AutoSpawnLogic
-{
-	protected override bool GetForcedFaction(out Faction faction)
-	{
-		if (CLW_Sides.GetPlayerFaction(faction))
-			return true;
-
-		return super.GetForcedFaction(faction);
-	}
-
-	protected override bool GetForcedLoadout(out SCR_BasePlayerLoadout loadout)
-	{
-		Faction faction;
-		if (CLW_Sides.GetPlayerFaction(faction))
-		{
-			array<SCR_BasePlayerLoadout> loadouts = {};
-			if (CLW_Sides.GetSpawnLoadouts(faction.GetFactionKey(), loadouts) > 0)
-			{
-				loadout = loadouts.GetRandomElement();
-				return true;
-			}
-		}
-
-		return super.GetForcedLoadout(loadout);
 	}
 }
