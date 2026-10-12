@@ -92,11 +92,51 @@ class CLW_Action_Buy : CLW_ActionExecutor
 			return false;
 		}
 
+		// economy guard (WP6): no purchase that will be refused (HQ reserve, AI cap); the text reaches the LLM as the action result
+		if (!EconomyGate(call, type, error))
+			return false;
+
 		// spawn on assignment (owner playtest 2026-10-12): an LLM purchase must come with the first order of the new units, so nothing is
 		// bought just to wait at the base. The order is checked here and applied when the unit is ready (CLW_PendingOrders).
 		if (call.m_sSource == "llm" && call.m_sAuthority == CLW_ActionEntry.AUTH_HQ)
 			return ValidateAssignment(call, error);
 
+		return true;
+	}
+
+	// WP6 buy gate for AI purchases (this action is the LLM / rules path; player requests use CLW_RequestService, not this): the HQ stock
+	// must stay at or above hqReserve after paying, and the side must not be at its AI cap. False with the refusal text in error.
+	protected bool EconomyGate(CLW_ActionCall call, string type, out string error)
+	{
+		CLW_ForceCatalog catalog = CLW_GameMode.GetForceCatalog();
+		CLW_ForceEntry entry;
+		if (catalog)
+			entry = catalog.Find(call.m_sFaction, type);
+		if (!entry)
+			return true;
+
+		string side = call.m_sFaction;
+		int live;
+		int cap;
+		if (CLW_EconomyGuard.AiCapFull(side, live, cap))
+		{
+			error = string.Format("AI cap (%1 live + pending, cap %2)", live, cap);
+			if (CLW_EconomyGuard.LogChanged("buycap-llm", side, "" + live + "/" + cap))
+				Print(string.Format("CLW: RemoteCommander %1: no buy, AI cap %2/%3", side, live, cap), LogLevel.NORMAL);
+			return false;
+		}
+
+		CLW_EconomyGuard.LogChanged("buycap-llm", side, "ok");
+		string why;
+		if (!CLW_EconomyGuard.CanAiSpend(side, entry.m_iCost, why))
+		{
+			error = why;
+			if (CLW_EconomyGuard.LogChanged("buyreserve-llm", side, why))
+				Print(string.Format("CLW: RemoteCommander %1: buy %2 refused: %3 (cost %4)", side, type, why, entry.m_iCost), LogLevel.NORMAL);
+			return false;
+		}
+
+		CLW_EconomyGuard.LogChanged("buyreserve-llm", side, "ok");
 		return true;
 	}
 
@@ -165,6 +205,13 @@ class CLW_Action_Buy : CLW_ActionExecutor
 			string error;
 			string tag;
 			bool started;
+			if (n > 0 && !EconomyGate(call, type, error))
+			{
+				// the first unit passed Validate; later ones re-check reserve / cap after the earlier purchases
+				Print(string.Format("CLW: RemoteCommander %1: buy %2 (%3/%4) stopped: %5", call.m_sFaction, type, n + 1, count, error), LogLevel.NORMAL);
+				break;
+			}
+
 			if (assigned)
 			{
 				tag = CLW_PendingOrders.Add(call.m_sFaction, commandName, assignTarget, assignPos, call.m_sReason, CLW_Orders.SOURCE_LLM);

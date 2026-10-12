@@ -142,3 +142,11 @@ runs the war inside it; `CLW_GameMode` worlds are unaffected either way. The com
 (`CLW: takeover of <class> in <world> (switch: cli|overrides)`). The scenario of a taken-over world: command line `-clwScenario <name>`
 (`Configs/CLW/Scenarios/<name>.conf`), else the world file name without a leading `GM_` (`GM_Arland` -> `Arland.conf`), else by-world / by-listing / auto.
 Recipe: `dev/notes/maps.md` ("Run a Game Master world with takeover"). Code: `CLW_WarRuntime.TakeoverSwitch`.
+
+## Economy guard params (`hqReserve`, `convoyMinLoad`) - M4 round 3 WP6
+War-mode params (setup menu, preset, `CLW_WarMode_ShortConflict`; no overrides.json key): `hqReserve` (default 100 supplies, 0 = no floor) is the HQ stock
+that AI purchases (rule commander, LLM BUY, convoy trucks) and convoy loads never go below; player requests (`/request`, HQ menu, arsenal kits) may.
+`convoyMinLoad` (default 60): a convoy loads `stock - hqReserve` (capped by the truck) and is skipped below this. Code: `CLW_EconomyGuard` (`CLW_SupplyStore.c`).
+Refusal text for the AI / LLM: `HQ reserve: stock <s>, reserve <r>`. The situation shows `baseRules.hqReserve` and `logisticsRules.hqReserve`.
+Logs: `CLW: convoy <side> skipped: loadable <n> < min <m> (stock <s>, reserve <r>)`, `CLW: RuleCommander <side>: no buy, AI cap <n>/<cap>`,
+`CLW: RuleCommander <side>: no buy, HQ reserve: stock <s>, reserve <r>`, `CLW: idle check <side>: candidates <n>, oldest <s> s (...)` (once a minute per side).

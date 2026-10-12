@@ -21,12 +21,14 @@ class CLW_BaseWatch
 	static const float DESPAWN_BUY_BLOCK_SEC = 120;		// no purchase of a despawned unit's kind this long
 	static const float DESPAWN_RECENT_SEC = 600;		// recentlyDespawned counts despawns of this window
 	static const float STOOD_DOWN_KEEP_SEC = 120;
+	static const float IDLE_LOG_SEC = 60;				// "CLW: idle check" log interval per side
 
 	protected static ref map<string, string> s_mGarrison = new map<string, string>();	// unit id -> faction
 	protected static ref map<string, float> s_mNoOrderSince = new map<string, float>();	// unit id -> world time it was first seen without an active order
 	protected static ref map<string, int> s_mCost = new map<string, int>();				// unit id -> supplies charged for it (0 = free)
 	protected static ref map<string, float> s_mGarrisonOrderAt = new map<string, float>();
 	protected static ref map<string, float> s_mLastThink = new map<string, float>();	// faction -> last run
+	protected static ref map<string, float> s_mIdleLogAt = new map<string, float>();	// faction -> last "idle check" log
 	protected static ref map<string, float> s_mStoodDown = new map<string, float>();	// unit id -> when it was stood down
 	protected static ref array<float> s_aDespawnAt = {};
 	protected static ref array<string> s_aDespawnFaction = {};
@@ -55,6 +57,7 @@ class CLW_BaseWatch
 		}
 
 		s_mLastThink.Remove(faction);
+		s_mIdleLogAt.Remove(faction);
 		for (int i = s_aDespawnAt.Count() - 1; i >= 0; i--)
 		{
 			if (s_aDespawnFaction[i] == faction)
@@ -176,7 +179,7 @@ class CLW_BaseWatch
 	// baseRules block of the situation.
 	static string RulesJson(string faction)
 	{
-		string text = "{\"garrisonSquads\":" + GarrisonWanted() + ",\"garrison\":" + GarrisonCount(faction) + ",\"idleDespawnMin\":" + IdleDespawnMin() + ",\"recentlyDespawned\":" + RecentlyDespawned(faction);
+		string text = "{\"garrisonSquads\":" + GarrisonWanted() + ",\"garrison\":" + GarrisonCount(faction) + ",\"idleDespawnMin\":" + IdleDespawnMin() + ",\"recentlyDespawned\":" + RecentlyDespawned(faction) + ",\"hqReserve\":" + CLW_EconomyGuard.HqReserve();
 		int last = -1;
 		for (int i = s_aDespawnAt.Count() - 1; i >= 0; i--)
 		{
@@ -342,11 +345,17 @@ class CLW_BaseWatch
 	protected static void ThinkIdle(CLW_Orders orders, CLW_SquadRegistry registry, CLW_WarState war, string faction, array<string> ids, vector hq, float now)
 	{
 		int limitMin = IdleDespawnMin();
+		// P10 diagnostics (one line per minute per side): why nothing idles
+		int total = ids.Count();
+		int nGarrison, nOrdered, nReserved, nHuman, nTruck, nCandidates, nAtBase, nFar;
+		float oldest;
+		float farthest;
 		foreach (string id : ids)
 		{
 			if (IsGarrison(id))
 			{
 				s_mNoOrderSince.Remove(id);
+				nGarrison++;
 				continue;
 			}
 
@@ -354,10 +363,17 @@ class CLW_BaseWatch
 			SCR_AIGroup group = registry.Find(id);
 			CLW_UnitOrder order = orders.GetOrder(id);
 			bool hasOrder = order && order.m_sStatus == CLW_Orders.STATUS_ACTIVE;
-			bool excluded = !group || CLW_RuleCommander.HasHumanLeader(group) || group.GetPlayerCount() > 0 || CLW_FobManager.IsReserved(id) || CLW_PendingOrders.IsPendingUnit(id);
-			if (hasOrder || excluded)
+			bool human = !group || CLW_RuleCommander.HasHumanLeader(group) || group.GetPlayerCount() > 0;
+			bool reserved = CLW_FobManager.IsReserved(id) || CLW_PendingOrders.IsPendingUnit(id);
+			if (hasOrder || human || reserved)
 			{
 				s_mNoOrderSince.Remove(id);
+				if (hasOrder)
+					nOrdered++;
+				else if (human)
+					nHuman++;
+				else
+					nReserved++;
 				continue;
 			}
 
@@ -368,13 +384,49 @@ class CLW_BaseWatch
 				s_mNoOrderSince.Set(id, since);
 			}
 
-			if (limitMin <= 0 || now - since < limitMin * 60)
+			nCandidates++;
+			float idleFor = now - since;
+			if (idleFor > oldest)
+				oldest = idleFor;
+
+			CLW_VehicleUnit truckUnit = orders.FindVehicleUnit(id);
+			string idKind = registry.GetKind(id);
+			if (truckUnit)
+				idKind = truckUnit.GetKind();
+			if (idKind == CLW_ForceKind.LOGISTICS)
+				nTruck++;
+
+			vector idlePos;
+			bool known = orders.UnitPos(id, idlePos);
+			if (known && vector.DistanceXZ(idlePos, hq) <= BASE_RADIUS_M)
+			{
+				nAtBase++;
+			}
+			else
+			{
+				nFar++;
+				if (known)
+					farthest = Math.Max(farthest, vector.DistanceXZ(idlePos, hq));
+			}
+
+			if (limitMin <= 0 || idleFor < limitMin * 60)
 				continue;
 
 			if (!IsFreeAtBase(orders, registry, id, hq, false))
 				continue;
 
-			StandDown(orders, registry, war, faction, id, Math.Round((now - since) / 60.0), now);
+			StandDown(orders, registry, war, faction, id, Math.Round(idleFor / 60.0), now);
+		}
+
+		float lastLog = -1000;
+		s_mIdleLogAt.Find(faction, lastLog);
+		if (now < lastLog)
+			lastLog = -1000;	// a new session restarted the clock
+
+		if (now - lastLog >= IDLE_LOG_SEC)
+		{
+			s_mIdleLogAt.Set(faction, now);
+			Print(string.Format("CLW: idle check %1: candidates %2, oldest %3 s (squads at base %4, excluded: garrison %5, ordered %6, reserved %7, human %8, truck %9; of %10 squads, %11 idle away from base up to %12 m; limit %13 min, radius %14 m)", faction, nCandidates, Math.Round(oldest), nAtBase, nGarrison, nOrdered, nReserved, nHuman, nTruck, total, nFar, Math.Round(farthest), limitMin, Math.Round(BASE_RADIUS_M)), LogLevel.NORMAL);
 		}
 	}
 
