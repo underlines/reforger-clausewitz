@@ -237,7 +237,12 @@ class CLW_Loc
 
 		CLW_LocMsg msg = CLW_LocMsg.Decode(text);
 		if (msg)
-			task.SetTaskName(msg.key, msg.params);
+		{
+			array<LocalizedString> locParams = {};
+			foreach (string p : msg.params)
+				locParams.Insert(p);
+			task.SetTaskName(msg.key, locParams);
+		}
 		else
 			task.SetTaskName(text);
 	}
@@ -249,7 +254,12 @@ class CLW_Loc
 
 		CLW_LocMsg msg = CLW_LocMsg.Decode(text);
 		if (msg)
-			task.SetTaskDescription(msg.key, msg.params);
+		{
+			array<LocalizedString> locParams = {};
+			foreach (string p : msg.params)
+				locParams.Insert(p);
+			task.SetTaskDescription(msg.key, locParams);
+		}
 		else
 			task.SetTaskDescription(text);
 	}
