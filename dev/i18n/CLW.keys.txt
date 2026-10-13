@@ -268,3 +268,170 @@ CLW-Rep_NoBook ::: HQ has no contact book. ::: Das HQ hat kein Kontaktbuch.
 CLW-Rep_Logged ::: Contact logged: %1 %2, grid %3 (%4 m %5). Thanks. ::: Kontakt gemeldet: %1 %2, Planquadrat %3 (%4 m %5). Danke.
 CLW-Rep_Kind_infantry ::: infantry ::: Infanterie
 CLW-Rep_Kind_vehicle ::: vehicles ::: Fahrzeuge
+CLW-Journal_Awaiting ::: Awaiting the first HQ situation report. It appears here and as a hint (H) when your HQ has compiled it. ::: Der erste Lagebericht des HQ steht noch aus. Er erscheint hier und als Hinweis (H), sobald dein HQ ihn erstellt hat.
+CLW-Journal_NoContact ::: No enemy contact reported yet. ::: Noch kein Feindkontakt gemeldet.
+CLW-Journal_Mission ::: Take and hold the objectives, preserve tickets. ::: Nimm und halte die Ziele, schone die Tickets.
+CLW-Journal_Execution ::: Your squad leader receives HQ missions in the task list (J). ::: Dein Truppführer erhält HQ-Aufträge in der Aufgabenliste (J).
+CLW-Journal_Logistics ::: Logistics ::: Logistik
+CLW-Sit_HintTitle ::: SITREP T+%1 ::: LAGE T+%1
+CLW-Sit_HintTitleHq ::: SITREP T+%1 (HQ) ::: LAGE T+%1 (HQ)
+CLW-Sit_HintEnemy ::: Enemy: %1 ::: Feind: %1
+CLW-Sit_HintFooter ::: Full report: map > journal. H = show again. ::: Voller Bericht: Karte > Journal. H = erneut anzeigen.
+CLW-Sit_NoneYet ::: No SITREP received yet, HQ staff is still working on it. ::: Noch keine Lage empfangen, der HQ-Stab arbeitet noch daran.
+CLW-Sit_Join ::: %1 %2 ::: %1 %2
+CLW-Sit_Bluf_NoPicture ::: BLUF: no war picture available yet. ::: Kernaussage: Noch kein Lagebild verfügbar.
+CLW-Sit_Bluf_HeldEffort ::: BLUF: %1. We hold %2; main effort: %3. ::: Kernaussage: %1. Wir halten %2; Schwerpunkt: %3.
+CLW-Sit_Bluf_HeldIdle ::: BLUF: %1. We hold %2; forces are consolidating. ::: Kernaussage: %1. Wir halten %2; die Kräfte sammeln sich.
+CLW-Sit_Bluf_Effort ::: BLUF: %1. Main effort: %2. ::: Kernaussage: %1. Schwerpunkt: %2.
+CLW-Sit_Bluf_Idle ::: BLUF: %1. Forces are consolidating. ::: Kernaussage: %1. Die Kräfte sammeln sich.
+CLW-Sit_Bluf_EndedDraw ::: BLUF: hostilities have ended in a draw. ::: Kernaussage: Die Kampfhandlungen endeten unentschieden.
+CLW-Sit_Bluf_Ended ::: BLUF: hostilities have ended. ::: Kernaussage: Die Kampfhandlungen sind beendet.
+CLW-Sit_Bluf_Assembling ::: BLUF: forces are assembling, no contact yet. ::: Kernaussage: Die Kräfte sammeln sich, noch kein Kontakt.
+CLW-Sit_S_OverDraw ::: The war is over: draw. ::: Der Krieg ist vorbei: Unentschieden.
+CLW-Sit_S_OverWinner ::: The war is over. Victory goes to %1. ::: Der Krieg ist vorbei. Der Sieg geht an %1.
+CLW-Sit_S_NotStarted ::: The war has not started yet. HQ staff is assembling; the first full SITREP follows when forces deploy. ::: Der Krieg hat noch nicht begonnen. Der HQ-Stab sammelt sich; die erste vollständige Lage folgt, wenn die Kräfte eingesetzt werden.
+CLW-Sit_M_NotStarted ::: Our forces seize and hold the objectives to preserve our tickets. ::: Unsere Kräfte nehmen und halten die Ziele, um unsere Tickets zu schonen.
+CLW-Sit_X_NotStarted ::: Pick a squad in the deploy menu; squad leaders receive HQ tasking once the war runs. ::: Wähle im Einsatzmenü einen Trupp; Truppführer erhalten HQ-Aufträge, sobald der Krieg läuft.
+CLW-Sit_S_AllHeld ::: We hold every objective. ::: Wir halten alle Ziele.
+CLW-Sit_S_HeldNone ::: We hold no objectives. ::: Wir halten keine Ziele.
+CLW-Sit_S_Held ::: We hold %1. ::: Wir halten %1.
+CLW-Sit_S_EnemyHolds ::: The enemy holds %1. ::: Der Feind hält %1.
+CLW-Sit_S_OpenOne ::: %1 remains open. ::: %1 bleibt offen.
+CLW-Sit_S_OpenMany ::: %1 remain open. ::: %1 bleiben offen.
+CLW-Sit_S_ContestedOne ::: %1 is contested. ::: %1 ist umkämpft.
+CLW-Sit_S_ContestedMany ::: %1 are contested. ::: %1 sind umkämpft.
+CLW-Sit_List2 ::: %1 and %2 ::: %1 und %2
+CLW-Sit_List3 ::: %1, %2 and %3 ::: %1, %2 und %3
+CLW-Sit_ListMore ::: %1, %2, %3 and %4 more ::: %1, %2, %3 und %4 weitere
+CLW-Sit_Tix_WellAhead ::: We are well ahead on tickets. ::: Bei den Tickets liegen wir weit vorn.
+CLW-Sit_Tix_Lead ::: We hold a narrow lead on tickets. ::: Bei den Tickets haben wir einen knappen Vorsprung.
+CLW-Sit_Tix_Even ::: Tickets are roughly even. ::: Die Tickets stehen etwa gleich.
+CLW-Sit_Tix_Behind ::: We are behind on tickets. ::: Bei den Tickets liegen wir zurück.
+CLW-Sit_Tix_BadlyBehind ::: We are badly behind on tickets. ::: Bei den Tickets liegen wir weit zurück.
+CLW-Sit_Time_LessMinute ::: Less than a minute remains. ::: Es bleibt weniger als eine Minute.
+CLW-Sit_Time_Minute ::: About a minute remains. ::: Es bleibt etwa eine Minute.
+CLW-Sit_Time_OverHour ::: Over an hour remains. ::: Es bleibt über eine Stunde.
+CLW-Sit_Time_Hour ::: About an hour remains. ::: Es bleibt etwa eine Stunde.
+CLW-Sit_Time_Minutes ::: About %1 minutes remain. ::: Es bleiben etwa %1 Minuten.
+CLW-Sit_Force_Full ::: Our forces are at full strength. ::: Unsere Kräfte sind voll einsatzbereit.
+CLW-Sit_Force_Good ::: Our forces are in good shape. ::: Unsere Kräfte sind in gutem Zustand.
+CLW-Sit_Force_Reduced ::: Our forces are at reduced strength. ::: Unsere Kräfte sind geschwächt.
+CLW-Sit_Force_Depleted ::: Our forces are badly depleted. ::: Unsere Kräfte sind stark dezimiert.
+CLW-Sit_Mom_Initiative ::: Initiative is ours ::: Die Initiative liegt bei uns
+CLW-Sit_Mom_Advantage ::: We hold a slight advantage ::: Wir haben einen leichten Vorteil
+CLW-Sit_Mom_Balanced ::: The fight is evenly balanced ::: Der Kampf ist ausgeglichen
+CLW-Sit_Mom_Pressure ::: We are under pressure ::: Wir stehen unter Druck
+CLW-Sit_Mom_Losing ::: We are losing ground ::: Wir verlieren Boden
+CLW-Sit_Obj_All ::: every objective ::: alle Ziele
+CLW-Sit_Obj_None ::: no objectives ::: keine Ziele
+CLW-Sit_Obj_Most ::: most objectives ::: die meisten Ziele
+CLW-Sit_Obj_Half ::: about half the objectives ::: etwa die Hälfte der Ziele
+CLW-Sit_Obj_Few ::: a few objectives ::: ein paar Ziele
+CLW-Sit_E_None ::: No enemy contact reported. ::: Kein Feindkontakt gemeldet.
+CLW-Sit_E_NounInf ::: infantry activity ::: Infanterieaktivität
+CLW-Sit_E_NounMove ::: movement ::: Bewegung
+CLW-Sit_E_Line ::: %1 enemy %2 %3, grid %4: %5, %6. ::: %1 feindliche %2 %3, Planquadrat %4: %5, %6.
+CLW-Sit_Mag_1 ::: Light ::: Leichte
+CLW-Sit_Mag_2 ::: Moderate ::: Mäßige
+CLW-Sit_Mag_3 ::: Significant ::: Erhebliche
+CLW-Sit_Mag_4 ::: Large ::: Große
+CLW-Sit_Age_Now ::: just now ::: gerade eben
+CLW-Sit_Age_Minute ::: within the last minute ::: innerhalb der letzten Minute
+CLW-Sit_Age_Few ::: in the last few minutes ::: in den letzten Minuten
+CLW-Sit_Age_Dated ::: earlier (dated) ::: früher (veraltet)
+CLW-Sit_Inf_1 ::: a few infantry ::: ein paar Infanteristen
+CLW-Sit_Inf_2 ::: an infantry fire team ::: ein Infanterie-Feuertrupp
+CLW-Sit_Inf_3 ::: a squad-sized infantry element ::: ein Infanterieelement in Truppstärke
+CLW-Sit_Inf_4 ::: a platoon-sized infantry element ::: ein Infanterieelement in Zugstärke
+CLW-Sit_Inf_5 ::: a company-sized infantry force ::: eine Infanteriekraft in Kompaniestärke
+CLW-Sit_Veh_1 ::: a single vehicle ::: ein einzelnes Fahrzeug
+CLW-Sit_Veh_2 ::: a section of vehicles ::: eine Fahrzeuggruppe
+CLW-Sit_Veh_3 ::: a vehicle platoon ::: ein Fahrzeugzug
+CLW-Sit_Veh_4 ::: a large mechanized force ::: eine große mechanisierte Kraft
+CLW-Sit_SizeWithVehicles ::: %1 with vehicle support ::: %1 mit Fahrzeugunterstützung
+CLW-Sit_SizeWithDismounts ::: %1 with dismounts ::: %1 mit abgesessenen Kräften
+CLW-Sit_SizeUnknown ::: an unidentified element ::: ein nicht identifiziertes Element
+CLW-Sit_CompassAdj_0 ::: northern ::: nördlich
+CLW-Sit_CompassAdj_1 ::: north-eastern ::: nordöstlich
+CLW-Sit_CompassAdj_2 ::: eastern ::: östlich
+CLW-Sit_CompassAdj_3 ::: south-eastern ::: südöstlich
+CLW-Sit_CompassAdj_4 ::: southern ::: südlich
+CLW-Sit_CompassAdj_5 ::: south-western ::: südwestlich
+CLW-Sit_CompassAdj_6 ::: western ::: westlich
+CLW-Sit_CompassAdj_7 ::: north-western ::: nordwestlich
+CLW-Sit_E_AimCentred ::: centred on %1 ::: auf %1 konzentriert
+CLW-Sit_E_AimHeld ::: aimed at %1, which we hold ::: gegen %1 gerichtet, das wir halten
+CLW-Sit_E_AimTake ::: to take %1 ::: um %1 zu nehmen
+CLW-Sit_E_AimReinforce ::: to reinforce %1 ::: um %1 zu verstärken
+CLW-Sit_E_SecNear ::: near %1 ::: nahe %1
+CLW-Sit_E_SecAt ::: at %1 ::: bei %1
+CLW-Sit_E_Assessment ::: Assessment: enemy main effort likely %1; secondary activity %2. ::: Einschätzung: Der Schwerpunkt des Feindes liegt voraussichtlich %1; Nebenaktivität %2.
+CLW-Sit_Noun_Grid ::: grid %1 ::: Planquadrat %1
+CLW-Sit_Noun_Hq ::: our HQ ::: unser HQ
+CLW-Sit_Noun_Approach ::: the %1 approach to %2 ::: der %1e Zugang zu %2
+CLW-Sit_Noun_Area ::: the area around %1 ::: das Gebiet um %1
+CLW-Sit_Where_Hq ::: close to our HQ ::: nahe unserem HQ
+CLW-Sit_Where_At ::: at %1 ::: bei %1
+CLW-Sit_Where_Near ::: near %1 ::: nahe %1
+CLW-Sit_Where_Approach ::: on the %1 approach to %2 ::: am %1en Zugang zu %2
+CLW-Sit_Where_Open ::: in open country ::: im offenen Gelände
+CLW-Sit_M_Consolidate ::: Our forces consolidate and screen, then take and hold the objectives to preserve our tickets. ::: Unsere Kräfte sammeln und sichern, nehmen und halten dann die Ziele, um unsere Tickets zu schonen.
+CLW-Sit_M_One ::: Our forces %1 %2. ::: Unsere Kräfte %1, %2.
+CLW-Sit_M_Two ::: Our forces %1 and %2 %3. ::: Unsere Kräfte %1 und %2, %3.
+CLW-Sit_Cl_Attack ::: seize %1 ::: nehmen %1 ein
+CLW-Sit_Cl_Defend ::: hold %1 ::: halten %1
+CLW-Sit_Cl_Recon ::: reconnoitre %1 ::: klären %1 auf
+CLW-Sit_Cl_FallBack ::: withdraw to %1 ::: ziehen sich auf %1 zurück
+CLW-Sit_Cl_Move ::: occupy %1 ::: besetzen %1
+CLW-Sit_Inf_Attack ::: seize %1 ::: %1 einnehmen
+CLW-Sit_Inf_Defend ::: hold %1 ::: %1 halten
+CLW-Sit_Inf_Recon ::: reconnoitre %1 ::: %1 aufklären
+CLW-Sit_Inf_FallBack ::: withdraw to %1 ::: Rückzug auf %1
+CLW-Sit_Inf_Move ::: occupy %1 ::: %1 besetzen
+CLW-Sit_Why_ProtectLead ::: to protect our lead ::: um unseren Vorsprung zu schützen
+CLW-Sit_Why_DenyGround ::: to deny the enemy the ground ::: um dem Feind das Gelände zu verwehren
+CLW-Sit_Why_FindMainBody ::: to locate the enemy main body ::: um die feindliche Hauptmacht aufzuspüren
+CLW-Sit_Why_Regroup ::: to regroup and preserve combat power ::: um sich neu zu gruppieren und Kampfkraft zu erhalten
+CLW-Sit_Why_TurnTickets ::: to turn the ticket count ::: um den Ticketstand zu drehen
+CLW-Sit_Why_KeepPressure ::: to keep the pressure on and hold our lead ::: um den Druck aufrechtzuerhalten und unseren Vorsprung zu halten
+CLW-Sit_Why_BleedTickets ::: to bleed enemy tickets ::: um die Tickets des Feindes zu senken
+CLW-Sit_X_Main ::: Main effort: %1. ::: Schwerpunkt: %1.
+CLW-Sit_X_Supporting ::: Supporting: %1. ::: Unterstützung: %1.
+CLW-Sit_X_Withdrawing ::: Withdrawing: %1. ::: Rückzug: %1.
+CLW-Sit_X_Reserve ::: Reserve: %1 held back. ::: Reserve: %1 zurückgehalten.
+CLW-Sit_X_Leaders ::: Squad leaders: check your HQ tasking in the task list (J). ::: Truppführer: Prüft eure HQ-Aufträge in der Aufgabenliste (J).
+CLW-Sit_X_None ::: No elements tasked yet. ::: Noch keine Elemente beauftragt.
+CLW-Sit_X_Semicolon ::: %1; %2 ::: %1; %2
+CLW-Sit_ElemOne ::: one element ::: ein Element
+CLW-Sit_ElemMany ::: %1 elements ::: %1 Elemente
+CLW-Sit_Ef_Attack_One ::: one element assaults %1 ::: ein Element greift %1 an
+CLW-Sit_Ef_Attack_Many ::: %1 elements assault %2 ::: %1 Elemente greifen %2 an
+CLW-Sit_Ef_Defend_One ::: one element defends %1 ::: ein Element verteidigt %1
+CLW-Sit_Ef_Defend_Many ::: %1 elements defend %2 ::: %1 Elemente verteidigen %2
+CLW-Sit_Ef_Recon_One ::: one element reconnoitres %1 ::: ein Element klärt %1 auf
+CLW-Sit_Ef_Recon_Many ::: %1 elements reconnoitre %2 ::: %1 Elemente klären %2 auf
+CLW-Sit_Ef_FallBack_One ::: one element falls back to %1 ::: ein Element zieht sich auf %1 zurück
+CLW-Sit_Ef_FallBack_Many ::: %1 elements fall back to %2 ::: %1 Elemente ziehen sich auf %2 zurück
+CLW-Sit_Ef_Move_One ::: one element moves to %1 ::: ein Element rückt nach %1 vor
+CLW-Sit_Ef_Move_Many ::: %1 elements move to %2 ::: %1 Elemente rücken nach %2 vor
+CLW-Sit_SupState_Adequate ::: adequate ::: ausreichend
+CLW-Sit_SupState_Exhausted ::: exhausted ::: erschöpft
+CLW-Sit_SupState_Tight ::: tight ::: knapp
+CLW-Sit_SupState_Plentiful ::: plentiful ::: reichlich
+CLW-Sit_L_IncomeNone ::: Supplies are %1 with no resupply income. ::: Der Nachschub ist %1, bei keinem Nachschubeinkommen.
+CLW-Sit_L_IncomeModest ::: Supplies are %1 with a modest income. ::: Der Nachschub ist %1, bei bescheidenem Einkommen.
+CLW-Sit_L_IncomeSteady ::: Supplies are %1 with a steady income. ::: Der Nachschub ist %1, bei stetigem Einkommen.
+CLW-Sit_L_IncomeStrong ::: Supplies are %1 with a strong income. ::: Der Nachschub ist %1, bei starkem Einkommen.
+CLW-Sit_L_VehNone ::: No vehicles are in service. ::: Es sind keine Fahrzeuge im Dienst.
+CLW-Sit_L_VehSome ::: Vehicles are in service. ::: Fahrzeuge sind im Dienst.
+CLW-Sit_L_VehFew ::: Few vehicles are in service. ::: Nur wenige Fahrzeuge sind im Dienst.
+CLW-Sit_L_VehHalf ::: About half our vehicles are in service. ::: Etwa die Hälfte unserer Fahrzeuge ist im Dienst.
+CLW-Sit_L_VehMost ::: Most of our vehicles are in service. ::: Die meisten unserer Fahrzeuge sind im Dienst.
+CLW-Sit_L_WornOne ::: One element is worn down. ::: Ein Element ist abgekämpft.
+CLW-Sit_L_WornMany ::: %1 elements are worn down. ::: %1 Elemente sind abgekämpft.
+CLW-Sit_L_IneffOne ::: One element is combat-ineffective. ::: Ein Element ist nicht mehr kampffähig.
+CLW-Sit_L_IneffMany ::: %1 elements are combat-ineffective. ::: %1 Elemente sind nicht mehr kampffähig.
+CLW-Sit_L_AllEffective ::: All elements remain combat-effective. ::: Alle Elemente bleiben kampffähig.
+CLW-Sit_L_AtCap ::: We are at force cap, no reinforcements needed. ::: Wir sind an der Kräftegrenze, keine Verstärkung nötig.
+CLW-Sit_L_CanBuy ::: Reinforcements can be bought. ::: Verstärkung kann gekauft werden.
+CLW-Sit_L_CannotBuy ::: We cannot afford reinforcements for now. ::: Verstärkung können wir uns vorerst nicht leisten.

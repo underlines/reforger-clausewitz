@@ -130,7 +130,15 @@ class CLW_Loc
 	// A wire (or a bare key) starts with '#'; plain text from the server, the LLM or the player never does.
 	static bool IsWire(string text)
 	{
-		return text.Length() > 1 && text.Substring(0, 1) == "#";
+		if (text.Length() < 2 || text.Substring(0, 1) != "#")
+			return false;
+
+		string head = text;
+		int sep = text.IndexOf(SEP);
+		if (sep >= 0)
+			head = text.Substring(0, sep);
+
+		return head.IndexOf(" ") < 0;	// "#Heading text" (markdown from an LLM) is not a key
 	}
 
 	// ---- build wires (server or client) ----

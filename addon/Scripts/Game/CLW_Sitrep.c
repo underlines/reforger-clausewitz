@@ -80,8 +80,7 @@ class CLW_Sitrep
 		if (index < 0 || index >= m_aBodies.Count())
 			return;
 
-		string text = Clean(body, CLW_SitrepTemplate.MAX_SECTION_CHARS);
-		m_aBodies.Set(index, text);
+		m_aBodies.Set(index, CleanAny(body, CLW_SitrepTemplate.MAX_SECTION_CHARS));
 	}
 
 	string GetBody(int index)
@@ -94,7 +93,7 @@ class CLW_Sitrep
 
 	void SetHeadline(string text)
 	{
-		m_sHeadline = Clean(text, CLW_SitrepTemplate.MAX_HEADLINE_CHARS);
+		m_sHeadline = CleanAny(text, CLW_SitrepTemplate.MAX_HEADLINE_CHARS);
 	}
 
 	bool IsEmpty()
@@ -120,10 +119,11 @@ class CLW_Sitrep
 		return text;
 	}
 
-	// Plain text (dashboard "text" field): headline + "TITLE: body" lines.
+	// Plain text (dashboard "text" field): headline + "TITLE: body" lines. The rules SITREP holds CLW_Loc wires: they are rendered
+	// here, on the server (English), because the sidecar and the dashboard have no stringtable.
 	string ToText()
 	{
-		string text = m_sHeadline;
+		string text = CLW_Loc.Resolve(m_sHeadline);
 		for (int i = 0; i < m_aBodies.Count(); i++)
 		{
 			if (m_aBodies[i].IsEmpty())
@@ -131,7 +131,7 @@ class CLW_Sitrep
 
 			if (!text.IsEmpty())
 				text += "\n";
-			text += CLW_SitrepTemplate.Title(i) + ": " + m_aBodies[i];
+			text += CLW_SitrepTemplate.Title(i) + ": " + CLW_Loc.Resolve(m_aBodies[i]);
 		}
 
 		return text;
@@ -142,10 +142,10 @@ class CLW_Sitrep
 	{
 		string json = "{\"scope\":\"" + CLW_Situation.Escape(m_sScope) + "\",\"unit\":\"" + CLW_Situation.Escape(m_sUnit) + "\",\"source\":\"" + CLW_Situation.Escape(m_sSource) + "\"";
 		int warTime = Math.Round(m_fWarTime);
-		json += ",\"warTimeSec\":" + warTime.ToString() + ",\"headline\":\"" + EscapeKeepLines(m_sHeadline) + "\"";
+		json += ",\"warTimeSec\":" + warTime.ToString() + ",\"headline\":\"" + EscapeKeepLines(CLW_Loc.Resolve(m_sHeadline)) + "\"";
 		for (int i = 0; i < m_aBodies.Count(); i++)
 		{
-			json += ",\"" + CLW_SitrepTemplate.Id(i) + "\":\"" + EscapeKeepLines(m_aBodies[i]) + "\"";
+			json += ",\"" + CLW_SitrepTemplate.Id(i) + "\":\"" + EscapeKeepLines(CLW_Loc.Resolve(m_aBodies[i])) + "\"";
 		}
 
 		json += "}";
@@ -189,6 +189,21 @@ class CLW_Sitrep
 		else
 			r.Replace("\n", " ");
 		return r;
+	}
+
+	// Rules text is made of CLW_Loc wires (one per line, never cut: a cut wire is unreadable, the client formats them); LLM prose is
+	// cleaned and length-limited (Clean). A body counts as wire text when its first line is a wire.
+	static string CleanAny(string text, int maxLength)
+	{
+		if (CLW_Loc.IsWire(text))
+		{
+			string wire = text;
+			wire.Replace("\r", "");
+			wire.Replace("\t", " ");
+			return wire;
+		}
+
+		return Clean(text, maxLength);
 	}
 
 	// Normalises text from any source (rules, LLM): no tags / control characters / tabs, trimmed, length-limited. Line breaks stay "\n".
