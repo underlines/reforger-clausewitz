@@ -1,5 +1,6 @@
 // HQ menu, client side data and entry points (M4 WP4). Wire format: see CLW_HqMenuServer.c. The dialog is CLW_HqMenuDialog
 // (preset Configs/CLW/UI/HqMenuDialog.conf, content layout UI/layouts/CLW/HqMenuContent.layout), same approach as the setup menu.
+// Text fields of the payload are CLW_Loc wires (or plain content names): the dialog renders them with CLW_Loc.Resolve in the game language.
 // Log prefix: "CLW: hqmenu".
 
 class CLW_HqOption
@@ -48,6 +49,7 @@ class CLW_HqMenuData
 	string m_sStatus;
 	bool m_bReport;
 	string m_sReportReason;
+	string m_sLang = "en";			// wire line G: the HQ language of the player (CLW_PlayerLang.Resolve on the server)
 	ref array<ref CLW_HqRequest> m_aRequests = {};
 	ref array<ref CLW_HqSquad> m_aSquads = {};
 	ref array<string> m_aLines = {};
@@ -141,6 +143,10 @@ class CLW_HqMenuData
 			{
 				data.m_aLines.Insert(f[1]);
 			}
+			else if (type == "G" && f.Count() >= 2)
+			{
+				data.m_sLang = f[1];
+			}
 			else if (type == "K" && f.Count() >= 2)
 			{
 				data.m_bReport = f[1] == "1";
@@ -210,7 +216,7 @@ class CLW_HqMenuClient
 		{
 			s_bWanted = false;
 			Print("CLW: hqmenu could not be created (preset / layout problem), use the /request and /report chat commands", LogLevel.ERROR);
-			CLW_Debug.Show("HQ menu failed to open, use /request and /report");
+			CLW_Debug.Show(CLW_Loc.W("#CLW-HqMenu_Failed"));
 			return;
 		}
 

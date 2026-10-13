@@ -3,7 +3,8 @@
 // (CLW_HqMenuData), with the vanilla widget library layouts, exactly like the setup menu. Every button sends an action to the
 // server (CLW_HqMenuClient.Act); the server runs the same code as the chat commands and pushes fresh data, which rebuilds the sections.
 // Sections: REQUESTS (vehicle / squad / resupply / reinforce / recon), SQUAD (join / leave HQ squads, SITREP), BASE (stock, FOBs,
-// convoys), CONTACT REPORT (count, type, distance, direction). Log prefix: "CLW: hqmenu".
+// convoys), CONTACT REPORT (count, type, distance, direction), LANGUAGE (HQ language of the player, same as /hq language).
+// Texts: stringtable keys (CLW_Loc.F) and the server's wires / content names (CLW_Loc.Resolve) in the game language. Log prefix: "CLW: hqmenu".
 
 class CLW_HqMenuButton
 {
@@ -26,6 +27,7 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 	protected Widget m_wSquadBox;
 	protected Widget m_wBaseBox;
 	protected Widget m_wReportBox;
+	protected Widget m_wLangBox;
 	protected ref array<ref CLW_HqMenuButton> m_aButtons = {};
 	protected ref map<string, int> m_mSelection = new map<string, int>();	// request id -> chosen option, kept across refreshes
 
@@ -39,6 +41,8 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 	protected Managed m_RepKindComp;
 	protected Managed m_RepDirComp;
 	protected Managed m_VCatComp;		// depot menu: category spin box
+	protected Managed m_LangComp;		// language spin box
+	protected ref array<string> m_aLangCodes = {};	// codes of the language spin box items ("auto" first)
 
 	bool IsOpen()
 	{
@@ -62,13 +66,14 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 		m_wSquadBox = root.FindAnyWidget("SquadBox");
 		m_wBaseBox = root.FindAnyWidget("BaseBox");
 		m_wReportBox = root.FindAnyWidget("ReportBox");
+		m_wLangBox = root.FindAnyWidget("LanguageBox");	// optional: an older layout has no language section
 		if (!m_wRequestBox || !m_wSquadBox || !m_wBaseBox || !m_wReportBox)
 		{
 			Print("CLW: hqmenu layout is missing its section boxes (RequestBox / SquadBox / BaseBox / ReportBox)", LogLevel.ERROR);
 			return;
 		}
 
-		SetTitle("Clausewitz - HQ");
+		SetTitle(CLW_Loc.F("#CLW-HqMenu_Title"));
 		m_OnButtonPressed.Insert(OnTagPressed);
 		Build();
 	}
@@ -97,16 +102,18 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 		ClearChildren(m_wSquadBox);
 		ClearChildren(m_wBaseBox);
 		ClearChildren(m_wReportBox);
+		ClearChildren(m_wLangBox);
 		m_aButtons.Clear();
 		m_RepCountComp = null;
 		m_RepDistComp = null;
 		m_RepKindComp = null;
 		m_RepDirComp = null;
 		m_VCatComp = null;
+		m_LangComp = null;
 
-		string headline = string.Format("%1 (%2), supplies %3 at %4", m_Data.m_sFaction, m_Data.m_sRole, m_Data.m_sSupplies, m_Data.m_sBase);
+		string headline = CLW_Loc.F("#CLW-HqMenu_Headline", m_Data.m_sFaction, "#CLW-Req_Role_" + m_Data.m_sRole, m_Data.m_sSupplies, m_Data.m_sBase);
 		if (!m_Data.m_bRunning)
-			headline = "The war is not running yet.";
+			headline = CLW_Loc.F("#CLW-HqMenu_NotRunning");
 		if (m_Data.m_sStatus.IsEmpty())
 			SetStatus(headline, false);
 		else
@@ -116,6 +123,7 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 		BuildSquads();
 		BuildBase();
 		BuildReport();
+		BuildLanguage();
 	}
 
 	protected void BuildRequests()
@@ -128,13 +136,13 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 
 		if (m_Data.m_aRequests.IsEmpty())
 		{
-			AddText(m_wRequestBox, "No requests available.", Color.FromSRGBA(160, 160, 160, 255));
+			AddText(m_wRequestBox, CLW_Loc.F("#CLW-HqMenu_NoRequests"), Color.FromSRGBA(160, 160, 160, 255));
 			return;
 		}
 
 		foreach (int i, CLW_HqRequest request : m_Data.m_aRequests)
 		{
-			AddText(m_wRequestBox, request.m_sTitle, null);
+			AddText(m_wRequestBox, CLW_Loc.Resolve(request.m_sTitle), null);
 			request.m_Spin = null;
 			if (request.m_aOptions.Count() > 1 || (request.m_aOptions.Count() == 1 && request.m_sId == "recon"))
 			{
@@ -144,10 +152,10 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 					spin = SCR_SpinBoxComponent.Cast(spinWidget.FindHandler(SCR_SpinBoxComponent));
 				if (spin)
 				{
-					spin.SetLabel("Type");
+					spin.SetLabel(CLW_Loc.F("#CLW-HqMenu_Type"));
 					foreach (CLW_HqOption option : request.m_aOptions)
 					{
-						spin.AddItem(option.m_sLabel);
+						spin.AddItem(CLW_Loc.Resolve(option.m_sLabel));
 					}
 
 					int kept;
@@ -159,9 +167,9 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 				}
 			}
 
-			AddButton(m_wRequestBox, "Request " + request.m_sId, "req", "", i);
+			AddButton(m_wRequestBox, CLW_Loc.F("#CLW-Req_Action", "#CLW-Req_Kind_" + request.m_sId), "req", "", i);
 			if (!request.m_sBlocked.IsEmpty())
-				AddText(m_wRequestBox, "Not possible now: " + request.m_sBlocked, Color.FromSRGBA(240, 130, 90, 255));
+				AddText(m_wRequestBox, CLW_Loc.F("#CLW-HqMenu_NotPossible", request.m_sBlocked), Color.FromSRGBA(240, 130, 90, 255));
 		}
 	}
 
@@ -176,35 +184,36 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 	// Depot menu (WP11): one page of the vehicle list (the server sends only the page), category spin box, page buttons.
 	protected void BuildDepotVehicles()
 	{
-		AddText(m_wRequestBox, string.Format("VEHICLE DEPOT - %1 vehicle(s) in this category, delivered next to this depot", m_Data.m_iTotal), null);
-		array<string> catNames = {"All", "Light", "Motorized", "Mech", "Armor", "Logistics"};
+		AddText(m_wRequestBox, CLW_Loc.F("#CLW-HqMenu_DepotTitle", CLW_Loc.N(m_Data.m_iTotal)), null);
+		array<string> catNames = {};
 		int catIndex;
 		for (int c = 0; c < DEPOT_CATS; c++)
 		{
+			catNames.Insert(CLW_Loc.F("#CLW-HqMenu_Cat_" + DepotCatId(c)));
 			if (DepotCatId(c) == m_Data.m_sCat)
 				catIndex = c;
 		}
 
-		m_VCatComp = AddSpin(m_wRequestBox, "Category", catNames, catIndex);
+		m_VCatComp = AddSpin(m_wRequestBox, CLW_Loc.F("#CLW-HqMenu_Category"), catNames, catIndex);
 		if (!m_Data.m_sVBlocked.IsEmpty())
-			AddText(m_wRequestBox, "Not possible now: " + m_Data.m_sVBlocked, Color.FromSRGBA(240, 130, 90, 255));
+			AddText(m_wRequestBox, CLW_Loc.F("#CLW-HqMenu_NotPossible", m_Data.m_sVBlocked), Color.FromSRGBA(240, 130, 90, 255));
 
 		if (m_Data.m_aVehicles.IsEmpty())
-			AddText(m_wRequestBox, "No vehicle in this category.", Color.FromSRGBA(160, 160, 160, 255));
+			AddText(m_wRequestBox, CLW_Loc.F("#CLW-HqMenu_DepotNone"), Color.FromSRGBA(160, 160, 160, 255));
 
 		foreach (CLW_HqVehicle vehicle : m_Data.m_aVehicles)
 		{
-			string label = vehicle.m_sLabel + " - " + vehicle.m_iCost.ToString() + " supplies";
+			string label = CLW_Loc.F("#CLW-HqMenu_VehicleBtn", vehicle.m_sLabel, CLW_Loc.N(vehicle.m_iCost));
 			AddButton(m_wRequestBox, label, "vreq", vehicle.m_sType, -1);
 		}
 
 		if (m_Data.m_iPages > 1)
 		{
-			AddText(m_wRequestBox, string.Format("Page %1 / %2", m_Data.m_iPage + 1, m_Data.m_iPages), null);
+			AddText(m_wRequestBox, CLW_Loc.F("#CLW-HqMenu_Page", CLW_Loc.N(m_Data.m_iPage + 1), CLW_Loc.N(m_Data.m_iPages)), null);
 			if (m_Data.m_iPage > 0)
-				AddButton(m_wRequestBox, "Previous page", "vpage", m_Data.m_sCat + "|" + (m_Data.m_iPage - 1).ToString(), -1);
+				AddButton(m_wRequestBox, CLW_Loc.F("#CLW-HqMenu_PagePrev"), "vpage", m_Data.m_sCat + "|" + (m_Data.m_iPage - 1).ToString(), -1);
 			if (m_Data.m_iPage < m_Data.m_iPages - 1)
-				AddButton(m_wRequestBox, "Next page", "vpage", m_Data.m_sCat + "|" + (m_Data.m_iPage + 1).ToString(), -1);
+				AddButton(m_wRequestBox, CLW_Loc.F("#CLW-HqMenu_PageNext"), "vpage", m_Data.m_sCat + "|" + (m_Data.m_iPage + 1).ToString(), -1);
 		}
 	}
 
@@ -213,36 +222,36 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 		bool inSquad;
 		foreach (CLW_HqSquad squad : m_Data.m_aSquads)
 		{
-			string info = string.Format("%1 - %2 player(s), %3 members", squad.m_sName, squad.m_iHumans, squad.m_iMembers);
+			string info = CLW_Loc.F("#CLW-HqMenu_SquadInfo", squad.m_sName, CLW_Loc.N(squad.m_iHumans), CLW_Loc.N(squad.m_iMembers));
 			if (squad.m_bMine)
 			{
 				inSquad = true;
-				AddText(m_wSquadBox, "Your squad: " + info, Color.FromSRGBA(140, 220, 140, 255));
+				AddText(m_wSquadBox, CLW_Loc.F("#CLW-HqMenu_YourSquad", info), Color.FromSRGBA(140, 220, 140, 255));
 			}
 			else if (squad.m_bFull)
 			{
-				AddText(m_wSquadBox, info + " (no free player slot)", Color.FromSRGBA(160, 160, 160, 255));
+				AddText(m_wSquadBox, CLW_Loc.F("#CLW-HqMenu_SquadFull", info), Color.FromSRGBA(160, 160, 160, 255));
 			}
 			else
 			{
-				AddButton(m_wSquadBox, "Join: " + info, "join", squad.m_sId, -1);
+				AddButton(m_wSquadBox, CLW_Loc.F("#CLW-HqMenu_SquadJoin", info), "join", squad.m_sId, -1);
 			}
 		}
 
 		if (m_Data.m_aSquads.IsEmpty())
-			AddText(m_wSquadBox, "No HQ squads listed.", Color.FromSRGBA(160, 160, 160, 255));
+			AddText(m_wSquadBox, CLW_Loc.F("#CLW-HqMenu_NoSquads"), Color.FromSRGBA(160, 160, 160, 255));
 
 		if (inSquad)
-			AddButton(m_wSquadBox, "Leave squad", "leave", "", -1);
+			AddButton(m_wSquadBox, CLW_Loc.F("#CLW-HqMenu_Leave"), "leave", "", -1);
 
-		AddButton(m_wSquadBox, "Show SITREP", "sitrep", "", -1);
+		AddButton(m_wSquadBox, CLW_Loc.F("#CLW-HqMenu_ShowSitrep"), "sitrep", "", -1);
 	}
 
 	protected void BuildBase()
 	{
 		foreach (string line : m_Data.m_aLines)
 		{
-			AddText(m_wBaseBox, line, null);
+			AddText(m_wBaseBox, CLW_Loc.Resolve(line), null);
 		}
 	}
 
@@ -250,21 +259,48 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 	{
 		if (!m_Data.m_bReport)
 		{
-			string reason = m_Data.m_sReportReason;
+			string reason = CLW_Loc.Resolve(m_Data.m_sReportReason);
 			if (reason.IsEmpty())
-				reason = "not available";
-			AddText(m_wReportBox, "Contact reports: " + reason, Color.FromSRGBA(160, 160, 160, 255));
+				reason = CLW_Loc.F("#CLW-HqMenu_ReportNA");
+			AddText(m_wReportBox, CLW_Loc.F("#CLW-HqMenu_ReportNo", reason), Color.FromSRGBA(160, 160, 160, 255));
 			return;
 		}
 
-		AddText(m_wReportBox, "Report an enemy contact to HQ (same as /report <count> <inf|veh|armor> <dist m> <dir>).", Color.FromSRGBA(160, 160, 160, 255));
-		m_RepCountComp = AddSlider(m_wReportBox, "Count", 1, 30, 1, m_fRepCount);
-		array<string> kindNames = {"Infantry", "Vehicles", "Armor"};
+		AddText(m_wReportBox, CLW_Loc.F("#CLW-HqMenu_ReportHelp"), Color.FromSRGBA(160, 160, 160, 255));
+		m_RepCountComp = AddSlider(m_wReportBox, CLW_Loc.F("#CLW-HqMenu_Count"), 1, 30, 1, m_fRepCount);
+		array<string> kindNames = {CLW_Loc.F("#CLW-HqMenu_KindInf"), CLW_Loc.F("#CLW-HqMenu_KindVeh"), CLW_Loc.F("#CLW-HqMenu_KindArmor")};
 		array<string> dirNames = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
-		m_RepKindComp = AddSpin(m_wReportBox, "Type", kindNames, m_iRepKind);
-		m_RepDistComp = AddSlider(m_wReportBox, "Distance (m)", 50, 1500, 50, m_fRepDist);
-		m_RepDirComp = AddSpin(m_wReportBox, "Direction", dirNames, m_iRepDir);
-		AddButton(m_wReportBox, "Send report", "report", "", -1);
+		m_RepKindComp = AddSpin(m_wReportBox, CLW_Loc.F("#CLW-HqMenu_Type"), kindNames, m_iRepKind);
+		m_RepDistComp = AddSlider(m_wReportBox, CLW_Loc.F("#CLW-HqMenu_Distance"), 50, 1500, 50, m_fRepDist);
+		m_RepDirComp = AddSpin(m_wReportBox, CLW_Loc.F("#CLW-HqMenu_Direction"), dirNames, m_iRepDir);
+		AddButton(m_wReportBox, CLW_Loc.F("#CLW-HqMenu_SendReport"), "report", "", -1);
+	}
+
+	// HQ language of the player (wire line G): "auto" or a code. The list shows the common languages; any other ISO code is set
+	// with /hq language <code> and then appears as an extra item. Choosing an item sends the action "lang" (server validates).
+	protected void BuildLanguage()
+	{
+		if (!m_wLangBox || !m_Data.m_bRunning)
+			return;
+
+		m_aLangCodes.Clear();
+		m_aLangCodes.Insert("auto");
+		CLW_HqLang.GetMenuCodes(m_aLangCodes);
+		if (!m_aLangCodes.Contains(m_Data.m_sLang))
+			m_aLangCodes.Insert(m_Data.m_sLang);
+
+		array<string> names = {};
+		int current;
+		foreach (int i, string code : m_aLangCodes)
+		{
+			names.Insert(CLW_Loc.F(CLW_HqLang.Label(code)));
+			if (code == m_Data.m_sLang)
+				current = i;
+		}
+
+		AddText(m_wLangBox, CLW_Loc.F("#CLW-HqMenu_LangCurrent", CLW_HqLang.Label(m_Data.m_sLang)), null);
+		m_LangComp = AddSpin(m_wLangBox, CLW_Loc.F("#CLW-HqMenu_LangSpin"), names, current);
+		AddText(m_wLangBox, CLW_Loc.F("#CLW-HqMenu_LangHint"), Color.FromSRGBA(160, 160, 160, 255));
 	}
 
 	// ---- widget helpers ----
@@ -380,8 +416,19 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 
 		if (m_VCatComp && comp == m_VCatComp)
 		{
-			SetStatus("Sending to HQ...", false);
+			SetStatus(CLW_Loc.F("#CLW-HqMenu_Sending"), false);
 			CLW_HqMenuClient.Act("vpage", DepotCatId(index) + "|0");
+			return;
+		}
+
+		if (m_LangComp && comp == m_LangComp)
+		{
+			if (index >= 0 && index < m_aLangCodes.Count())
+			{
+				SetStatus(CLW_Loc.F("#CLW-HqMenu_Sending"), false);
+				CLW_HqMenuClient.Act("lang", m_aLangCodes[index]);
+			}
+
 			return;
 		}
 
@@ -445,7 +492,7 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 			arg = ReportArgs();
 		}
 
-		SetStatus("Sending to HQ...", false);
+		SetStatus(CLW_Loc.F("#CLW-HqMenu_Sending"), false);
 		CLW_HqMenuClient.Act(button.m_sAction, arg);
 	}
 
@@ -473,7 +520,7 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 		if (tag != "refresh")
 			return;
 
-		SetStatus("Refreshing...", false);
+		SetStatus(CLW_Loc.F("#CLW-HqMenu_Refreshing"), false);
 		CLW_HqMenuClient.Act("refresh", "");
 	}
 
@@ -481,7 +528,7 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 
 	void SetStatus(string text, bool isError)
 	{
-		SetMessage(text);
+		SetMessage(CLW_Loc.Resolve(text));
 		if (isError)
 			SetMessageColor(Color.FromSRGBA(240, 90, 70, 255));
 		else

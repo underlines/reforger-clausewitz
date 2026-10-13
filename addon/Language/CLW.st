@@ -96,6 +96,442 @@ StringTable {
    Target_en_us "%1 upgraded FOB %2 (depot)."
    Target_de_de "%1 hat die FOB %2 ausgebaut (Depot)."
   }
+  CustomStringTableItem CLW-Hq_Busy {
+   Target_en_us "HQ: still working on your last message, stand by."
+   Target_de_de "HQ: ich bearbeite noch deine letzte Meldung, bitte warten."
+  }
+  CustomStringTableItem CLW-Hq_LangAuto {
+   Target_en_us "HQ: language back to automatic (now %1)."
+   Target_de_de "HQ: Sprache wieder automatisch (jetzt %1)."
+  }
+  CustomStringTableItem CLW-Hq_LangBad {
+   Target_en_us "HQ: unknown language code '%1'. Use two letters, for example /hq language de, or auto."
+   Target_de_de "HQ: unbekannter Sprachcode '%1'. Nutze zwei Buchstaben, zum Beispiel /hq language de, oder auto."
+  }
+  CustomStringTableItem CLW-Hq_LangCurrent {
+   Target_en_us "HQ: HQ answers you in %1. Change it: /hq language <code|auto>"
+   Target_de_de "HQ: das HQ antwortet dir auf %1. Ändern: /hq language <Code|auto>"
+  }
+  CustomStringTableItem CLW-Hq_LangSet {
+   Target_en_us "HQ: language set to %1. HQ answers in that language from now on."
+   Target_de_de "HQ: Sprache auf %1 gestellt. Das HQ antwortet ab jetzt in dieser Sprache."
+  }
+  CustomStringTableItem CLW-Hq_NoOperator {
+   Target_en_us "HQ: no radio operator on duty. Use the fixed requests:"
+   Target_de_de "HQ: kein Funker im Dienst. Nutze die festen Anforderungen:"
+  }
+  CustomStringTableItem CLW-Hq_NotAllowed {
+   Target_en_us "HQ: %1 is not something HQ can do for you."
+   Target_de_de "HQ: %1 kann das HQ nicht für dich erledigen."
+  }
+  CustomStringTableItem CLW-Hq_NoWar {
+   Target_en_us "HQ: the radio works once the war is running and you are on a side."
+   Target_de_de "HQ: der Funk geht, sobald der Krieg läuft und du einer Seite angehörst."
+  }
+  CustomStringTableItem CLW-Hq_Received {
+   Target_en_us "HQ: message received, stand by."
+   Target_de_de "HQ: Meldung empfangen, bitte warten."
+  }
+  CustomStringTableItem CLW-Hq_Roger {
+   Target_en_us "Roger."
+   Target_de_de "Verstanden."
+  }
+  CustomStringTableItem CLW-Hq_SayWhat {
+   Target_en_us "HQ: say what you need, for example /hq I need a truck at the camp. Fixed requests: /request"
+   Target_de_de "HQ: sag, was du brauchst, zum Beispiel /hq Ich brauche einen Lkw am Lager. Feste Anforderungen: /request"
+  }
+  CustomStringTableItem CLW-Hq_Wait {
+   Target_en_us "HQ: one moment, say again in a few seconds."
+   Target_de_de "HQ: einen Moment, sag es in ein paar Sekunden noch einmal."
+  }
+  CustomStringTableItem CLW-HqMenu_AlreadyIn {
+   Target_en_us "HQ: you are already in %1."
+   Target_de_de "HQ: du bist bereits in %1."
+  }
+  CustomStringTableItem CLW-HqMenu_Answered {
+   Target_en_us "HQ answered, see the message on screen."
+   Target_de_de "Das HQ hat geantwortet, siehe Meldung auf dem Bildschirm."
+  }
+  CustomStringTableItem CLW-HqMenu_Base {
+   Target_en_us "BASE"
+   Target_de_de "BASIS"
+  }
+  CustomStringTableItem CLW-HqMenu_BaseSupplies {
+   Target_en_us "HQ supplies: %1"
+   Target_de_de "HQ-Nachschub: %1"
+  }
+  CustomStringTableItem CLW-HqMenu_BaseSupplyTotal {
+   Target_en_us "HQ supplies: %1, side total %2"
+   Target_de_de "HQ-Nachschub: %1, Gesamt der Seite %2"
+  }
+  CustomStringTableItem CLW-HqMenu_BaseTerminal {
+   Target_en_us "This terminal draws on %1 stock: %2"
+   Target_de_de "Dieses Terminal nutzt den Vorrat von %1: %2"
+  }
+  CustomStringTableItem CLW-HqMenu_Blk_Cooldown {
+   Target_en_us "cooldown, %1 s left"
+   Target_de_de "Abklingzeit, noch %1 s"
+  }
+  CustomStringTableItem CLW-HqMenu_Blk_LeaderOnly {
+   Target_en_us "squad leaders only"
+   Target_de_de "nur Truppführer"
+  }
+  CustomStringTableItem CLW-HqMenu_Blk_NoTeam {
+   Target_en_us "no AI team in the faction's catalog"
+   Target_de_de "kein KI-Team im Katalog der Fraktion"
+  }
+  CustomStringTableItem CLW-HqMenu_Blk_NoVehicle {
+   Target_en_us "no vehicle in the faction's catalog"
+   Target_de_de "kein Fahrzeug im Katalog der Fraktion"
+  }
+  CustomStringTableItem CLW-HqMenu_Blk_RequestsOff {
+   Target_en_us "requests are off in this war mode"
+   Target_de_de "Anforderungen sind in diesem Kriegsmodus aus"
+  }
+  CustomStringTableItem CLW-HqMenu_Blk_Supplies {
+   Target_en_us "needs %1 supplies, the base has %2"
+   Target_de_de "braucht %1 Nachschub, die Basis hat %2"
+  }
+  CustomStringTableItem CLW-HqMenu_Cat_all {
+   Target_en_us "All"
+   Target_de_de "Alle"
+  }
+  CustomStringTableItem CLW-HqMenu_Cat_armor {
+   Target_en_us "Armor"
+   Target_de_de "Panzer"
+  }
+  CustomStringTableItem CLW-HqMenu_Cat_light {
+   Target_en_us "Light"
+   Target_de_de "Leicht"
+  }
+  CustomStringTableItem CLW-HqMenu_Cat_logistics {
+   Target_en_us "Logistics"
+   Target_de_de "Logistik"
+  }
+  CustomStringTableItem CLW-HqMenu_Cat_mech {
+   Target_en_us "Mech"
+   Target_de_de "Mechanisiert"
+  }
+  CustomStringTableItem CLW-HqMenu_Cat_motorized {
+   Target_en_us "Motorized"
+   Target_de_de "Motorisiert"
+  }
+  CustomStringTableItem CLW-HqMenu_Category {
+   Target_en_us "Category"
+   Target_de_de "Kategorie"
+  }
+  CustomStringTableItem CLW-HqMenu_Convoy {
+   Target_en_us "Convoy %1: %2 -> %3, %4 supplies, %5, grid %6"
+   Target_de_de "Konvoi %1: %2 -> %3, %4 Nachschub, %5, Planquadrat %6"
+  }
+  CustomStringTableItem CLW-HqMenu_ConvoyState_en_route {
+   Target_en_us "en route"
+   Target_de_de "unterwegs"
+  }
+  CustomStringTableItem CLW-HqMenu_ConvoyState_loading {
+   Target_en_us "loading"
+   Target_de_de "lädt"
+  }
+  CustomStringTableItem CLW-HqMenu_ConvoyState_planned {
+   Target_en_us "planned"
+   Target_de_de "geplant"
+  }
+  CustomStringTableItem CLW-HqMenu_Count {
+   Target_en_us "Count"
+   Target_de_de "Anzahl"
+  }
+  CustomStringTableItem CLW-HqMenu_DepotNone {
+   Target_en_us "No vehicle in this category."
+   Target_de_de "Kein Fahrzeug in dieser Kategorie."
+  }
+  CustomStringTableItem CLW-HqMenu_DepotTitle {
+   Target_en_us "VEHICLE DEPOT - %1 vehicle(s) in this category, delivered next to this depot"
+   Target_de_de "FAHRZEUGDEPOT - %1 Fahrzeug(e) in dieser Kategorie, geliefert direkt neben dem Depot"
+  }
+  CustomStringTableItem CLW-HqMenu_Direction {
+   Target_en_us "Direction"
+   Target_de_de "Richtung"
+  }
+  CustomStringTableItem CLW-HqMenu_Distance {
+   Target_en_us "Distance (m)"
+   Target_de_de "Entfernung (m)"
+  }
+  CustomStringTableItem CLW-HqMenu_Failed {
+   Target_en_us "HQ menu failed to open, use /request and /report"
+   Target_de_de "HQ-Menü konnte nicht geöffnet werden, nutze /request und /report"
+  }
+  CustomStringTableItem CLW-HqMenu_Fob {
+   Target_en_us "%1, grid %2, %3%4%5%6"
+   Target_de_de "%1, Planquadrat %2, %3%4%5%6"
+  }
+  CustomStringTableItem CLW-HqMenu_FobAttack {
+   Target_en_us ", UNDER ATTACK"
+   Target_de_de ", UNTER ANGRIFF"
+  }
+  CustomStringTableItem CLW-HqMenu_FobProgress {
+   Target_en_us ", %1%%"
+   Target_de_de ", %1%%"
+  }
+  CustomStringTableItem CLW-HqMenu_FobState_active {
+   Target_en_us "active"
+   Target_de_de "aktiv"
+  }
+  CustomStringTableItem CLW-HqMenu_FobState_building {
+   Target_en_us "building"
+   Target_de_de "im Bau"
+  }
+  CustomStringTableItem CLW-HqMenu_FobState_failed {
+   Target_en_us "failed"
+   Target_de_de "gescheitert"
+  }
+  CustomStringTableItem CLW-HqMenu_FobState_lost {
+   Target_en_us "lost"
+   Target_de_de "verloren"
+  }
+  CustomStringTableItem CLW-HqMenu_FobState_moving {
+   Target_en_us "moving"
+   Target_de_de "unterwegs"
+  }
+  CustomStringTableItem CLW-HqMenu_FobState_planned {
+   Target_en_us "planned"
+   Target_de_de "geplant"
+  }
+  CustomStringTableItem CLW-HqMenu_FobStock {
+   Target_en_us ", stock %1"
+   Target_de_de ", Vorrat %1"
+  }
+  CustomStringTableItem CLW-HqMenu_Headline {
+   Target_en_us "%1 (%2), supplies %3 at %4"
+   Target_de_de "%1 (%2), Nachschub %3 bei %4"
+  }
+  CustomStringTableItem CLW-HqMenu_Joining {
+   Target_en_us "HQ: joining %1."
+   Target_de_de "HQ: trete %1 bei."
+  }
+  CustomStringTableItem CLW-HqMenu_KindArmor {
+   Target_en_us "Armor"
+   Target_de_de "Panzer"
+  }
+  CustomStringTableItem CLW-HqMenu_KindInf {
+   Target_en_us "Infantry"
+   Target_de_de "Infanterie"
+  }
+  CustomStringTableItem CLW-HqMenu_KindVeh {
+   Target_en_us "Vehicles"
+   Target_de_de "Fahrzeuge"
+  }
+  CustomStringTableItem CLW-HqMenu_LangCurrent {
+   Target_en_us "HQ answers in: %1"
+   Target_de_de "Das HQ antwortet auf: %1"
+  }
+  CustomStringTableItem CLW-HqMenu_LangHint {
+   Target_en_us "Other languages: /hq language <code>, for example fr or ja."
+   Target_de_de "Andere Sprachen: /hq language <Code>, zum Beispiel fr oder ja."
+  }
+  CustomStringTableItem CLW-HqMenu_LangSpin {
+   Target_en_us "HQ language"
+   Target_de_de "HQ-Sprache"
+  }
+  CustomStringTableItem CLW-HqMenu_Language {
+   Target_en_us "LANGUAGE"
+   Target_de_de "SPRACHE"
+  }
+  CustomStringTableItem CLW-HqMenu_Leave {
+   Target_en_us "Leave squad"
+   Target_de_de "Trupp verlassen"
+  }
+  CustomStringTableItem CLW-HqMenu_Left {
+   Target_en_us "HQ: you left %1. Pick another squad in this menu or the groups menu."
+   Target_de_de "HQ: du hast %1 verlassen. Wähle einen anderen Trupp in diesem Menü oder im Gruppenmenü."
+  }
+  CustomStringTableItem CLW-HqMenu_Marker {
+   Target_en_us "Requested vehicle"
+   Target_de_de "Angefordertes Fahrzeug"
+  }
+  CustomStringTableItem CLW-HqMenu_NeedWar {
+   Target_en_us "The menu is available once the war is running and you are on a side."
+   Target_de_de "Das Menü ist verfügbar, sobald der Krieg läuft und du einer Seite angehörst."
+  }
+  CustomStringTableItem CLW-HqMenu_NoConvoy {
+   Target_en_us "No convoy in flight."
+   Target_de_de "Kein Konvoi unterwegs."
+  }
+  CustomStringTableItem CLW-HqMenu_NoFob {
+   Target_en_us "No FOB yet."
+   Target_de_de "Noch keine FOB."
+  }
+  CustomStringTableItem CLW-HqMenu_NoRequests {
+   Target_en_us "No requests available."
+   Target_de_de "Keine Anforderungen verfügbar."
+  }
+  CustomStringTableItem CLW-HqMenu_NoSquads {
+   Target_en_us "No HQ squads listed."
+   Target_de_de "Keine HQ-Trupps gelistet."
+  }
+  CustomStringTableItem CLW-HqMenu_NotDeployedSquad {
+   Target_en_us "HQ: you must be deployed on a side to join a squad."
+   Target_de_de "HQ: du musst auf einer Seite eingesetzt sein, um einem Trupp beizutreten."
+  }
+  CustomStringTableItem CLW-HqMenu_NotInSquad {
+   Target_en_us "HQ: you are not in an HQ squad."
+   Target_de_de "HQ: du bist in keinem HQ-Trupp."
+  }
+  CustomStringTableItem CLW-HqMenu_NotPossible {
+   Target_en_us "Not possible now: %1"
+   Target_de_de "Gerade nicht möglich: %1"
+  }
+  CustomStringTableItem CLW-HqMenu_NotRunning {
+   Target_en_us "The war is not running yet."
+   Target_de_de "Der Krieg läuft noch nicht."
+  }
+  CustomStringTableItem CLW-HqMenu_NoWarSquads {
+   Target_en_us "HQ: squads are available once the war is running."
+   Target_de_de "HQ: Trupps sind verfügbar, sobald der Krieg läuft."
+  }
+  CustomStringTableItem CLW-HqMenu_OptDefault {
+   Target_en_us "Default: %1 (%2)"
+   Target_de_de "Standard: %1 (%2)"
+  }
+  CustomStringTableItem CLW-HqMenu_OptNameCost {
+   Target_en_us "%1 (%2)"
+   Target_de_de "%1 (%2)"
+  }
+  CustomStringTableItem CLW-HqMenu_Page {
+   Target_en_us "Page %1 / %2"
+   Target_de_de "Seite %1 / %2"
+  }
+  CustomStringTableItem CLW-HqMenu_PageNext {
+   Target_en_us "Next page"
+   Target_de_de "Nächste Seite"
+  }
+  CustomStringTableItem CLW-HqMenu_PagePrev {
+   Target_en_us "Previous page"
+   Target_de_de "Vorherige Seite"
+  }
+  CustomStringTableItem CLW-HqMenu_Refresh {
+   Target_en_us "Refresh"
+   Target_de_de "Aktualisieren"
+  }
+  CustomStringTableItem CLW-HqMenu_Refreshing {
+   Target_en_us "Refreshing..."
+   Target_de_de "Aktualisiere..."
+  }
+  CustomStringTableItem CLW-HqMenu_Report {
+   Target_en_us "CONTACT REPORT"
+   Target_de_de "KONTAKTMELDUNG"
+  }
+  CustomStringTableItem CLW-HqMenu_ReportHelp {
+   Target_en_us "Report an enemy contact to HQ (same as /report <count> <inf|veh|armor> <dist m> <dir>)."
+   Target_de_de "Feindkontakt an das HQ melden (wie /report <Anzahl> <inf|veh|armor> <Entfernung m> <Richtung>)."
+  }
+  CustomStringTableItem CLW-HqMenu_ReportNA {
+   Target_en_us "not available"
+   Target_de_de "nicht verfügbar"
+  }
+  CustomStringTableItem CLW-HqMenu_ReportNo {
+   Target_en_us "Contact reports: %1"
+   Target_de_de "Kontaktmeldungen: %1"
+  }
+  CustomStringTableItem CLW-HqMenu_ReportOff {
+   Target_en_us "contact reports are off in this war mode"
+   Target_de_de "Kontaktmeldungen sind in diesem Kriegsmodus aus"
+  }
+  CustomStringTableItem CLW-HqMenu_ReportWarOff {
+   Target_en_us "the war is not running"
+   Target_de_de "der Krieg läuft nicht"
+  }
+  CustomStringTableItem CLW-HqMenu_Requests {
+   Target_en_us "REQUESTS"
+   Target_de_de "ANFORDERUNGEN"
+  }
+  CustomStringTableItem CLW-HqMenu_RowRecon {
+   Target_en_us "Recon: HQ sends a group to look (squad leaders, free)"
+   Target_de_de "Aufklärung: das HQ schickt eine Gruppe zum Erkunden (Truppführer, kostenlos)"
+  }
+  CustomStringTableItem CLW-HqMenu_RowReinforce {
+   Target_en_us "Reinforce: HQ sends the nearest free group to you (squad leaders, free)"
+   Target_de_de "Verstärkung: das HQ schickt dir die nächste freie Gruppe (Truppführer, kostenlos)"
+  }
+  CustomStringTableItem CLW-HqMenu_RowResupply {
+   Target_en_us "Resupply box: ammo at your position, cost %1"
+   Target_de_de "Nachschubkiste: Munition an deiner Position, Kosten %1"
+  }
+  CustomStringTableItem CLW-HqMenu_RowSquad {
+   Target_en_us "Squad: an AI team joins your squad (squad leaders)"
+   Target_de_de "Trupp: ein KI-Team schließt sich deinem Trupp an (Truppführer)"
+  }
+  CustomStringTableItem CLW-HqMenu_RowVehicle {
+   Target_en_us "Vehicle: empty, parked at the depot"
+   Target_de_de "Fahrzeug: leer, am Depot abgestellt"
+  }
+  CustomStringTableItem CLW-HqMenu_RowVehicleTerm {
+   Target_en_us "Vehicle: empty, parked at the depot (at this terminal)"
+   Target_de_de "Fahrzeug: leer, am Depot abgestellt (an diesem Terminal)"
+  }
+  CustomStringTableItem CLW-HqMenu_Sending {
+   Target_en_us "Sending to HQ..."
+   Target_de_de "Sende an das HQ..."
+  }
+  CustomStringTableItem CLW-HqMenu_SendReport {
+   Target_en_us "Send report"
+   Target_de_de "Meldung senden"
+  }
+  CustomStringTableItem CLW-HqMenu_ShowSitrep {
+   Target_en_us "Show SITREP"
+   Target_de_de "LAGE anzeigen"
+  }
+  CustomStringTableItem CLW-HqMenu_Squad {
+   Target_en_us "SQUAD"
+   Target_de_de "TRUPP"
+  }
+  CustomStringTableItem CLW-HqMenu_SquadFull {
+   Target_en_us "%1 (no free player slot)"
+   Target_de_de "%1 (kein freier Spielerplatz)"
+  }
+  CustomStringTableItem CLW-HqMenu_SquadGone {
+   Target_en_us "HQ: that squad is not available (it may be gone or belong to the other side)."
+   Target_de_de "HQ: dieser Trupp ist nicht verfügbar (vielleicht aufgelöst oder von der anderen Seite)."
+  }
+  CustomStringTableItem CLW-HqMenu_SquadInfo {
+   Target_en_us "%1 - %2 player(s), %3 members"
+   Target_de_de "%1 - %2 Spieler, %3 Mitglieder"
+  }
+  CustomStringTableItem CLW-HqMenu_SquadJoin {
+   Target_en_us "Join: %1"
+   Target_de_de "Beitreten: %1"
+  }
+  CustomStringTableItem CLW-HqMenu_SquadNoSlot {
+   Target_en_us "HQ: %1 has no free slot for a player."
+   Target_de_de "HQ: %1 hat keinen freien Platz für einen Spieler."
+  }
+  CustomStringTableItem CLW-HqMenu_Title {
+   Target_en_us "Clausewitz - HQ"
+   Target_de_de "Clausewitz - HQ"
+  }
+  CustomStringTableItem CLW-HqMenu_Type {
+   Target_en_us "Type"
+   Target_de_de "Typ"
+  }
+  CustomStringTableItem CLW-HqMenu_UnknownAction {
+   Target_en_us "unknown menu action"
+   Target_de_de "unbekannte Menüaktion"
+  }
+  CustomStringTableItem CLW-HqMenu_VehicleBtn {
+   Target_en_us "%1 - %2 supplies"
+   Target_de_de "%1 - %2 Nachschub"
+  }
+  CustomStringTableItem CLW-HqMenu_WhereHere {
+   Target_en_us "Where: here"
+   Target_de_de "Wo: hier"
+  }
+  CustomStringTableItem CLW-HqMenu_WhereObjective {
+   Target_en_us "Where: nearest objective"
+   Target_de_de "Wo: nächstes Ziel"
+  }
+  CustomStringTableItem CLW-HqMenu_YourSquad {
+   Target_en_us "Your squad: %1"
+   Target_de_de "Dein Trupp: %1"
+  }
   CustomStringTableItem CLW-Hud_Draw {
    Target_en_us "Draw"
    Target_de_de "Unentschieden"
@@ -135,6 +571,50 @@ StringTable {
   CustomStringTableItem CLW-Journal_NoContact {
    Target_en_us "No enemy contact reported yet."
    Target_de_de "Noch kein Feindkontakt gemeldet."
+  }
+  CustomStringTableItem CLW-Lang_auto {
+   Target_en_us "Automatic"
+   Target_de_de "Automatisch"
+  }
+  CustomStringTableItem CLW-Lang_de {
+   Target_en_us "German"
+   Target_de_de "Deutsch"
+  }
+  CustomStringTableItem CLW-Lang_en {
+   Target_en_us "English"
+   Target_de_de "Englisch"
+  }
+  CustomStringTableItem CLW-Lang_es {
+   Target_en_us "Spanish"
+   Target_de_de "Spanisch"
+  }
+  CustomStringTableItem CLW-Lang_fr {
+   Target_en_us "French"
+   Target_de_de "Französisch"
+  }
+  CustomStringTableItem CLW-Lang_it {
+   Target_en_us "Italian"
+   Target_de_de "Italienisch"
+  }
+  CustomStringTableItem CLW-Lang_ja {
+   Target_en_us "Japanese"
+   Target_de_de "Japanisch"
+  }
+  CustomStringTableItem CLW-Lang_pl {
+   Target_en_us "Polish"
+   Target_de_de "Polnisch"
+  }
+  CustomStringTableItem CLW-Lang_pt {
+   Target_en_us "Portuguese"
+   Target_de_de "Portugiesisch"
+  }
+  CustomStringTableItem CLW-Lang_ru {
+   Target_en_us "Russian"
+   Target_de_de "Russisch"
+  }
+  CustomStringTableItem CLW-Lang_zh {
+   Target_en_us "Chinese"
+   Target_de_de "Chinesisch"
   }
   CustomStringTableItem CLW-Log_ConvoyLost {
    Target_en_us "%1 supply convoy %2 was lost with %3 supplies."

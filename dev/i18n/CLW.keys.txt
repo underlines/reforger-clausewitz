@@ -435,3 +435,123 @@ CLW-Sit_L_AllEffective ::: All elements remain combat-effective. ::: Alle Elemen
 CLW-Sit_L_AtCap ::: We are at force cap, no reinforcements needed. ::: Wir sind an der Kräftegrenze, keine Verstärkung nötig.
 CLW-Sit_L_CanBuy ::: Reinforcements can be bought. ::: Verstärkung kann gekauft werden.
 CLW-Sit_L_CannotBuy ::: We cannot afford reinforcements for now. ::: Verstärkung können wir uns vorerst nicht leisten.
+CLW-Hq_SayWhat ::: HQ: say what you need, for example /hq I need a truck at the camp. Fixed requests: /request ::: HQ: sag, was du brauchst, zum Beispiel /hq Ich brauche einen Lkw am Lager. Feste Anforderungen: /request
+CLW-Hq_NoWar ::: HQ: the radio works once the war is running and you are on a side. ::: HQ: der Funk geht, sobald der Krieg läuft und du einer Seite angehörst.
+CLW-Hq_Wait ::: HQ: one moment, say again in a few seconds. ::: HQ: einen Moment, sag es in ein paar Sekunden noch einmal.
+CLW-Hq_Busy ::: HQ: still working on your last message, stand by. ::: HQ: ich bearbeite noch deine letzte Meldung, bitte warten.
+CLW-Hq_Received ::: HQ: message received, stand by. ::: HQ: Meldung empfangen, bitte warten.
+CLW-Hq_NoOperator ::: HQ: no radio operator on duty. Use the fixed requests: ::: HQ: kein Funker im Dienst. Nutze die festen Anforderungen:
+CLW-Hq_Roger ::: Roger. ::: Verstanden.
+CLW-Hq_NotAllowed ::: HQ: %1 is not something HQ can do for you. ::: HQ: %1 kann das HQ nicht für dich erledigen.
+CLW-Hq_LangCurrent ::: HQ: HQ answers you in %1. Change it: /hq language <code|auto> ::: HQ: das HQ antwortet dir auf %1. Ändern: /hq language <Code|auto>
+CLW-Hq_LangSet ::: HQ: language set to %1. HQ answers in that language from now on. ::: HQ: Sprache auf %1 gestellt. Das HQ antwortet ab jetzt in dieser Sprache.
+CLW-Hq_LangAuto ::: HQ: language back to automatic (now %1). ::: HQ: Sprache wieder automatisch (jetzt %1).
+CLW-Hq_LangBad ::: HQ: unknown language code '%1'. Use two letters, for example /hq language de, or auto. ::: HQ: unbekannter Sprachcode '%1'. Nutze zwei Buchstaben, zum Beispiel /hq language de, oder auto.
+CLW-Lang_auto ::: Automatic ::: Automatisch
+CLW-Lang_en ::: English ::: Englisch
+CLW-Lang_de ::: German ::: Deutsch
+CLW-Lang_fr ::: French ::: Französisch
+CLW-Lang_es ::: Spanish ::: Spanisch
+CLW-Lang_ru ::: Russian ::: Russisch
+CLW-Lang_pl ::: Polish ::: Polnisch
+CLW-Lang_ja ::: Japanese ::: Japanisch
+CLW-Lang_zh ::: Chinese ::: Chinesisch
+CLW-Lang_it ::: Italian ::: Italienisch
+CLW-Lang_pt ::: Portuguese ::: Portugiesisch
+CLW-HqMenu_Title ::: Clausewitz - HQ ::: Clausewitz - HQ
+CLW-HqMenu_Refresh ::: Refresh ::: Aktualisieren
+CLW-HqMenu_Requests ::: REQUESTS ::: ANFORDERUNGEN
+CLW-HqMenu_Squad ::: SQUAD ::: TRUPP
+CLW-HqMenu_Base ::: BASE ::: BASIS
+CLW-HqMenu_Report ::: CONTACT REPORT ::: KONTAKTMELDUNG
+CLW-HqMenu_Language ::: LANGUAGE ::: SPRACHE
+CLW-HqMenu_Failed ::: HQ menu failed to open, use /request and /report ::: HQ-Menü konnte nicht geöffnet werden, nutze /request und /report
+CLW-HqMenu_Headline ::: %1 (%2), supplies %3 at %4 ::: %1 (%2), Nachschub %3 bei %4
+CLW-HqMenu_NotRunning ::: The war is not running yet. ::: Der Krieg läuft noch nicht.
+CLW-HqMenu_NeedWar ::: The menu is available once the war is running and you are on a side. ::: Das Menü ist verfügbar, sobald der Krieg läuft und du einer Seite angehörst.
+CLW-HqMenu_ReportWarOff ::: the war is not running ::: der Krieg läuft nicht
+CLW-HqMenu_ReportOff ::: contact reports are off in this war mode ::: Kontaktmeldungen sind in diesem Kriegsmodus aus
+CLW-HqMenu_NoRequests ::: No requests available. ::: Keine Anforderungen verfügbar.
+CLW-HqMenu_Type ::: Type ::: Typ
+CLW-HqMenu_NotPossible ::: Not possible now: %1 ::: Gerade nicht möglich: %1
+CLW-HqMenu_Blk_RequestsOff ::: requests are off in this war mode ::: Anforderungen sind in diesem Kriegsmodus aus
+CLW-HqMenu_Blk_LeaderOnly ::: squad leaders only ::: nur Truppführer
+CLW-HqMenu_Blk_Cooldown ::: cooldown, %1 s left ::: Abklingzeit, noch %1 s
+CLW-HqMenu_Blk_NoVehicle ::: no vehicle in the faction's catalog ::: kein Fahrzeug im Katalog der Fraktion
+CLW-HqMenu_Blk_NoTeam ::: no AI team in the faction's catalog ::: kein KI-Team im Katalog der Fraktion
+CLW-HqMenu_Blk_Supplies ::: needs %1 supplies, the base has %2 ::: braucht %1 Nachschub, die Basis hat %2
+CLW-HqMenu_RowVehicle ::: Vehicle: empty, parked at the depot ::: Fahrzeug: leer, am Depot abgestellt
+CLW-HqMenu_RowVehicleTerm ::: Vehicle: empty, parked at the depot (at this terminal) ::: Fahrzeug: leer, am Depot abgestellt (an diesem Terminal)
+CLW-HqMenu_RowSquad ::: Squad: an AI team joins your squad (squad leaders) ::: Trupp: ein KI-Team schließt sich deinem Trupp an (Truppführer)
+CLW-HqMenu_RowResupply ::: Resupply box: ammo at your position, cost %1 ::: Nachschubkiste: Munition an deiner Position, Kosten %1
+CLW-HqMenu_RowReinforce ::: Reinforce: HQ sends the nearest free group to you (squad leaders, free) ::: Verstärkung: das HQ schickt dir die nächste freie Gruppe (Truppführer, kostenlos)
+CLW-HqMenu_RowRecon ::: Recon: HQ sends a group to look (squad leaders, free) ::: Aufklärung: das HQ schickt eine Gruppe zum Erkunden (Truppführer, kostenlos)
+CLW-HqMenu_OptDefault ::: Default: %1 (%2) ::: Standard: %1 (%2)
+CLW-HqMenu_OptNameCost ::: %1 (%2) ::: %1 (%2)
+CLW-HqMenu_WhereHere ::: Where: here ::: Wo: hier
+CLW-HqMenu_WhereObjective ::: Where: nearest objective ::: Wo: nächstes Ziel
+CLW-HqMenu_DepotTitle ::: VEHICLE DEPOT - %1 vehicle(s) in this category, delivered next to this depot ::: FAHRZEUGDEPOT - %1 Fahrzeug(e) in dieser Kategorie, geliefert direkt neben dem Depot
+CLW-HqMenu_Category ::: Category ::: Kategorie
+CLW-HqMenu_Cat_all ::: All ::: Alle
+CLW-HqMenu_Cat_light ::: Light ::: Leicht
+CLW-HqMenu_Cat_motorized ::: Motorized ::: Motorisiert
+CLW-HqMenu_Cat_mech ::: Mech ::: Mechanisiert
+CLW-HqMenu_Cat_armor ::: Armor ::: Panzer
+CLW-HqMenu_Cat_logistics ::: Logistics ::: Logistik
+CLW-HqMenu_DepotNone ::: No vehicle in this category. ::: Kein Fahrzeug in dieser Kategorie.
+CLW-HqMenu_VehicleBtn ::: %1 - %2 supplies ::: %1 - %2 Nachschub
+CLW-HqMenu_Page ::: Page %1 / %2 ::: Seite %1 / %2
+CLW-HqMenu_PagePrev ::: Previous page ::: Vorherige Seite
+CLW-HqMenu_PageNext ::: Next page ::: Nächste Seite
+CLW-HqMenu_SquadInfo ::: %1 - %2 player(s), %3 members ::: %1 - %2 Spieler, %3 Mitglieder
+CLW-HqMenu_YourSquad ::: Your squad: %1 ::: Dein Trupp: %1
+CLW-HqMenu_SquadFull ::: %1 (no free player slot) ::: %1 (kein freier Spielerplatz)
+CLW-HqMenu_SquadJoin ::: Join: %1 ::: Beitreten: %1
+CLW-HqMenu_NoSquads ::: No HQ squads listed. ::: Keine HQ-Trupps gelistet.
+CLW-HqMenu_Leave ::: Leave squad ::: Trupp verlassen
+CLW-HqMenu_ShowSitrep ::: Show SITREP ::: LAGE anzeigen
+CLW-HqMenu_ReportNo ::: Contact reports: %1 ::: Kontaktmeldungen: %1
+CLW-HqMenu_ReportNA ::: not available ::: nicht verfügbar
+CLW-HqMenu_ReportHelp ::: Report an enemy contact to HQ (same as /report <count> <inf|veh|armor> <dist m> <dir>). ::: Feindkontakt an das HQ melden (wie /report <Anzahl> <inf|veh|armor> <Entfernung m> <Richtung>).
+CLW-HqMenu_Count ::: Count ::: Anzahl
+CLW-HqMenu_Distance ::: Distance (m) ::: Entfernung (m)
+CLW-HqMenu_Direction ::: Direction ::: Richtung
+CLW-HqMenu_KindInf ::: Infantry ::: Infanterie
+CLW-HqMenu_KindVeh ::: Vehicles ::: Fahrzeuge
+CLW-HqMenu_KindArmor ::: Armor ::: Panzer
+CLW-HqMenu_SendReport ::: Send report ::: Meldung senden
+CLW-HqMenu_Sending ::: Sending to HQ... ::: Sende an das HQ...
+CLW-HqMenu_Refreshing ::: Refreshing... ::: Aktualisiere...
+CLW-HqMenu_Answered ::: HQ answered, see the message on screen. ::: Das HQ hat geantwortet, siehe Meldung auf dem Bildschirm.
+CLW-HqMenu_UnknownAction ::: unknown menu action ::: unbekannte Menüaktion
+CLW-HqMenu_NoWarSquads ::: HQ: squads are available once the war is running. ::: HQ: Trupps sind verfügbar, sobald der Krieg läuft.
+CLW-HqMenu_NotDeployedSquad ::: HQ: you must be deployed on a side to join a squad. ::: HQ: du musst auf einer Seite eingesetzt sein, um einem Trupp beizutreten.
+CLW-HqMenu_SquadGone ::: HQ: that squad is not available (it may be gone or belong to the other side). ::: HQ: dieser Trupp ist nicht verfügbar (vielleicht aufgelöst oder von der anderen Seite).
+CLW-HqMenu_AlreadyIn ::: HQ: you are already in %1. ::: HQ: du bist bereits in %1.
+CLW-HqMenu_SquadNoSlot ::: HQ: %1 has no free slot for a player. ::: HQ: %1 hat keinen freien Platz für einen Spieler.
+CLW-HqMenu_Joining ::: HQ: joining %1. ::: HQ: trete %1 bei.
+CLW-HqMenu_NotInSquad ::: HQ: you are not in an HQ squad. ::: HQ: du bist in keinem HQ-Trupp.
+CLW-HqMenu_Left ::: HQ: you left %1. Pick another squad in this menu or the groups menu. ::: HQ: du hast %1 verlassen. Wähle einen anderen Trupp in diesem Menü oder im Gruppenmenü.
+CLW-HqMenu_BaseSupplies ::: HQ supplies: %1 ::: HQ-Nachschub: %1
+CLW-HqMenu_BaseSupplyTotal ::: HQ supplies: %1, side total %2 ::: HQ-Nachschub: %1, Gesamt der Seite %2
+CLW-HqMenu_BaseTerminal ::: This terminal draws on %1 stock: %2 ::: Dieses Terminal nutzt den Vorrat von %1: %2
+CLW-HqMenu_Fob ::: %1, grid %2, %3%4%5%6 ::: %1, Planquadrat %2, %3%4%5%6
+CLW-HqMenu_FobProgress ::: , %1%% ::: , %1%%
+CLW-HqMenu_FobAttack ::: , UNDER ATTACK ::: , UNTER ANGRIFF
+CLW-HqMenu_FobStock ::: , stock %1 ::: , Vorrat %1
+CLW-HqMenu_FobState_planned ::: planned ::: geplant
+CLW-HqMenu_FobState_moving ::: moving ::: unterwegs
+CLW-HqMenu_FobState_building ::: building ::: im Bau
+CLW-HqMenu_FobState_active ::: active ::: aktiv
+CLW-HqMenu_FobState_lost ::: lost ::: verloren
+CLW-HqMenu_FobState_failed ::: failed ::: gescheitert
+CLW-HqMenu_NoFob ::: No FOB yet. ::: Noch keine FOB.
+CLW-HqMenu_NoConvoy ::: No convoy in flight. ::: Kein Konvoi unterwegs.
+CLW-HqMenu_Convoy ::: Convoy %1: %2 -> %3, %4 supplies, %5, grid %6 ::: Konvoi %1: %2 -> %3, %4 Nachschub, %5, Planquadrat %6
+CLW-HqMenu_ConvoyState_planned ::: planned ::: geplant
+CLW-HqMenu_ConvoyState_loading ::: loading ::: lädt
+CLW-HqMenu_ConvoyState_en_route ::: en route ::: unterwegs
+CLW-HqMenu_LangCurrent ::: HQ answers in: %1 ::: Das HQ antwortet auf: %1
+CLW-HqMenu_LangSpin ::: HQ language ::: HQ-Sprache
+CLW-HqMenu_LangHint ::: Other languages: /hq language <code>, for example fr or ja. ::: Andere Sprachen: /hq language <Code>, zum Beispiel fr oder ja.
+CLW-HqMenu_Marker ::: Requested vehicle ::: Angefordertes Fahrzeug

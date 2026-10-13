@@ -26,11 +26,105 @@ class CLW_HqReplyDto
 	int msgId;
 	string text;
 	bool fallback;	// true = no answer from the model: show the /request menu hint
+	string setLanguage;	// protocol v4: the asker wants HQ in this language (ISO 639-1 code or "auto"); "" = unchanged
+}
+
+// Language helpers shared by /hq language, the HQ menu and the sidecar reply (setLanguage). Resolution itself is CLW_PlayerLang.
+class CLW_HqLang
+{
+	// Codes the HQ menu offers (besides "auto"); any other ISO 639-1 code works through /hq language <code>.
+	static void GetMenuCodes(notnull array<string> outCodes)
+	{
+		outCodes.Insert("en");
+		outCodes.Insert("de");
+		outCodes.Insert("fr");
+		outCodes.Insert("es");
+		outCodes.Insert("ru");
+		outCodes.Insert("pl");
+		outCodes.Insert("ja");
+		outCodes.Insert("zh");
+		outCodes.Insert("it");
+		outCodes.Insert("pt");
+	}
+
+	static bool InMenu(string code)
+	{
+		array<string> codes = {};
+		GetMenuCodes(codes);
+		return codes.Contains(code);
+	}
+
+	// Param for a wire / widget: the language's stringtable name for "auto" and the codes of the menu, else the code itself.
+	static string Label(string code)
+	{
+		if (code == "auto" || InMenu(code))
+			return "#CLW-Lang_" + code;
+
+		return code;
+	}
+
+	// Lower case, trimmed; "" when it is neither "auto" nor a valid code.
+	static string Normalize(string raw)
+	{
+		string code = raw;
+		code = code.Trim();
+		code.ToLower();
+		if (code == "auto" || CLW_PlayerLang.IsValidCode(code))
+			return code;
+
+		return "";
+	}
+
+	// Sets ("xx") or clears ("auto") the language override of ONE player; the code is validated here again (it may come from a
+	// client or from the LLM). Returns false for an invalid code. Log lines "CLW: lang ...".
+	static bool Apply(int playerId, string raw, string source)
+	{
+		string code = Normalize(raw);
+		if (code.IsEmpty())
+		{
+			Print(string.Format("CLW: lang player=%1(%2) rejected code '%3' (source %4)", playerId, CLW_RequestService.PlayerName(playerId), raw, source), LogLevel.WARNING);
+			return false;
+		}
+
+		if (code == "auto")
+		{
+			CLW_PlayerLang.ClearOverride(playerId);
+		}
+		else if (!CLW_PlayerLang.SetOverride(playerId, code))
+		{
+			Print(string.Format("CLW: lang player=%1(%2) SetOverride refused '%3' (source %4)", playerId, CLW_RequestService.PlayerName(playerId), code, source), LogLevel.WARNING);
+			return false;
+		}
+
+		Print(string.Format("CLW: lang player=%1(%2) %3 -> now '%4' (source %5)", playerId, CLW_RequestService.PlayerName(playerId), code, CLW_PlayerLang.Resolve(playerId), source), LogLevel.NORMAL);
+		return true;
+	}
+
+	// Chat answer to a language change (a wire, shown in the player's game language).
+	static string SetAnswer(int playerId, string code)
+	{
+		if (code == "auto")
+			return CLW_Loc.W("#CLW-Hq_LangAuto", Label(CLW_PlayerLang.Resolve(playerId)));
+
+		return CLW_Loc.W("#CLW-Hq_LangSet", Label(code));
+	}
+}
+
+// Free text (LLM reply, result text) as a wire param: a leading '#' would make it a key.
+class CLW_HqText
+{
+	static string Param(string text)
+	{
+		if (text.Length() > 0 && text.Substring(0, 1) == "#")
+			return " " + text;
+
+		return text;
+	}
 }
 
 class CLW_HqConfig
 {
-	static const float TIMEOUT_SEC = 60;			// a message without an answer gets the fallback hint
+	static const float TIMEOUT_SEC = 90;			// a message without an answer gets the fallback hint (above CLW_RemoteCommander.TIMEOUT_SECONDS, one slow turn)
 	static const int TICK_MS = 5000;
 	static const int MAX_TEXT = 240;
 	static const int MAX_PENDING = 12;
@@ -94,9 +188,12 @@ class CLW_HqChat
 		clean = clean.Trim();
 		if (clean.IsEmpty())
 		{
-			CLW_RequestService.Answer(playerId, "HQ: say what you need, for example /hq I need a truck at the camp. Fixed requests: /request", true);
+			CLW_RequestService.Answer(playerId, CLW_Loc.W("#CLW-Hq_SayWhat"), true);
 			return;
 		}
+
+		if (HandleLanguage(playerId, clean))
+			return;
 
 		if (clean.Length() > CLW_HqConfig.MAX_TEXT)
 			clean = clean.Substring(0, CLW_HqConfig.MAX_TEXT);
@@ -105,7 +202,7 @@ class CLW_HqChat
 		CLW_WarState war = CLW_GameMode.GetWarState();
 		if (faction.IsEmpty() || !war || !war.IsRunning())
 		{
-			CLW_RequestService.Answer(playerId, "HQ: the radio works once the war is running and you are on a side.", true);
+			CLW_RequestService.Answer(playerId, CLW_Loc.W("#CLW-Hq_NoWar"), true);
 			return;
 		}
 
@@ -113,7 +210,7 @@ class CLW_HqChat
 		float last;
 		if (s_mLastMessage.Find(playerId, last) && now - last < CLW_HqConfig.PLAYER_COOLDOWN_SEC)
 		{
-			CLW_RequestService.Answer(playerId, "HQ: one moment, say again in a few seconds.", false);
+			CLW_RequestService.Answer(playerId, CLW_Loc.W("#CLW-Hq_Wait"), false);
 			return;
 		}
 
@@ -121,7 +218,7 @@ class CLW_HqChat
 		{
 			if (pending.m_iPlayer == playerId)
 			{
-				CLW_RequestService.Answer(playerId, "HQ: still working on your last message, stand by.", false);
+				CLW_RequestService.Answer(playerId, CLW_Loc.W("#CLW-Hq_Busy"), false);
 				return;
 			}
 		}
@@ -151,19 +248,49 @@ class CLW_HqChat
 		msg.m_fTime = now;
 		s_aPending.Insert(msg);
 		Print(string.Format("CLW: hq #%1 player=%2(%3) faction=%4 role=%5 text='%6' -> sent to the sidecar with the next situation", msg.m_iId, playerId, name, faction, msg.m_sRole, clean), LogLevel.NORMAL);
-		CLW_RequestService.Answer(playerId, "HQ: message received, stand by.", false);
+		CLW_RequestService.Answer(playerId, CLW_Loc.W("#CLW-Hq_Received"), false);
+	}
+
+	// "/hq language", "/hq language <code>", "/hq language auto" (works without the LLM). True = handled.
+	protected static bool HandleLanguage(int playerId, string text)
+	{
+		array<string> words = {};
+		text.Split(" ", words, true);
+		if (words.IsEmpty() || words.Count() > 2)
+			return false;
+
+		string first = words[0];
+		first.ToLower();
+		if (first != "language")
+			return false;
+
+		if (words.Count() == 1)
+		{
+			CLW_RequestService.Answer(playerId, CLW_Loc.W("#CLW-Hq_LangCurrent", CLW_HqLang.Label(CLW_PlayerLang.Resolve(playerId))), true);
+			return true;
+		}
+
+		string code = CLW_HqLang.Normalize(words[1]);
+		if (code.IsEmpty() || !CLW_HqLang.Apply(playerId, code, "chat"))
+		{
+			CLW_RequestService.Answer(playerId, CLW_Loc.W("#CLW-Hq_LangBad", CLW_HqText.Param(words[1])), true);
+			return true;
+		}
+
+		CLW_RequestService.Answer(playerId, CLW_HqLang.SetAnswer(playerId, code), true);
+		return true;
 	}
 
 	// No LLM answer: tell the player to use the fixed requests.
 	static void Fallback(int playerId)
 	{
-		CLW_RequestService.Answer(playerId, "HQ: no radio operator on duty. Use the fixed requests:", true);
+		CLW_RequestService.Answer(playerId, CLW_Loc.W("#CLW-Hq_NoOperator"), true);
 		CLW_RequestService.ShowMenu(playerId);
 	}
 
 	// ---- situation (protocol v3 "hq") ----
 
-	// JSON array of the faction's pending messages, "" when none: [{"id","player","role","squad","grid","pos":[x,z],"text","ageSec"}].
+	// JSON array of the faction's pending messages, "" when none: [{"id","player","role","squad","grid","pos":[x,z],"lang","text","ageSec"}] (protocol v4: lang = CLW_PlayerLang.Resolve of the asker).
 	static string GetJson(string factionKey)
 	{
 		string text = "";
@@ -178,6 +305,7 @@ class CLW_HqChat
 				text += ",";
 			text += "{\"id\":" + msg.m_iId + ",\"player\":\"" + CLW_Situation.Escape(msg.m_sName) + "\",\"role\":\"" + msg.m_sRole + "\",\"squad\":\"" + CLW_Situation.Escape(msg.m_sSquad) + "\"";
 			text += ",\"grid\":\"" + CLW_Places.Grid(msg.m_vPos) + "\",\"pos\":[" + Math.Round(msg.m_vPos[0]) + "," + Math.Round(msg.m_vPos[2]) + "]";
+			text += ",\"lang\":\"" + CLW_Situation.Escape(CLW_PlayerLang.Resolve(msg.m_iPlayer)) + "\"";
 			text += ",\"text\":\"" + CLW_Situation.Escape(msg.m_sText) + "\",\"ageSec\":" + Math.Round(Math.Max(0, now - msg.m_fTime)) + "}";
 			written++;
 		}
@@ -239,19 +367,25 @@ class CLW_HqChat
 					continue;
 				}
 
+				// protocol v4: the asker asked (in any words) to be answered in some language; it concerns this player only
+				if (!reply.setLanguage.IsEmpty())
+					CLW_HqLang.Apply(msg.m_iPlayer, reply.setLanguage, "llm");
+
 				string line = reply.text;
 				line = line.Trim();
-				if (line.IsEmpty())
-					line = "Roger.";
 				if (line.Length() > 300)
 					line = line.Substring(0, 300);
+				if (line.IsEmpty())
+					line = CLW_Loc.W("#CLW-Hq_Roger");	// a wire: the client renders it
+				else
+					line = CLW_HqText.Param(line);	// LLM text, already in the player's language, shown as it is
 
 				Print(string.Format("CLW: hq #%1 %2 reply: '%3'", msg.m_iId, msg.m_sName, line), LogLevel.NORMAL);
 				// one hint with reply + action result (a second hint would replace the first at once; the reply alone was a
 				// short chat line the owner did not see, DS e2e 2026-10-12)
 				msg.m_sReply = line;
 				if (!HasActionsFor(msg, actions))
-					CLW_RequestService.Answer(msg.m_iPlayer, "HQ: " + line, true);
+					CLW_RequestService.Answer(msg.m_iPlayer, CLW_Loc.W("#CLW-Req_Granted", line), true);
 				RunActions(msg, actions);
 			}
 		}
@@ -347,7 +481,7 @@ class CLW_HqChat
 		string answer;
 		if (!entry || entry.m_sAuthority != CLW_ActionEntry.AUTH_PLAYER)
 		{
-			answer = "HQ: " + dto.action + " is not something HQ can do for you.";
+			answer = CLW_Loc.W("#CLW-Hq_NotAllowed", dto.action);
 			Print(string.Format("CLW: hq #%1 %2 action %3 %4 rejected: unknown or not a player action", msg.m_iId, msg.m_sName, dto.id, dto.action), LogLevel.WARNING);
 		}
 		else
@@ -372,15 +506,15 @@ class CLW_HqChat
 			string result;
 			bool granted = registry.Run(call, result);
 			if (granted)
-				answer = "HQ: " + result;
+				answer = CLW_Loc.W("#CLW-Req_Granted", CLW_HqText.Param(result));
 			else
-				answer = "HQ: request " + dto.action + " refused - " + result;
+				answer = CLW_Loc.W("#CLW-Req_Refused", dto.action, CLW_HqText.Param(result));
 
 			Print(string.Format("CLW: hq #%1 %2 action %3 %4 -> %5: %6", msg.m_iId, msg.m_sName, dto.id, dto.action, granted, result), LogLevel.NORMAL);
 		}
 
 		if (!msg.m_sReply.IsEmpty())
-			answer = "HQ: " + msg.m_sReply + "\n" + answer;
+			answer = CLW_Loc.Lines(CLW_Loc.W("#CLW-Req_Granted", msg.m_sReply), answer);
 
 		CLW_RequestService.Answer(msg.m_iPlayer, answer, true);
 	}

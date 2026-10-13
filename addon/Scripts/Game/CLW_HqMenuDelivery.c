@@ -72,7 +72,7 @@ class CLW_VehicleDelivery
 		vector pos = info.m_Vehicle.GetOrigin();
 		marker.SetWorldPos(pos[0], pos[2]);
 		marker.SetMarkerFactionFlags(1 << factionManager.GetFactionIndex(side));	// own side only
-		marker.SetCustomText("Requested vehicle");
+		marker.SetCustomText("#CLW-HqMenu_Marker");
 		manager.InsertStaticMarker(marker, false, true);
 		info.m_Marker = marker;
 		info.m_vMarkerPos = pos;

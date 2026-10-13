@@ -10,13 +10,16 @@
 //   Q <squadId> <name> <humans> <members> <mine 0|1> <full 0|1>         a joinable HQ squad of the player's side
 //   L <text>                                                            a base line (stock, FOB, convoy)
 //   K <allowed 0|1> <reason>                                            contact report available
+//   G <language code>                                                   the player's HQ language (CLW_PlayerLang.Resolve)
+// i18n: every text field (S, R title / blocked reason, O label, L, K reason) is a CLW_Loc wire (or plain content text such as a vehicle
+// name), formatted by the client in its own language (CLW_HqMenuClient / CLW_HqMenuDialog). Wire params are content names or numbers.
 // Server only. Log prefix: "CLW: hqmenu".
 
 class CLW_HqMenuConfig
 {
 	static const int SQUADS_MAX = 10;				// squads listed
 	static const int OPTIONS_MAX = 10;				// vehicle / squad types listed per request row
-	static const int FIELD_MAX = 200;				// characters per text field on the wire
+	static const int FIELD_MAX = 400;				// characters per text field on the wire (a wire is longer than its text)
 	static const int DELIVERY_MARKER_SEC = 300;		// map marker of a delivered vehicle is removed after this
 	static const int DELIVERY_POLL_MS = 2000;		// check "did the requester get in"
 	static const int PAGE_SIZE = 12;				// depot menu: vehicles per page
@@ -60,7 +63,7 @@ class CLW_HqMenuServer
 		Push(playerId, terminalPos, "");
 	}
 
-	// A button of the menu. action: req | join | leave | report | refresh. Runs the shared code, then pushes fresh data.
+	// A button of the menu. action: req | join | leave | report | lang | refresh. Runs the shared code, then pushes fresh data.
 	static void Action(int playerId, string action, string arg, vector terminalPos)
 	{
 		if (!Replication.IsServer() || playerId <= 0)
@@ -80,7 +83,8 @@ class CLW_HqMenuServer
 			if (parts.Count() > 1)
 				typeArg = parts[1];
 			kind.ToLower();
-			status = CLW_RequestService.Handle(playerId, kind, typeArg, terminalPos);	// answers chat + hint itself
+			CLW_RequestService.Handle(playerId, kind, typeArg, terminalPos);	// answers chat + hint itself (the returned English text is for logs)
+			status = CLW_Loc.W("#CLW-HqMenu_Answered");
 		}
 		else if (action == "vpage")
 		{
@@ -89,12 +93,14 @@ class CLW_HqMenuServer
 		else if (action == "vreq")
 		{
 			// depot menu: arg = exact catalog type id; the server re-validates side, distance to the depot, cost and caps (Handle)
-			status = CLW_RequestService.Handle(playerId, CLW_RequestKind.VEHICLE, arg, terminalPos);
-			Print(string.Format("CLW: depot request %1 %2 -> %3", CLW_RequestService.PlayerName(playerId), arg, status), LogLevel.NORMAL);
+			string depotResult = CLW_RequestService.Handle(playerId, CLW_RequestKind.VEHICLE, arg, terminalPos);
+			status = CLW_Loc.W("#CLW-HqMenu_Answered");
+			Print(string.Format("CLW: depot request %1 %2 -> %3", CLW_RequestService.PlayerName(playerId), arg, depotResult), LogLevel.NORMAL);
 		}
 		else if (action == "report")
 		{
-			status = "HQ: " + CLW_Reports.Chat(playerId, arg);
+			CLW_Reports.Chat(playerId, arg);	// answers chat + hint itself
+			status = CLW_Loc.W("#CLW-HqMenu_Answered");
 		}
 		else if (action == "join")
 		{
@@ -106,10 +112,19 @@ class CLW_HqMenuServer
 			status = LeaveSquad(playerId);
 			CLW_RequestService.Answer(playerId, status, true);
 		}
+		else if (action == "lang")
+		{
+			// language option (auto | xx): the same code as /hq language, validated again on the server
+			if (CLW_HqLang.Apply(playerId, arg, "menu"))
+				status = CLW_HqLang.SetAnswer(playerId, CLW_HqLang.Normalize(arg));
+			else
+				status = CLW_Loc.W("#CLW-Hq_LangBad", CLW_HqText.Param(arg));
+			CLW_RequestService.Answer(playerId, status, true);
+		}
 		else if (action != "refresh")
 		{
 			Print("CLW: hqmenu unknown action '" + action + "'", LogLevel.WARNING);
-			status = "unknown menu action";
+			status = CLW_Loc.W("#CLW-HqMenu_UnknownAction");
 		}
 
 		Push(playerId, terminalPos, status);
@@ -140,26 +155,26 @@ class CLW_HqMenuServer
 		string faction = CLW_RequestService.FactionKeyOf(playerId);
 		vector pos;
 		if (!war || !war.IsRunning() || !registry)
-			return "HQ: squads are available once the war is running.";
+			return CLW_Loc.W("#CLW-HqMenu_NoWarSquads");
 		if (faction.IsEmpty() || !CLW_RequestService.PlayerPos(playerId, pos))
-			return "HQ: you must be deployed on a side to join a squad.";
+			return CLW_Loc.W("#CLW-HqMenu_NotDeployedSquad");
 
 		SCR_AIGroup group = registry.Find(squadId);
 		if (!group || !registry.IsJoinable(group) || CLW_SquadRegistry.GetFactionKey(group) != faction)
 		{
 			Print(string.Format("CLW: hqmenu join player=%1 squad=%2 refused: not a joinable squad of %3", playerId, squadId, faction), LogLevel.NORMAL);
-			return "HQ: that squad is not available (it may be gone or belong to the other side).";
+			return CLW_Loc.W("#CLW-HqMenu_SquadGone");
 		}
 
 		if (group.IsPlayerInGroup(playerId))
-			return "HQ: you are already in " + CLW_SquadGroups.DisplayName(group) + ".";
+			return CLW_Loc.W("#CLW-HqMenu_AlreadyIn", CLW_SquadGroups.DisplayName(group));
 
 		if (group.IsFull())
-			return "HQ: " + CLW_SquadGroups.DisplayName(group) + " has no free slot for a player.";
+			return CLW_Loc.W("#CLW-HqMenu_SquadNoSlot", CLW_SquadGroups.DisplayName(group));
 
 		Print(string.Format("CLW: hqmenu join player=%1 -> squad %2 (%3) via CLW_PlayerSquad.Join", playerId, squadId, group), LogLevel.NORMAL);
 		CLW_PlayerSquad.Join(group, playerId);
-		return "HQ: joining " + CLW_SquadGroups.DisplayName(group) + ".";
+		return CLW_Loc.W("#CLW-HqMenu_Joining", CLW_SquadGroups.DisplayName(group));
 	}
 
 	// Same calls as CLW_SquadJoin.OnSquadReleased; the vanilla hooks (CLW_SquadJoin) release the squad when no human is left.
@@ -168,7 +183,7 @@ class CLW_HqMenuServer
 		CLW_SquadRegistry registry = CLW_GameMode.GetRegistry();
 		SCR_AIGroup group = CLW_RequestService.GroupOf(playerId);
 		if (!registry || !group || !registry.IsAdopted(group))
-			return "HQ: you are not in an HQ squad.";
+			return CLW_Loc.W("#CLW-HqMenu_NotInSquad");
 
 		string name = CLW_SquadGroups.DisplayName(group);
 		group.RemovePlayer(playerId);
@@ -176,7 +191,7 @@ class CLW_HqMenuServer
 		if (controller)
 			controller.ResetGroupIDs_S();	// [verify] same call as CLW_SquadJoin.OnSquadReleased: frees the player to pick another squad
 		Print(string.Format("CLW: hqmenu leave player=%1 left squad %2 (humans left %3)", playerId, name, group.GetPlayerCount()), LogLevel.NORMAL);
-		return "HQ: you left " + name + ". Pick another squad in this menu or the groups menu.";
+		return CLW_Loc.W("#CLW-HqMenu_Left", name);
 	}
 
 	// ---- wire ----
@@ -251,11 +266,12 @@ class CLW_HqMenuServer
 			wire = Line("H", faction, role, supplies.ToString(), baseLabel, "1");
 		if (!status.IsEmpty())
 			wire += Line("S", status);
+		wire += Line("G", CLW_PlayerLang.Resolve(playerId));
 
 		if (!running || faction.IsEmpty())
 		{
-			wire += Line("L", "The menu is available once the war is running and you are on a side.");
-			wire += Line("K", "0", "the war is not running");
+			wire += Line("L", CLW_Loc.W("#CLW-HqMenu_NeedWar"));
+			wire += Line("K", "0", CLW_Loc.W("#CLW-HqMenu_ReportWarOff"));
 			return wire;
 		}
 
@@ -269,43 +285,46 @@ class CLW_HqMenuServer
 		if (CLW_Capabilities.Has("reports"))
 			wire += Line("K", "1", "");
 		else
-			wire += Line("K", "0", "contact reports are off in this war mode");
+			wire += Line("K", "0", CLW_Loc.W("#CLW-HqMenu_ReportOff"));
 
 		return wire;
 	}
 
 	// ---- requests ----
 
-	// Why a request of this kind would be refused right now ("" = looks fine). The executor still decides; this is the hint on the row.
+	// Why a request of this kind would be refused right now ("" = looks fine), as a wire. The executor still decides; this is the hint on the row.
 	protected static string Blocked(int playerId, string faction, string kind, string baseId)
 	{
 		if (!CLW_Capabilities.Has("requests"))
-			return "requests are off in this war mode";
+			return CLW_Loc.W("#CLW-HqMenu_Blk_RequestsOff");
 
 		vector pos;
 		if (!CLW_RequestService.PlayerPos(playerId, pos))
-			return "you are not deployed";
+			return CLW_Loc.W("#CLW-Req_NotDeployed");
 
 		if (CLW_RequestKind.NeedsLeader(kind) && !CLW_RequestService.IsSquadLeader(playerId))
-			return "squad leaders only";
+			return CLW_Loc.W("#CLW-HqMenu_Blk_LeaderOnly");
 
 		float left = CLW_RequestService.CooldownLeft(playerId, kind);
 		if (left > 0)
-			return "cooldown, " + Math.Round(left) + " s left";
+		{
+			int leftSec = Math.Round(left);
+			return CLW_Loc.W("#CLW-HqMenu_Blk_Cooldown", CLW_Loc.N(leftSec));
+		}
 
 		int cost = -1;
 		if (kind == CLW_RequestKind.VEHICLE)
 		{
 			CLW_ForceEntry vehicle = CLW_RequestService.PickVehicle(faction, "");
 			if (!vehicle)
-				return "no vehicle in the faction's catalog";
+				return CLW_Loc.W("#CLW-HqMenu_Blk_NoVehicle");
 			cost = CLW_RequestService.VehicleCost(vehicle);
 		}
 		else if (kind == CLW_RequestKind.SQUAD)
 		{
 			CLW_ForceEntry team = CLW_RequestService.PickInfantry(faction, "");
 			if (!team)
-				return "no AI team in the faction's catalog";
+				return CLW_Loc.W("#CLW-HqMenu_Blk_NoTeam");
 			cost = team.m_iCost;
 		}
 		else if (kind == CLW_RequestKind.RESUPPLY)
@@ -317,7 +336,7 @@ class CLW_HqMenuServer
 		{
 			int have = CLW_SupplyStore.Get(faction, baseId);
 			if (have < cost)
-				return string.Format("needs %1 supplies, the base has %2", cost, have);
+				return CLW_Loc.W("#CLW-HqMenu_Blk_Supplies", CLW_Loc.N(cost), CLW_Loc.N(have));
 		}
 
 		return "";
@@ -373,12 +392,12 @@ class CLW_HqMenuServer
 
 	protected static void AppendRequests(inout string wire, int playerId, string faction, string baseId, vector terminalPos)
 	{
-		string where;
+		string vehicleTitle = CLW_Loc.W("#CLW-HqMenu_RowVehicle");
 		if (terminalPos != vector.Zero)
-			where = " (at this terminal)";
+			vehicleTitle = CLW_Loc.W("#CLW-HqMenu_RowVehicleTerm");
 
 		string reason = Blocked(playerId, faction, CLW_RequestKind.VEHICLE, baseId);
-		wire += Line("R", "vehicle", CLW_RequestKind.VEHICLE, "Vehicle: empty, parked at the depot" + where, reason);
+		wire += Line("R", "vehicle", CLW_RequestKind.VEHICLE, vehicleTitle, reason);
 		CLW_ForceCatalog catalog = CLW_GameMode.GetForceCatalog();
 		array<CLW_ForceEntry> entries = {};
 		if (catalog)
@@ -386,7 +405,7 @@ class CLW_HqMenuServer
 
 		CLW_ForceEntry defaultVehicle = CLW_RequestService.PickVehicle(faction, "");
 		if (defaultVehicle)
-			wire += Line("O", "-", "Default: " + defaultVehicle.GetVehicleName() + " (" + CLW_RequestService.VehicleCost(defaultVehicle) + ")");
+			wire += Line("O", "-", CLW_Loc.W("#CLW-HqMenu_OptDefault", defaultVehicle.GetVehicleName(), CLW_Loc.N(CLW_RequestService.VehicleCost(defaultVehicle))));
 
 		int listed;
 		foreach (CLW_ForceEntry entry : entries)
@@ -394,15 +413,15 @@ class CLW_HqMenuServer
 			if (!entry || !entry.m_bEnabled || !entry.HasVehicle() || listed >= CLW_HqMenuConfig.OPTIONS_MAX)
 				continue;
 
-			wire += Line("O", entry.m_sType, entry.GetVehicleName() + " (" + CLW_RequestService.VehicleCost(entry) + ")");
+			wire += Line("O", entry.m_sType, CLW_Loc.W("#CLW-HqMenu_OptNameCost", entry.GetVehicleName(), CLW_Loc.N(CLW_RequestService.VehicleCost(entry))));
 			listed++;
 		}
 
 		reason = Blocked(playerId, faction, CLW_RequestKind.SQUAD, baseId);
-		wire += Line("R", "squad", CLW_RequestKind.SQUAD, "Squad: an AI team joins your squad (squad leaders)", reason);
+		wire += Line("R", "squad", CLW_RequestKind.SQUAD, CLW_Loc.W("#CLW-HqMenu_RowSquad"), reason);
 		CLW_ForceEntry defaultTeam = CLW_RequestService.PickInfantry(faction, "");
 		if (defaultTeam)
-			wire += Line("O", "-", "Default: " + defaultTeam.m_sName + " (" + defaultTeam.m_iCost + ")");
+			wire += Line("O", "-", CLW_Loc.W("#CLW-HqMenu_OptDefault", defaultTeam.m_sName, CLW_Loc.N(defaultTeam.m_iCost)));
 
 		listed = 0;
 		foreach (CLW_ForceEntry team : entries)
@@ -410,20 +429,20 @@ class CLW_HqMenuServer
 			if (!team || !team.m_bEnabled || team.HasVehicle() || team.m_GroupPrefab.IsEmpty() || listed >= CLW_HqMenuConfig.OPTIONS_MAX)
 				continue;
 
-			wire += Line("O", team.m_sType, team.m_sName + " (" + team.m_iCost + ")");
+			wire += Line("O", team.m_sType, CLW_Loc.W("#CLW-HqMenu_OptNameCost", team.m_sName, CLW_Loc.N(team.m_iCost)));
 			listed++;
 		}
 
 		reason = Blocked(playerId, faction, CLW_RequestKind.RESUPPLY, baseId);
-		wire += Line("R", "resupply", CLW_RequestKind.RESUPPLY, "Resupply box: ammo at your position, cost " + CLW_RequestConfig.RESUPPLY_COST, reason);
+		wire += Line("R", "resupply", CLW_RequestKind.RESUPPLY, CLW_Loc.W("#CLW-HqMenu_RowResupply", CLW_Loc.N(CLW_RequestConfig.RESUPPLY_COST)), reason);
 
 		reason = Blocked(playerId, faction, CLW_RequestKind.REINFORCE, baseId);
-		wire += Line("R", "reinforce", CLW_RequestKind.REINFORCE, "Reinforce: HQ sends the nearest free group to you (squad leaders, free)", reason);
+		wire += Line("R", "reinforce", CLW_RequestKind.REINFORCE, CLW_Loc.W("#CLW-HqMenu_RowReinforce"), reason);
 
 		reason = Blocked(playerId, faction, CLW_RequestKind.RECON, baseId);
-		wire += Line("R", "recon", CLW_RequestKind.RECON, "Recon: HQ sends a group to look (squad leaders, free)", reason);
-		wire += Line("O", "here", "Where: here");
-		wire += Line("O", "objective", "Where: nearest objective");
+		wire += Line("R", "recon", CLW_RequestKind.RECON, CLW_Loc.W("#CLW-HqMenu_RowRecon"), reason);
+		wire += Line("O", "here", CLW_Loc.W("#CLW-HqMenu_WhereHere"));
+		wire += Line("O", "objective", CLW_Loc.W("#CLW-HqMenu_WhereObjective"));
 	}
 
 	// ---- squads ----
@@ -460,33 +479,42 @@ class CLW_HqMenuServer
 	protected static void AppendBase(inout string wire, string faction, string baseId)
 	{
 		CLW_WarState war = CLW_GameMode.GetWarState();
-		string line = "HQ supplies: " + war.GetSupplies(faction);
+		string line = CLW_Loc.W("#CLW-HqMenu_BaseSupplies", CLW_Loc.N(war.GetSupplies(faction)));
 		if (CLW_Capabilities.Has("logistics"))
-			line += ", side total " + CLW_SupplyStore.GetTotal(faction);
+			line = CLW_Loc.W("#CLW-HqMenu_BaseSupplyTotal", CLW_Loc.N(war.GetSupplies(faction)), CLW_Loc.N(CLW_SupplyStore.GetTotal(faction)));
 		wire += Line("L", line);
 
 		if (!CLW_SupplyStore.IsHq(baseId) && CLW_SupplyStore.HasOwnStock(faction, baseId))
-			wire += Line("L", "This terminal draws on " + baseId + " stock: " + CLW_SupplyStore.Get(faction, baseId));
+			wire += Line("L", CLW_Loc.W("#CLW-HqMenu_BaseTerminal", baseId, CLW_Loc.N(CLW_SupplyStore.Get(faction, baseId))));
 
 		array<CLW_Fob> fobs = {};
 		CLW_FobManager.GetFobs(faction, fobs);
 		foreach (CLW_Fob fob : fobs)
 		{
-			string fobLine = fob.m_sId;
+			string fobName = fob.m_sId;
 			if (!fob.m_sName.IsEmpty())
-				fobLine += " " + fob.m_sName;
-			fobLine += ", grid " + CLW_Places.Grid(fob.m_vPos) + ", " + fob.StateName();
+				fobName += " " + fob.m_sName;
+
+			string fobProgress;
 			if (fob.IsInProgress())
-				fobLine += " " + Math.Round(fob.m_fBuild) + "%";
+			{
+				int buildPct = Math.Round(fob.m_fBuild);
+				fobProgress = CLW_Loc.W("#CLW-HqMenu_FobProgress", CLW_Loc.N(buildPct));
+			}
+
+			string fobAttack;
 			if (fob.m_bUnderAttack)
-				fobLine += ", UNDER ATTACK";
+				fobAttack = CLW_Loc.W("#CLW-HqMenu_FobAttack");
+
+			string fobStock;
 			if (fob.IsActive() && CLW_SupplyStore.HasOwnStock(faction, fob.m_sId))
-				fobLine += ", stock " + CLW_SupplyStore.Get(faction, fob.m_sId);
-			wire += Line("L", fobLine);
+				fobStock = CLW_Loc.W("#CLW-HqMenu_FobStock", CLW_Loc.N(CLW_SupplyStore.Get(faction, fob.m_sId)));
+
+			wire += Line("L", CLW_Loc.W("#CLW-HqMenu_Fob", fobName, CLW_Places.Grid(fob.m_vPos), CLW_Loc.W("#CLW-HqMenu_FobState_" + fob.StateName()), fobProgress, fobAttack, fobStock));
 		}
 
 		if (fobs.IsEmpty() && CLW_Capabilities.Has("fob"))
-			wire += Line("L", "No FOB yet.");
+			wire += Line("L", CLW_Loc.W("#CLW-HqMenu_NoFob"));
 
 		if (!CLW_Capabilities.Has("logistics"))
 			return;
@@ -501,12 +529,12 @@ class CLW_HqMenuServer
 			if (state != "planned" && state != "loading" && state != "en_route")
 				continue;
 
-			wire += Line("L", string.Format("Convoy %1: %2 -> %3, %4 supplies, %5, grid %6", JsonField(obj, "id"), JsonField(obj, "from"), JsonField(obj, "to"), JsonField(obj, "cargo"), state, JsonField(obj, "grid")));
+			wire += Line("L", CLW_Loc.W("#CLW-HqMenu_Convoy", JsonField(obj, "id"), JsonField(obj, "from"), JsonField(obj, "to"), JsonField(obj, "cargo"), CLW_Loc.W("#CLW-HqMenu_ConvoyState_" + state), JsonField(obj, "grid")));
 			convoys++;
 		}
 
 		if (convoys == 0)
-			wire += Line("L", "No convoy in flight.");
+			wire += Line("L", CLW_Loc.W("#CLW-HqMenu_NoConvoy"));
 	}
 
 	// Convoy JSON body "{..},{..}" -> one string per object (flat objects, no nested braces except the pos array).

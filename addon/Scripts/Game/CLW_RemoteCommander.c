@@ -123,11 +123,11 @@ class CLW_RemoteCommander
 {
 	static bool ENABLED = true;
 	static const string BASE_URL = "http://127.0.0.1:8788/";
-	static const int TIMEOUT_SECONDS = 30;		// above the sidecar provider timeout (20 s), or slow LLM replies fall back to rules
-	static const float STUCK_SECONDS = 45;		// a request in flight longer than this is considered lost
+	static const int TIMEOUT_SECONDS = 60;		// above the sidecar's longest turn: HQ agent turn (agent.timeoutSec 40 s) + SITREP translation (i18n.translateTimeoutSec 10 s, parallel per language) + provider latency
+	static const float STUCK_SECONDS = 75;		// a request in flight longer than this is considered lost (above TIMEOUT_SECONDS)
 	static const float LOG_INTERVAL = 60;		// s: repeat the same fallback reason at most this often
 	static const float RULES_INTERVAL = 25;		// s: the rule-commander fallback runs at most this often (we are polled every 10 s)
-	static const float ONLINE_SECONDS = 45;		// IsOnline: a valid reply within this long ago
+	static const float ONLINE_SECONDS = 90;		// IsOnline: a valid reply within this long ago (above one slow poll, TIMEOUT_SECONDS, plus the poll interval)
 	static const int MAX_BUY_ENTRIES = 3;
 	static const int MAX_OFFERS = 3;
 	static const int MAX_BRIEF = 240;
@@ -230,6 +230,11 @@ class CLW_RemoteCommander
 		string hqJson = CLW_HqChat.GetJson(m_sFaction);
 		if (!hqJson.IsEmpty() && body.Length() > 2)
 			body = CLW_Str.DropLast(body) + ",\"hq\":" + hqJson + "}";
+
+		// protocol v4: languages of this faction's players, for the translations of a broadcast SITREP (sitrep.text_by_lang in the reply)
+		string langsJson = CLW_SitrepStore.GetLangsJson(m_sFaction);
+		if (!langsJson.IsEmpty() && body.Length() > 2)
+			body = CLW_Str.DropLast(body) + ",\"langs\":" + langsJson + "}";
 
 		if (squads <= 0)
 			ThinkRules();	// still POST the situation below: the sidecar/dashboard must learn the faction has no squads left (it may still buy)
@@ -341,7 +346,14 @@ class CLW_RemoteCommander
 		{
 			CLW_Sitrep llmSitrep = reply.sitrep.ToSitrep(m_sFaction, war.GetElapsedSec());
 			if (llmSitrep)
-				CLW_SitrepStore.SetLlm(m_sFaction, llmSitrep);
+			{
+				// protocol v4: translations of the same SITREP per recipient language (absent = v3 behaviour)
+				map<string, ref CLW_Sitrep> byLang;
+				if (data.IndexOf("text_by_lang") >= 0)
+					byLang = CLW_SitrepLangs.Parse(data, m_sFaction, war.GetElapsedSec());
+
+				CLW_SitrepStore.SetLlm(m_sFaction, llmSitrep, byLang);
+			}
 		}
 
 		bool hasOrders = reply.orders && !reply.orders.IsEmpty();
