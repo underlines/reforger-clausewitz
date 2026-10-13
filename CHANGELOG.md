@@ -5,6 +5,8 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-13
+
 ### Added
 - Readable squad names everywhere (`1st Rifle Squad`, `Recon Team 1`, `Motorized Squad 1`, `Mechanized Squad 1`, `Armor 1`, `Supply Truck 1`, `FOB Team 1`, `HQ Garrison`): group list, HQ menu, map markers, situation (`name` per squad; orders keep the `id`). Dismount groups of motorized/mech squads and recon teams are joinable again under their parent's name.
 - HUD: own side's supplies centred in the ticket row.
