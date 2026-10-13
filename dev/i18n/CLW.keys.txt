@@ -554,3 +554,4 @@ CLW-HqMenu_ConvoyState_en_route ::: en route ::: unterwegs
 CLW-HqMenu_LangCurrent ::: HQ answers in: %1 ::: Das HQ antwortet auf: %1
 CLW-HqMenu_LangSpin ::: HQ language ::: HQ-Sprache
 CLW-HqMenu_LangHint ::: Other languages: /hq language <code>, for example fr or ja. ::: Andere Sprachen: /hq language <Code>, zum Beispiel fr oder ja.
+CLW-HqMenu_Marker ::: Requested vehicle ::: Angefordertes Fahrzeug

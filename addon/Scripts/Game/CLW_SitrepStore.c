@@ -5,6 +5,9 @@
 // think, works without a sidecar) and the LLM SITREP (carried by the commander reply, see CLW_RemoteCommander). The LLM one replaces
 // the rules one while it is at most LLM_FRESH_SEC old; afterwards the rules version is current again.
 // Players get a copy when the content changes or when they appear (join, faction change, respawn handled by the client).
+// Protocol v4 (i18n): the LLM SITREP may come with translations (text_by_lang, one CLW_Sitrep per language); each player is delivered the
+// version in his language (CLW_PlayerLang.Resolve), the canonical one when his language is missing. The rules SITREP is rendered on the
+// client from keys and needs no per-language copy.
 // Log lines are prefixed "CLW: sitrep".
 class CLW_SitrepStore
 {
@@ -14,6 +17,7 @@ class CLW_SitrepStore
 
 	protected static ref map<string, ref CLW_Sitrep> s_mRules;
 	protected static ref map<string, ref CLW_Sitrep> s_mLlm;
+	protected static ref map<string, ref map<string, ref CLW_Sitrep>> s_mLlmLang;	// faction -> language -> translated LLM SITREP
 	protected static ref map<string, int> s_mVersion;		// faction -> content version of the current SITREP
 	protected static ref map<string, string> s_mSignature;	// faction -> signature of the current SITREP
 	protected static ref map<string, float> s_mRulesAt;		// faction -> real time of the last rules build
@@ -27,6 +31,7 @@ class CLW_SitrepStore
 
 		s_mRules = new map<string, ref CLW_Sitrep>();
 		s_mLlm = new map<string, ref CLW_Sitrep>();
+		s_mLlmLang = new map<string, ref map<string, ref CLW_Sitrep>>();
 		s_mVersion = new map<string, int>();
 		s_mSignature = new map<string, string>();
 		s_mRulesAt = new map<string, float>();
@@ -54,15 +59,29 @@ class CLW_SitrepStore
 		Refresh(factionKey);
 	}
 
-	// The LLM SITREP of a faction (from the commander reply). A copy of the object is kept.
-	static void SetLlm(string factionKey, CLW_Sitrep sitrep)
+	// The LLM SITREP of a faction (from the commander reply). byLang (protocol v4 text_by_lang, may be null) = its translations.
+	static void SetLlm(string factionKey, CLW_Sitrep sitrep, map<string, ref CLW_Sitrep> byLang = null)
 	{
 		if (!Replication.IsServer() || !sitrep)
 			return;
 
 		EnsureInit();
 		s_mLlm.Set(factionKey, sitrep);
-		Print(string.Format("CLW: sitrep %1 LLM version received (%2 chars headline, mission '%3')", factionKey, sitrep.m_sHeadline.Length(), sitrep.GetBody(2)), LogLevel.NORMAL);
+		if (byLang && !byLang.IsEmpty())
+			s_mLlmLang.Set(factionKey, byLang);
+		else
+			s_mLlmLang.Remove(factionKey);
+
+		string langs = "";
+		if (byLang)
+		{
+			foreach (string code, CLW_Sitrep translated : byLang)
+			{
+				langs += " " + code;
+			}
+		}
+
+		Print(string.Format("CLW: sitrep %1 LLM version received (%2 chars headline, mission '%3', languages:%4)", factionKey, sitrep.m_sHeadline.Length(), sitrep.GetBody(2), langs), LogLevel.NORMAL);
 		Refresh(factionKey);
 	}
 
@@ -92,6 +111,76 @@ class CLW_SitrepStore
 		return null;
 	}
 
+	// The SITREP to deliver to a player of this language: the translated LLM version when the LLM one is current and has his language,
+	// else the current (canonical) one.
+	static CLW_Sitrep CurrentForLang(string factionKey, string lang)
+	{
+		CLW_Sitrep current = Current(factionKey);
+		if (!current || lang.IsEmpty())
+			return current;
+
+		CLW_Sitrep llm;
+		if (!s_mLlm.Find(factionKey, llm) || llm != current)
+			return current;
+
+		map<string, ref CLW_Sitrep> byLang;
+		if (!s_mLlmLang.Find(factionKey, byLang) || !byLang)
+			return current;
+
+		CLW_Sitrep translated;
+		if (byLang.Find(lang, translated) && translated)
+			return translated;
+
+		return current;
+	}
+
+	// Player ids of the faction's connected players (recipients of its SITREP).
+	static void GetFactionPlayers(string factionKey, notnull array<int> outIds)
+	{
+		PlayerManager players = GetGame().GetPlayerManager();
+		if (!players)
+			return;
+
+		array<int> ids = {};
+		players.GetPlayers(ids);
+		foreach (int id : ids)
+		{
+			if (id <= 0)
+				continue;
+
+			Faction faction = SCR_FactionManager.SGetPlayerFaction(id);
+			if (faction && faction.GetFactionKey() == factionKey)
+				outIds.Insert(id);
+		}
+	}
+
+	// Protocol v4 "langs" of the sidecar POST: JSON array of the distinct languages of this faction's players ("" = no player).
+	static string GetLangsJson(string factionKey)
+	{
+		array<int> ids = {};
+		GetFactionPlayers(factionKey, ids);
+		if (ids.IsEmpty())
+			return "";
+
+		array<string> langs = {};
+		CLW_PlayerLang.GetLangsOfRecipients(ids, langs);
+		string text = "";
+		foreach (string lang : langs)
+		{
+			if (lang.IsEmpty())
+				continue;
+
+			if (!text.IsEmpty())
+				text += ",";
+			text += "\"" + CLW_Situation.Escape(lang) + "\"";
+		}
+
+		if (text.IsEmpty())
+			return "";
+
+		return "[" + text + "]";
+	}
+
 	// JSON object of the rules SITREP for the sidecar POST ("" = none yet).
 	static string GetRulesJson(string factionKey)
 	{
@@ -112,6 +201,15 @@ class CLW_SitrepStore
 			return;
 
 		string signature = current.Signature();
+		map<string, ref CLW_Sitrep> translations;
+		if (s_mLlmLang.Find(factionKey, translations) && translations)
+		{
+			foreach (string code, CLW_Sitrep translated : translations)
+			{
+				signature += "|" + code + ":" + translated.Signature();	// a changed translation is a new version too
+			}
+		}
+
 		string known;
 		if (!s_mSignature.Find(factionKey, known) || known != signature)
 		{
@@ -158,13 +256,14 @@ class CLW_SitrepStore
 			}
 
 			string key = faction.GetFactionKey();
-			CLW_Sitrep current = Current(key);
+			string lang = CLW_PlayerLang.Resolve(id);
+			CLW_Sitrep current = CurrentForLang(key, lang);
 			if (!current)
 				continue;
 
 			int version;
 			s_mVersion.Find(key, version);
-			string stamp = key + ":" + version.ToString();
+			string stamp = key + ":" + version.ToString() + ":" + lang;	// a language change re-delivers
 			string sent;
 			if (s_mSent.Find(id, sent) && sent == stamp)
 				continue;
@@ -220,6 +319,7 @@ class CLW_SitrepStore
 	{
 		s_mRules = null;
 		s_mLlm = null;
+		s_mLlmLang = null;
 		s_mVersion = null;
 		s_mSignature = null;
 		s_mRulesAt = null;

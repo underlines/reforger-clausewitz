@@ -124,7 +124,7 @@ class CLW_HqText
 
 class CLW_HqConfig
 {
-	static const float TIMEOUT_SEC = 60;			// a message without an answer gets the fallback hint
+	static const float TIMEOUT_SEC = 90;			// a message without an answer gets the fallback hint (above CLW_RemoteCommander.TIMEOUT_SECONDS, one slow turn)
 	static const int TICK_MS = 5000;
 	static const int MAX_TEXT = 240;
 	static const int MAX_PENDING = 12;

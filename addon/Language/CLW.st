@@ -344,6 +344,10 @@ StringTable {
    Target_en_us "HQ: you left %1. Pick another squad in this menu or the groups menu."
    Target_de_de "HQ: du hast %1 verlassen. Wähle einen anderen Trupp in diesem Menü oder im Gruppenmenü."
   }
+  CustomStringTableItem CLW-HqMenu_Marker {
+   Target_en_us "Requested vehicle"
+   Target_de_de "Angefordertes Fahrzeug"
+  }
   CustomStringTableItem CLW-HqMenu_NeedWar {
    Target_en_us "The menu is available once the war is running and you are on a side."
    Target_de_de "Das Menü ist verfügbar, sobald der Krieg läuft und du einer Seite angehörst."
