@@ -7,12 +7,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { loginFetch } from "../test-login.mjs"; // dashboard API needs the admin session
 
 const PORT = Number(process.argv[2]) || 8799;
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const cfgFile = path.join(os.tmpdir(), `clw-journal-test-${process.pid}.json`);
 fs.writeFileSync(cfgFile, JSON.stringify({ provider: "fake", memory: { enabled: true, reviewMin: 5 } }));
-const child = spawn(process.execPath, [path.join(DIR, "..", "llm_sidecar.mjs")], { env: { ...process.env, CLW_PORT: String(PORT), CLW_CONFIG: cfgFile, CLW_LLM: "fake" }, stdio: ["ignore", "pipe", "pipe"] });
+const child = spawn(process.execPath, [path.join(DIR, "..", "llm_sidecar.mjs")], { env: { ...process.env, CLW_PORT: String(PORT), CLW_CONFIG: cfgFile, CLW_DATA_DIR: cfgFile + ".data", CLW_LLM: "fake" }, stdio: ["ignore", "pipe", "pipe"] });
 let out = "";
 child.stdout.on("data", (d) => (out += d));
 child.stderr.on("data", (d) => (out += d));
@@ -27,6 +28,7 @@ const sit = (time, events = [], extra = {}) => ({ v: 2, faction: "US", side: 0, 
 let ok = false;
 try {
   for (let i = 0; i < 40; i++) { try { await get("/health"); break; } catch { await sleep(250); } }
+  await loginFetch(base);
   await post("/orders", sit(100));
   await sleep(300);
   let st = await get("/api/state");

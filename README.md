@@ -38,6 +38,13 @@ Workspace tooling in `D:\GitHub\ReforgerMods\_dedicated\` (see `dev/notes/dedica
 4. Client: `_dedicated\start-client.ps1 -Packs <same packs file>` joins 127.0.0.1. Stop with `_dedicated\stop-server.ps1`.
 Logs: `_dedicated\profile\logs\<latest>\console.log` (server). Current work: `dev/notes/m4-round3-plan.md`.
 
+## Dashboard login and game token (sidecar)
+- The dashboard and every `/api/*` endpoint need the admin login. **Default password: `clausewitz`** (until you change it; a banner reminds you). Change it in the dashboard under Usage & Config > Admin account (min. 8 characters). It is stored as scrypt hash + salt (`admin` in `dev/tools/sidecar-config.json`, git-ignored); the session is the cookie `clw_session` (HttpOnly, SameSite=Strict, 30 days, sessions kept in `dev/tools/.cache/sessions.json` so they survive restarts). 5 failed logins per 5 minutes per address block further attempts.
+- Game endpoints (`/orders`, `/manifest`, `/translate`, `/world*`, `/health`, `/loadouts/*`, `/control`) never use the cookie. Set a game token (Usage & Config, or `gameToken` in `sidecar-config.json`) and put the same value in the server's `$profile:Clausewitz/overrides.json` as `sidecarToken`; the game then sends `X-CLW-Token`. No token set = open (old behaviour).
+- Exposed beyond localhost (`CLW_HOST=0.0.0.0`)? Put an HTTPS reverse proxy (Caddy, nginx, ...) in front and forward `X-Forwarded-Proto`; the cookie then gets the `Secure` flag. Plain http over a network sends the password in clear text.
+- Loadouts tab: players' saved loadouts, server loadout library (max 7 active per faction), squad compositions and pins; stored in `dev/tools/.cache/loadouts-store.json`. "Restart war" bumps `restartId`, which the game polls (`GET /control`). `CLW_DATA_DIR` moves the data dir.
+- Tests: `node dev/tools/test-loadouts.mjs` (login, token, loadout library; needs no network).
+
 ## Dependencies
 None (base game only). RHS / WCS / GRS factions, vehicles and gear work when loaded alongside, without a hard dependency.
 

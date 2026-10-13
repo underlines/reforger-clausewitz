@@ -271,3 +271,27 @@ dl.jkv { grid-template-columns: 1fr; }
 /* language picker (header) */
 .langsel { font: inherit; font-size: 12px; font-weight: 600; background: rgba(255,255,255,.06); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 4px; cursor: pointer; }
 .langtog { margin-left: 10px; vertical-align: middle; } .langtog button { padding: 1px 8px; font-size: 11px; }
+
+/* login page */
+.loginwrap { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+.loginbox { width: min(360px, 100%); }
+.loginbox .field input { width: 100%; }
+
+/* loadouts tab */
+button.btn.mini { padding: 2px 9px; font-size: 12px; font-weight: 500; border-radius: 6px; }
+.nowrap { white-space: nowrap; }
+.nopad { padding: 0; }
+.lo-items { display: inline-flex; flex-wrap: wrap; gap: 4px; max-width: 360px; }
+.lo-item { background: rgba(255,255,255,.07); border-radius: 5px; padding: 0 6px; cursor: help; white-space: nowrap; }
+.lo-item.lo-gone { background: rgba(255,107,107,.18); color: var(--bad); }
+tr.lo-bad { background: rgba(255,107,107,.1); }
+tr.lo-bad:hover { background: rgba(255,107,107,.16); }
+input.lo-name { min-width: 170px; }
+.lo-list { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 8px; }
+.lo-pick { display: inline-flex; gap: 4px; align-items: center; }
+.lo-pick select, .lo-pick input[type=text] { width: auto; padding: 3px 8px; }
+.lo-kind { display: flex; flex-direction: column; }
+.lo-kindname { color: var(--mut); font-weight: 600; }
+.lo-pins { border-top: 1px solid var(--line); }
+td select { width: auto; padding: 3px 8px; }
+.banner a { color: inherit; text-decoration: underline; }

@@ -30,7 +30,7 @@ for (const [lang, d] of Object.entries(dicts)) {
 for (const [lang, d] of Object.entries(dicts)) for (const [k, v] of Object.entries(d)) if (typeof v !== "string" || v === "") errors.push(`${lang}.json: "${k}" is not a non-empty string`);
 
 const used = new Set(), prefixes = new Set();
-for (const f of ["app.js", "journal.js", "index.html"]) {
+for (const f of ["app.js", "journal.js", "loadouts.js", "login.js", "login.html", "index.html"]) {
   const src = read(path.join(dash, f));
   const add = (key, what) => { used.add(key); if (!(key in en)) errors.push(`${f}: ${what} "${key}" is not in en.json`); };
   for (const m of src.matchAll(/(?<![\w.$])t\(\s*(["'`])([^"'`$]+)\1\s*[,)]/g)) add(m[2], "t()");
