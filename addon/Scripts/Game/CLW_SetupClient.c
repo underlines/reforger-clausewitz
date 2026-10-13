@@ -7,11 +7,13 @@ class CLW_SetupClient
 	static const string PRESET_TAG = "clw_setup";
 
 	protected static ref CLW_SetupDialog s_Dialog;
+	protected static bool s_bPlaceholderHidden;
 
 	// Server asks this player to set up the war: parse the payload and open the dialog (ignored while it is already open).
 	static void Open(string wire)
 	{
 		RegisterChatCommand();
+		HideLoadingPlaceholder();
 		if (s_Dialog && s_Dialog.IsOpen())
 		{
 			Print("CLW: setup menu already open, ignoring the new payload", LogLevel.NORMAL);
@@ -41,6 +43,23 @@ class CLW_SetupClient
 		SendAck();
 	}
 
+	// During SETUP the player has no character and the server withholds NotifyReadyForSpawn_S, so vanilla
+	// SCR_PlayerDeployMenuHandlerComponent.SetReady() never calls DestroyLoadingPlaceholder(): the full-screen splash
+	// (created once in SCR_RespawnSystemComponent.OnInit, never re-created) would cover the setup menu. Remove it here.
+	protected static void HideLoadingPlaceholder()
+	{
+		SCR_RespawnSystemComponent respawn = SCR_RespawnSystemComponent.GetInstance();
+		if (!respawn)
+			return;
+
+		respawn.DestroyLoadingPlaceholder();
+		if (s_bPlaceholderHidden)
+			return;
+
+		s_bPlaceholderHidden = true;
+		Print("CLW: setup hid the respawn loading placeholder", LogLevel.NORMAL);
+	}
+
 	protected static void SendAck()
 	{
 		SCR_PlayerController controller = SCR_PlayerController.Cast(GetGame().GetPlayerController());
@@ -52,6 +71,7 @@ class CLW_SetupClient
 	static void Wait(string ownerName)
 	{
 		RegisterChatCommand();
+		HideLoadingPlaceholder();
 		string text = CLW_Loc.F("#CLW-Setup_Waiting", ownerName);
 		Print("CLW: " + text, LogLevel.NORMAL);
 		CLW_Debug.Show(text);
