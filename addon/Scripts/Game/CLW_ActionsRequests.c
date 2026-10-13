@@ -132,14 +132,14 @@ class CLW_Action_RequestVehicle : CLW_Action_RequestBase
 		string where;
 		vector requesterPos;
 		CLW_RequestService.PlayerPos(call.m_iPlayerId, requesterPos);
-		if (!CLW_RequestService.FindVehicleSpot(faction, spot, yaw, via, where, call.GetString("base"), requesterPos))
+		if (!CLW_RequestService.FindVehicleSpot(faction, spot, yaw, via, where, call.GetString("base"), requesterPos, entry.m_VehiclePrefab))
 		{
 			CLW_SupplyStore.Refund(faction, call.GetString("base"), cost);
 			result = "no free parking spot at the " + where;
 			return false;
 		}
 
-		IEntity vehicle = CLW_RequestService.SpawnVehicle(entry.m_VehiclePrefab, spot, yaw);
+		IEntity vehicle = CLW_RequestService.SpawnVehicle(entry.m_VehiclePrefab, spot, yaw, faction);
 		if (!vehicle)
 		{
 			CLW_SupplyStore.Refund(faction, call.GetString("base"), cost);

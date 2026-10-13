@@ -84,8 +84,18 @@ class CLW_Footprint
 	}
 }
 
+// Extra pose test of a caller (CLW_VehicleSpot: service footprints, reserved spots, tilt). "" = fine, else the reject reason.
+class CLW_SpotExtra
+{
+	string Check(vector pos, float yaw)
+	{
+		return "";
+	}
+}
+
 class CLW_SpotParams
 {
+	ref CLW_SpotExtra m_Extra;			// optional extra pose test, run right after the slope test of CheckPose
 	string m_sLabel = "spot";
 	vector m_vCenter;
 	float m_fMinRadius;
@@ -736,6 +746,13 @@ class CLW_FreeSpot
 		range = maxY - minY;
 		if (range > p.m_fMaxHeightRange)
 			return "slope";
+
+		if (p.m_Extra)
+		{
+			string extraReason = p.m_Extra.Check(pos, yaw);
+			if (!extraReason.IsEmpty())
+				return extraReason;
+		}
 
 		// road clearance: the rotated footprint rectangle must keep m_fRoadClearance from every road edge (cached segments, no engine query)
 		if (p.m_fRoadClearance > 0 && p.m_RoadCache)
