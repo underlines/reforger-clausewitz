@@ -8,7 +8,9 @@ packages instead of a separate spike session (every R0 question gets a log line 
 - **Save = the vanilla save action, hooked.** Every `ArsenalBox_Base.et` child (vanilla, RHS, WCS, ours) already has the vanilla "save
   loadout" action, which ends in `SCR_ArsenalManagerComponent.SetPlayerArsenalLoadout` (authority). A `modded` override stores our copy there
   (calls `super` first). So "save at any arsenal" works without touching third-party prefabs. Only **Load** is a new action
-  (`CLW_LoadLoadoutAction`), shipped on our `CLW_Arsenal.et`; third-party boxes get it only if R0.3 shows a safe way (test question, not code).
+  (`CLW_LoadLoadoutAction`). Our HQ/FOB arsenals are vanilla/pack boxes chosen by faction data (there is no own arsenal prefab), so the
+  action goes into an override of vanilla `ArsenalBox_Base.et` in our addon (vanilla content + one action), which every child box
+  (vanilla, RHS, WCS) inherits unless it replaces the action list. R0.3 checks which boxes show it.
 - **Game <-> sidecar via REST, game keeps a cache file.** The sidecar may not know the server's `$profile` path (other machine, other
   profile). So the game pulls the library from the sidecar at war start and writes `$profile:Clausewitz/loadouts.json` as its cache; without
   the sidecar it uses the cache. Player custom loadouts are game-owned (`$profile:Clausewitz/player-loadouts.json`) and pushed to the sidecar.
@@ -19,7 +21,7 @@ packages instead of a separate spike session (every R0 question gets a log line 
 | WP | Scope | Owns (new unless marked) |
 |----|-------|--------------------------|
 | G1 | R0.1 logging, R2 role picker, R4 squad roles + AI kits | `CLW_RolePicker.c`, `CLW_SquadRoles.c`, `CLW_SquadCompositions.c`, `Configs/CLW/SquadCompositions.conf`; edits: `CLW_ForceSpawner.c`, `CLW_PlayerSquad.c` (spawn path only) |
-| G2 | Kit core, R1 custom loadout, R6 kit validation | `CLW_Kits.c`, `CLW_CustomLoadouts.c`, `CLW_ArsenalSaveHook.c`, `CLW_LoadLoadoutAction.c`; edits: `` (action only) |
+| G2 | Kit core, R1 custom loadout, R6 kit validation | `CLW_Kits.c`, `CLW_CustomLoadouts.c`, `CLW_ArsenalSaveHook.c`, `CLW_LoadLoadoutAction.c`; prefab override of vanilla `ArsenalBox_Base.et` (only to add the Load action) |
 | G3 | R3 server loadouts + spawn slots, library sync, restart, R6 messages, serverKitCost | `CLW_LoadoutLibrary.c`, `CLW_LoadoutSync.c`, `CLW_ServerLoadout.c`, `CLW_SideCustomLoadout.c`, `CLW_LoadoutSlots.c` (replication); edits: `CLW_LoadoutManager.et`, `CLW_WarMode_ShortConflict.c` (param + cap), one call at war start / restart in `CLW_WarRuntime.c` |
 | S  | R5 login, loadouts tab, library store, compositions/pins, control | `dev/tools/auth.mjs`, `dev/tools/loadouts.mjs`, edits `llm_sidecar.mjs` (routes only), `dashboard/*`, `dev/tools/test-loadouts.mjs`, README section |
 
@@ -106,6 +108,6 @@ Records:
 - R0.1 `CLW: squad roles slots <unitId> <groupPrefab> [<prefab>:<ROLE_...>, ...]` (before roles are changed).
 - R0.2 `CLW: squad roles kit <unitId> m<idx> <role> applied=<0|1> missing=N primary=<prefab|none> mags=N` + a delayed (10 s) check
   `CLW: squad roles kitcheck <unitId> m<idx> weapon=<prefab> ammo=N`. Switch `squadKits` in overrides.json (`on` default | `off`).
-- R0.3 manual: does `CLW_LoadLoadoutAction` appear on `CLW_Arsenal.et`, and how do WCS/Bacon actions look next to it.
+- R0.3 manual: which arsenal boxes (vanilla / RHS / WCS) show `CLW_LoadLoadoutAction`, and how do WCS/Bacon actions look next to it.
 - R0.4 `CLW: loadouts slot <side> <idx> faction=<key> name=<..> source=<library|role|hidden>` on server and client.
 - R0.5 after a dashboard restart: client spawn screen shows the new slot names without reconnect?
