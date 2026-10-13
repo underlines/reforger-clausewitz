@@ -613,3 +613,9 @@ CLW-Loadout_NoSupplies ::: Not enough supplies: loadout costs %1, arsenal has %2
 CLW-Loadout_Failed ::: Loadout could not be applied. ::: Loadout konnte nicht angewendet werden.
 CLW-Loadout_Loaded ::: Loadout loaded (%1 supplies). ::: Loadout geladen (%1 Vorräte).
 CLW-Loadout_LoadedPartial ::: Loadout loaded, %1 items unavailable (%2 supplies). ::: Loadout geladen, %1 Gegenstände nicht verfügbar (%2 Vorräte).
+CLW-Param_cap_serverKitCost ::: Server loadout cost ::: Kosten für Server-Ausrüstung
+CLW-Param_cap_serverKitCost_Desc ::: Spawning with a server loadout costs supplies. Off: free. ::: Spawnen mit Server-Ausrüstung kostet Nachschub. Aus: kostenlos.
+CLW-Loadouts_Warn ::: %1: %2 active server loadout(s) unavailable (mod pack changed), defaults used; %3 with missing items. ::: %1: %2 aktive Server-Ausrüstung(en) nicht verfügbar (Modpaket geändert), Standard wird genutzt; %3 mit fehlenden Gegenständen.
+CLW-Loadouts_RestartReason ::: Restart requested from the dashboard ::: Neustart vom Dashboard angefordert
+CLW-Loadouts_NoSupplies ::: Server loadout '%1' costs %2 supplies, only %3 available: standard issue. ::: Server-Ausrüstung '%1' kostet %2 Nachschub, nur %3 vorhanden: Standardausrüstung.
+CLW-Loadouts_KitCost ::: Server loadout '%1' issued: %2 supplies. ::: Server-Ausrüstung '%1' ausgegeben: %2 Nachschub.
