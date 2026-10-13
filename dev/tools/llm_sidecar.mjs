@@ -126,6 +126,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { cleanHistory } from "./agent/hqHistory.mjs";
 import * as I18N from "./agent/i18n.mjs"; // protocol v4: languages, structured /hq reply, translator (section "i18n" below)
 import * as J from "./agent/journal.mjs"; // HQ war journal (pure functions), see "HQ war journal" below
 import * as FB from "./agent/fallback.mjs"; // backup (fallback) model per slot, see "model fallback" below
@@ -1286,7 +1287,7 @@ function cleanHqMessage(m) {
   const str = (v, n) => (typeof v === "string" ? v.slice(0, n) : "");
   return { id: m.id, player: str(m.player, 60) || "player", role: m.role === "leader" ? "leader" : "soldier", squad: str(m.squad, 60), grid: str(m.grid, 20),
     pos: Array.isArray(m.pos) && m.pos.length >= 2 && m.pos.every(isNum) ? m.pos.slice(0, 3) : null, text: m.text.trim().slice(0, 400), ageSec: isNum(m.ageSec) ? m.ageSec : 0,
-    lang: I18N.normLang(m.lang) ?? "" }; // protocol v4: the asker's language (ISO 639-1); "" = v3 message, no language handling
+    lang: I18N.normLang(m.lang) ?? "", history: cleanHistory(m.history) }; // protocol v4: the asker's language (ISO 639-1); "" = v3 message, no language handling
 }
 function hqFallbackReason(c) {
   if (!c.enabled) return "sidecar disabled";
@@ -1337,7 +1338,7 @@ function hqIngest(faction, sit, list, manifest, c) {
     if (hqSeen.has(key)) continue;
     hqSeen.add(key);
     if (hqSeen.size > HQ_SEEN_MAX) { const first = hqSeen.values().next().value; hqSeen.delete(first); }
-    const entry = { ts: Date.now(), faction, msg, provider: c.provider, model: c.provider === "fake" ? null : c.model, modelUsed: null, fellBack: false, primaryError: null, state: "running", ok: null, error: null, steps: [], tools: [], actions: [], reply: "", usage: null, latencyMs: null, lang: msg.lang || null, setLanguage: null };
+    const entry = { ts: Date.now(), faction, msg, provider: c.provider, model: c.provider === "fake" ? null : c.model, modelUsed: null, fellBack: false, primaryError: null, state: "running", ok: null, error: null, steps: [], tools: [], actions: [], reply: "", usage: null, latencyMs: null, lang: msg.lang || null, setLanguage: null, historyCount: msg.history.length };
     hqLog.unshift(entry); if (hqLog.length > HQ_MAX) hqLog.length = HQ_MAX;
     const why = hqFallbackReason(c) ?? (msg.ageSec > HQ_MAX_AGE_SEC ? "message too old" : null);
     if (why) {

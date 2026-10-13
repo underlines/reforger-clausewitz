@@ -18,6 +18,7 @@ import { z } from "zod";
 import { JOURNAL_RULE } from "./journal.mjs";
 import { normLang, normSetLanguage, hqLanguageRules, parseStructuredReply } from "./i18n.mjs";
 import { isRetryable } from "./fallback.mjs";
+import { historyBlock } from "./hqHistory.mjs";
 
 export const DEFAULTS = { maxSteps: 4, timeoutSec: 40, maxActions: 3, coreToolsMax: 6, maxOutputTokens: 700 };
 const isNum = (n) => typeof n === "number" && Number.isFinite(n);
@@ -162,7 +163,7 @@ Rules:
 - Do not invent ids, types, grids or numbers. If something is unclear, ask one short question instead of guessing.
 - The radio reply is 1-2 short sentences. After calling a tool, only acknowledge (for example "Roger, requesting a truck for you.").
 ${lang ? hqLanguageRules(lang) : "- Your final text is the radio reply, in the language the player wrote."}
-${tools.find_tools ? "- Tools not shown are found with find_tools.\n" : ""}${journal ? `\n${journal}\n${JOURNAL_RULE}\n` : ""}`;
+${tools.find_tools ? "- Tools not shown are found with find_tools.\n" : ""}${historyBlock(message.history)}${journal ? `\n${journal}\n${JOURNAL_RULE}\n` : ""}`;
 }
 
 // ---------- model seam ----------
