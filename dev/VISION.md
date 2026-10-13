@@ -505,8 +505,35 @@ Own game mode `CLW_GameMode` (see `notes/decision-game-mode.md`). Live status: `
 | **M2 - Real war + mechanized** (design: `notes/m2-design.md`) | Control points, tickets + bleed, win conditions, supplies ledger + income, bases/respawn, force purchases, mechanized/motorized units (mount, dismount, overwatch, stuck watchdog), objective-driven rule commander, protocol v2 for the LLM, mission offers for player squad leaders; all content as data (scenario + faction profiles, auto-discovery) so mod packs work | AI vs AI with economy and vehicles |
 | **M3 - Logistics, bases & requests** (draft: `notes/m3-design.md`) | Action registry (section 5a), base services (command post, vehicle depot, arsenal, medical/repair), FOBs and supply convoys gated by war-mode capabilities, player requests (fast path + LLM agent turn), player reports, arsenals/loadouts with RHS/WCS/GRS | Logistics, humans in the loop |
 | **M4 - Any map, any pack** | **Maps (option A):** wrapper worlds for the vanilla maps (Everon, Arland, Kolguyev) + a generator (`_tools/` or Workbench plugin) that builds the wrapper for any map mod as a tiny compat addon; **auto scenario** when a map has no `.conf` (HQs via random layout, objectives from the map prefab's places, FOB sites computed); **spike (option C):** take over a map's own Game Master scenario at runtime (map addon + ours + its GM scenario ID, no wrapper), keep if clean. **Content:** side pools for vehicles/groups/loadouts + one role resolver with style sets and admin overrides (section 10a, fixes missing pack roles such as supply trucks), own base structures + HQ menu (section 6a), reliable FOB builders + convoys for pack factions | Runs on any map with any packs |
+| **M4.5 - Terrain-aware war** (section 13a) | HQs at settlement borders, objectives from places of interest (villages, crossroads, bridges, high ground), per-objective terrain descriptors for the LLM, saved loadouts (3 slots), journal review reliability, collision-free vehicle spawns | Realistic ground, usable LLM spatial picture |
 | **M5 - Scale & realism** | Population manager (collapse/expand far groups, engine active-AI budget), chain-of-command echelons with delayed reports, friendly picture on the in-game map with the setup marker level (section 8a), LLM robustness (timeouts on big prompts, `/hq` eval set per model) | Size of war |
 | **Later** | Dashboard config editor (WYSIWYG overrides, section 10a), runtime takeover of other scenario types (option B, only if C proves the approach), Story mode (section 3a), Squad-leader LLM agents (section 4a), Voice/radio, virtual battlefield (experimental), Conflict adapter | - |
+
+### 13a. M4.5 - Terrain-aware war (owner 2026-10-13, after the round-3 test)
+- **HQ at settlement borders (mostly, not always).** Today's urban search (round 3) lands 140-660 m from the place label: villages are rejected for building density
+  (> 150 within 150 m) and a blocked 24 x 24 m core; static obstacles cannot be cleared (not replicated, `object-norpl`). Next: score the distance to the nearest
+  BUILDING (15-60 m), not to the place label, require a village (>= 8 buildings within 150 m) and a road <= 30 m, keep the ~40 x 40 m free flat ground for the
+  compact base. A weighted preference, so open ground still wins where no village fits; never inside dense centres (vehicle jams, CQB at the HQ).
+- **Saved loadouts (3 slots per player).** Research first: vanilla Conflict "save loadout" (`SCR_ArsenalManagerComponent` / saved-loadout respawn) in our game
+  mode, and whether WCS Loadout Editor already offers presets. Fallback: HQ menu Save/Load slot 1-3; server serialises the character's equipment (clothes,
+  vest/backpack contents, weapons + attachments, magazines) to a per-identity JSON in the server profile; loading only at a base arsenal, only items of the
+  side's current arsenal pool, kit cost charged like the arsenal (no free gear past the economy).
+- **Objectives from places of interest.** Root cause today: with random start positions the objectives are a rotated/scaled pattern on the HQ line, then
+  snapped to a town only if one is close, else "nudged" to a CLEAR spot, which pushes them out of villages into fields (round-3 run: 1 snapped, 3 nudged,
+  1 kept). Next: pick objectives from a scored set of map features (settlements by size, crossroads, bridges/passes, high ground with view, military/industrial
+  sites) from map data (place names, road graph, terrain height), spread along the front, balanced for both sides, value and capture radius from the feature.
+  No "must be in a city" rule: features score. Risks to measure: Reforger AI in buildings (pathing, waypoints lost), capture by one soldier in a house
+  (consider majority-in-radius).
+- **LLM spatial picture.** The model gets coordinates, grid, name and left/centre/right only; it cannot do geometry. Precompute per objective (~30-60 tokens):
+  terrain and cover (village with N buildings / forest / open / hill +N m), road links to other objectives, road distance and ETA from both HQs, what it
+  overlooks, 1-2 approach routes (direct, left/right flank, covered/open). Feeds flank decisions and the war journal lessons.
+- **Journal review reliability (bug, round-3 test).** RHS_USAF got 2 accepted reviews and 58 rejected ("no JSON object in the reply", empty reply); RHS_AFRF
+  the same. Cause (likely): the review call uses `max_tokens 400` while the configured model (`inclusionai/ling-3.0-flash`, OpenRouter) needs ~310-370 output
+  tokens for a good reply and returns empty `content` when it runs out (the orders call uses 32000 and works). Fix: review budget from the main `maxTokens`
+  (or >= 2000), log `finish_reason` + usage + `message.reasoning` length on every rejection, accept a JSON object inside reasoning-only replies, and show the
+  last rejection reason on the dashboard Journal tab.
+- **Vehicle spawns without clipping** (branch `feature/m5-polish`, built, untested): one `CLW_VehicleSpot` helper for every vehicle spawn, road first within 50 m,
+  bounds-sized box check, keep-out around our services, reservations, post-spawn tilt/overlap check.
 
 ## 14. Open questions / risks
 
