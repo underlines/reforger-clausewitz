@@ -32,6 +32,13 @@ Content names (factions, places, units) still come from content display names (`
 - The override only steers LLM text; an English game can get German HQ messages.
 - To verify: the script API call that gives the client's UI language. Fallback if none: the HQ menu option only.
 
+### 3a. Natural-language language change
+If a player just writes "please respond in Japanese" (any phrasing, any language, via `/hq` or HQ chat), the HQ complies and
+persists it: the strong LLM returns an optional `setLanguage` field (ISO 639-1 code, or `auto` to clear) next to `reply`;
+the game validates the code (2 letters, `[a-z]`), stores it exactly like `/hq language <code>`, and the reply already comes
+back in the new language. The HQ confirms in that language. Only the asker's own preference changes, never other players'.
+Sidecar protocol: response field `setLanguage` (optional, string); the v4 request carries the current `lang`.
+
 ## 4. LLM text: one rule
 - **One reader** (`/hq` reply, request acks): the strong LLM writes `reply` directly in the asker's language, in the same
   structured response as its actions. One call, no translation.
