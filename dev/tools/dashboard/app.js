@@ -2,6 +2,7 @@
 // (auto-escaped); no dangerouslySetInnerHTML anywhere.
 import { html, render, useState, useEffect, useRef, useMemo, useCallback } from "/vendor/standalone.module.js";
 import { JournalView, MemorySettings } from "/journal.js"; // HQ war journal view + memory settings (WP5, dashboard/journal.js)
+import { t, tk, has, LANGS, getLang, setLang, onLang } from "/i18n.js"; // EN/DE dictionaries (dashboard/i18n/*.json); locals named t / tk below were renamed
 
 const WORLD = 4096, GRID = 512, STALE_MS = 30000; // WORLD = fallback extent until /api/world reports the real one
 const DEF_EXT = { x0: 0, z0: 0, x1: WORLD, z1: WORLD };
@@ -72,9 +73,8 @@ const tint = (col, a) => { const [r, g, b] = hex2rgb(col); return `rgba(${r},${g
 const DORM_A = 0.4;
 const actOK = (act, dm) => act === "all" || (act === "dormant" ? dm : !dm);
 const accent = (f) => ({ borderTop: `3px solid ${colorOf(f)}` });
-const PARAM_LABEL = { timeLimitMin: "Time limit (min)", startTickets: "Start tickets", startSupplies: "Start supplies", incomeMultiplier: "Income multiplier", battleSize: "Battle size", ticketBleed: "Ticket bleed" };
-const humanKey = (k) => PARAM_LABEL[k] ?? String(k).replace(/([A-Z])/g, " $1").toLowerCase().replace(/^./, (c) => c.toUpperCase());
-const fmtVal = (v) => (typeof v === "boolean" ? (v ? "yes" : "no") : v !== null && typeof v === "object" ? JSON.stringify(v) : v === undefined || v === null || v === "" ? "-" : String(v));
+const humanKey = (k) => (has("param." + k) ? t("param." + k) : String(k).replace(/([A-Z])/g, " $1").toLowerCase().replace(/^./, (c) => c.toUpperCase()));
+const fmtVal = (v) => (typeof v === "boolean" ? (v ? t("val.yes") : t("val.no")) : v !== null && typeof v === "object" ? JSON.stringify(v) : v === undefined || v === null || v === "" ? "-" : String(v));
 
 // ---------- icons (inline SVG) ----------
 const P = {
@@ -129,7 +129,7 @@ function useState2(showInactive) {
       setRaw({ ...j, offline: false, recvAt: Date.now() });
     } catch { setRaw((s) => ({ ...s, offline: true })); }
   }, []);
-  useEffect(() => { poll(); const t = setInterval(poll, 2000); return () => clearInterval(t); }, [poll]);
+  useEffect(() => { poll(); const iv = setInterval(poll, 2000); return () => clearInterval(iv); }, [poll]);
   const st = useMemo(() => { const d = deriveState(raw, showInactive); setFactions(d); return d; }, [raw, showInactive]);
   return [st, poll];
 }
@@ -167,7 +167,7 @@ function buildRows(state, faction) {
         }
       }
       const moving = speed !== null && speed > 0.3;
-      const move = speed === null ? "-" : moving ? `${speed.toFixed(1)} m/s${heading !== null ? " " + Math.round(heading) + "°" : ""}${derived ? " ~" : ""}` : "stationary";
+      const move = speed === null ? "-" : moving ? `${speed.toFixed(1)} m/s${heading !== null ? " " + Math.round(heading) + "°" : ""}${derived ? " ~" : ""}` : t("squad.stationary");
       const state_ = s.state ? String(s.state) : s.agents === 0 ? "dead" : moving ? "moving" : s.mode === "ATTACK" ? "engaged" : s.mode === "DEFEND" ? "defending" : "idle";
       const ots = e.orderTs?.[s.id];
       rows.push({
@@ -192,20 +192,20 @@ function WakeChip({ name, s, recvAt, toast, refresh, paused, engine }) {
   const wake = async () => {
     try {
       const { ok, j } = await postJson("/api/wake", { faction: name });
-      toast(ok ? `${name} HQ will be consulted on the next poll` : "Wake failed: " + (j.error ?? "request failed"), ok ? "ok" : "err");
+      toast(ok ? t("wake.ok", name) : t("wake.failed", j.error ?? t("err.request")), ok ? "ok" : "err");
       refresh();
-    } catch (e) { toast("Error: " + e.message, "err"); }
+    } catch (e) { toast(t("err.generic", e.message), "err"); }
   };
   const trig = s.lastWakeTriggers?.length ? ` (${s.lastWakeTriggers.join("; ")})` : "";
   const tip = [
-    `Interval: ${dash(s.intervalSec)} s (chosen ${dash(s.chosenSec)} s${s.chosenReason ? ": " + s.chosenReason : ""}), budget stretch x${(s.stretch ?? 1).toFixed(2)}`,
-    `Last wake: ${s.lastWakeReason ?? "-"}${trig}`,
-    `Gated polls (no LLM call): ${s.gated ?? 0}${s.failed ? "; last call failed, rule fallback active" : ""}`,
+    t("wake.tipInterval", dash(s.intervalSec), dash(s.chosenSec), s.chosenReason ? ": " + s.chosenReason : "", (s.stretch ?? 1).toFixed(2)),
+    t("wake.tipLast", s.lastWakeReason ?? "-", trig),
+    t("wake.tipGated", s.gated ?? 0, s.failed ? t("wake.tipFailed") : ""),
   ].join("\n");
   const idle = engine && engine !== "llm";
-  const txt = idle ? "rules" : paused ? "paused" : s.manual ? "wake pending" : left > 0 ? `in ${left} s` : "due";
-  return html`<div class=${"chip wake" + (s.failed && !idle && !paused ? " bad" : "")} title=${tip}><b class=${facClass(name)}>${name}</b> next HQ call <b>${txt}</b>
-    <button class="mini" type="button" disabled=${idle || paused} onClick=${wake} title="Call the LLM on the next poll">wake now</button></div>`;
+  const txt = idle ? t("wake.rules") : paused ? t("wake.paused") : s.manual ? t("wake.pending") : left > 0 ? t("wake.in", left) : t("wake.due");
+  return html`<div class=${"chip wake" + (s.failed && !idle && !paused ? " bad" : "")} title=${tip}><b class=${facClass(name)}>${name}</b> ${t("wake.next")} <b>${txt}</b>
+    <button class="mini" type="button" disabled=${idle || paused} onClick=${wake} title=${t("wake.btnTip")}>${t("wake.btn")}</button></div>`;
 }
 
 // Global HQ controls: pause toggle (runtime) and engine selector (persisted config).
@@ -214,42 +214,42 @@ function HqControls({ st, toast, refresh }) {
   const togglePause = async () => {
     try {
       const { ok, j } = await postJson("/api/pause", { paused: !paused });
-      if (!ok) toast("Pause failed: " + (j.error ?? "request failed"), "err");
+      if (!ok) toast(t("hq.pauseFailed", j.error ?? t("err.request")), "err");
       refresh();
-    } catch (e) { toast("Error: " + e.message, "err"); }
+    } catch (e) { toast(t("err.generic", e.message), "err"); }
   };
   const setEngine = async (e) => {
     try {
       const { ok, j } = await postJson("/api/config", { engine: e.target.value });
-      if (!ok) toast("Engine not changed: " + (j.error ?? "request failed"), "err");
+      if (!ok) toast(t("hq.engineFailed", j.error ?? t("err.request")), "err");
       refresh();
-    } catch (err) { toast("Error: " + err.message, "err"); }
+    } catch (err) { toast(t("err.generic", err.message), "err"); }
   };
   return html`<div class="chip hqctl">
-    <button class=${"mini pausebtn" + (paused ? " on" : "")} type="button" onClick=${togglePause} title=${paused ? "Resume: the HQ is consulted on the next poll" : "Pause: no LLM calls, the game keeps its current orders"}>${paused ? "resume" : "pause"}</button>
-    <label class="engsel" title="HQ engine: llm = LLM decides; rules = game rule commander, no LLM calls; model = trained decision model (not available yet)">engine
+    <button class=${"mini pausebtn" + (paused ? " on" : "")} type="button" onClick=${togglePause} title=${paused ? t("hq.resumeTip") : t("hq.pauseTip")}>${paused ? t("hq.resume") : t("hq.pause")}</button>
+    <label class="engsel" title=${t("hq.engineTip")}>${t("hq.engine")}
       <select value=${engine} onChange=${setEngine}>
-        <option value="llm">llm</option><option value="rules">rules</option><option value="model" disabled>model (soon)</option></select></label></div>`;
+        <option value="llm">llm</option><option value="rules">rules</option><option value="model" disabled>${t("hq.modelSoon")}</option></select></label></div>`;
 }
 
 function Strip({ st, toast, refresh }) {
   const c = st.counters ?? {}, cf = st.config ?? {}, bud = st.usage?.budget;
   const age = st.lastRequestTs ? ((st.now ?? Date.now()) - st.lastRequestTs) / 1000 : null;
   const stale = st.offline || age === null || age * 1000 > STALE_MS;
-  const ageTxt = st.offline ? "sidecar unreachable" : age === null ? "no request yet" : `${age.toFixed(0)} s ago`;
+  const ageTxt = st.offline ? t("strip.unreachable") : age === null ? t("strip.noRequest") : t("time.agoS", age.toFixed(0));
   const prov = cf.provider ? (cf.provider === "fake" ? "fake" : `${cf.provider} / ${cf.model}`) : "?";
   return html`<div class="strip">
-    <div class="chip">provider <b>${prov}</b></div>
-    <div class=${"chip" + (cf.enabled === false ? " bad" : "")}>enabled <b>${cf.enabled === false ? "NO" : "yes"}</b></div>
-    <div class="chip">requests <b>${c.requests ?? 0}</b></div>
-    <div class="chip" title="Requests answered without a provider call (interval / unchanged)">skipped <b>${c.skipped ?? 0}</b></div>
+    <div class="chip">${t("strip.provider")} <b>${prov}</b></div>
+    <div class=${"chip" + (cf.enabled === false ? " bad" : "")}>${t("strip.enabled")} <b>${cf.enabled === false ? t("strip.no") : t("val.yes")}</b></div>
+    <div class="chip">${t("strip.requests")} <b>${c.requests ?? 0}</b></div>
+    <div class="chip" title=${t("strip.skippedTip")}>${t("strip.skipped")} <b>${c.skipped ?? 0}</b></div>
     ${cf.enabled !== false && Object.keys(st.scheduler ?? {}).sort(facCmp).map((n) => html`<${WakeChip} key=${n} name=${n} s=${st.scheduler[n]} recvAt=${st.recvAt} toast=${toast} refresh=${refresh} paused=${!!st.paused} engine=${cf.engine} />`)}
     <${HqControls} st=${st} toast=${toast} refresh=${refresh} />
-    ${(st.paused || (cf.engine && cf.engine !== "llm")) && html`<div class="chip hqnote">HQ engine: <b>${cf.engine && cf.engine !== "llm" ? cf.engine : "llm"}</b>${st.paused ? " (paused)" : ""}, no LLM calls</div>`}
-    <div class=${"chip" + (c.errors ? " bad" : "")}>errors <b>${c.errors ?? 0}</b></div>
-    <div class="chip">tokens in/out <b>${c.inputTokens ?? 0} / ${c.outputTokens ?? 0}</b></div>
-    ${bud && bud.level !== "ok" && html`<div class=${"chip " + (bud.level === "warn" ? "warn" : "bad")} title="OpenRouter key budget (see Configuration)"><span class="dot"></span>${bud.level === "reached" ? "budget limit reached" : `budget ${bud.pct.toFixed(0)}% used`}</div>`}
-    <div class=${"chip " + (stale ? "bad" : "ok")} title="Red when the game has not contacted the sidecar for 30 s"><span class="dot"></span>last request <b>${ageTxt}</b></div>
+    ${(st.paused || (cf.engine && cf.engine !== "llm")) && html`<div class="chip hqnote">${t("strip.hqEngine")} <b>${cf.engine && cf.engine !== "llm" ? cf.engine : "llm"}</b>${st.paused ? " " + t("strip.pausedParen") : ""}, ${t("strip.noLlm")}</div>`}
+    <div class=${"chip" + (c.errors ? " bad" : "")}>${t("strip.errors")} <b>${c.errors ?? 0}</b></div>
+    <div class="chip">${t("strip.tokens")} <b>${c.inputTokens ?? 0} / ${c.outputTokens ?? 0}</b></div>
+    ${bud && bud.level !== "ok" && html`<div class=${"chip " + (bud.level === "warn" ? "warn" : "bad")} title=${t("strip.budgetTip")}><span class="dot"></span>${bud.level === "reached" ? t("strip.budgetReached") : t("strip.budgetPct", bud.pct.toFixed(0))}</div>`}
+    <div class=${"chip " + (stale ? "bad" : "ok")} title=${t("strip.staleTip")}><span class="dot"></span>${t("strip.lastReq")} <b>${ageTxt}</b></div>
   </div>`;
 }
 
@@ -297,7 +297,7 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall, act = "a
     v.fitted = hasData; v.user = false;
   };
 
-  const draw = useCallback((t) => {
+  const draw = useCallback((ts) => {
     const c = cv.current;
     if (!c) return;
     const { st, faction, sel, layers, world, act, focus } = latest.current, v = view.current;
@@ -429,7 +429,7 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall, act = "a
         const x = sx(o.pos[0]), y = sy(o.pos[1]);
         if (x < -200 || x > r.width + 200 || y < -200 || y > r.height + 200) continue;
         const col = o.owner && o.owner !== "none" ? colorOf(o.owner) : NEUTRAL, rad = Math.max(7, (num(o.radius) ? o.radius : 50) * v.s);
-        const blink = o.contested ? 0.5 + 0.5 * Math.sin(t / 250) : 1;
+        const blink = o.contested ? 0.5 + 0.5 * Math.sin(ts / 250) : 1;
         ctx.fillStyle = col; ctx.globalAlpha = 0.16; ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill();
         if (o.contested && hatch) { ctx.save(); ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.clip(); ctx.globalAlpha = 0.55; ctx.fillStyle = hatch; ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2); ctx.restore(); }
         ctx.globalAlpha = o.contested ? 0.35 + 0.65 * blink : 0.95; ctx.strokeStyle = col; ctx.lineWidth = o.contested ? 3 : 2;
@@ -447,15 +447,15 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall, act = "a
           if (v.s > 0.08 && o.name) { ctx.font = "10px system-ui, sans-serif"; ctx.strokeText(String(o.name), x + 6, y - rad + 5); ctx.fillStyle = "#dde3ec"; ctx.fillText(String(o.name), x + 6, y - rad + 5); }
           ctx.font = "11px system-ui, sans-serif"; ctx.lineJoin = "miter";
         }
-        h.push({ x, y, r: Math.max(12, rad), title: `Objective ${o.id}${o.name ? " " + o.name : ""}`, lines: [`owner: ${o.owner ?? "?"}${o.contested ? " (CONTESTED)" : ""}`, `value ${dash(o.value)}, radius ${dash(o.radius)} m`, `capture progress ${dash(o.progress)}`, `at ${Math.round(o.pos[0])}, ${Math.round(o.pos[1])}`] });
+        h.push({ x, y, r: Math.max(12, rad), title: t("map.objective", o.id + (o.name ? " " + o.name : "")), lines: [t("map.owner", o.owner ?? "?", o.contested ? " " + t("map.contestedCaps") : ""), t("map.valueRadius", dash(o.value), dash(o.radius)), t("map.progress", dash(o.progress)), t("map.at2", Math.round(o.pos[0]), Math.round(o.pos[1]))] });
       }
       for (const b of pic.bases) {
         const x = sx(b.pos[0]), y = sy(b.pos[1]), col = colorOf(b.faction);
         ctx.fillStyle = col; ctx.strokeStyle = "#0a0d12"; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.rect(x - 8, y - 8, 16, 16); ctx.fill(); ctx.stroke();
         ctx.fillStyle = "#0a0d12"; ctx.font = "bold 10px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillText("HQ", x, y + 1); ctx.textAlign = "start";
-        if (layers.labels) { ctx.font = "bold 11px system-ui, sans-serif"; ctx.lineWidth = 3.5; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(8,11,16,.9)"; ctx.strokeText(b.faction + " base", x + 12, y); ctx.fillStyle = col; ctx.fillText(b.faction + " base", x + 12, y); ctx.lineJoin = "miter"; ctx.font = "11px system-ui, sans-serif"; }
-        h.push({ x, y, r: 12, title: `${b.faction} main base`, lines: [`at ${Math.round(b.pos[0])}, ${Math.round(b.pos[1])}`] });
+        if (layers.labels) { ctx.font = "bold 11px system-ui, sans-serif"; ctx.lineWidth = 3.5; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(8,11,16,.9)"; ctx.strokeText(t("map.baseLabel", b.faction), x + 12, y); ctx.fillStyle = col; ctx.fillText(t("map.baseLabel", b.faction), x + 12, y); ctx.lineJoin = "miter"; ctx.font = "11px system-ui, sans-serif"; }
+        h.push({ x, y, r: 12, title: t("map.mainBase", b.faction), lines: [t("map.at2", Math.round(b.pos[0]), Math.round(b.pos[1]))] });
       }
       // WP3: task arrows (dashed, unit -> destination): FOB builder / escort -> site, convoy truck -> destination base
       const taskArrow = (x0, y0, x1, y1, col) => {
@@ -480,21 +480,21 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall, act = "a
         if (layers.labels) { const txt = `${c.id} ${num(c.cargo) ? c.cargo : 0}`; ctx.font = "bold 10px system-ui, sans-serif"; ctx.lineWidth = 3; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(8,11,16,.9)"; ctx.strokeText(txt, x + 9, y + 3); ctx.fillStyle = col; ctx.fillText(txt, x + 9, y + 3); ctx.lineJoin = "miter"; ctx.font = "11px system-ui, sans-serif"; }
         const cd = c.state === "lost" ? null : destOf(fe, c.to);
         if (cd && num(cd[0]) && num(cd[1]) && (c.state === "en_route" || c.state === "loading")) taskArrow(x, y, sx(cd[0]), sy(cd[1]), col);
-        h.push({ x, y, r: 10, title: `${fk} convoy ${c.id}`, lines: [`${c.from} -> ${c.to}, ${c.state}`, `cargo ${dash(c.cargo)}`] });
+        h.push({ x, y, r: 10, title: t("map.convoy", fk, c.id), lines: [`${c.from} -> ${c.to}, ${c.state}`, t("map.cargo", dash(c.cargo))] });
       }
       // FOBs (M3 phase F): each faction's own situation lists its FOBs; a diamond, hollow while planned / moving / building
       for (const [fk, fe] of Object.entries(st.factions ?? {})) for (const f of Array.isArray(fe.situation?.fobs) ? fe.situation.fobs : []) {
         if (!f || !Array.isArray(f.pos) || !num(f.pos[0]) || !num(f.pos[1]) || f.state === "lost") continue;
         const x = sx(f.pos[0]), y = sy(f.pos[1]), col = colorOf(fk), up = f.state === "active";
         // base icon like the HQ (square with text): filled when standing, hollow while planned / moving / building (never an objective)
-        ctx.globalAlpha = f.underAttack ? 0.5 + 0.5 * Math.sin(t / 200) : 1; ctx.strokeStyle = col; ctx.fillStyle = up ? col : "rgba(8,11,16,.85)"; ctx.lineWidth = 2.5;
+        ctx.globalAlpha = f.underAttack ? 0.5 + 0.5 * Math.sin(ts / 200) : 1; ctx.strokeStyle = col; ctx.fillStyle = up ? col : "rgba(8,11,16,.85)"; ctx.lineWidth = 2.5;
         ctx.beginPath(); ctx.rect(x - 9, y - 9, 18, 18); ctx.fill(); ctx.stroke();
         ctx.fillStyle = up ? "#0a0d12" : col; ctx.font = "bold 9px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillText("FOB", x, y + 1); ctx.textAlign = "start"; ctx.globalAlpha = 1;
-        const fobTasks = Array.isArray(fe.situation?.fobTasks) ? fe.situation.fobTasks.filter((tk) => tk && tk.fob === f.id && Array.isArray(tk.pos)) : [];
-        if (!up) for (const tk of fobTasks) taskArrow(sx(tk.pos[0]), sy(tk.pos[1]), x, y, col);
+        const fobTasks = Array.isArray(fe.situation?.fobTasks) ? fe.situation.fobTasks.filter((ft) => ft && ft.fob === f.id && Array.isArray(ft.pos)) : [];
+        if (!up) for (const ft of fobTasks) taskArrow(sx(ft.pos[0]), sy(ft.pos[1]), x, y, col);
         if (!up && !fobTasks.length && f.builder) { const bq = (Array.isArray(fe.situation?.squads) ? fe.situation.squads : []).find((s0) => s0 && s0.id === f.builder && okPos(s0.pos)); if (bq) taskArrow(sx(bq.pos[0]), sy(bq.pos[2]), x, y, col); }
-        if (layers.labels) { const txt = `${f.id}${up ? "" : f.state === "building" ? ` (building ${Math.round(f.build ?? 0)} %)` : " (planned)"}${num(f.stock) ? " [" + Math.round(f.stock) + "]" : ""}`; ctx.font = "bold 11px system-ui, sans-serif"; ctx.lineWidth = 3.5; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(8,11,16,.9)"; ctx.strokeText(txt, x + 14, y); ctx.fillStyle = col; ctx.fillText(txt, x + 14, y); ctx.lineJoin = "miter"; ctx.font = "11px system-ui, sans-serif"; }
-        h.push({ x, y, r: 12, title: `${fk} FOB ${f.id}${f.name ? " " + f.name : ""}`, lines: [...(num(f.stock) ? [`stock ${Math.round(f.stock)} supplies`] : []), `state ${f.state}${f.state === "building" ? " " + Math.round(f.build ?? 0) + "%" : ""}, tier ${dash(f.tier)}${f.underAttack ? " (UNDER ATTACK)" : ""}`, `services: ${Array.isArray(f.services) && f.services.length ? f.services.join(", ") : "-"}`, `at ${Math.round(f.pos[0])}, ${Math.round(f.pos[1])}`] });
+        if (layers.labels) { const txt = `${f.id}${up ? "" : " " + (f.state === "building" ? t("map.fobBuilding", Math.round(f.build ?? 0)) : t("map.fobPlanned"))}${num(f.stock) ? " [" + Math.round(f.stock) + "]" : ""}`; ctx.font = "bold 11px system-ui, sans-serif"; ctx.lineWidth = 3.5; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(8,11,16,.9)"; ctx.strokeText(txt, x + 14, y); ctx.fillStyle = col; ctx.fillText(txt, x + 14, y); ctx.lineJoin = "miter"; ctx.font = "11px system-ui, sans-serif"; }
+        h.push({ x, y, r: 12, title: t("map.fobTitle", fk, f.id + (f.name ? " " + f.name : "")), lines: [...(num(f.stock) ? [t("map.fobStock", Math.round(f.stock))] : []), t("map.fobState", f.state, f.state === "building" ? " " + Math.round(f.build ?? 0) + "%" : "", dash(f.tier), f.underAttack ? " (" + t("map.underAttack") + ")" : ""), t("map.services", Array.isArray(f.services) && f.services.length ? f.services.join(", ") : "-"), t("map.at2", Math.round(f.pos[0]), Math.round(f.pos[1]))] });
       }
     }
     if (layers.structures) { // base / FOB structures (arsenal, depot, ...): situation.structures[] of each faction, a small lettered square
@@ -509,7 +509,7 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall, act = "a
           ctx.beginPath(); ctx.rect(x - 6, y - 6, 12, 12); ctx.fill(); ctx.stroke();
           ctx.fillStyle = col; ctx.font = "bold 9px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillText(GLYPH[s.kind] ?? "?", x, y + 3); ctx.textAlign = "start";
           if (layers.labels && v.s > 0.1) { const txt = String(s.label ?? s.kind); ctx.font = "10px system-ui, sans-serif"; ctx.lineWidth = 3; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(8,11,16,.9)"; ctx.strokeText(txt, x + 9, y + 3); ctx.fillStyle = col; ctx.fillText(txt, x + 9, y + 3); ctx.lineJoin = "miter"; ctx.font = "11px system-ui, sans-serif"; }
-          h.push({ x, y, r: 9, title: `${fk} ${s.label ?? s.kind}`, lines: [`${dash(s.kind)} at ${dash(s.base)}`, `grid ${dash(s.grid)}`, `at ${Math.round(s.pos[0])}, ${Math.round(s.pos[1])}`] });
+          h.push({ x, y, r: 9, title: `${fk} ${s.label ?? s.kind}`, lines: [t("map.structAt", dash(s.kind), dash(s.base)), t("map.grid", dash(s.grid)), t("map.at2", Math.round(s.pos[0]), Math.round(s.pos[1]))] });
         }
       }
     }
@@ -527,7 +527,7 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall, act = "a
         ctx.beginPath(); ctx.moveTo(x, y - 8); ctx.lineTo(x + 8, y); ctx.lineTo(x, y + 8); ctx.lineTo(x - 8, y); ctx.closePath(); ctx.stroke();
         if (layers.labels) { ctx.font = "10px system-ui, sans-serif"; ctx.fillStyle = enemyColor(f); ctx.fillText(String(ct.desc ?? "?").slice(0, 14), x + 11, y + 11); ctx.font = "11px system-ui, sans-serif"; }
         ctx.globalAlpha = 1;
-        h.push({ x, y, r: 10, title: "Contact (seen by " + f + ")", lines: [String(ct.desc ?? "?"), `age ${age} s`, `at ${gridTxt(ct.pos)}`] });
+        h.push({ x, y, r: 10, title: t("map.contact", f), lines: [String(ct.desc ?? "?"), t("map.age", age), t("map.at1", gridTxt(ct.pos))] });
       }
       // arrows: the sidecar's LLM orders, else the squad's current objective as reported by the game (rule commander, human leader)
       const arrows = [];
@@ -549,12 +549,12 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall, act = "a
         ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x1 - 10 * Math.cos(a - .4), y1 - 10 * Math.sin(a - .4)); ctx.lineTo(x1 - 10 * Math.cos(a + .4), y1 - 10 * Math.sin(a + .4)); ctx.closePath(); ctx.fill();
         ctx.globalAlpha = 1;
         if (layers.labels) { ctx.font = "9px system-ui, sans-serif"; ctx.fillStyle = "rgba(221,227,236,.75)"; ctx.fillText(o.command + (o.target ? " " + o.target : ""), x1 + 8, y1 + 12); ctx.font = "11px system-ui, sans-serif"; }
-        h.push({ x: x1, y: y1, r: 8, title: `${o.command} order${o.target ? " -> " + o.target : ""}`, lines: [String(o.squad), String(o.reason ?? "")] });
+        h.push({ x: x1, y: y1, r: 8, title: t("map.orderTitle", o.command, o.target ? " -> " + o.target : ""), lines: [String(o.squad), String(o.reason ?? "")] });
       }
       if (layers.squads) for (const s of squads) {
         const x = sx(s.pos[0]), y = sy(s.pos[2]), key = f + "/" + s.id, col = colorOf(f), dm = s.dormant === true;
         if (s.humanLed) {
-          const ph = ((t / 1200) % 1);
+          const ph = ((ts / 1200) % 1);
           ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.globalAlpha = 1 - ph;
           ctx.beginPath(); ctx.arc(x, y, 9 + ph * 14, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
         }
@@ -575,17 +575,17 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall, act = "a
         if (layers.labels) {
           ctx.fillStyle = dm ? "rgba(221,227,236,.6)" : "#dde3ec";
           ctx.font = "600 11px system-ui, sans-serif"; ctx.fillText((s.name || shortId(s.id)) + (s.humanLed ? " ★" : ""), x + 9, y - 11);
-          if (s.kind || veh) { ctx.font = "9px system-ui, sans-serif"; ctx.fillStyle = dm ? "rgba(221,227,236,.45)" : "rgba(221,227,236,.7)"; ctx.fillText([kindLabel(s.kind), veh?.type, veh ? (veh.mounted ? "mounted" : "dismounted") : null].filter(Boolean).join(" "), x + 9, y + 13); }
+          if (s.kind || veh) { ctx.font = "9px system-ui, sans-serif"; ctx.fillStyle = dm ? "rgba(221,227,236,.45)" : "rgba(221,227,236,.7)"; ctx.fillText([kindLabel(s.kind), veh?.type, veh ? (veh.mounted ? t("veh.mounted") : t("veh.dismounted")) : null].filter(Boolean).join(" "), x + 9, y + 13); }
           ctx.font = "11px system-ui, sans-serif";
         }
         const oc = s.objective?.command ?? (byOrder.get(s.id)?.command ?? "-"), ot = s.objective?.target ?? byOrder.get(s.id)?.target;
-        h.push({ x, y, r: 11, key, title: s.name ? `${s.name} (${s.id})` : String(s.id), lines: [`${f}, ${s.agents}/${s.startAgents} agents, ${s.mode ?? s.state ?? "-"}`, `activity: ${typeof s.dormant !== "boolean" ? "unknown (game does not report it)" : dm ? "dormant (engine max AI LOD, barely simulated)" : "active (kept awake)"}`, ...(s.kind ? [`kind ${s.kind}${s.type ? ": " + s.type : ""}`] : []),
-          ...(veh ? [`vehicle ${dash(veh.type)}, ${veh.mounted ? "mounted" : "dismounted"}${veh.state ? ", " + veh.state : ""}${num(veh.health) ? ", hp " + Math.round(veh.health * 100) + "%" : ""}`] : []),
-          `objective: ${oc}${ot ? " " + ot : ""}`, s.humanLed ? "human-led" + (s.mission?.state && s.mission.state !== "none" ? `, mission ${s.mission.state} ${s.mission.kind ?? ""} ${s.mission.target ?? ""}` : "") : "AI-led", `at ${gridTxt(s.pos)}`] });
+        h.push({ x, y, r: 11, key, title: s.name ? `${s.name} (${s.id})` : String(s.id), lines: [t("map.sqL1", f, s.agents, s.startAgents, s.mode ?? s.state ?? "-"), t("map.sqActivity", typeof s.dormant !== "boolean" ? t("act.unknown") : dm ? t("act.dormantLong") : t("act.activeLong")), ...(s.kind ? [t("map.kind", s.kind, s.type ? ": " + s.type : "")] : []),
+          ...(veh ? [t("map.vehicle", dash(veh.type), veh.mounted ? t("veh.mounted") : t("veh.dismounted"), veh.state ? ", " + veh.state : "", num(veh.health) ? ", " + t("unit.hp", Math.round(veh.health * 100)) : "")] : []),
+          t("map.objectiveLine", oc + (ot ? " " + ot : "")), s.humanLed ? t("map.humanLed") + (s.mission?.state && s.mission.state !== "none" ? t("map.missionSuffix", `${s.mission.state} ${s.mission.kind ?? ""} ${s.mission.target ?? ""}`) : "") : t("map.aiLed"), t("map.at1", gridTxt(s.pos))] });
       }
     }
     if (focus && Array.isArray(focus.pos)) { // focus marker (Missions): pulsing dashed ring + label
-      const x = sx(focus.pos[0]), y = sy(focus.pos[1]), pr = 20 + 3 * Math.sin(t / 220);
+      const x = sx(focus.pos[0]), y = sy(focus.pos[1]), pr = 20 + 3 * Math.sin(ts / 220);
       ctx.strokeStyle = "#ffe36e"; ctx.lineWidth = 2.5; ctx.setLineDash([5, 4]); ctx.beginPath(); ctx.arc(x, y, pr, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
       if (focus.label) { ctx.font = "bold 12px system-ui, sans-serif"; ctx.lineJoin = "round"; ctx.lineWidth = 3.5; ctx.strokeStyle = "rgba(8,11,16,.9)"; ctx.strokeText(focus.label, x + pr + 6, y); ctx.fillStyle = "#ffe36e"; ctx.fillText(focus.label, x + pr + 6, y); ctx.lineJoin = "miter"; }
     }
@@ -605,7 +605,7 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall, act = "a
   // animation loop (pulsing rings need continuous redraw)
   useEffect(() => {
     let raf;
-    const loop = (t) => { draw(t); raf = requestAnimationFrame(loop); };
+    const loop = (ts) => { draw(ts); raf = requestAnimationFrame(loop); };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
   }, [draw]);
@@ -657,13 +657,13 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall, act = "a
   };
 
   return html`<section class=${"panel" + (tall ? " tall" : "") + (compact ? " compact" : "")}>
-    <h2>${compact ? "Mission map" : "Map"} <span class="sub">${Math.round(ext.x1 - ext.x0)} x ${Math.round(ext.z1 - ext.z0)} m, x east / z north${world.map?.status === "resolving" ? ", loading map image..." : ""}</span></h2>
+    <h2>${compact ? t("map.missionMap") : t("map.title")} <span class="sub">${t("map.sub", Math.round(ext.x1 - ext.x0), Math.round(ext.z1 - ext.z0))}${world.map?.status === "resolving" ? t("map.loadingImg") : ""}</span></h2>
     <div class="mapbox" ref=${box}>
       <canvas ref=${cv} onMouseDown=${onDown} onMouseMove=${onMove} onMouseUp=${onUp}
         onMouseLeave=${() => { setTip(null); drag.current = null; cv.current.classList.remove("grabbing"); }}
         onDblClick=${() => fit()}></canvas>
-      <button class="mapbtn" onClick=${() => fit()} title="Reset view"><${Icon} n="reset" /> Fit</button>
-      <div class="maphint">wheel zoom, drag pan, click a squad to select, hover for details</div>
+      <button class="mapbtn" onClick=${() => fit()} title=${t("map.resetView")}><${Icon} n="reset" /> ${t("map.fit")}</button>
+      <div class="maphint">${t("map.hint")}</div>
       ${tip && html`<div class="tip" style=${{ left: Math.min(tip.x + 14, (box.current?.clientWidth ?? 600) - 200) + "px", top: tip.y + 14 + "px" }}>
         <b>${tip.h.title}</b>${tip.h.lines.map((l) => html`<div class="muted">${l}</div>`)}</div>`}
     </div>
@@ -696,23 +696,23 @@ function Compare({ names, rows }) {
 // unit-activity filter (all / active / dormant), shared by the Map and Forces views; counts come from the unfiltered rows
 function ActFilter({ act, setAct, rows }) {
   const dm = rows.filter((r) => r.dormant === true).length, ac = rows.filter((r) => r.dormant !== true).length, known = rows.some((r) => r.dormant !== null);
-  const opt = [["all", "all", rows.length], ["active", "active", ac], ["dormant", "dormant", dm]];
-  return html`<div class="seg actf" title=${known ? "Dormant = every agent of the unit sits in the engine's max AI LOD (barely simulated); active = kept awake by activity management" : "This game build does not report unit activity (no dormant field)"}>
+  const opt = [["all", t("common.all"), rows.length], ["active", t("act.active"), ac], ["dormant", t("act.dormant"), dm]];
+  return html`<div class="seg actf" title=${known ? t("act.filterTip") : t("act.filterNoData")}>
     ${opt.map(([k, l, n]) => html`<button key=${k} class=${act === k ? "on" : ""} disabled=${!known && k !== "all"} onClick=${() => setAct(k)}>${l} <span class="muted">${n}</span></button>`)}</div>`;
 }
 // key: strong swatch = active, pale swatch = dormant, per faction
 function ActLegend({ names, rows }) {
   if (!rows.some((r) => r.dormant !== null)) return null;
   return html`<div class="actleg">${names.map((f) => html`<span key=${f}><i class="sw" style=${{ background: colorOf(f) }}></i><i class="sw" style=${{ background: tint(colorOf(f), DORM_A), boxShadow: `inset 0 0 0 1px ${tint(colorOf(f), 0.85)}` }}></i> <b class=${facClass(f)}>${f}</b></span>`)}
-    <span class="muted">strong = active, pale = dormant</span></div>`;
+    <span class="muted">${t("act.legend")}</span></div>`;
 }
 
 // ---------- squads table ----------
-const COLS = [["id", "Squad"], ["faction", "Faction"], ["kind", "Kind"], ["strength", "Strength"], ["objective", "Objective"], ["state", "State"], ["position", "Position x, z"]];
+const COLS = [["id", "col.squad"], ["faction", "col.faction"], ["kind", "col.kind"], ["strength", "col.strength"], ["objective", "col.objective"], ["state", "col.state"], ["position", "col.position"]];
 const SORTKEY = { id: (r) => r.id, faction: (r) => r.faction, kind: (r) => r.kind, strength: (r) => r.pct ?? -1,
   objective: (r) => r.obj?.command ?? "", state: (r) => r.state, position: (r) => (okPos(r.pos) ? r.pos[0] : -1) };
 const stateBadge = (s) => ({ dead: "bad", engaged: "bad", moving: "info", defending: "ok" }[s] ?? "");
-const DormBadge = ({ r }) => (r.dormant === true ? html`<span class="badge dorm" title="Dormant: engine max AI LOD">dormant</span>` : "");
+const DormBadge = ({ r }) => (r.dormant === true ? html`<span class="badge dorm" title=${t("act.dormantTip")}>${t("act.dormant")}</span>` : "");
 
 // Compact table; the secondary fields (type, vehicle, wounded, movement, leader, order age) open as a detail row on the selected squad.
 function SquadsTable({ rows, sel, onSel }) {
@@ -723,29 +723,29 @@ function SquadsTable({ rows, sel, onSel }) {
   }, [rows, sort]);
   useEffect(() => { if (sel) document.querySelector(`tr[data-key="${CSS.escape(sel)}"]`)?.scrollIntoView({ block: "nearest" }); }, [sel]);
   return html`<section class="panel squads">
-    <h2>Squads <span class="sub">${rows.length} shown, click header to sort, click a row for details</span></h2>
+    <h2>${t("squads.title")} <span class="sub">${t("squads.sub", rows.length)}</span></h2>
     <div class="scroll"><table>
-      <thead><tr>${COLS.map(([k, t]) => html`<th class="sortable" onClick=${() => setSort((s) => ({ key: k, dir: s.key === k ? -s.dir : 1 }))}>${t}${sort.key === k ? (sort.dir > 0 ? " ▲" : " ▼") : ""}</th>`)}</tr></thead>
+      <thead><tr>${COLS.map(([k, lbl]) => html`<th class="sortable" onClick=${() => setSort((s) => ({ key: k, dir: s.key === k ? -s.dir : 1 }))}>${t(lbl)}${sort.key === k ? (sort.dir > 0 ? " ▲" : " ▼") : ""}</th>`)}</tr></thead>
       <tbody>${sorted.map((r) => {
         const col = r.pct === null ? "#5d697c" : r.pct >= 66 ? "var(--ok)" : r.pct >= 33 ? "var(--warn)" : "var(--bad)", o = r.obj, on = sel === r.key;
         const main = html`<tr key=${r.key} data-key=${r.key} class=${"sqrow" + (on ? " sel" : "") + (r.dormant === true ? " dormrow" : "")} onClick=${() => onSel(on ? null : r.key)}>
-          <td style=${{ borderLeft: "3px solid " + colorOf(r.faction) }} title=${r.id}><b>${r.name || r.id}</b>${r.name ? html` <span class="muted mono">${r.id}</span>` : ""}${r.human ? html` <span class="badge human">human</span>` : ""}</td><td class=${facClass(r.faction)}>${r.faction}</td>
+          <td style=${{ borderLeft: "3px solid " + colorOf(r.faction) }} title=${r.id}><b>${r.name || r.id}</b>${r.name ? html` <span class="muted mono">${r.id}</span>` : ""}${r.human ? html` <span class="badge human">${t("badge.human")}</span>` : ""}</td><td class=${facClass(r.faction)}>${r.faction}</td>
           <td>${r.kind ? html`<span class=${"badge kind k-" + r.kind}>${kindLabel(r.kind)}</span>` : "-"}</td>
           <td>${r.pct === null ? "-" : html`<span class="bar"><i style=${{ width: Math.min(100, r.pct) + "%", background: col }}></i></span><span class="mono">${r.size}</span> <span class="muted">${r.pct}%</span>`}</td>
           <td class="wrap">${o ? html`<span class=${"cmd " + o.command}>${o.command}</span> ${o.target ? html`<b>${o.target}</b>` : ""}${!o.target && Array.isArray(o.pos) && num(o.pos[0]) ? html`<span class="mono">${Math.round(o.pos[0])}, ${Math.round(o.pos[1])}</span>` : ""}${o.status ? html` <span class="muted">${o.status}</span>` : ""}` : "-"}</td>
-          <td><span class=${"badge " + stateBadge(r.state)}>${r.state}</span> <${DormBadge} r=${r} /></td><td class="mono">${r.posTxt}</td></tr>`;
+          <td><span class=${"badge " + stateBadge(r.state)}>${tk("state", r.state)}</span> <${DormBadge} r=${r} /></td><td class="mono">${r.posTxt}</td></tr>`;
         if (!on) return main;
         return [main, html`<tr key=${r.key + "#d"} class="detail"><td colspan=${COLS.length}><dl class="kv">
-          <div><dt>Type</dt><dd>${r.type}</dd></div>
-          <div><dt>Vehicle</dt><dd>${r.vehicle ? html`${dash(r.vehicle.type)} <span class=${"badge " + (r.vehicle.mounted ? "info" : "warn")}>${r.vehicle.mounted ? "mounted" : "dismounted"}</span>${r.vehicle.state ? html` <span class="muted">${r.vehicle.state}</span>` : ""}${num(r.vehicle.health) ? html` <span class="muted">hp ${Math.round(r.vehicle.health * 100)}%</span>` : ""}` : "-"}</dd></div>
-          <div><dt>Wounded</dt><dd>${r.wounded === null ? "-" : r.wounded}${r.health !== null ? html` <span class="muted">avg hp ${Math.round(r.health * 100)}%</span>` : ""}</dd></div>
-          <div><dt>Movement</dt><dd class="mono">${r.move}</dd></div>
-          <div><dt>Leader</dt><dd>${r.human ? html`human${r.mission ? html` <span class="badge warn">${r.mission.state} ${r.mission.kind ?? ""} ${r.mission.target ?? ""}</span>` : ""}` : "AI"}</dd></div>
-          <div><dt>Activity</dt><dd>${r.dormant === true ? "dormant (engine max AI LOD)" : r.dormant === false ? "active (kept awake)" : "-"}</dd></div>
-          <div><dt>Last order</dt><dd>${r.orderAge === null ? "-" : r.orderAge + " s ago"}</dd></div>
-          <div class="wide"><dt>Reason</dt><dd class="muted">${dash(r.reason)}</dd></div></dl></td></tr>`];
+          <div><dt>${t("det.type")}</dt><dd>${r.type}</dd></div>
+          <div><dt>${t("det.vehicle")}</dt><dd>${r.vehicle ? html`${dash(r.vehicle.type)} <span class=${"badge " + (r.vehicle.mounted ? "info" : "warn")}>${r.vehicle.mounted ? t("veh.mounted") : t("veh.dismounted")}</span>${r.vehicle.state ? html` <span class="muted">${r.vehicle.state}</span>` : ""}${num(r.vehicle.health) ? html` <span class="muted">${t("unit.hp", Math.round(r.vehicle.health * 100))}</span>` : ""}` : "-"}</dd></div>
+          <div><dt>${t("det.wounded")}</dt><dd>${r.wounded === null ? "-" : r.wounded}${r.health !== null ? html` <span class="muted">${t("unit.avgHp", Math.round(r.health * 100))}</span>` : ""}</dd></div>
+          <div><dt>${t("det.movement")}</dt><dd class="mono">${r.move}</dd></div>
+          <div><dt>${t("det.leader")}</dt><dd>${r.human ? html`${t("det.leaderHuman")}${r.mission ? html` <span class="badge warn">${r.mission.state} ${r.mission.kind ?? ""} ${r.mission.target ?? ""}</span>` : ""}` : t("det.leaderAi")}</dd></div>
+          <div><dt>${t("det.activity")}</dt><dd>${r.dormant === true ? t("act.dormantShort") : r.dormant === false ? t("act.activeLong") : "-"}</dd></div>
+          <div><dt>${t("det.lastOrder")}</dt><dd>${r.orderAge === null ? "-" : t("time.agoS", r.orderAge)}</dd></div>
+          <div class="wide"><dt>${t("col.reason")}</dt><dd class="muted">${dash(r.reason)}</dd></div></dl></td></tr>`];
       })}</tbody></table>
-      ${!rows.length && html`<div class="empty">No squads to show.</div>`}</div>
+      ${!rows.length && html`<div class="empty">${t("squads.empty")}</div>`}</div>
   </section>`;
 }
 
@@ -757,16 +757,16 @@ function GameModePanel({ st, names }) {
   const keys = [...new Set(names.flatMap((f) => Object.keys(war(f)?.mode?.params ?? {})))];
   const cap = (v, c) => (num(c) && c > 0 ? { txt: html`${dash(v)}<span class="muted"> / ${c}</span>`, v: num(v) ? v : 0, max: c } : { txt: dash(v) });
   const rows = [
-    { section: "Rules" },
+    { section: t("gm.rules") },
     ...keys.map((k) => ({ label: humanKey(k), tip: k, merge: true, cell: (f) => ({ txt: fmtVal(war(f)?.mode?.params?.[k]) }) })),
-    { label: "Time left", merge: true, cell: (f) => ({ txt: num(sit(f).timeLeftSec) && sit(f).timeLeftSec >= 0 ? fmtTime(sit(f).timeLeftSec) : "no limit" }) },
-    { section: "Live" },
-    { label: "Tickets", tip: "0 = defeat; -1 = not used by this mode", cell: (f) => { const t = war(f)?.tickets; return num(t) && t >= 0 ? { txt: String(t), v: t } : { txt: "n/a", dim: true }; } },
-    { label: "Supplies", tip: "Purchasing power, income per minute", cell: (f) => { const w = war(f); return w ? { txt: html`${dash(w.supplies)}${num(w.income) ? html`<span class="muted"> +${w.income}/min</span>` : ""}`, v: num(w.supplies) ? w.supplies : 0 } : { txt: "-" }; } },
-    { label: "AI soldiers", tip: "Live AI / cap", cell: (f) => cap(war(f)?.liveAI, war(f)?.aiCap) },
-    { label: "Vehicles", tip: "Live vehicles / cap", cell: (f) => cap(war(f)?.vehicles, war(f)?.vehicleCap) },
+    { label: t("gm.timeLeft"), merge: true, cell: (f) => ({ txt: num(sit(f).timeLeftSec) && sit(f).timeLeftSec >= 0 ? fmtTime(sit(f).timeLeftSec) : t("gm.noLimit") }) },
+    { section: t("gm.live") },
+    { label: t("gm.tickets"), tip: t("gm.ticketsTip"), cell: (f) => { const tix = war(f)?.tickets; return num(tix) && tix >= 0 ? { txt: String(tix), v: tix } : { txt: t("gm.na"), dim: true }; } },
+    { label: t("gm.supplies"), tip: t("gm.suppliesTip"), cell: (f) => { const w = war(f); return w ? { txt: html`${dash(w.supplies)}${num(w.income) ? html`<span class="muted"> ${t("gm.incomePerMin", w.income)}</span>` : ""}`, v: num(w.supplies) ? w.supplies : 0 } : { txt: "-" }; } },
+    { label: t("gm.ai"), tip: t("gm.aiTip"), cell: (f) => cap(war(f)?.liveAI, war(f)?.aiCap) },
+    { label: t("gm.vehicles"), tip: t("gm.vehiclesTip"), cell: (f) => cap(war(f)?.vehicles, war(f)?.vehicleCap) },
   ];
-  return html`<section class="panel"><h2>Game mode <span class="sub">${mode ? html`<b>${mode.name || mode.id}</b> ` : ""}${phase ? html`<span class=${"badge " + (phase === "running" ? "ok" : phase === "setup" ? "warn" : "info")}>${phase}</span>` : ""}</span></h2>
+  return html`<section class="panel"><h2>${t("gm.title")} <span class="sub">${mode ? html`<b>${mode.name || mode.id}</b> ` : ""}${phase ? html`<span class=${"badge " + (phase === "running" ? "ok" : phase === "setup" ? "warn" : "info")}>${phase}</span>` : ""}</span></h2>
     <div class="scroll"><${Compare} names=${names} rows=${rows} /></div></section>`;
 }
 
@@ -775,10 +775,10 @@ function SitrepCard({ f, e, now }) {
   const s = e?.sitrep && typeof e.sitrep === "object" ? e.sitrep : null, secs = Array.isArray(s?.sections) ? s.sections.filter((x) => x && (x.title || x.body)) : [];
   const has = s && (s.text || secs.length), age = num(s?.generatedAt) ? Math.max(0, Math.round(((now ?? Date.now()) - s.generatedAt) / 1000)) : null;
   return html`<section class="panel sitrep" style=${accent(f)}><h2><span class=${facClass(f)}>${f}</span> SITREP
-    ${has && html`<span class="sub">${s.source ? html`<span class=${"badge " + (s.source === "llm" ? "info" : "")} title=${s.source === "llm" ? "written by the LLM" : "generated by rules"}>${s.source}</span> ` : ""}${num(s.warTimeSec) ? "war time " + fmtTime(s.warTimeSec) + ", " : ""}${age === null ? "" : age < 90 ? age + " s ago" : Math.round(age / 60) + " min ago"}${age !== null && age > 600 ? html` <span class="badge warn">stale</span>` : ""}</span>`}</h2>
+    ${has && html`<span class="sub">${s.source ? html`<span class=${"badge " + (s.source === "llm" ? "info" : "")} title=${s.source === "llm" ? t("sitrep.byLlm") : t("sitrep.byRules")}>${s.source}</span> ` : ""}${num(s.warTimeSec) ? t("sitrep.warTime", fmtTime(s.warTimeSec)) + " " : ""}${age === null ? "" : age < 90 ? t("time.agoS", age) : t("time.agoMin", Math.round(age / 60))}${age !== null && age > 600 ? html` <span class="badge warn">${t("badge.stale")}</span>` : ""}</span>`}</h2>
     ${has ? html`<div class="sitbody">${s.text && html`<p class="sittext">${s.text}</p>`}
       ${secs.length > 0 && html`<dl class="sitsecs">${secs.map((x, i) => html`<div key=${i}><dt>${dash(x.title)}</dt><dd>${x.body}</dd></div>`)}</dl>`}</div>`
-      : html`<div class="empty sitempty">No SITREP yet. The HQ report appears here when the SITREP generator has produced one.</div>`}</section>`;
+      : html`<div class="empty sitempty">${t("sitrep.empty")}</div>`}</section>`;
 }
 
 // ---------- force comparison (Overview and Forces): same table, Forces adds rows ----------
@@ -792,26 +792,26 @@ function forceStats(st, rows, f) {
     vehicles: mine.filter((r) => r.vehicle).length, human: mine.filter((r) => r.human).length, wounded: mine.reduce((n, r) => n + (num(r.wounded) ? r.wounded : 0), 0),
     engaged: mine.filter((r) => r.state === "engaged").length, moving: mine.filter((r) => r.state === "moving").length };
 }
-function ForcesCompare({ st, rows, names, full, title = "Forces" }) {
+function ForcesCompare({ st, rows, names, full, title = null }) {
   if (!names.length) return null;
   const S = new Map(names.map((f) => [f, forceStats(st, rows, f)]));
   const g = (f) => S.get(f);
   const out = [
-    { label: "Squads", tip: "Commandable units. Bar: strong = active, pale = dormant", cell: (f) => ({ txt: String(g(f).mine.length), stack: g(f).known ? [[g(f).act, 1], [g(f).dorm, DORM_A]] : null, v: g(f).mine.length }) },
-    ...(rows.some((r) => r.dormant !== null) ? [{ label: "Active / dormant", tip: "Dormant = all agents in the engine's max AI LOD", cell: (f) => (g(f).known ? { txt: html`${g(f).act} <span class="muted">/</span> ${g(f).dorm}` } : { txt: "-", dim: true }) }] : []),
-    { label: "Soldiers", tip: "Alive / at start. Bar: share still alive", cell: (f) => ({ txt: html`${g(f).alive}${g(f).start > g(f).alive ? html`<span class="muted"> / ${g(f).start}</span>` : ""}`, v: g(f).alive, max: g(f).start || 1 }) },
-    { label: "Vehicle units", cell: (f) => ({ txt: String(g(f).vehicles) }) },
-    { label: "Human-led", cell: (f) => ({ txt: String(g(f).human) }) },
-    { label: "Contacts known", cell: (f) => ({ txt: String(g(f).contacts) }) },
-    { label: "By kind", cell: (f) => ({ txt: html`<span class="kinds">${g(f).kinds.size ? [...g(f).kinds.entries()].map(([k, n]) => html`<span class=${"badge kind k-" + k} key=${k}>${kindLabel(k)} ${n}</span>`) : "-"}</span>` }) },
+    { label: t("fc.squads"), tip: t("fc.squadsTip"), cell: (f) => ({ txt: String(g(f).mine.length), stack: g(f).known ? [[g(f).act, 1], [g(f).dorm, DORM_A]] : null, v: g(f).mine.length }) },
+    ...(rows.some((r) => r.dormant !== null) ? [{ label: t("fc.activeDormant"), tip: t("fc.activeDormantTip"), cell: (f) => (g(f).known ? { txt: html`${g(f).act} <span class="muted">/</span> ${g(f).dorm}` } : { txt: "-", dim: true }) }] : []),
+    { label: t("fc.soldiers"), tip: t("fc.soldiersTip"), cell: (f) => ({ txt: html`${g(f).alive}${g(f).start > g(f).alive ? html`<span class="muted"> / ${g(f).start}</span>` : ""}`, v: g(f).alive, max: g(f).start || 1 }) },
+    { label: t("fc.vehicleUnits"), cell: (f) => ({ txt: String(g(f).vehicles) }) },
+    { label: t("fc.humanLed"), cell: (f) => ({ txt: String(g(f).human) }) },
+    { label: t("fc.contacts"), cell: (f) => ({ txt: String(g(f).contacts) }) },
+    { label: t("fc.byKind"), cell: (f) => ({ txt: html`<span class="kinds">${g(f).kinds.size ? [...g(f).kinds.entries()].map(([k, n]) => html`<span class=${"badge kind k-" + k} key=${k}>${kindLabel(k)} ${n}</span>`) : "-"}</span>` }) },
     ...(full ? [
-      { label: "Engaged", cell: (f) => ({ txt: String(g(f).engaged) }) },
-      { label: "Moving", cell: (f) => ({ txt: String(g(f).moving) }) },
-      { label: "Wounded", cell: (f) => ({ txt: String(g(f).wounded) }) },
+      { label: t("fc.engaged"), cell: (f) => ({ txt: String(g(f).engaged) }) },
+      { label: t("fc.moving"), cell: (f) => ({ txt: String(g(f).moving) }) },
+      { label: t("fc.wounded"), cell: (f) => ({ txt: String(g(f).wounded) }) },
     ] : []),
-    { label: "Updated", cell: (f) => ({ txt: ago(st, st.factions[f]?.ts), dim: true }) },
+    { label: t("fc.updated"), cell: (f) => ({ txt: ago(st, st.factions[f]?.ts), dim: true }) },
   ];
-  return html`<section class="panel"><h2>${title} <span class="sub">per side</span></h2><div class="scroll"><${Compare} names=${names} rows=${out} /></div></section>`;
+  return html`<section class="panel"><h2>${title ?? t("fc.title")} <span class="sub">${t("fc.perSide")}</span></h2><div class="scroll"><${Compare} names=${names} rows=${out} /></div></section>`;
 }
 
 // ---------- objectives + recent events ----------
@@ -821,11 +821,11 @@ function ObjectivesPanel({ st }) {
   // progress is signed from the viewer's side (+100 = viewer's, -100 = enemy's): show who it favours, in that faction's colour
   const other = FACTIONS.find((x) => x !== viewer);
   const prog = (o) => { if (!num(o.progress) || o.progress === 0) return html`<span class="dim">0 %</span>`; const to = o.progress > 0 ? viewer : other, c = to ? colorOf(to) : NEUTRAL;
-    return html`<span class="pbar" title=${"toward " + (to ?? "?")}><i style=${{ width: Math.min(100, Math.abs(o.progress)) + "%", background: c }}></i></span><span class="mono">${Math.abs(o.progress)} %</span>`; };
-  return html`<section class="panel side"><h2>Objectives <span class="sub">${objs.length} points</span></h2><div class="scroll"><table>
-    <thead><tr><th>Id</th><th>Name</th><th>Value</th><th>Owner</th><th>Progress</th><th>Position x, z</th></tr></thead><tbody>
+    return html`<span class="pbar" title=${t("obj.toward", to ?? "?")}><i style=${{ width: Math.min(100, Math.abs(o.progress)) + "%", background: c }}></i></span><span class="mono">${Math.abs(o.progress)} %</span>`; };
+  return html`<section class="panel side"><h2>${t("obj.title")} <span class="sub">${t("obj.sub", objs.length)}</span></h2><div class="scroll"><table>
+    <thead><tr><th>${t("col.id")}</th><th>${t("col.name")}</th><th>${t("col.value")}</th><th>${t("col.owner")}</th><th>${t("col.progress")}</th><th>${t("col.position")}</th></tr></thead><tbody>
     ${objs.map((o) => html`<tr key=${o.id}><td><b>${o.id}</b></td><td>${dash(o.name)}</td><td>${dash(o.value)}</td>
-      <td>${o.owner && o.owner !== "none" ? html`<b class=${facClass(o.owner)}>${o.owner}</b>` : html`<span class="dim">neutral</span>`}${o.contested ? html` <span class="badge warn">contested</span>` : ""}</td>
+      <td>${o.owner && o.owner !== "none" ? html`<b class=${facClass(o.owner)}>${o.owner}</b>` : html`<span class="dim">${t("obj.neutral")}</span>`}${o.contested ? html` <span class="badge warn">${t("obj.contested")}</span>` : ""}</td>
       <td>${prog(o)}</td><td class="mono">${Math.round(o.pos[0])}, ${Math.round(o.pos[1])}</td></tr>`)}
     </tbody></table></div></section>`;
 }
@@ -834,7 +834,7 @@ function EventsPanel({ st, faction }) {
   for (const f of Object.keys(st.factions ?? {})) if (faction === "all" || f === faction) for (const e of st.factions[f].eventLog ?? []) list.push({ ...e, faction: f });
   list.sort((a, b) => b.ts - a.ts);
   if (!list.length) return null;
-  return html`<section class="panel side"><h2>Recent events <span class="sub">newest first</span></h2><div class="scroll"><table><tbody>
+  return html`<section class="panel side"><h2>${t("ev.title")} <span class="sub">${t("common.newestFirst")}</span></h2><div class="scroll"><table><tbody>
     ${list.slice(0, 30).map((e, i) => html`<tr key=${i}><td class="mono muted">${new Date(e.ts).toLocaleTimeString()}</td><td class=${facClass(e.faction)}>${e.faction}</td><td class="wrap">${e.text}</td></tr>`)}
     </tbody></table></div></section>`;
 }
@@ -842,16 +842,16 @@ function EventsPanel({ st, faction }) {
 // ---------- sitrep ----------
 function Sitrep({ st, faction }) {
   const names = sortedKeys(st.factions).filter((f) => faction === "all" || f === faction);
-  return html`<section class="panel side"><h2>Known contacts <span class="sub">per HQ</span></h2><div class="scroll">
+  return html`<section class="panel side"><h2>${t("ct.title")} <span class="sub">${t("ct.sub")}</span></h2><div class="scroll">
     ${names.map((f) => {
       const e = st.factions[f], sit = e.situation ?? {}, ct = Array.isArray(sit.contacts) ? sit.contacts : [];
       return html`<div class="facblock"><div class="hd"><b class=${facClass(f)}>${f}</b>
-        <span class="muted">time ${dash(sit.time)} s, ${Array.isArray(sit.squads) ? sit.squads.length : 0} squads, updated ${(((st.now ?? Date.now()) - e.ts) / 1000).toFixed(0)} s ago</span></div>
-        <table><thead><tr><th>Contact</th><th>Position x, z</th><th>Age</th></tr></thead><tbody>
-        ${ct.length ? ct.map((c) => html`<tr><td>${dash(c.desc)}${c.kind && c.kind !== "unknown" ? html` <span class=${"badge " + (c.kind === "vehicle" ? "bad" : "info")}>${c.kind}</span>` : ""}</td><td class="mono">${gridTxt(c.pos)}</td><td>${dash(c.ageSec)} s</td></tr>`) : html`<tr><td colspan="3" class="dim">no contacts</td></tr>`}
+        <span class="muted">${t("ct.hdr", dash(sit.time), Array.isArray(sit.squads) ? sit.squads.length : 0, (((st.now ?? Date.now()) - e.ts) / 1000).toFixed(0))}</span></div>
+        <table><thead><tr><th>${t("col.contact")}</th><th>${t("col.position")}</th><th>${t("col.age")}</th></tr></thead><tbody>
+        ${ct.length ? ct.map((c) => html`<tr><td>${dash(c.desc)}${c.kind && c.kind !== "unknown" ? html` <span class=${"badge " + (c.kind === "vehicle" ? "bad" : "info")}>${c.kind}</span>` : ""}</td><td class="mono">${gridTxt(c.pos)}</td><td>${dash(c.ageSec)} s</td></tr>`) : html`<tr><td colspan="3" class="dim">${t("ct.none")}</td></tr>`}
         </tbody></table></div>`;
     })}
-    ${!names.length && html`<div class="empty">No data yet.</div>`}</div></section>`;
+    ${!names.length && html`<div class="empty">${t("common.noData")}</div>`}</div></section>`;
 }
 
 // ---------- exchange log ----------
@@ -859,27 +859,27 @@ const J = (o) => JSON.stringify(o, null, 2);
 function Log({ st, faction }) {
   const ex = (st.exchanges ?? []).filter((x) => faction === "all" || x.faction === faction);
   const noLlm = st.paused || (st.config?.engine && st.config.engine !== "llm");
-  return html`<section class="panel log"><h2>Orders / log <span class="sub">newest first, last ${st.exchanges?.length ?? 0}</span>
-    ${noLlm && html`<span class="badge warn">HQ engine: ${st.config?.engine && st.config.engine !== "llm" ? st.config.engine : "llm"}${st.paused ? " (paused)" : ""}, no LLM calls</span>`}</h2><div class="scroll">
+  return html`<section class="panel log"><h2>${t("log.title")} <span class="sub">${t("log.sub", st.exchanges?.length ?? 0)}</span>
+    ${noLlm && html`<span class="badge warn">${t("strip.hqEngine")} ${st.config?.engine && st.config.engine !== "llm" ? st.config.engine : "llm"}${st.paused ? " " + t("strip.pausedParen") : ""}, ${t("strip.noLlm")}</span>`}</h2><div class="scroll">
     ${ex.map((x) => html`<details class="ex" key=${x.ts + x.faction}><summary>
       <span class="mono muted">${new Date(x.ts).toLocaleTimeString()}</span><b class=${facClass(x.faction)}>${x.faction}</b>
       <span class="muted">${x.provider}${x.model ? " / " + x.model : ""}</span>
-      ${x.ok && String(x.reason ?? "").startsWith("skipped") ? html`<span class="badge info">${x.reason}</span>` : x.ok ? html`<span class=${"badge " + (x.orders.length ? "ok" : "warn")}>${x.orders.length ? "ok" : "ok, no orders"}</span>` : html`<span class="badge bad">fallback: ${x.reason}</span>`}
-      ${x.dropped?.length ? html`<span class="badge warn">${x.dropped.length} dropped</span>` : ""}
-      ${x.wake && html`<span class=${"badge " + (x.wake.reason === "trigger" ? "warn" : "info")} title=${x.wake.triggers?.join("\n") ?? ""}>wake: ${x.wake.reason}${x.wake.triggers?.length ? ": " + x.wake.triggers.slice(0, 2).join("; ") + (x.wake.triggers.length > 2 ? ` +${x.wake.triggers.length - 2}` : "") : ""}</span>`}
-      ${x.nextCheck && html`<span class="muted" title=${x.nextCheck.reason}>next ${x.nextCheck.sec} s${x.nextCheck.reason ? ": " + x.nextCheck.reason : ""}</span>`}
-      <span>${x.orders.length} orders</span>
-      ${x.buy?.length ? html`<span class="badge ok" title=${x.buy.map((b) => `${b.count}x ${b.type}`).join(", ")}>buy ${x.buy.map((b) => `${b.count}x ${b.type}`).join(", ")}</span>` : ""}
-      ${x.missions?.length ? html`<span class="badge info">${x.missions.reduce((n, m) => n + m.offers.length, 0)} mission offers</span>` : ""}
-      ${x.keep ? html`<span class="badge info">keep</span>` : ""}<span class="muted">${x.latencyMs} ms${x.usage ? ` , ${x.usage.input}/${x.usage.output} tok` : ""}${num(x.usage?.cost) ? ` , $${x.usage.cost.toFixed(4)}` : ""}</span></summary>
-      <div class="body"><h3>Orders</h3><pre>${J(x.orders)}</pre>
-      ${x.buy?.length ? html`<h3>Purchases</h3><pre>${J(x.buy)}</pre>` : ""}
-      ${x.missions?.length ? html`<h3>Mission offers (human-led squads)</h3><pre>${J(x.missions)}</pre>` : ""}
-      ${x.request?.events?.length ? html`<h3>Events in this request</h3><pre>${x.request.events.join("\n")}</pre>` : ""}
-      ${x.dropped?.length ? html`<h3>Dropped (with reason)</h3><pre>${J(x.dropped)}</pre>` : ""}
-      ${x.rawReply != null ? html`<h3>Raw LLM reply</h3><pre>${x.rawReply}</pre>` : ""}
-      <h3>Request</h3><pre>${J(x.request)}</pre></div></details>`)}
-    ${!ex.length && html`<div class="empty">No exchanges yet.</div>`}</div></section>`;
+      ${x.ok && String(x.reason ?? "").startsWith("skipped") ? html`<span class="badge info">${x.reason}</span>` : x.ok ? html`<span class=${"badge " + (x.orders.length ? "ok" : "warn")}>${x.orders.length ? t("log.ok") : t("log.okNoOrders")}</span>` : html`<span class="badge bad">${t("log.fallback", x.reason)}</span>`}
+      ${x.dropped?.length ? html`<span class="badge warn">${t("log.dropped", x.dropped.length)}</span>` : ""}
+      ${x.wake && html`<span class=${"badge " + (x.wake.reason === "trigger" ? "warn" : "info")} title=${x.wake.triggers?.join("\n") ?? ""}>${t("log.wake", x.wake.reason)}${x.wake.triggers?.length ? ": " + x.wake.triggers.slice(0, 2).join("; ") + (x.wake.triggers.length > 2 ? ` +${x.wake.triggers.length - 2}` : "") : ""}</span>`}
+      ${x.nextCheck && html`<span class="muted" title=${x.nextCheck.reason}>${t("log.next", x.nextCheck.sec)}${x.nextCheck.reason ? ": " + x.nextCheck.reason : ""}</span>`}
+      <span>${t("log.ordersN", x.orders.length)}</span>
+      ${x.buy?.length ? html`<span class="badge ok" title=${x.buy.map((b) => `${b.count}x ${b.type}`).join(", ")}>${t("log.buy", x.buy.map((b) => `${b.count}x ${b.type}`).join(", "))}</span>` : ""}
+      ${x.missions?.length ? html`<span class="badge info">${t("log.offersN", x.missions.reduce((n, m) => n + m.offers.length, 0))}</span>` : ""}
+      ${x.keep ? html`<span class="badge info">${t("log.keep")}</span>` : ""}<span class="muted">${x.latencyMs} ms${x.usage ? ` , ${x.usage.input}/${x.usage.output} tok` : ""}${num(x.usage?.cost) ? ` , $${x.usage.cost.toFixed(4)}` : ""}</span></summary>
+      <div class="body"><h3>${t("log.hOrders")}</h3><pre>${J(x.orders)}</pre>
+      ${x.buy?.length ? html`<h3>${t("log.hBuy")}</h3><pre>${J(x.buy)}</pre>` : ""}
+      ${x.missions?.length ? html`<h3>${t("log.hOffers")}</h3><pre>${J(x.missions)}</pre>` : ""}
+      ${x.request?.events?.length ? html`<h3>${t("log.hEvents")}</h3><pre>${x.request.events.join("\n")}</pre>` : ""}
+      ${x.dropped?.length ? html`<h3>${t("log.hDropped")}</h3><pre>${J(x.dropped)}</pre>` : ""}
+      ${x.rawReply != null ? html`<h3>${t("log.hRaw")}</h3><pre>${x.rawReply}</pre>` : ""}
+      <h3>${t("col.request")}</h3><pre>${J(x.request)}</pre></div></details>`)}
+    ${!ex.length && html`<div class="empty">${t("log.empty")}</div>`}</div></section>`;
 }
 
 // ---------- world: extent, map image status, roads, places (from the sidecar; the game posts them) ----------
@@ -939,14 +939,14 @@ const LAYER_DEFAULTS = { image: true, structures: true, roads: true, buildings: 
 function loadLayers() {
   try { return { ...LAYER_DEFAULTS, ...JSON.parse(localStorage.getItem(LAYER_KEY) ?? "{}") }; } catch { return { ...LAYER_DEFAULTS }; }
 }
-const ago = (st, ts) => (ts ? `${Math.max(0, Math.round(((st.now ?? Date.now()) - ts) / 1000))} s ago` : "-");
+const ago = (st, ts) => (ts ? t("time.agoS", Math.max(0, Math.round(((st.now ?? Date.now()) - ts) / 1000))) : "-");
 
 // Faction selector + "show inactive" toggle; shared by all views (except Usage & Config).
 function FactionBar({ names, faction, setFaction, hidden, showInactive, setShowInactive }) {
   return html`<div class="toolbar subbar">
-    <div class="seg">${["all", ...names].map((n) => html`<button key=${n} class=${faction === n ? "on" : ""} onClick=${() => setFaction(n)}>${n}</button>`)}</div>
-    <label class="toggles inact" title="Factions that stopped posting (setup-phase factions before the host picked others, or a previous war) are hidden. Show them for debugging.">
-      <span><input type="checkbox" checked=${showInactive} onChange=${(e) => setShowInactive(e.target.checked)} /> show inactive factions${hidden.length ? ` (${hidden.length} hidden: ${hidden.join(", ")})` : ""}</span></label>
+    <div class="seg">${["all", ...names].map((n) => html`<button key=${n} class=${faction === n ? "on" : ""} onClick=${() => setFaction(n)}>${n === "all" ? t("common.all") : n}</button>`)}</div>
+    <label class="toggles inact" title=${t("fb.inactiveTip")}>
+      <span><input type="checkbox" checked=${showInactive} onChange=${(e) => setShowInactive(e.target.checked)} /> ${t("fb.showInactive")}${hidden.length ? ` (${t("fb.hidden", hidden.length, hidden.join(", "))})` : ""}</span></label>
   </div>`;
 }
 
@@ -964,9 +964,9 @@ function OwnerBar({ st }) {
   const facs = [...new Set([...Object.keys(st.factions ?? {}), ...by.keys()].filter((k) => k))].sort(facCmp);
   const keys = facs.length ? [facs[0], "", ...facs.slice(1)] : [""];
   const contested = objs.filter((o) => o.contested).length;
-  return html`<section class="panel"><h2>Objective control <span class="sub">${objs.length} points, weighted by value${contested ? `, ${contested} contested` : ""}</span></h2><div class="cfgbody">
-    <div class="ownbar">${keys.map((k) => html`<i key=${k} style=${{ width: (100 * (by.get(k) ?? 0) / tot) + "%", background: k ? colorOf(k) : NEUTRAL }} title=${(k || "neutral") + ": " + (by.get(k) ?? 0) + " / " + tot + (hatch.get(k) ? ", contested " + hatch.get(k) : "")}>${hatch.get(k) ? html`<b class="hatch" style=${{ width: (100 * hatch.get(k) / by.get(k)) + "%" }}></b>` : ""}</i>`)}</div>
-    <div class="ownleg">${keys.map((k) => html`<span key=${k}><b class=${k ? facClass(k) : "f-none"}>${k || "neutral"}</b> <span class="muted">${by.get(k) ?? 0} / ${tot}</span></span>`)}</div></div></section>`;
+  return html`<section class="panel"><h2>${t("own.title")} <span class="sub">${t("own.sub", objs.length)}${contested ? t("own.contested", contested) : ""}</span></h2><div class="cfgbody">
+    <div class="ownbar">${keys.map((k) => html`<i key=${k} style=${{ width: (100 * (by.get(k) ?? 0) / tot) + "%", background: k ? colorOf(k) : NEUTRAL }} title=${(k || t("obj.neutral")) + ": " + (by.get(k) ?? 0) + " / " + tot + (hatch.get(k) ? ", " + t("own.contestedN", hatch.get(k)) : "")}>${hatch.get(k) ? html`<b class="hatch" style=${{ width: (100 * hatch.get(k) / by.get(k)) + "%" }}></b>` : ""}</i>`)}</div>
+    <div class="ownleg">${keys.map((k) => html`<span key=${k}><b class=${k ? facClass(k) : "f-none"}>${k || t("obj.neutral")}</b> <span class="muted">${by.get(k) ?? 0} / ${tot}</span></span>`)}</div></div></section>`;
 }
 function Overview({ st, faction, rows }) {
   const names = sortedKeys(st.factions).filter((f) => faction === "all" || f === faction);
@@ -978,29 +978,29 @@ function Overview({ st, faction, rows }) {
     </div>
     <div class="grid2 gap">${names.map((f) => html`<${SitrepCard} key=${f} f=${f} e=${st.factions[f]} now=${st.now} />`)}</div>
     <div class="grid2 gap"><${ObjectivesPanel} st=${st} /><${EventsPanel} st=${st} faction=${faction} /></div>
-    ${!Object.keys(st.factions ?? {}).length && html`<div class="empty">No data yet: waiting for the game to post a situation.</div>`}</main>`;
+    ${!Object.keys(st.factions ?? {}).length && html`<div class="empty">${t("ov.waiting")}</div>`}</main>`;
 }
 
 // ---- Map ----
 function SelCard({ rows, sel }) {
   const r = sel ? rows.find((x) => x.key === sel) : null;
-  if (!r) return html`<div class="muted selcard">Click a squad on the map to see its details.</div>`;
+  if (!r) return html`<div class="muted selcard">${t("sel.hint")}</div>`;
   const o = r.obj;
-  return html`<div class="selcard"><b class=${facClass(r.faction)}>${r.name || r.id}</b>${r.name ? html` <span class="muted mono">${r.id}</span>` : ""} ${r.kind ? html`<span class=${"badge kind k-" + r.kind}>${kindLabel(r.kind)}</span>` : ""} <span class=${"badge " + stateBadge(r.state)}>${r.state}</span> <${DormBadge} r=${r} />${r.dormant === false ? html`<span class="badge actv">active</span>` : ""}
-    <span class="muted">${r.size} soldiers${r.pct !== null ? ", " + r.pct + "%" : ""}${r.vehicle ? ", " + dash(r.vehicle.type) + (r.vehicle.mounted ? " (mounted)" : " (dismounted)") : ""}, ${r.move}, at ${r.posTxt}</span>
-    ${o ? html` <span class=${"cmd " + o.command}>${o.command}</span> ${o.target ?? ""} <span class="muted">${o.reason ?? ""}</span>` : ""}${r.human ? html` <span class="badge human">human</span>` : ""}</div>`;
+  return html`<div class="selcard"><b class=${facClass(r.faction)}>${r.name || r.id}</b>${r.name ? html` <span class="muted mono">${r.id}</span>` : ""} ${r.kind ? html`<span class=${"badge kind k-" + r.kind}>${kindLabel(r.kind)}</span>` : ""} <span class=${"badge " + stateBadge(r.state)}>${tk("state", r.state)}</span> <${DormBadge} r=${r} />${r.dormant === false ? html`<span class="badge actv">${t("act.active")}</span>` : ""}
+    <span class="muted">${t("sel.soldiers", r.size)}${r.pct !== null ? ", " + r.pct + "%" : ""}${r.vehicle ? ", " + dash(r.vehicle.type) + " (" + (r.vehicle.mounted ? t("veh.mounted") : t("veh.dismounted")) + ")" : ""}, ${r.move}, ${t("map.at1", r.posTxt)}</span>
+    ${o ? html` <span class=${"cmd " + o.command}>${o.command}</span> ${o.target ?? ""} <span class="muted">${o.reason ?? ""}</span>` : ""}${r.human ? html` <span class="badge human">${t("badge.human")}</span>` : ""}</div>`;
 }
 function MapView({ st, faction, rows, sel, onSel, layers, setLayers, world, act, setAct }) {
   const names = sortedKeys(st.factions).filter((f) => faction === "all" || f === faction);
-  const tog = (k) => html`<label key=${k}><input type="checkbox" checked=${layers[k]} onChange=${() => setLayers((l) => ({ ...l, [k]: !l[k] }))} /> ${k}</label>`;
+  const tog = (k) => html`<label key=${k}><input type="checkbox" checked=${layers[k]} onChange=${() => setLayers((l) => ({ ...l, [k]: !l[k] }))} /> ${tk("layer", k)}</label>`;
   return html`<main class="view">
     <div class="toolbar">
       <${ActFilter} act=${act} setAct=${setAct} rows=${rows} /><${ActLegend} names=${names} rows=${rows} />
       <div class="toggles nomargin">${["grid", "objectives", "structures", "squads", "contacts", "orders", "labels"].map(tog)}</div>
-      <div class="toggles" title="Map background: toggles, image opacity; flip = image y axis inverted (calibration)">
+      <div class="toggles" title=${t("map.layersTip")}>
         ${["image", "roads", "buildings", "objects", "places", "flip"].map(tog)}
-        <span class="muted" title="Objects key: diamond = base, triangle over a bar = airport, ring = port. Buildings: grey = house, large = bigger than 250 m2, orange = military / industrial">◆ base ▲ airport ◎ port</span>
-        <label>dim <input type="range" min="0.1" max="1" step="0.05" value=${layers.dim} onInput=${(e) => setLayers((l) => ({ ...l, dim: Number(e.target.value) }))} style=${{ width: "80px", verticalAlign: "middle" }} /></label>
+        <span class="muted" title=${t("map.keyTip")}>${t("map.keyText")}</span>
+        <label>${t("layer.dim")} <input type="range" min="0.1" max="1" step="0.05" value=${layers.dim} onInput=${(e) => setLayers((l) => ({ ...l, dim: Number(e.target.value) }))} style=${{ width: "80px", verticalAlign: "middle" }} /></label>
       </div>
     </div>
     <${MapPanel} st=${st} faction=${faction} rows=${rows} sel=${sel} onSel=${onSel} layers=${layers} world=${world} tall=${true} act=${act} />
@@ -1011,19 +1011,19 @@ function MapView({ st, faction, rows, sel, onSel, layers, setLayers, world, act,
 function CatalogPanel({ st, f }) {
   const e = st.factions[f], sit = e.situation ?? {}, sup = sit.war?.supplies;
   const cat = (Array.isArray(sit.catalog) ? sit.catalog : []).filter((c) => c && typeof c.type === "string").sort((a, b) => (num(a.cost) ? a.cost : 1e9) - (num(b.cost) ? b.cost : 1e9));
-  return html`<section class="panel" style=${accent(f)}><h2><span class=${facClass(f)}>${f}</span> buy list <span class="sub">supplies ${dash(sup)}${num(sit.war?.income) ? ` (+${sit.war.income}/min)` : ""}</span></h2><div class="scroll"><table>
-    <thead><tr><th>Type</th><th>Kind</th><th>Cost</th><th>Affordable</th><th>Description</th></tr></thead><tbody>
+  return html`<section class="panel" style=${accent(f)}><h2><span class=${facClass(f)}>${f}</span> ${t("cat.title")} <span class="sub">${t("cat.sub", dash(sup), num(sit.war?.income) ? ` (${t("gm.incomePerMin", sit.war.income)})` : "")}</span></h2><div class="scroll"><table>
+    <thead><tr><th>${t("det.type")}</th><th>${t("col.kind")}</th><th>${t("col.cost")}</th><th>${t("col.affordable")}</th><th>${t("col.description")}</th></tr></thead><tbody>
     ${cat.map((c) => html`<tr key=${c.type}><td><b>${c.type}</b></td><td>${c.kind ? html`<span class=${"badge kind k-" + c.kind}>${kindLabel(c.kind)}</span>` : "-"}</td><td class="mono">${dash(c.cost)}</td>
-      <td>${num(c.cost) && num(sup) ? html`<span class=${"badge " + (c.cost <= sup ? "ok" : "bad")}>${c.cost <= sup ? "yes" : "short " + (c.cost - sup)}</span>` : "-"}</td><td class="wrap muted">${dash(c.desc)}</td></tr>`)}
-    </tbody></table>${!cat.length && html`<div class="empty">No catalog reported.</div>`}</div></section>`;
+      <td>${num(c.cost) && num(sup) ? html`<span class=${"badge " + (c.cost <= sup ? "ok" : "bad")}>${c.cost <= sup ? t("val.yes") : t("cat.short", c.cost - sup)}</span>` : "-"}</td><td class="wrap muted">${dash(c.desc)}</td></tr>`)}
+    </tbody></table>${!cat.length && html`<div class="empty">${t("cat.empty")}</div>`}</div></section>`;
 }
 function PurchasesPanel({ st, faction }) {
   const list = [];
   for (const x of st.exchanges ?? []) if ((faction === "all" || x.faction === faction) && x.buy?.length) for (const b of x.buy) list.push({ ts: x.ts, faction: x.faction, ...b });
-  return html`<section class="panel"><h2>Purchases <span class="sub">decided by the HQ, this sidecar session</span></h2><div class="scroll"><table>
-    <thead><tr><th>Time</th><th>Faction</th><th>Order</th><th>Reason</th></tr></thead><tbody>
+  return html`<section class="panel"><h2>${t("pur.title")} <span class="sub">${t("pur.sub")}</span></h2><div class="scroll"><table>
+    <thead><tr><th>${t("col.time")}</th><th>${t("col.faction")}</th><th>${t("col.order")}</th><th>${t("col.reason")}</th></tr></thead><tbody>
     ${list.slice(0, 60).map((b, i) => html`<tr key=${i}><td class="mono muted">${new Date(b.ts).toLocaleTimeString()}</td><td class=${facClass(b.faction)}>${b.faction}</td><td><b>${b.count}x ${b.type}</b></td><td class="wrap muted">${dash(b.reason)}</td></tr>`)}
-    </tbody></table>${!list.length && html`<div class="empty">No purchases yet.</div>`}</div></section>`;
+    </tbody></table>${!list.length && html`<div class="empty">${t("pur.empty")}</div>`}</div></section>`;
 }
 function ForcesView({ st, faction, rows, sel, onSel, act, setAct }) {
   const names = sortedKeys(st.factions).filter((f) => faction === "all" || f === faction);
@@ -1043,23 +1043,23 @@ function Decision({ st, f }) {
   const sc = st.scheduler?.[f];
   const e = st.factions[f];
   const dropLabel = (d) => { const k = Object.keys(d).find((q) => q !== "reason"); return k ? `${k}: ${J(d[k])}` : ""; };
-  return html`<section class="panel" style=${accent(f)}><h2><span class=${facClass(f)}>${f}</span> HQ decision <span class="sub">${x ? new Date(x.ts).toLocaleTimeString() : "no exchange yet"}</span></h2><div class="cfgbody">
-    ${sc && html`<div class="muted" title=${(sc.lastWakeTriggers ?? []).join("\n")}>Scheduler: next call ${sc.manual ? "pending (wake)" : sc.nextDueInSec > 0 ? "in " + sc.nextDueInSec + " s" : "due"}, interval ${dash(sc.intervalSec)} s (chosen ${dash(sc.chosenSec)} s${sc.chosenReason ? ": " + sc.chosenReason : ""}), budget stretch x${(sc.stretch ?? 1).toFixed(2)},
-      last wake ${sc.lastWakeReason ?? "-"}${sc.lastWakeTriggers?.length ? " (" + sc.lastWakeTriggers.join("; ") + ")" : ""}, last LLM call ${sc.lastLlmAgoSec === null || sc.lastLlmAgoSec === undefined ? "never" : sc.lastLlmAgoSec + " s ago"}, gated polls ${sc.gated ?? 0}${sc.failed ? ", last call FAILED (rule fallback)" : ""}</div>`}
-    ${!x ? html`<div class="empty">No exchange for this faction yet.</div>` : html`
-      <div class="hdr">${x.ok ? html`<span class=${"badge " + (x.orders.length || x.buy?.length || x.missions?.length ? "ok" : "warn")}>ok</span>` : html`<span class="badge bad">fallback: ${x.reason}</span>`}
+  return html`<section class="panel" style=${accent(f)}><h2><span class=${facClass(f)}>${f}</span> ${t("dec.title")} <span class="sub">${x ? new Date(x.ts).toLocaleTimeString() : t("dec.noExchangeShort")}</span></h2><div class="cfgbody">
+    ${sc && html`<div class="muted" title=${(sc.lastWakeTriggers ?? []).join("\n")}>${t("dec.sched", sc.manual ? t("dec.pendingWake") : sc.nextDueInSec > 0 ? t("wake.in", sc.nextDueInSec) : t("wake.due"), dash(sc.intervalSec), dash(sc.chosenSec), sc.chosenReason ? ": " + sc.chosenReason : "", (sc.stretch ?? 1).toFixed(2),
+      sc.lastWakeReason ?? "-", sc.lastWakeTriggers?.length ? " (" + sc.lastWakeTriggers.join("; ") + ")" : "", sc.lastLlmAgoSec === null || sc.lastLlmAgoSec === undefined ? t("time.never") : t("time.agoS", sc.lastLlmAgoSec), sc.gated ?? 0, sc.failed ? t("dec.failedSfx") : "")}</div>`}
+    ${!x ? html`<div class="empty">${t("dec.noExchange")}</div>` : html`
+      <div class="hdr">${x.ok ? html`<span class=${"badge " + (x.orders.length || x.buy?.length || x.missions?.length ? "ok" : "warn")}>${t("log.ok")}</span>` : html`<span class="badge bad">${t("log.fallback", x.reason)}</span>`}
         <span class="muted">${x.provider}${x.model ? " / " + x.model : ""}, ${x.latencyMs} ms${x.usage ? `, ${x.usage.input}/${x.usage.output} tok` : ""}${num(x.usage?.cost) ? `, $${x.usage.cost.toFixed(4)}` : ""}</span>
-        ${x.wake && html`<span class="badge info" title=${x.wake.triggers?.join("\n") ?? ""}>wake: ${x.wake.reason}</span>`}
-        ${x.nextCheck && html`<span class="muted">next check ${x.nextCheck.sec} s${x.nextCheck.reason ? ": " + x.nextCheck.reason : ""}</span>`}${x.keep ? html`<span class="badge info">keep</span>` : ""}</div>
-      <h3 class="cfgh">Orders applied (${x.orders.length})</h3>
-      ${x.orders.length ? html`<table><thead><tr><th>Squad</th><th>Command</th><th>Target</th><th>Reason</th></tr></thead><tbody>${x.orders.map((o, i) => html`<tr key=${i}><td><b>${o.squad}</b></td><td><span class=${"cmd " + o.command}>${o.command}</span></td>
-        <td class="mono">${o.target ?? gridTxt(Array.isArray(o.pos) ? [o.pos[0], 0, o.pos[1]] : null)}</td><td class="wrap muted">${dash(o.reason)}</td></tr>`)}</tbody></table>` : html`<div class="dim">none</div>`}
-      ${x.buy?.length ? html`<h3 class="cfgh">Buy (${x.buy.length})</h3><table><tbody>${x.buy.map((b, i) => html`<tr key=${i}><td><b>${b.count}x ${b.type}</b></td><td class="wrap muted">${dash(b.reason)}</td></tr>`)}</tbody></table>` : ""}
-      ${x.missions?.length ? html`<h3 class="cfgh">Mission offers</h3><table><tbody>${x.missions.flatMap((m) => m.offers.map((o, i) => html`<tr key=${m.squad + i}><td><b>${m.squad}</b></td><td>${o.kind}</td><td class="mono">${o.target ?? gridTxt(Array.isArray(o.pos) ? [o.pos[0], 0, o.pos[1]] : null)}</td><td class="wrap muted">${dash(o.brief)}</td></tr>`))}</tbody></table>` : ""}
-      ${x.dropped?.length ? html`<h3 class="cfgh">Dropped (${x.dropped.length})</h3><table><tbody>${x.dropped.map((d, i) => html`<tr key=${i}><td class="wrap mono">${dropLabel(d)}</td><td class="wrap"><span class="badge warn">${d.reason}</span></td></tr>`)}</tbody></table>` : ""}
-      ${x.request?.events?.length ? html`<details><summary class="muted">Events in this request (${x.request.events.length})</summary><pre>${x.request.events.join("\n")}</pre></details>` : ""}
-      <details><summary class="muted">Raw LLM reply</summary><pre>${x.rawReply != null ? x.rawReply : "(no raw reply: rules / fake / skipped)"}</pre></details>`}
-    ${e.orders?.length ? html`<div class="muted">Standing orders in the game: ${e.orders.length}</div>` : ""}
+        ${x.wake && html`<span class="badge info" title=${x.wake.triggers?.join("\n") ?? ""}>${t("log.wake", x.wake.reason)}</span>`}
+        ${x.nextCheck && html`<span class="muted">${t("dec.nextCheck", x.nextCheck.sec)}${x.nextCheck.reason ? ": " + x.nextCheck.reason : ""}</span>`}${x.keep ? html`<span class="badge info">${t("log.keep")}</span>` : ""}</div>
+      <h3 class="cfgh">${t("dec.applied", x.orders.length)}</h3>
+      ${x.orders.length ? html`<table><thead><tr><th>${t("col.squad")}</th><th>${t("col.command")}</th><th>${t("col.target")}</th><th>${t("col.reason")}</th></tr></thead><tbody>${x.orders.map((o, i) => html`<tr key=${i}><td><b>${o.squad}</b></td><td><span class=${"cmd " + o.command}>${o.command}</span></td>
+        <td class="mono">${o.target ?? gridTxt(Array.isArray(o.pos) ? [o.pos[0], 0, o.pos[1]] : null)}</td><td class="wrap muted">${dash(o.reason)}</td></tr>`)}</tbody></table>` : html`<div class="dim">${t("common.none")}</div>`}
+      ${x.buy?.length ? html`<h3 class="cfgh">${t("dec.buy", x.buy.length)}</h3><table><tbody>${x.buy.map((b, i) => html`<tr key=${i}><td><b>${b.count}x ${b.type}</b></td><td class="wrap muted">${dash(b.reason)}</td></tr>`)}</tbody></table>` : ""}
+      ${x.missions?.length ? html`<h3 class="cfgh">${t("dec.offers")}</h3><table><tbody>${x.missions.flatMap((m) => m.offers.map((o, i) => html`<tr key=${m.squad + i}><td><b>${m.squad}</b></td><td>${o.kind}</td><td class="mono">${o.target ?? gridTxt(Array.isArray(o.pos) ? [o.pos[0], 0, o.pos[1]] : null)}</td><td class="wrap muted">${dash(o.brief)}</td></tr>`))}</tbody></table>` : ""}
+      ${x.dropped?.length ? html`<h3 class="cfgh">${t("dec.dropped", x.dropped.length)}</h3><table><tbody>${x.dropped.map((d, i) => html`<tr key=${i}><td class="wrap mono">${dropLabel(d)}</td><td class="wrap"><span class="badge warn">${d.reason}</span></td></tr>`)}</tbody></table>` : ""}
+      ${x.request?.events?.length ? html`<details><summary class="muted">${t("dec.events", x.request.events.length)}</summary><pre>${x.request.events.join("\n")}</pre></details>` : ""}
+      <details><summary class="muted">${t("log.hRaw")}</summary><pre>${x.rawReply != null ? x.rawReply : t("dec.noRaw")}</pre></details>`}
+    ${e.orders?.length ? html`<div class="muted">${t("dec.standing", e.orders.length)}</div>` : ""}
   </div></section>`;
 }
 function HqView({ st, faction }) {
@@ -1081,13 +1081,13 @@ function MissionsView({ st, faction, rows, sel, onSel, layers, world, act }) {
   for (const f of Object.keys(st.factions ?? {})) if (faction === "all" || f === faction) for (const e of st.factions[f].eventLog ?? []) if (/mission/i.test(e.text)) evs.push({ ...e, faction: f });
   evs.sort((a, b) => b.ts - a.ts);
   const noHum = Object.keys(st.factions ?? {}).filter((f) => (faction === "all" || f === faction) && !rows.some((r) => r.human && r.faction === f));
-  const why = noHum.length ? ` HQ only offers missions to player-led squads; none in ${noHum.join(", ")}.` : "";
+  const why = noHum.length ? " " + t("mis.why", noHum.join(", ")) : "";
   const stBadge = (s) => (s === "accepted" ? "ok" : s === "offered" ? "warn" : s === "completed" ? "info" : "");
   // where an offer / mission points: objective id -> objective centre, else explicit [x, z], else (fallback) the squad
   const aim = (o, squadKey) => {
     const ob = o.target ? objById.get(o.target) : null;
     if (ob) return { pos: ob.pos, label: ob.id + (ob.name ? " " + ob.name : "") };
-    if (Array.isArray(o.pos) && num(o.pos[0]) && num(o.pos[1])) return { pos: [o.pos[0], o.pos[1]], label: "target" };
+    if (Array.isArray(o.pos) && num(o.pos[0]) && num(o.pos[1])) return { pos: [o.pos[0], o.pos[1]], label: t("mis.targetLabel") };
     const r = rows.find((x) => x.key === squadKey);
     return r && okPos(r.pos) ? { pos: [r.pos[0], r.pos[2]], label: r.id } : null;
   };
@@ -1096,27 +1096,27 @@ function MissionsView({ st, faction, rows, sel, onSel, layers, world, act }) {
   const tgt = (o) => o.target ?? gridTxt(Array.isArray(o.pos) ? [o.pos[0], 0, o.pos[1]] : null);
   return html`<main class="view">
     <div class="grid2">
-      <section class="panel"><h2>Human-led squads <span class="sub">${humans.length}, click a row to show it on the map</span></h2><div class="scroll"><table>
-        <thead><tr><th>Squad</th><th>Faction</th><th>Mission</th><th>Kind</th><th>Target</th><th>State</th></tr></thead><tbody>
+      <section class="panel"><h2>${t("mis.humans")} <span class="sub">${t("mis.humansSub", humans.length)}</span></h2><div class="scroll"><table>
+        <thead><tr><th>${t("col.squad")}</th><th>${t("col.faction")}</th><th>${t("col.mission")}</th><th>${t("col.kind")}</th><th>${t("col.target")}</th><th>${t("col.state")}</th></tr></thead><tbody>
         ${humans.map((r) => { const key = "h:" + r.key;
           return html`<tr key=${r.key} class=${"sqrow" + (focus?.key === key ? " sel" : "")} onClick=${() => go(key, aim(r.mission ?? {}, r.key), r.key)}><td style=${{ borderLeft: "3px solid " + colorOf(r.faction) }}><b>${r.id}</b></td><td class=${facClass(r.faction)}>${r.faction}</td>
-          <td>${r.mission ? html`<span class=${"badge " + stBadge(r.mission.state)}>${r.mission.state}</span>` : html`<span class="dim">none</span>`}</td><td>${dash(r.mission?.kind)}</td><td>${dash(r.mission?.target)}</td>
-          <td><span class=${"badge " + stateBadge(r.state)}>${r.state}</span></td></tr>`; })}</tbody></table>
-        ${!humans.length && html`<div class="empty">No human-led squads right now.</div>`}</div></section>
-      <section class="panel"><h2>Current offers <span class="sub">latest HQ reply, click to show the target</span></h2><div class="scroll"><table>
-        <thead><tr><th>Faction</th><th>Squad</th><th>Kind</th><th>Target</th><th>Brief</th></tr></thead><tbody>
+          <td>${r.mission ? html`<span class=${"badge " + stBadge(r.mission.state)}>${r.mission.state}</span>` : html`<span class="dim">${t("common.none")}</span>`}</td><td>${dash(r.mission?.kind)}</td><td>${dash(r.mission?.target)}</td>
+          <td><span class=${"badge " + stateBadge(r.state)}>${tk("state", r.state)}</span></td></tr>`; })}</tbody></table>
+        ${!humans.length && html`<div class="empty">${t("mis.noHumans")}</div>`}</div></section>
+      <section class="panel"><h2>${t("mis.offers")} <span class="sub">${t("mis.offersSub")}</span></h2><div class="scroll"><table>
+        <thead><tr><th>${t("col.faction")}</th><th>${t("col.squad")}</th><th>${t("col.kind")}</th><th>${t("col.target")}</th><th>${t("col.brief")}</th></tr></thead><tbody>
         ${offers.map((o, i) => { const key = "o:" + i; return html`<tr key=${i} class=${"sqrow" + (focus?.key === key ? " sel" : "")} onClick=${() => go(key, aim(o, o.faction + "/" + o.squad), o.faction + "/" + o.squad)}><td style=${{ borderLeft: "3px solid " + colorOf(o.faction) }} class=${facClass(o.faction)}>${o.faction}</td><td><b>${o.squad}</b></td><td>${o.kind}</td><td class="mono">${tgt(o)}</td><td class="wrap muted">${dash(o.brief)}</td></tr>`; })}</tbody></table>
-        ${!offers.length && html`<div class="empty">No LLM offers pending (without them the game plans offers itself).${why}</div>`}</div></section>
+        ${!offers.length && html`<div class="empty">${t("mis.noOffers")}${why}</div>`}</div></section>
     </div>
     <${MapPanel} st=${st} faction=${faction} rows=${rows} sel=${sel} onSel=${onSel} layers=${mapLayers} world=${world} act=${act} focus=${focus} compact=${true} />
     <div class="grid2" style=${{ marginTop: "12px" }}>
-      <section class="panel"><h2>Mission events <span class="sub">offered / accepted / completed / failed</span></h2><div class="scroll"><table><tbody>
+      <section class="panel"><h2>${t("mis.events")} <span class="sub">${t("mis.eventsSub")}</span></h2><div class="scroll"><table><tbody>
         ${evs.slice(0, 40).map((e, i) => html`<tr key=${i}><td class="mono muted">${new Date(e.ts).toLocaleTimeString()}</td><td class=${facClass(e.faction)}>${e.faction}</td><td class="wrap">${e.text}</td></tr>`)}</tbody></table>
-        ${!evs.length && html`<div class="empty">No mission events yet.${why}</div>`}</div></section>
-      <section class="panel"><h2>Offer history <span class="sub">from HQ replies this session, click to show the target</span></h2><div class="scroll"><table>
-        <thead><tr><th>Time</th><th>Faction</th><th>Squad</th><th>Kind</th><th>Target</th><th>Brief</th></tr></thead><tbody>
+        ${!evs.length && html`<div class="empty">${t("mis.noEvents")}${why}</div>`}</div></section>
+      <section class="panel"><h2>${t("mis.history")} <span class="sub">${t("mis.historySub")}</span></h2><div class="scroll"><table>
+        <thead><tr><th>${t("col.time")}</th><th>${t("col.faction")}</th><th>${t("col.squad")}</th><th>${t("col.kind")}</th><th>${t("col.target")}</th><th>${t("col.brief")}</th></tr></thead><tbody>
         ${hist.slice(0, 60).map((o, i) => { const key = "x:" + i; return html`<tr key=${i} class=${"sqrow" + (focus?.key === key ? " sel" : "")} onClick=${() => go(key, aim(o, o.faction + "/" + o.squad), null)}><td class="mono muted">${new Date(o.ts).toLocaleTimeString()}</td><td class=${facClass(o.faction)}>${o.faction}</td><td><b>${o.squad}</b></td><td>${o.kind}</td><td class="mono">${tgt(o)}</td><td class="wrap muted">${dash(o.brief)}</td></tr>`; })}</tbody></table>
-        ${!hist.length && html`<div class="empty">No offers yet.${why}</div>`}</div></section>
+        ${!hist.length && html`<div class="empty">${t("mis.noHistory")}${why}</div>`}</div></section>
     </div></main>`;
 }
 
@@ -1133,11 +1133,11 @@ function RequestsView({ st, faction }) {
   rows.sort((a, b) => b.at - a.at);
   const granted = rows.filter((r) => r.status === "granted").length;
   return html`<main class="view">
-    <section class="panel"><h2>Player requests <span class="sub">${rows.length} recent, ${granted} granted; chat /request, request terminal; HQ rules decide</span></h2><div class="scroll"><table>
-      <thead><tr><th>Time</th><th>Faction</th><th>Player</th><th>Role</th><th>Request</th><th>Status</th><th>Answer</th></tr></thead><tbody>
+    <section class="panel"><h2>${t("req.title")} <span class="sub">${t("req.sub", rows.length, granted)}</span></h2><div class="scroll"><table>
+      <thead><tr><th>${t("col.time")}</th><th>${t("col.faction")}</th><th>${t("col.player")}</th><th>${t("col.role")}</th><th>${t("col.request")}</th><th>${t("col.status")}</th><th>${t("col.answer")}</th></tr></thead><tbody>
       ${rows.map((r, i) => html`<tr key=${r.faction + r.id + i}><td class="mono muted">${r.at ? new Date(r.at).toLocaleTimeString() : "-"}</td><td class=${facClass(r.faction)}>${r.faction}</td><td><b>${dash(r.player)}</b></td><td>${dash(r.role)}</td>
         <td><b>${dash(r.kind)}</b> <span class="mono muted">${dash(r.args)}</span></td><td><span class=${"badge " + (r.status === "granted" ? "ok" : "bad")}>${dash(r.status)}</span></td><td class="wrap muted">${dash(r.reason)}</td></tr>`)}</tbody></table>
-      ${!rows.length && html`<div class="empty">No player requests yet (the war must run with the <code>requests</code> capability; try <code>/request</code> in game chat).</div>`}</div></section>
+      ${!rows.length && html`<div class="empty">${t("req.empty")}</div>`}</div></section>
   </main>`;
 }
 
@@ -1147,27 +1147,27 @@ function HqChatView({ st, faction }) {
   const all = Array.isArray(st.hq) ? st.hq : [];
   const rows = faction === "all" ? all : all.filter((h) => h.faction === faction);
   const cost = rows.reduce((a, h) => a + (h.usage?.cost ?? 0), 0);
-  const state = (h) => (h.state === "running" ? ["warn", "running"] : h.ok ? ["ok", "answered"] : ["bad", h.error?.startsWith("fallback") ? "fallback" : "failed"]);
+  const state = (h) => (h.state === "running" ? ["warn", t("chat.running")] : h.ok ? ["ok", t("chat.answered")] : ["bad", h.error?.startsWith("fallback") ? t("chat.fallback") : t("chat.failed")]);
   return html`<main class="view">
-    <section class="panel"><h2>HQ chat <span class="sub">${rows.length} message(s), ${usd4(cost)} total; players write /hq &lt;text&gt;; the agent queues requests, the game rules grant them</span></h2><div class="scroll"><table>
-      <thead><tr><th>Time</th><th>Faction</th><th>Player</th><th>Message</th><th>Tools</th><th>Actions</th><th>Reply</th><th>State</th><th>Cost</th><th>Latency</th></tr></thead><tbody>
+    <section class="panel"><h2>${t("chat.title")} <span class="sub">${t("chat.sub", rows.length, usd4(cost))}</span></h2><div class="scroll"><table>
+      <thead><tr><th>${t("col.time")}</th><th>${t("col.faction")}</th><th>${t("col.player")}</th><th>${t("col.message")}</th><th>${t("col.tools")}</th><th>${t("col.actions")}</th><th>${t("col.reply")}</th><th>${t("col.state")}</th><th>${t("col.cost")}</th><th>${t("col.latency")}</th></tr></thead><tbody>
       ${rows.flatMap((h, i) => {
         const [cls, label] = state(h), calls = (h.steps ?? []).flatMap((s) => s.toolCalls ?? []), key = h.faction + h.msg.id + h.ts;
         return [html`<tr key=${key} class=${"sqrow" + (open === key ? " sel" : "")} onClick=${() => setOpen(open === key ? null : key)}>
           <td class="mono muted">${new Date(h.ts).toLocaleTimeString()}</td><td class=${facClass(h.faction)}>${h.faction}</td>
           <td><b>${h.msg.player}</b> <span class="muted">${h.msg.role}${h.msg.grid ? ", " + h.msg.grid : ""}</span></td><td class="wrap">${h.msg.text}</td>
-          <td class="mono">${(h.steps ?? []).length} step(s), ${calls.length} call(s)</td>
+          <td class="mono">${t("chat.steps", (h.steps ?? []).length, calls.length)}</td>
           <td class="mono wrap">${(h.actions ?? []).map((a) => a.action + "(" + (a.args ?? []).map((x) => x.name + "=" + x.value).join(", ") + ")").join("; ") || "-"}</td>
           <td class="wrap">${dash(h.reply || h.error)}</td><td><span class=${"badge " + cls}>${label}</span></td>
           <td class="mono">${h.usage?.cost ? usd4(h.usage.cost) : "-"}</td><td class="mono">${h.latencyMs != null ? h.latencyMs + " ms" : "-"}</td></tr>`,
         open === key && html`<tr key=${key + "d"}><td colspan="10"><div class="cfgbody">
-          <div class="muted">${h.provider}${h.model ? " / " + h.model : ""}; ${(h.tools ?? []).length} tools offered; tokens in ${h.usage?.input ?? 0} / out ${h.usage?.output ?? 0}</div>
-          ${(h.steps ?? []).map((s) => html`<div key=${s.n} class="wrap"><b>Step ${s.n}</b> <span class="muted">${s.finishReason}</span>
+          <div class="muted">${h.provider}${h.model ? " / " + h.model : ""}; ${t("chat.detail", (h.tools ?? []).length, h.usage?.input ?? 0, h.usage?.output ?? 0)}</div>
+          ${(h.steps ?? []).map((s) => html`<div key=${s.n} class="wrap"><b>${t("chat.step", s.n)}</b> <span class="muted">${s.finishReason}</span>
             ${(s.toolCalls ?? []).map((c, j) => html`<div key=${j} class="mono wrap">&rarr; ${c.name}(${JSON.stringify(c.input)}) = ${JSON.stringify(c.output)}</div>`)}
             ${s.text && html`<div>${s.text}</div>`}</div>`)}
           ${h.error && html`<div class="wrap"><span class="badge bad">${h.error}</span></div>`}</div></td></tr>`];
       })}</tbody></table>
-      ${!rows.length && html`<div class="empty">No HQ chat messages yet (in game: <code>/hq I need a truck at the camp</code>, needs the LLM engine and the <code>requests</code> capability).</div>`}</div></section>
+      ${!rows.length && html`<div class="empty">${t("chat.empty")}</div>`}</div></section>
   </main>`;
 }
 
@@ -1178,33 +1178,33 @@ function DebugView({ st }) {
   const needle = q.trim().toLowerCase();
   const rows = (needle ? all.filter((d) => String(d.msg).toLowerCase().includes(needle)) : all).slice(0, 300);
   const clock = (sec) => { const s = Math.max(0, Math.round(sec)), p = (v) => String(v).padStart(2, "0"); return `${p(Math.floor(s / 3600))}:${p(Math.floor((s % 3600) / 60))}:${p(s % 60)}`; };
-  return html`<main class="view"><section class="panel"><h2>Debug log <span class="sub">game debug lines, newest first, ${rows.length} of ${all.length}</span></h2>
-    <div class="cfgbody"><label class="field"><span>Filter</span><input type="text" value=${q} placeholder="e.g. mission, spawn, captured" onInput=${(e) => setQ(e.target.value)} /></label></div>
+  return html`<main class="view"><section class="panel"><h2>${t("dbg.title")} <span class="sub">${t("dbg.sub", rows.length, all.length)}</span></h2>
+    <div class="cfgbody"><label class="field"><span>${t("dbg.filter")}</span><input type="text" value=${q} placeholder=${t("dbg.placeholder")} onInput=${(e) => setQ(e.target.value)} /></label></div>
     <div class="scroll"><table><tbody>
       ${rows.map((d, i) => html`<tr key=${i}><td class="mono muted">${new Date(d.ts).toLocaleTimeString()}</td><td class="mono muted">${clock(d.t)}</td><td class="wrap">${d.msg}</td></tr>`)}</tbody></table>
-      ${!rows.length && html`<div class="empty">${all.length ? "No line matches the filter." : "No debug lines yet. They arrive with the game's situation posts while a war runs."}</div>`}</div></section></main>`;
+      ${!rows.length && html`<div class="empty">${all.length ? t("dbg.noMatch") : t("dbg.none")}</div>`}</div></section></main>`;
 }
 
 // ---- action manifest (protocol v3): what each faction's game offers HQ in this war mode, read-only ----
 function ManifestTable({ title, rows }) {
   return html`<h3 class="cfgh">${title} <span class="muted">(${rows.length})</span></h3>
-    ${rows.length ? html`<div class="scroll"><table><thead><tr><th>Name</th><th>Reply key</th><th>Authority</th><th>Requires</th><th>Parameters</th><th>Description</th></tr></thead><tbody>
+    ${rows.length ? html`<div class="scroll"><table><thead><tr><th>${t("col.name")}</th><th>${t("man.replyKey")}</th><th>${t("man.authority")}</th><th>${t("man.requires")}</th><th>${t("man.params")}</th><th>${t("col.description")}</th></tr></thead><tbody>
       ${rows.map((e) => html`<tr key=${e.name}><td><b>${e.name}</b></td><td class="mono">${e.channel}</td><td>${e.authority}</td><td class="mono">${(e.requires ?? []).join(", ") || "-"}</td>
-        <td class="mono wrap">${(e.params ?? []).map((p) => p.name + (p.required ? "*" : "") + ":" + p.type).join(", ")}</td><td class="wrap muted">${e.desc}</td></tr>`)}</tbody></table></div>` : html`<div class="empty">none</div>`}`;
+        <td class="mono wrap">${(e.params ?? []).map((p) => p.name + (p.required ? "*" : "") + ":" + p.type).join(", ")}</td><td class="wrap muted">${e.desc}</td></tr>`)}</tbody></table></div>` : html`<div class="empty">${t("common.none")}</div>`}`;
 }
 function ActionsView({ st }) {
   const ms = st.manifests ?? { factions: {}, builtin: null };
   const names = Object.keys(ms.factions ?? {}).sort();
   return html`<main class="view">
-    ${names.map((n) => { const m = ms.factions[n]; return html`<section class="panel" key=${n}><h2>${n} <span class="sub">manifest ${m.hash}, mode ${m.mode || "?"}, received ${new Date(m.receivedAt).toLocaleTimeString()}</span></h2>
-      <div class="cfgbody"><div class="muted">Capabilities on: <b>${(m.capabilities ?? []).join(", ") || "none"}</b></div>
-      <${ManifestTable} title="Intents (strategic tick)" rows=${m.intents ?? []} /><${ManifestTable} title="Primitives (agent turns)" rows=${m.primitives ?? []} /></div></section>`; })}
-    ${!names.length && ms.builtin && html`<section class="panel"><h2>Built-in manifest <span class="sub">no game manifest received yet; the sidecar uses this one</span></h2><div class="cfgbody"><${ManifestTable} title="Intents" rows=${ms.builtin.intents ?? []} /></div></section>`}
+    ${names.map((n) => { const m = ms.factions[n]; return html`<section class="panel" key=${n}><h2>${n} <span class="sub">${t("man.sub", m.hash, m.mode || "?", new Date(m.receivedAt).toLocaleTimeString())}</span></h2>
+      <div class="cfgbody"><div class="muted">${t("man.caps")} <b>${(m.capabilities ?? []).join(", ") || t("common.none")}</b></div>
+      <${ManifestTable} title=${t("man.intents")} rows=${m.intents ?? []} /><${ManifestTable} title=${t("man.primitives")} rows=${m.primitives ?? []} /></div></section>`; })}
+    ${!names.length && ms.builtin && html`<section class="panel"><h2>${t("man.builtin")} <span class="sub">${t("man.builtinSub")}</span></h2><div class="cfgbody"><${ManifestTable} title=${t("man.intentsShort")} rows=${ms.builtin.intents ?? []} /></div></section>`}
   </main>`;
 }
 
 // ---- tabs ----
-const TABS = [["overview", "Overview"], ["map", "Map"], ["forces", "Forces"], ["hq", "HQ / LLM"], ["journal", "Journal"], ["missions", "Missions"], ["requests", "Requests"], ["hqchat", "HQ chat"], ["actions", "Actions"], ["debug", "Debug log"], ["usage", "Usage & Config"]];
+const TABS = [["overview", "tab.overview"], ["map", "tab.map"], ["forces", "tab.forces"], ["hq", "tab.hq"], ["journal", "tab.journal"], ["missions", "tab.missions"], ["requests", "tab.requests"], ["hqchat", "tab.hqchat"], ["actions", "tab.actions"], ["debug", "tab.debug"], ["usage", "tab.usage"]];
 const TAB_KEY = "clw.tab", INACT_KEY = "clw.showInactive";
 const tabOf = (s) => { const k = String(s ?? "").replace(/^#/, ""), t = k === "config" ? "usage" : k; return TABS.some(([id]) => id === t) ? t : null; };
 function loadTab() {
@@ -1234,24 +1234,24 @@ function MapCard({ toast }) {
     return () => clearInterval(t);
   }, [load]);
   const act = async (url, body, okMsg) => {
-    try { const { ok, j } = await postJson(url, body); toast(ok ? okMsg : "Failed: " + (j.error ?? "request failed"), ok ? "ok" : "err"); load(); }
-    catch (err) { toast("Error: " + err.message, "err"); }
+    try { const { ok, j } = await postJson(url, body); toast(ok ? okMsg : t("common.failed", j.error ?? t("err.request")), ok ? "ok" : "err"); load(); }
+    catch (err) { toast(t("err.generic", err.message), "err"); }
   };
   const m = w?.map ?? {}, v = w?.vector ?? {};
-  return html`<section class="panel" style=${{ marginTop: "12px" }}><h2>Map <span class="sub">background image and roads / places for the HQ map</span></h2>
+  return html`<section class="panel" style=${{ marginTop: "12px" }}><h2>${t("map.title")} <span class="sub">${t("mc.sub")}</span></h2>
     <div class="cfgbody">
-      <div class="muted">World <b>${w?.worldKey || "(game has not reported yet)"}</b>${w?.info?.mapPrefab ? " / " + w.info.mapPrefab : ""}</div>
-      <div>Image: <b>${m.status ?? "none"}</b>${m.source ? html` <span class="muted">${m.source}, ${m.width}x${m.height}</span>` : ""}${m.error ? html` <span class="muted">${m.error}</span>` : ""}</div>
-      <div>Roads: <b>${v.roads ?? "not received"}</b>, places: <b>${v.locations ?? "not received"}</b>, buildings: <b>${v.buildings ?? "not received"}</b></div>
-      ${v.roads == null || v.locations == null || v.buildings == null ? html`<div class="dim">Waiting for the game: it resends within about 60 s (the game must be running).</div>` : null}
-      <div class="muted">Detected game dir: ${w?.detectedGameDir || "none"}</div>
-      <label class="field"><span>Game dir (empty = auto-detect)</span><input type="text" value=${gameDir ?? ""} placeholder="e.g. E:/Games/steam/steamapps/common/Arma Reforger" onInput=${(e) => setGameDir(e.target.value)} /></label>
-      <label class="field"><span>Max image size (px)</span><input type="number" min="256" max="8192" value=${maxSize} onInput=${(e) => setMaxSize(e.target.value)} /></label>
+      <div class="muted">${t("mc.world")} <b>${w?.worldKey || t("mc.noWorld")}</b>${w?.info?.mapPrefab ? " / " + w.info.mapPrefab : ""}</div>
+      <div>${t("mc.image")} <b>${m.status ?? t("common.none")}</b>${m.source ? html` <span class="muted">${m.source}, ${m.width}x${m.height}</span>` : ""}${m.error ? html` <span class="muted">${m.error}</span>` : ""}</div>
+      <div>${t("mc.roads")} <b>${v.roads ?? t("mc.notReceived")}</b>, ${t("mc.places")} <b>${v.locations ?? t("mc.notReceived")}</b>, ${t("mc.buildings")} <b>${v.buildings ?? t("mc.notReceived")}</b></div>
+      ${v.roads == null || v.locations == null || v.buildings == null ? html`<div class="dim">${t("mc.waiting")}</div>` : null}
+      <div class="muted">${t("mc.detected", w?.detectedGameDir || t("common.none"))}</div>
+      <label class="field"><span>${t("mc.gameDir")}</span><input type="text" value=${gameDir ?? ""} placeholder=${t("mc.gameDirPh")} onInput=${(e) => setGameDir(e.target.value)} /></label>
+      <label class="field"><span>${t("mc.maxSize")}</span><input type="number" min="256" max="8192" value=${maxSize} onInput=${(e) => setMaxSize(e.target.value)} /></label>
       <div class="btns">
-        <button class="btn" type="button" onClick=${() => act("/api/config", { gameDir: gameDir ?? "", mapMaxSize: Number(maxSize) }, "Map settings saved")}><${Icon} n="save" /> Save</button>
-        <button class="btn ghost" type="button" onClick=${() => act("/api/map/reload", {}, "Re-resolving the map image")}><${Icon} n="reset" /> Re-resolve image</button>
-        <button class="btn ghost" type="button" onClick=${() => act("/api/vector/reset", {}, "Vector data cleared; the game resends within 60 s")}><${Icon} n="reset" /> Resend roads</button></div>
-      <small class="muted">The image is read at runtime from your own game install and is never committed. Modded terrains: put dev/tools/maps/NAME.png and NAME.json next to the sidecar.</small>
+        <button class="btn" type="button" onClick=${() => act("/api/config", { gameDir: gameDir ?? "", mapMaxSize: Number(maxSize) }, t("mc.saved"))}><${Icon} n="save" /> ${t("common.save")}</button>
+        <button class="btn ghost" type="button" onClick=${() => act("/api/map/reload", {}, t("mc.reresolving"))}><${Icon} n="reset" /> ${t("mc.reresolve")}</button>
+        <button class="btn ghost" type="button" onClick=${() => act("/api/vector/reset", {}, t("mc.vectorCleared"))}><${Icon} n="reset" /> ${t("mc.resend")}</button></div>
+      <small class="muted">${t("mc.note")}</small>
     </div></section>`;
 }
 function Config({ st, toast, refresh }) {
@@ -1264,10 +1264,10 @@ function Config({ st, toast, refresh }) {
       const c = await (await fetch("/api/config", { cache: "no-store" })).json();
       setF({ provider: c.provider, model: c.model, baseUrl: c.baseUrl, apiKey: "", timeoutSec: c.timeoutSec, maxTokens: c.maxTokens, enabled: !!c.enabled, engine: c.engine ?? "llm", minIntervalSec: c.minIntervalSec ?? 0, skipUnchanged: c.skipUnchanged !== false, stopAtLimit: c.stopAtLimit !== false, wakeup: { ...c.wakeup }, triggers: { ...c.triggers }, memory: { ...c.memory } });
       setKeyMeta({ set: c.apiKeySet, last4: c.apiKeyLast4 });
-    } catch (e) { toast("Could not load config: " + e.message, "err"); }
+    } catch (e) { toast(t("cfg.loadFail", e.message), "err"); }
   }, []);
   useEffect(() => { load(); }, [load]);
-  if (!f) return html`<main><div class="empty">Loading...</div></main>`;
+  if (!f) return html`<main><div class="empty">${t("common.loading")}</div></main>`;
   const set = (k, v) => setF((o) => ({ ...o, [k]: v }));
   const setG = (g, k, v) => setF((o) => ({ ...o, [g]: { ...o[g], [k]: v } }));
   const numG = (g) => Object.fromEntries(Object.entries(f[g]).map(([k, v]) => [k, typeof v === "boolean" ? v : Number(v)]));
@@ -1283,65 +1283,65 @@ function Config({ st, toast, refresh }) {
     e.preventDefault(); setBusy(true);
     try {
       const { ok, j } = await postJson("/api/config", body());
-      if (!ok) toast("Not saved: " + (j.error ?? "request failed"), "err");
-      else { toast(j.saved ? "Settings saved" : "Applied, but sidecar-config.json could not be written", j.saved ? "ok" : "err"); await load(); refresh(); }
-    } catch (err) { toast("Error: " + err.message, "err"); }
+      if (!ok) toast(t("cfg.notSaved", j.error ?? t("err.request")), "err");
+      else { toast(j.saved ? t("cfg.saved") : t("cfg.appliedNoFile"), j.saved ? "ok" : "err"); await load(); refresh(); }
+    } catch (err) { toast(t("err.generic", err.message), "err"); }
     setBusy(false);
   };
   const doTest = async () => {
     setBusy(true); setTest({ pending: true });
     try {
       const { ok, j } = await postJson("/api/test", body());
-      setTest(ok ? j : { ok: false, error: j.error ?? "request failed" });
-      toast(ok && j.ok ? `Connection OK (${j.latencyMs} ms)` : "Test failed: " + (ok ? j.error : j.error), ok && j.ok ? "ok" : "err");
-    } catch (err) { setTest({ ok: false, error: err.message }); toast("Error: " + err.message, "err"); }
+      setTest(ok ? j : { ok: false, error: j.error ?? t("err.request") });
+      toast(ok && j.ok ? t("cfg.connOk", j.latencyMs) : t("cfg.testFailed", j.error), ok && j.ok ? "ok" : "err");
+    } catch (err) { setTest({ ok: false, error: err.message }); toast(t("err.generic", err.message), "err"); }
     setBusy(false);
   };
-  return html`<main class="view"><div class="cfgwrap">${st.usage?.enabled && html`<${UsageCard} u=${st.usage} now=${st.now} toast=${toast} refresh=${refresh} />`}<section class="panel" style=${{ marginTop: "12px" }}><h2>Configuration <span class="sub">saved to dev/tools/sidecar-config.json</span></h2>
+  return html`<main class="view"><div class="cfgwrap">${st.usage?.enabled && html`<${UsageCard} u=${st.usage} now=${st.now} toast=${toast} refresh=${refresh} />`}<section class="panel" style=${{ marginTop: "12px" }}><h2>${t("cfg.title")} <span class="sub">${t("cfg.sub")}</span></h2>
     <form class="cfgbody" onSubmit=${save} autocomplete="off">
-      <label class="field"><span>Provider</span><select value=${f.provider} onChange=${(e) => set("provider", e.target.value)}>
-        <option value="fake">fake (rule-based stub, no network)</option>
+      <label class="field"><span>${t("cfg.provider")}</span><select value=${f.provider} onChange=${(e) => set("provider", e.target.value)}>
+        <option value="fake">${t("cfg.opt.fake")}</option>
         <option value="anthropic">anthropic</option>
-        <option value="openai-compatible">openai-compatible (Ollama, LM Studio, ...)</option>
-        <option value="openrouter">openrouter (with usage / budget monitoring)</option></select></label>
-      <label class="field"><span>HQ engine</span><select value=${f.engine} onChange=${(e) => set("engine", e.target.value)}>
-        <option value="llm">llm (LLM provider decides)</option>
-        <option value="rules">rules (game rule commander, no LLM calls)</option>
-        <option value="model" disabled>model (soon)</option></select>
-        <small>Main switch. rules: the sidecar answers with no orders so the game's own rule commander drives; the HQ scheduler is idle. model: a future trained decision model.</small></label>
-      <label class="field"><span>Model</span><input type="text" value=${f.model} onInput=${(e) => set("model", e.target.value)} /></label>
-      <label class="field"><span>Base URL</span><input type="text" value=${f.baseUrl} placeholder=${f.provider === "openrouter" ? "optional, default https://openrouter.ai/api/v1" : "e.g. http://127.0.0.1:11434/v1  (openai-compatible; /chat/completions is appended)"} onInput=${(e) => set("baseUrl", e.target.value)} /></label>
-      <label class="field"><span>API key</span><input type="password" autocomplete="new-password" value=${f.apiKey} placeholder=${keyMeta.set ? `stored key ending ...${keyMeta.last4} (leave empty to keep)` : "not set"} onInput=${(e) => set("apiKey", e.target.value)} />
-        <small>Write-only: the sidecar never sends the key back.</small></label>
+        <option value="openai-compatible">${t("cfg.opt.openai")}</option>
+        <option value="openrouter">${t("cfg.opt.openrouter")}</option></select></label>
+      <label class="field"><span>${t("hq.engineLabel")}</span><select value=${f.engine} onChange=${(e) => set("engine", e.target.value)}>
+        <option value="llm">${t("cfg.opt.llm")}</option>
+        <option value="rules">${t("cfg.opt.rules")}</option>
+        <option value="model" disabled>${t("hq.modelSoon")}</option></select>
+        <small>${t("cfg.engineHelp")}</small></label>
+      <label class="field"><span>${t("cfg.model")}</span><input type="text" value=${f.model} onInput=${(e) => set("model", e.target.value)} /></label>
+      <label class="field"><span>${t("cfg.baseUrl")}</span><input type="text" value=${f.baseUrl} placeholder=${f.provider === "openrouter" ? t("cfg.baseUrlPhOr") : t("cfg.baseUrlPhOai")} onInput=${(e) => set("baseUrl", e.target.value)} /></label>
+      <label class="field"><span>${t("cfg.apiKey")}</span><input type="password" autocomplete="new-password" value=${f.apiKey} placeholder=${keyMeta.set ? t("cfg.keyStored", keyMeta.last4) : t("cfg.keyNotSet")} onInput=${(e) => set("apiKey", e.target.value)} />
+        <small>${t("cfg.keyNote")}</small></label>
       <div class="pair">
-        <label class="field"><span>Timeout (s)</span><input type="number" min="1" max="300" value=${f.timeoutSec} onInput=${(e) => set("timeoutSec", e.target.value)} /></label>
-        <label class="field"><span>Max tokens</span><input type="number" min="16" max="32000" value=${f.maxTokens} onInput=${(e) => set("maxTokens", e.target.value)} /></label></div>
+        <label class="field"><span>${t("cfg.timeout")}</span><input type="number" min="1" max="300" value=${f.timeoutSec} onInput=${(e) => set("timeoutSec", e.target.value)} /></label>
+        <label class="field"><span>${t("cfg.maxTokens")}</span><input type="number" min="16" max="32000" value=${f.maxTokens} onInput=${(e) => set("maxTokens", e.target.value)} /></label></div>
       <div class="pair">
-        <label class="field"><span>Min interval per faction (s, 0 = every request)</span><input type="number" min="0" max="600" value=${f.minIntervalSec} onInput=${(e) => set("minIntervalSec", e.target.value)} /></label>
-        <label class="switch"><input type="checkbox" checked=${f.skipUnchanged} onChange=${(e) => set("skipUnchanged", e.target.checked)} /><span>Skip unchanged situations</span></label></div>
-      <small class="muted">Batch APIs (24 h latency) don't fit a live war, so we cut call frequency instead. Skipped requests answer "keep current orders". The min interval is the hard floor between any two LLM calls (also for wakeups and triggers); unchanged situations are skipped at scheduled wakeups.</small>
-      <h3 class="cfgh">Wakeup</h3>
-      ${gsw("wakeup", "dynamic", "Let the LLM choose its next wakeup (next_check_sec)")}
-      <div class="pair">${gnum("wakeup", "defaultSec", "Default interval (s)", 5, 3600)}${gnum("wakeup", "minSec", "Shortest interval (s)", 5, 3600)}</div>
-      <div class="pair">${gnum("wakeup", "maxSec", "Longest interval (s)", 5, 7200)}${gsw("wakeup", "budgetStretch", "Stretch intervals when the budget pace overshoots")}</div>
-      <small class="muted">The game polls every 10 s; the HQ is only consulted at the scheduled time or when a trigger fires. With dynamic off the interval is always the default. Budget stretch multiplies the interval by projected/limit (max x3) when the OpenRouter pace estimate projects overshooting the key limit.</small>
-      <h3 class="cfgh">Triggers</h3>
-      ${gsw("triggers", "enabled", "Wake the HQ early on events")}
-      <div class="pair">${gsw("triggers", "newContact", "New contact (more than 150 m from every known one)")}${gsw("triggers", "squadLost", "Squad lost (0 alive or gone)")}</div>
-      <div class="pair">${gsw("triggers", "objectiveReached", "Objective reached (within 50 m, or squad idle)")}${gsw("triggers", "squadChange", "Squad appeared / player-led changed")}</div>
-      <div class="pair">${gnum("triggers", "contactNearSquadM", "Contact near a squad (m, 0 = off)", 0, 5000)}${gnum("triggers", "casualties", "Casualties since last call (agents, 0 = off)", 0, 1000)}</div>
-      <div class="pair">${gnum("triggers", "strengthDropPct", "Squad strength drop (% of start, 0 = off)", 0, 100)}${gnum("triggers", "cooldownSec", "Cooldown between trigger calls (s)", 0, 600)}</div>
-      <div class="pair">${gsw("triggers", "objectiveChanged", "Objective changed owner (v2)")}${gsw("triggers", "unitSpawned", "New unit spawned (v2)")}</div>
-      <div class="pair">${gsw("triggers", "missionEvent", "Mission offered / accepted / done (v2)")}${gnum("triggers", "ticketsDropPct", "Own tickets dropped since last call (%, 0 = off, v2)", 0, 100)}</div>
-      <small class="muted">Compared with the situation at the last LLM call. Triggered calls also respect the min interval above. Use "wake now" in the status strip to force a call.</small>
+        <label class="field"><span>${t("cfg.minInterval")}</span><input type="number" min="0" max="600" value=${f.minIntervalSec} onInput=${(e) => set("minIntervalSec", e.target.value)} /></label>
+        <label class="switch"><input type="checkbox" checked=${f.skipUnchanged} onChange=${(e) => set("skipUnchanged", e.target.checked)} /><span>${t("cfg.skipUnchanged")}</span></label></div>
+      <small class="muted">${t("cfg.batchNote")}</small>
+      <h3 class="cfgh">${t("cfg.wakeup")}</h3>
+      ${gsw("wakeup", "dynamic", t("cfg.w.dynamic"))}
+      <div class="pair">${gnum("wakeup", "defaultSec", t("cfg.w.default"), 5, 3600)}${gnum("wakeup", "minSec", t("cfg.w.min"), 5, 3600)}</div>
+      <div class="pair">${gnum("wakeup", "maxSec", t("cfg.w.max"), 5, 7200)}${gsw("wakeup", "budgetStretch", t("cfg.w.stretch"))}</div>
+      <small class="muted">${t("cfg.wakeNote")}</small>
+      <h3 class="cfgh">${t("cfg.triggers")}</h3>
+      ${gsw("triggers", "enabled", t("cfg.tr.enabled"))}
+      <div class="pair">${gsw("triggers", "newContact", t("cfg.tr.newContact"))}${gsw("triggers", "squadLost", t("cfg.tr.squadLost"))}</div>
+      <div class="pair">${gsw("triggers", "objectiveReached", t("cfg.tr.objectiveReached"))}${gsw("triggers", "squadChange", t("cfg.tr.squadChange"))}</div>
+      <div class="pair">${gnum("triggers", "contactNearSquadM", t("cfg.tr.contactNear"), 0, 5000)}${gnum("triggers", "casualties", t("cfg.tr.casualties"), 0, 1000)}</div>
+      <div class="pair">${gnum("triggers", "strengthDropPct", t("cfg.tr.strengthDrop"), 0, 100)}${gnum("triggers", "cooldownSec", t("cfg.tr.cooldown"), 0, 600)}</div>
+      <div class="pair">${gsw("triggers", "objectiveChanged", t("cfg.tr.objectiveChanged"))}${gsw("triggers", "unitSpawned", t("cfg.tr.unitSpawned"))}</div>
+      <div class="pair">${gsw("triggers", "missionEvent", t("cfg.tr.missionEvent"))}${gnum("triggers", "ticketsDropPct", t("cfg.tr.ticketsDrop"), 0, 100)}</div>
+      <small class="muted">${t("cfg.trNote")}</small>
       <${MemorySettings} f=${f} setG=${setG} />
       ${f.provider === "openrouter" && html`<label class="switch"><input type="checkbox" checked=${f.stopAtLimit} onChange=${(e) => set("stopAtLimit", e.target.checked)} />
-        <span>Stop provider calls at the key's spending limit <span class="muted">(the game then runs on its rule commander; LLM resumes automatically when budget is available again)</span></span></label>`}
+        <span>${t("cfg.stopAtLimit")} <span class="muted">${t("cfg.stopAtLimitNote")}</span></span></label>`}
       <label class="switch"><input type="checkbox" checked=${f.enabled} onChange=${(e) => set("enabled", e.target.checked)} />
-        <span>Enabled <span class="muted">(off: no LLM calls, the game runs on its rule commander; the HQ engine selector above is the main switch)</span></span></label>
-      <div class="btns"><button class="btn" type="submit" disabled=${busy}><${Icon} n="save" /> Save</button>
-        <button class="btn ghost" type="button" disabled=${busy} onClick=${doTest}><${Icon} n="plug" /> Test connection</button></div>
-      ${test && html`<pre>${test.pending ? "testing with the form values (nothing is saved)..." : J(test)}</pre>`}
+        <span>${t("cfg.enabled")} <span class="muted">${t("cfg.enabledNote")}</span></span></label>
+      <div class="btns"><button class="btn" type="submit" disabled=${busy}><${Icon} n="save" /> ${t("common.save")}</button>
+        <button class="btn ghost" type="button" disabled=${busy} onClick=${doTest}><${Icon} n="plug" /> ${t("cfg.test")}</button></div>
+      ${test && html`<pre>${test.pending ? t("cfg.testing") : J(test)}</pre>`}
     </form></section>
     <${MapCard} toast=${toast} />
     </div></main>`;
@@ -1350,15 +1350,15 @@ function Config({ st, toast, refresh }) {
 // ---------- OpenRouter usage card ----------
 const usd = (v) => (num(v) ? "$" + (Math.abs(v) < 10 ? v.toFixed(2) : v.toFixed(1)) : "-");
 const usd4 = (v) => (num(v) ? "$" + v.toFixed(4) : "-");
-const PERIOD = { daily: ["usage_daily", "Today"], weekly: ["usage_weekly", "This week"], monthly: ["usage_monthly", "This month"] };
+const PERIOD = { daily: ["usage_daily", "use.today"], weekly: ["usage_weekly", "use.thisWeek"], monthly: ["usage_monthly", "use.thisMonth"] };
 function UsageCard({ u, now, toast, refresh }) {
   const [busy, setBusy] = useState(false);
   if (!u?.enabled) return null;
   const k = u.key, d = k?.data, s = u.session ?? {}, b = u.budget;
   const doRefresh = async () => {
     setBusy(true);
-    try { const { ok, j } = await postJson("/api/usage/refresh", {}); toast(ok && j.ok ? "Usage refreshed" : "Refresh failed: " + (j.usage?.key?.error ?? j.error ?? "request failed"), ok && j.ok ? "ok" : "err"); refresh(); }
-    catch (err) { toast("Error: " + err.message, "err"); }
+    try { const { ok, j } = await postJson("/api/usage/refresh", {}); toast(ok && j.ok ? t("use.refreshed") : t("use.refreshFailed", j.usage?.key?.error ?? j.error ?? t("err.request")), ok && j.ok ? "ok" : "err"); refresh(); }
+    catch (err) { toast(t("err.generic", err.message), "err"); }
     setBusy(false);
   };
   // bar: period usage vs limit, or all-time usage vs limit
@@ -1366,46 +1366,46 @@ function UsageCard({ u, now, toast, refresh }) {
   if (d && num(d.limit) && d.limit > 0) {
     const per = PERIOD[d.limit_reset], used = per ? d[per[0]] : d.usage;
     const est = (used ?? 0) + (k.costSincePoll ?? 0), pct = Math.min(100, (100 * est) / d.limit);
-    bar = { pct, label: `${per ? per[1] : "Total"} ${usd(est)} / ${usd(d.limit)} (${per ? "resets " + d.limit_reset : "no reset"})` };
+    bar = { pct, label: `${per ? t(per[1]) : t("use.total")} ${usd(est)} / ${usd(d.limit)} (${per ? t("use.resets", tk("use.reset", d.limit_reset)) : t("use.noReset")})` };
   } else if (d) {
-    numbers = [["Today", d.usage_daily], ["Week", d.usage_weekly], ["Month", d.usage_monthly], ["Total", d.usage]];
+    numbers = [[t("use.today"), d.usage_daily], [t("use.week"), d.usage_weekly], [t("use.month"), d.usage_monthly], [t("use.total"), d.usage]];
   }
   const pc = u.pace, dur = (ms) => { const m = Math.max(0, Math.round(ms / 60000)), dd = Math.floor(m / 1440), hh = Math.floor((m % 1440) / 60); return dd ? `${dd}d ${hh}h` : hh ? `${hh}h ${m % 60}m` : `${m}m`; };
   let chip = null, mark = null;
   if (pc?.kind === "period" && d) {
     mark = Math.min(100, (100 * pc.expected) / d.limit);
-    const rs = ` · resets in ${dur(pc.resetsInMs)}`;
-    if (pc.projected === null) chip = { cls: "", txt: "not enough data yet" + rs };
+    const rs = ` · ${t("use.resetsIn", dur(pc.resetsInMs))}`;
+    if (pc.projected === null) chip = { cls: "", txt: t("use.noData") + rs };
     else {
       const r = pc.projected / d.limit, cls = r > 1 ? "bad" : r >= 0.9 ? "warn" : "ok";
-      chip = { cls, txt: pc.delta > 0 ? `▲ +${usd(pc.delta)} over by reset (proj. ${usd(pc.projected)} of ${usd(d.limit)})${rs}` : `▼ ${usd(-pc.delta)} under (proj. ${usd(pc.projected)} of ${usd(d.limit)})${rs}` };
+      chip = { cls, txt: pc.delta > 0 ? t("use.over", usd(pc.delta), usd(pc.projected), usd(d.limit), rs) : t("use.under", usd(-pc.delta), usd(pc.projected), usd(d.limit), rs) };
     }
   } else if (pc?.kind === "rate") {
-    chip = { cls: "", txt: pc.ratePerHour === null ? "not enough data yet" : `${usd(pc.ratePerHour)}/h${pc.hoursToLimit ? `, limit reached in ~${pc.hoursToLimit < 10 ? pc.hoursToLimit.toFixed(1) : Math.round(pc.hoursToLimit)} h` : ""}` };
+    chip = { cls: "", txt: pc.ratePerHour === null ? t("use.noData") : `${usd(pc.ratePerHour)}/h${pc.hoursToLimit ? ", " + t("use.limitIn", pc.hoursToLimit < 10 ? pc.hoursToLimit.toFixed(1) : Math.round(pc.hoursToLimit)) : ""}` };
   }
   const col = !bar ? "" : bar.pct >= 95 ? "var(--bad)" : bar.pct >= 80 ? "var(--warn)" : "var(--ok)";
   const models = Object.entries(s.byModel ?? {}).sort((a, c) => c[1].cost - a[1].cost);
   const facs = Object.entries(s.byFaction ?? {}).sort((a, c) => c[1].cost - a[1].cost);
-  const polled = k?.ts ? `${Math.round(((now ?? Date.now()) - k.ts) / 1000)} s ago` : "never";
-  return html`<section class="panel"><h2>Usage <span class="sub">OpenRouter${d?.label ? " key " + d.label : ""}</span></h2>
+  const polled = k?.ts ? t("time.agoS", Math.round(((now ?? Date.now()) - k.ts) / 1000)) : t("time.never");
+  return html`<section class="panel"><h2>${t("use.title")} <span class="sub">OpenRouter${d?.label ? " " + t("use.key", d.label) : ""}</span></h2>
     <div class="cfgbody">
       ${b && b.level !== "ok" && html`<div class=${"banner " + (b.level === "warn" ? "warn" : "bad")}>${b.level === "reached"
-        ? `Spending limit reached (${usd(b.limit)}).${u.stopAtLimit ? " Provider calls are stopped; the game uses its rule commander until budget is available again." : ""}`
-        : `${b.pct.toFixed(0)}% of the key's spending limit used (${usd(b.remaining)} left).${b.pace?.delta > 0 ? ` At this pace you will overshoot by ${usd(b.pace.delta)} by reset.` : ""}`}</div>`}
-      ${k?.error && html`<div class="banner bad">Budget poll failed: ${k.error}</div>`}
-      ${!k?.keySet && html`<div class="muted">No API key stored: budget polling is off.</div>`}
+        ? t("use.reached", usd(b.limit)) + (u.stopAtLimit ? " " + t("use.stopped") : "")
+        : t("use.pctUsed", b.pct.toFixed(0), usd(b.remaining)) + (b.pace?.delta > 0 ? " " + t("use.overshoot", usd(b.pace.delta)) : "")}</div>`}
+      ${k?.error && html`<div class="banner bad">${t("use.pollFailed", k.error)}</div>`}
+      ${!k?.keySet && html`<div class="muted">${t("use.noKey")}</div>`}
       ${!bar && chip && html`<div class=${"upace " + chip.cls}>${chip.txt}</div>`}
-      ${bar && html`<div><div class="ubar"><i style=${{ width: bar.pct + "%", background: col }}></i>${mark !== null && html`<span class="umark" style=${{ left: mark + "%" }} title="on pace marker"></span>`}</div><div class="ulabel">${bar.label}${chip && html` <span class=${"upace " + chip.cls}>${chip.txt}</span>`}${num(d.limit_remaining) ? html` <span class="muted">, ${usd(d.limit_remaining - (k.costSincePoll ?? 0))} left</span>` : ""}</div></div>`}
-      ${numbers && html`<div><div class="unums">${numbers.map(([l, v]) => html`<div><span class="muted">${l}</span><b>${usd(v)}</b></div>`)}</div><div class="muted">no spending limit set</div></div>`}
+      ${bar && html`<div><div class="ubar"><i style=${{ width: bar.pct + "%", background: col }}></i>${mark !== null && html`<span class="umark" style=${{ left: mark + "%" }} title=${t("use.paceMarker")}></span>`}</div><div class="ulabel">${bar.label}${chip && html` <span class=${"upace " + chip.cls}>${chip.txt}</span>`}${num(d.limit_remaining) ? html` <span class="muted">, ${t("use.left", usd(d.limit_remaining - (k.costSincePoll ?? 0)))}</span>` : ""}</div></div>`}
+      ${numbers && html`<div><div class="unums">${numbers.map(([l, v]) => html`<div><span class="muted">${l}</span><b>${usd(v)}</b></div>`)}</div><div class="muted">${t("use.noLimit")}</div></div>`}
       <div class="unums">
-        <div><span class="muted">Session cost</span><b>${usd4(s.cost)}</b></div>
-        <div><span class="muted">Requests</span><b>${s.requests ?? 0}</b></div>
-        <div><span class="muted">Tokens in / out</span><b>${s.tokensIn ?? 0} / ${s.tokensOut ?? 0}</b></div></div>
-      ${models.length > 0 && html`<table><thead><tr><th>Model</th><th>Requests</th><th>Cost</th></tr></thead><tbody>${models.map(([m, e]) => html`<tr><td>${m}</td><td>${e.requests}</td><td class="mono">${usd4(e.cost)}</td></tr>`)}</tbody></table>`}
-      ${facs.length > 0 && html`<table><thead><tr><th>Faction (unit)</th><th>Requests</th><th>Cost</th></tr></thead><tbody>${facs.map(([m, e]) => html`<tr><td>${m}</td><td>${e.requests}</td><td class="mono">${usd4(e.cost)}</td></tr>`)}</tbody></table>`}
-      <div class="btns"><button class="btn ghost" type="button" disabled=${busy || !k?.keySet} onClick=${doRefresh}><${Icon} n="reset" /> Refresh</button>
-        <span class="muted" style=${{ alignSelf: "center" }}>last poll ${polled}; session figures reset when the sidecar restarts</span></div>
-      <small class="muted">Use a dedicated OpenRouter key with a hard spending limit.</small>
+        <div><span class="muted">${t("use.sessionCost")}</span><b>${usd4(s.cost)}</b></div>
+        <div><span class="muted">${t("strip.requestsCap")}</span><b>${s.requests ?? 0}</b></div>
+        <div><span class="muted">${t("use.tokensInOut")}</span><b>${s.tokensIn ?? 0} / ${s.tokensOut ?? 0}</b></div></div>
+      ${models.length > 0 && html`<table><thead><tr><th>${t("cfg.model")}</th><th>${t("strip.requestsCap")}</th><th>${t("col.cost")}</th></tr></thead><tbody>${models.map(([m, e]) => html`<tr><td>${m}</td><td>${e.requests}</td><td class="mono">${usd4(e.cost)}</td></tr>`)}</tbody></table>`}
+      ${facs.length > 0 && html`<table><thead><tr><th>${t("use.factionUnit")}</th><th>${t("strip.requestsCap")}</th><th>${t("col.cost")}</th></tr></thead><tbody>${facs.map(([m, e]) => html`<tr><td>${m}</td><td>${e.requests}</td><td class="mono">${usd4(e.cost)}</td></tr>`)}</tbody></table>`}
+      <div class="btns"><button class="btn ghost" type="button" disabled=${busy || !k?.keySet} onClick=${doRefresh}><${Icon} n="reset" /> ${t("use.refresh")}</button>
+        <span class="muted" style=${{ alignSelf: "center" }}>${t("use.lastPoll", polled)}</span></div>
+      <small class="muted">${t("use.keyAdvice")}</small>
     </div></section>`;
 }
 
@@ -1420,6 +1420,8 @@ function App() {
   const [layers, setLayers] = useState(loadLayers);
   const [toasts, toast] = useToasts();
   const world = useWorld();
+  const [, bumpLang] = useState(0); // re-render everything when the dashboard language changes
+  useEffect(() => onLang(() => bumpLang((n) => n + 1)), []);
   useEffect(() => { const h = () => { const t = tabOf(location.hash); if (t) setTab(t); }; window.addEventListener("hashchange", h); return () => window.removeEventListener("hashchange", h); }, []);
   useEffect(() => { try { localStorage.setItem(TAB_KEY, tab); } catch { /* storage unavailable */ } }, [tab]);
   useEffect(() => { try { localStorage.setItem(INACT_KEY, showInactive ? "1" : "0"); } catch { /* storage unavailable */ } }, [showInactive]);
@@ -1432,8 +1434,9 @@ function App() {
   return html`<div>
     <header class="topbar">
       <div class="brand"><span class="logo"><${Icon} n="logo" /></span>Clausewitz HQ</div>
-      <nav>${TABS.map(([id, label]) => html`<a key=${id} href=${"#" + id} class=${tab === id ? "active" : ""} onClick=${go(id)}>${label}</a>`)}</nav>
+      <nav>${TABS.map(([id, label]) => html`<a key=${id} href=${"#" + id} class=${tab === id ? "active" : ""} onClick=${go(id)}>${t(label)}</a>`)}</nav>
       <${Strip} st=${st} toast=${toast} refresh=${refresh} />
+      <select class="langsel" value=${getLang()} onChange=${(e) => setLang(e.target.value)} title=${t("lang.title")} aria-label=${t("lang.title")}>${LANGS.map((l) => html`<option key=${l} value=${l}>${l.toUpperCase()}</option>`)}</select>
     </header>
     ${tab !== "usage" && tab !== "debug" && tab !== "actions" && html`<div class="subwrap"><${FactionBar} names=${names} faction=${fac} setFaction=${setFaction} hidden=${st.hidden ?? []} showInactive=${showInactive} setShowInactive=${setShowInactive} /></div>`}
     ${tab === "overview" && html`<${Overview} ...${common} />`}
