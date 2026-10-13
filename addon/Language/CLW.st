@@ -1160,6 +1160,38 @@ StringTable {
    Target_en_us "Scales the supplies income."
    Target_de_de "Skaliert das Nachschubeinkommen."
   }
+  CustomStringTableItem CLW-Param_mapMe {
+   Target_en_us "Show me"
+   Target_de_de "Mich anzeigen"
+  }
+  CustomStringTableItem CLW-Param_mapMe_Desc {
+   Target_en_us "Your own position and heading on the map."
+   Target_de_de "Deine eigene Position und Blickrichtung auf der Karte."
+  }
+  CustomStringTableItem CLW-Param_mapSquadmates {
+   Target_en_us "Show squad members"
+   Target_de_de "Gruppenmitglieder anzeigen"
+  }
+  CustomStringTableItem CLW-Param_mapSquadmates_Desc {
+   Target_en_us "Every member of your own group, AI and players."
+   Target_de_de "Jedes Mitglied deiner eigenen Gruppe, KI und Spieler."
+  }
+  CustomStringTableItem CLW-Param_mapSquads {
+   Target_en_us "Show friendly squads"
+   Target_de_de "Befreundete Trupps anzeigen"
+  }
+  CustomStringTableItem CLW-Param_mapSquads_Desc {
+   Target_en_us "One symbol per friendly group at its leader."
+   Target_de_de "Ein Symbol je befreundeter Gruppe an ihrem Anführer."
+  }
+  CustomStringTableItem CLW-Param_mapVehicles {
+   Target_en_us "Show friendly vehicles"
+   Target_de_de "Befreundete Fahrzeuge anzeigen"
+  }
+  CustomStringTableItem CLW-Param_mapVehicles_Desc {
+   Target_en_us "Crewed or claimed friendly vehicles, symbol by type."
+   Target_de_de "Besetzte oder zugeteilte befreundete Fahrzeuge, Symbol nach Typ."
+  }
   CustomStringTableItem CLW-Param_randomSeed {
    Target_en_us "Random seed"
    Target_de_de "Zufallswert"

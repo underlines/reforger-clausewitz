@@ -171,6 +171,9 @@ Open:
 - [x] not yet checked by the owner: `/report`, map-marker contacts, vehicle request far from a depot (roadside), FOB respawn, convoys, kit cost off
 - [x] LLM timeouts with the bigger prompt; engine AI ~120/128 although caps sum to 90 (the headroom gate catches it)
 
+## Friendly units on the map (design `notes/map-friendly-design.md`, 2026-10-13)
+- WP-A done (code only, not compiled until WP-B/C merge): four bool war-mode params `mapMe` (default true), `mapSquadmates` (true), `mapSquads` (false), `mapVehicles` (false); setup menu, `/war start key=value`, overrides.json `setup`. `CLW_FriendlyMapSettings.Mask()` bits 1/2/4/8. Hooks: `CLW_FriendlyPicture.Start()` (WarRuntime), `.RematchReset()` (Rematch, 2x). EN+DE keys `CLW-Param_map*`.
+
 ## Log
 - 2026-10-11: Vision and research committed; game-mode decision made; roadmap condensed to M0-M5; branch naming unified on `main`.
 - 2026-10-11: Human participation made central (VISION 2a): soldiers and squad leaders get HQ orders as missions.  Players pick from several offered assignments.

@@ -198,6 +198,7 @@ class CLW_Rematch
 		CLW_PendingOrders.RematchReset();
 		CLW_BaseWatch.RematchReset();
 		CLW_SitrepStore.RematchReset();
+		CLW_FriendlyPicture.RematchReset();
 		Print("CLW: rematch: reset pending orders, idle-watch ledger, SITREP store (state only)", LogLevel.NORMAL);
 		CLW_StructureMarkers.RemoveAll();
 		CLW_StructureMarkers.Reset();
@@ -705,6 +706,7 @@ class CLW_Rematch
 		CLW_PendingOrders.RematchReset();
 		CLW_BaseWatch.RematchReset();
 		CLW_SitrepStore.RematchReset();
+		CLW_FriendlyPicture.RematchReset();
 		CLW_StructureMarkers.Reset();
 		CLW_RequestTerminals.Reset();
 		Print("CLW: rematch: statics cleared (world end)", LogLevel.NORMAL);

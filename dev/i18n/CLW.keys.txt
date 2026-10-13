@@ -596,3 +596,11 @@ CLW-ReqStatus_Objective ::: Objective %1 (%3 m): %2. ::: Ziel %1 (%3 m): %2.
 CLW-ReqStatus_NoObjective ::: No objective within %1 m of you. ::: Kein Ziel im Umkreis von %1 m um dich.
 CLW-ReqStatus_Contact ::: Last known enemy contact: %1 (%2), %3, grid %4, %5 m away, seen %6 s ago. ::: Letzter bekannter Feindkontakt: %1 (%2), %3, Planquadrat %4, %5 m entfernt, vor %6 s gesehen.
 CLW-ReqStatus_NoContact ::: No known enemy contact within %1 m. ::: Kein bekannter Feindkontakt im Umkreis von %1 m.
+CLW-Param_mapMe ::: Show me ::: Mich anzeigen
+CLW-Param_mapMe_Desc ::: Your own position and heading on the map. ::: Deine eigene Position und Blickrichtung auf der Karte.
+CLW-Param_mapSquadmates ::: Show squad members ::: Gruppenmitglieder anzeigen
+CLW-Param_mapSquadmates_Desc ::: Every member of your own group, AI and players. ::: Jedes Mitglied deiner eigenen Gruppe, KI und Spieler.
+CLW-Param_mapSquads ::: Show friendly squads ::: Befreundete Trupps anzeigen
+CLW-Param_mapSquads_Desc ::: One symbol per friendly group at its leader. ::: Ein Symbol je befreundeter Gruppe an ihrem Anführer.
+CLW-Param_mapVehicles ::: Show friendly vehicles ::: Befreundete Fahrzeuge anzeigen
+CLW-Param_mapVehicles_Desc ::: Crewed or claimed friendly vehicles, symbol by type. ::: Besetzte oder zugeteilte befreundete Fahrzeuge, Symbol nach Typ.

@@ -55,7 +55,7 @@ The object is flat and uses the same keys and values as the menu and `/war start
 | `autoStartSec` | seconds after game start to start the war with the preset. Default 10, minimum 5. `-1` = no auto start: the preset only pre-fills the menu, and the scenario's auto start is off as well |
 | `mode` | war mode id (missing = scenario default) |
 | `factionA`, `factionB` | faction keys of side A / B (missing = scenario sides) |
-| anything else | a parameter of that mode (missing = mode default), e.g. `startPositions`, `battleSize`, `startTickets`, `fobMax`, `fobEarliestMin` (default 6, 0 = no FOB timing gate), `garrisonSquads` (default 1), `idleDespawnMin` (default 6, 0 = off), `cap_logistics` |
+| anything else | a parameter of that mode (missing = mode default), e.g. `startPositions`, `battleSize`, `startTickets`, `fobMax`, `fobEarliestMin` (default 6, 0 = no FOB timing gate), `garrisonSquads` (default 1), `idleDespawnMin` (default 6, 0 = off), `cap_logistics`, the friendly-map switches `mapMe` (true), `mapSquadmates` (true), `mapSquads` (false), `mapVehicles` (false) |
 
 - The preset values are also the menu defaults, so a human who joins before the auto start sees them and can still change them and start earlier.
 - An invalid preset (unknown mode, faction or parameter, bad value) is NOT replaced by defaults. The war stays in setup, and the log shows

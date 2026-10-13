@@ -315,6 +315,7 @@ class CLW_WarRuntime
 			if (!m_Vehicles)
 				m_Vehicles = new CLW_VehicleManager();
 			m_Vehicles.Init(m_Registry);
+			CLW_FriendlyPicture.Start();
 			if (!m_Spawner)
 				m_Spawner = new CLW_ForceSpawner();
 			m_Spawner.Init(m_Catalog, m_Registry, m_Vehicles);
