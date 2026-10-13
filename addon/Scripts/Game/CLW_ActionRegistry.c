@@ -511,8 +511,7 @@ class CLW_ActionRegistry
 			if (!summary.IsEmpty())
 			{
 				summary += "; ";
-				summaryWire += "
-";
+				summaryWire += "\n";
 			}
 
 			summary += stepResult;
