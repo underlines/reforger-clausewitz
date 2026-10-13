@@ -551,6 +551,11 @@ class CLW_ForceSpawner
 		job.m_Group = group;
 		job.m_sUnitId = NameAndTag(group, NextName(job.m_sFaction, entry.m_sKind), entry.m_sKind, entry.m_sName, entry.m_sType, false);
 		job.m_eState = CLW_ESpawnState.GROUP_WAIT;
+		// squad roles (G1): the members do not exist yet, so slot prefabs can still be swapped for role prefabs
+		SCR_AIGroup recruitSquad;
+		if (job.m_iRequester >= 0)
+			recruitSquad = CLW_RequestService.GroupOf(job.m_iRequester);
+		CLW_SquadRoles.Prepare(group, job.m_sUnitId, job.m_sFaction, entry.m_sKind, recruitSquad);
 		Print(string.Format("CLW: spawn %1 infantry group spawned as %2 (%3), waiting for %4 members", job.m_sFaction, job.m_sUnitId, entry.m_sType, entry.m_iGroupMembers), LogLevel.NORMAL);
 		return true;
 	}
@@ -579,6 +584,7 @@ class CLW_ForceSpawner
 			return;
 		}
 
+		CLW_SquadRoles.OnMembersReady(job.m_Group);
 		Finish(job, string.Format("%1 members (%2)", members, ActiveAINote()));
 	}
 
@@ -798,6 +804,7 @@ class CLW_ForceSpawner
 
 		job.m_Cargo = cargo;
 		job.m_sCargoId = NameAndTag(cargo, job.m_sUnitId + "_Inf", CLW_ForceKind.INFANTRY, entry.m_sName + " (infantry)", entry.m_sType, true);
+		CLW_SquadRoles.Prepare(cargo, job.m_sCargoId, job.m_sFaction, entry.m_sKind, null);	// composition of the vehicle's kind (mech, motorized, ...)
 		job.m_eState = CLW_ESpawnState.CARGO_WAIT;
 		job.m_fStateAge = 0;
 		Print(string.Format("CLW: spawn %1 embarked group %2 spawned, waiting for %3 members", job.m_sUnitId, job.m_sCargoId, entry.m_iCargoMembers), LogLevel.NORMAL);
@@ -838,6 +845,8 @@ class CLW_ForceSpawner
 			Finish(job, "crewed vehicle (empty cargo)");
 			return;
 		}
+
+		CLW_SquadRoles.OnMembersReady(job.m_Cargo);
 
 		// put the members into the real cargo seats; the ones that do not fit stay on foot with the group
 		array<IEntity> people = CLW_SquadInfo.Members(job.m_Cargo);
