@@ -1,29 +1,101 @@
 SCR_LoadoutManager : "{B54D08AEA74A5354}Prefabs/MP/Managers/Loadouts/LoadoutManager_Editor.et" {
  ID "2E86B0D7143FA9C5"
  m_aPlayerLoadouts {
-  SCR_FactionPlayerLoadout "{56B2B461C34A570F}" : "{7C7C65FD583E6612}Configs/Loadouts/US/Regular/Loadout_US_Rifleman.conf" {
+  SCR_FactionPlayerLoadout "{5596D845DBEEF78C}" {
+   m_sAffiliatedFaction ""
   }
-  SCR_FactionPlayerLoadout "{5A2494BE3D648F60}" : "{C71228DC46A2C723}Configs/Loadouts/US/Regular/Loadout_US_AR.conf" {
+  SCR_FactionPlayerLoadout "{5596D8455CFBE540}" {
+   m_sAffiliatedFaction ""
   }
-  SCR_FactionPlayerLoadout "{56B2B461C275B309}" : "{AFA36BB8828E381A}Configs/Loadouts/US/Regular/Loadout_US_MG.conf" {
+  SCR_FactionPlayerLoadout "{5596D844009597AC}" {
+   m_sAffiliatedFaction ""
   }
-  SCR_FactionPlayerLoadout "{56B2B461C7495F41}" : "{0B4549C656AFC7AE}Configs/Loadouts/US/Regular/Loadout_US_GL.conf" {
+  SCR_PlayerArsenalLoadout "{568CC9D1BC0FCCF3}" {
+   m_sAffiliatedFaction ""
   }
-  SCR_FactionPlayerLoadout "{56B2B461C047DCDA}" : "{121FC1ABB7FE098C}Configs/Loadouts/US/Regular/Loadout_US_LAT.conf" {
+  SCR_PlayerArsenalLoadout "{568CC9D1B0926B78}" {
+   m_sAffiliatedFaction ""
   }
-  SCR_FactionPlayerLoadout "{56B2B4613C48D08E}" : "{0EFB9B7C7EF8B247}Configs/Loadouts/US/Regular/Loadout_US_Sniper.conf" {
+  SCR_PlayerArsenalLoadout "{568CC9D1B2D77D1F}" {
+   m_sAffiliatedFaction ""
   }
-  SCR_FactionPlayerLoadout "{56B2B46134D39388}" : "{5F9034642E99437D}Configs/Loadouts/USSR/Regular/Loadout_USSR_Rifleman.conf" {
+  CLW_ServerLoadout "{2C3A367C6E394646}" {
+   m_sLoadoutName "Server loadout A1"
+   m_iSide 0
+   m_iSlot 1
   }
-  SCR_FactionPlayerLoadout "{5A2494B91167F3F6}" : "{743C07B33B63F854}Configs/Loadouts/USSR/Regular/Loadout_USSR_AR.conf" {
+  CLW_ServerLoadout "{18E76759745B4205}" {
+   m_sLoadoutName "Server loadout A2"
+   m_iSide 0
+   m_iSlot 2
   }
-  SCR_FactionPlayerLoadout "{56B2B461341EA370}" : "{E97C426E941D8FDC}Configs/Loadouts/USSR/Regular/Loadout_USSR_MG.conf" {
+  CLW_ServerLoadout "{4EEC140747C67976}" {
+   m_sLoadoutName "Server loadout A3"
+   m_iSide 0
+   m_iSlot 3
   }
-  SCR_FactionPlayerLoadout "{56B2B4613FB900E5}" : "{A62BF2390565DC0B}Configs/Loadouts/USSR/Regular/Loadout_USSR_GL.conf" {
+  CLW_ServerLoadout "{268A25D961047A13}" {
+   m_sLoadoutName "Server loadout A4"
+   m_iSide 0
+   m_iSlot 4
   }
-  SCR_FactionPlayerLoadout "{56B2B4613DCD3341}" : "{C1C1DB68C6FC265B}Configs/Loadouts/USSR/Regular/Loadout_USSR_AT.conf" {
+  CLW_ServerLoadout "{4F006B62649A7AAC}" {
+   m_sLoadoutName "Server loadout A5"
+   m_iSide 0
+   m_iSlot 5
   }
-  SCR_FactionPlayerLoadout "{56B2B4613581570A}" : "{FB56BAF9A1BBAB39}Configs/Loadouts/USSR/Regular/Loadout_USSR_Sharpshooter.conf" {
+  CLW_ServerLoadout "{6AB9329912BB1FD3}" {
+   m_sLoadoutName "Server loadout A6"
+   m_iSide 0
+   m_iSlot 6
+  }
+  CLW_ServerLoadout "{07D43D3730064C53}" {
+   m_sLoadoutName "Server loadout A7"
+   m_iSide 0
+   m_iSlot 7
+  }
+  CLW_SideCustomLoadout "{753D5B0240770B69}" {
+   m_sLoadoutName "#AR-Loadout_Editor_SavedArsenalLoadout_Name"
+   m_iSide 0
+  }
+  CLW_ServerLoadout "{2314550A5B407176}" {
+   m_sLoadoutName "Server loadout B1"
+   m_iSide 1
+   m_iSlot 1
+  }
+  CLW_ServerLoadout "{60CD752522C91EBB}" {
+   m_sLoadoutName "Server loadout B2"
+   m_iSide 1
+   m_iSlot 2
+  }
+  CLW_ServerLoadout "{2E636D4E56AF7AB7}" {
+   m_sLoadoutName "Server loadout B3"
+   m_iSide 1
+   m_iSlot 3
+  }
+  CLW_ServerLoadout "{019B1DEC492E059B}" {
+   m_sLoadoutName "Server loadout B4"
+   m_iSide 1
+   m_iSlot 4
+  }
+  CLW_ServerLoadout "{7D446D0F23103139}" {
+   m_sLoadoutName "Server loadout B5"
+   m_iSide 1
+   m_iSlot 5
+  }
+  CLW_ServerLoadout "{7C8830413DCC5E30}" {
+   m_sLoadoutName "Server loadout B6"
+   m_iSide 1
+   m_iSlot 6
+  }
+  CLW_ServerLoadout "{0A101F5E2570655F}" {
+   m_sLoadoutName "Server loadout B7"
+   m_iSide 1
+   m_iSlot 7
+  }
+  CLW_SideCustomLoadout "{072979A641AE1BA7}" {
+   m_sLoadoutName "#AR-Loadout_Editor_SavedArsenalLoadout_Name"
+   m_iSide 1
   }
  }
 }
