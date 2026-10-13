@@ -70,7 +70,8 @@ class CLW_FriendlyPic
 			if (i > 0)
 				body += ";";
 
-			body += Clean(e.m_sType, 1) + "," + Clean(e.m_sKey, MAX_KEY) + "," + e.m_iX5.ToString() + "," + e.m_iZ5.ToString() + "," + e.m_iH10.ToString() + "," + Clean(e.m_sKind, MAX_KIND) + "," + e.m_iCount.ToString() + "," + e.m_iFlags.ToString() + "," + Clean(e.m_sLabel, MAX_LABEL);
+			body += Clean(e.m_sType, 1) + "," + Clean(e.m_sKey, MAX_KEY) + "," + e.m_iX5.ToString() + "," + e.m_iZ5.ToString() + "," + e.m_iH10.ToString() + ",";
+			body += Clean(e.m_sKind, MAX_KIND) + "," + e.m_iCount.ToString() + "," + e.m_iFlags.ToString() + "," + Clean(e.m_sLabel, MAX_LABEL);
 		}
 
 		return head + body;
