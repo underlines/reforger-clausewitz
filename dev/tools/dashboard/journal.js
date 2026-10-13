@@ -3,7 +3,7 @@
 // rejected, reviewedAt, reviewWarTime, nextReviewAt, reviewing, lastError, resetAt, resetReason, recentEvents[]}} (sidecar, agent/journal.mjs).
 // The journal is written by the sidecar only (review call every memory.reviewMin minutes + the game-counted attack record); nothing here edits it.
 import { html } from "/vendor/standalone.module.js";
-import { t, tk } from "/i18n.js"; // dashboard dictionaries (dashboard/i18n/*.json)
+import { t, tk, fmtClock } from "/i18n.js"; // dashboard dictionaries (dashboard/i18n/*.json)
 
 const num = (v) => typeof v === "number" && Number.isFinite(v);
 const STATUS_CLS = { open: "info", done: "ok", failed: "bad" };
@@ -42,7 +42,7 @@ function JournalCard({ f, j, now, cls }) {
         : html`<div class="empty">${t("j.noAttacks")}</div>`}
       ${(j.openAttacks ?? []).length > 0 && html`<small class="muted">${t("j.openAttacks", j.openAttacks.length, j.openAttacks.map((a) => `${a.squad} -> ${a.target}`).join(", "))}</small>`}
       <details class="jdet"><summary>${t("j.block", j.blockChars ?? 0)}</summary><pre>${j.block || t("j.blockEmpty")}</pre></details>
-      <small class="muted">${t("j.started", new Date(j.resetAt).toLocaleTimeString(), j.resetReason ?? "new")}${j.lastError ? " " + t("j.lastProblem", j.lastError) : ""}</small>
+      <small class="muted">${t("j.started", fmtClock(j.resetAt), j.resetReason ?? "new")}${j.lastError ? " " + t("j.lastProblem", j.lastError) : ""}</small>
     </div>
   </section>`;
 }

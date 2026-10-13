@@ -2,7 +2,7 @@
 // (auto-escaped); no dangerouslySetInnerHTML anywhere.
 import { html, render, useState, useEffect, useRef, useMemo, useCallback } from "/vendor/standalone.module.js";
 import { JournalView, MemorySettings } from "/journal.js"; // HQ war journal view + memory settings (WP5, dashboard/journal.js)
-import { t, tk, has, LANGS, getLang, setLang, onLang } from "/i18n.js"; // EN/DE dictionaries (dashboard/i18n/*.json); locals named t / tk below were renamed
+import { t, tk, has, LANGS, getLang, setLang, onLang, fmtClock } from "/i18n.js"; // EN/DE dictionaries (dashboard/i18n/*.json); locals named t / tk below were renamed
 
 const WORLD = 4096, GRID = 512, STALE_MS = 30000; // WORLD = fallback extent until /api/world reports the real one
 const DEF_EXT = { x0: 0, z0: 0, x1: WORLD, z1: WORLD };
@@ -772,12 +772,18 @@ function GameModePanel({ st, names }) {
 
 // ---------- per-faction SITREP (generated elsewhere: st.factions[f].sitrep = { text, sections:[{title, body}], generatedAt, source, warTimeSec }) ----------
 function SitrepCard({ f, e, now }) {
+  const [view, setView] = useState("en"); // per-card language toggle; en = canonical text as stored
   const s = e?.sitrep && typeof e.sitrep === "object" ? e.sitrep : null, secs = Array.isArray(s?.sections) ? s.sections.filter((x) => x && (x.title || x.body)) : [];
-  const has = s && (s.text || secs.length), age = num(s?.generatedAt) ? Math.max(0, Math.round(((now ?? Date.now()) - s.generatedAt) / 1000)) : null;
+  const filled = s && (s.text || secs.length), age = num(s?.generatedAt) ? Math.max(0, Math.round(((now ?? Date.now()) - s.generatedAt) / 1000)) : null;
+  const tbl = s?.text_by_lang && typeof s.text_by_lang === "object" ? s.text_by_lang : null;
+  const langs = tbl ? ["en", ...Object.keys(tbl).filter((l) => l !== "en" && tbl[l] && typeof tbl[l] === "object")] : ["en"];
+  const lg = langs.includes(view) ? view : "en", tr = lg !== "en" ? tbl[lg] : null;
+  const head = tr ? tr.headline : s?.text, body = (x) => (tr ? tr[x.id] ?? x.body : x.body), title = (x) => (x.id && has("sitrep.sec." + x.id) ? tk("sitrep.sec", x.id) : x.title);
   return html`<section class="panel sitrep" style=${accent(f)}><h2><span class=${facClass(f)}>${f}</span> SITREP
-    ${has && html`<span class="sub">${s.source ? html`<span class=${"badge " + (s.source === "llm" ? "info" : "")} title=${s.source === "llm" ? t("sitrep.byLlm") : t("sitrep.byRules")}>${s.source}</span> ` : ""}${num(s.warTimeSec) ? t("sitrep.warTime", fmtTime(s.warTimeSec)) + " " : ""}${age === null ? "" : age < 90 ? t("time.agoS", age) : t("time.agoMin", Math.round(age / 60))}${age !== null && age > 600 ? html` <span class="badge warn">${t("badge.stale")}</span>` : ""}</span>`}</h2>
-    ${has ? html`<div class="sitbody">${s.text && html`<p class="sittext">${s.text}</p>`}
-      ${secs.length > 0 && html`<dl class="sitsecs">${secs.map((x, i) => html`<div key=${i}><dt>${dash(x.title)}</dt><dd>${x.body}</dd></div>`)}</dl>`}</div>`
+    ${langs.length > 1 && html`<span class="seg langtog" role="group" aria-label=${t("sitrep.langToggle")} title=${t("sitrep.langToggle")}>${langs.map((l) => html`<button type="button" key=${l} class=${l === lg ? "on" : ""} onClick=${() => setView(l)}>${l.toUpperCase()}</button>`)}</span>`}
+    ${filled && html`<span class="sub">${s.source ? html`<span class=${"badge " + (s.source === "llm" ? "info" : "")} title=${s.source === "llm" ? t("sitrep.byLlm") : t("sitrep.byRules")}>${s.source}</span> ` : ""}${num(s.warTimeSec) ? t("sitrep.warTime", fmtTime(s.warTimeSec)) + " " : ""}${age === null ? "" : age < 90 ? t("time.agoS", age) : t("time.agoMin", Math.round(age / 60))}${age !== null && age > 600 ? html` <span class="badge warn">${t("badge.stale")}</span>` : ""}</span>`}</h2>
+    ${filled ? html`<div class="sitbody">${head && html`<p class="sittext">${head}</p>`}
+      ${secs.length > 0 && html`<dl class="sitsecs">${secs.map((x, i) => html`<div key=${i}><dt>${dash(title(x))}</dt><dd>${body(x)}</dd></div>`)}</dl>`}</div>`
       : html`<div class="empty sitempty">${t("sitrep.empty")}</div>`}</section>`;
 }
 
@@ -835,7 +841,7 @@ function EventsPanel({ st, faction }) {
   list.sort((a, b) => b.ts - a.ts);
   if (!list.length) return null;
   return html`<section class="panel side"><h2>${t("ev.title")} <span class="sub">${t("common.newestFirst")}</span></h2><div class="scroll"><table><tbody>
-    ${list.slice(0, 30).map((e, i) => html`<tr key=${i}><td class="mono muted">${new Date(e.ts).toLocaleTimeString()}</td><td class=${facClass(e.faction)}>${e.faction}</td><td class="wrap">${e.text}</td></tr>`)}
+    ${list.slice(0, 30).map((e, i) => html`<tr key=${i}><td class="mono muted">${fmtClock(e.ts)}</td><td class=${facClass(e.faction)}>${e.faction}</td><td class="wrap">${e.text}</td></tr>`)}
     </tbody></table></div></section>`;
 }
 
@@ -862,7 +868,7 @@ function Log({ st, faction }) {
   return html`<section class="panel log"><h2>${t("log.title")} <span class="sub">${t("log.sub", st.exchanges?.length ?? 0)}</span>
     ${noLlm && html`<span class="badge warn">${t("strip.hqEngine")} ${st.config?.engine && st.config.engine !== "llm" ? st.config.engine : "llm"}${st.paused ? " " + t("strip.pausedParen") : ""}, ${t("strip.noLlm")}</span>`}</h2><div class="scroll">
     ${ex.map((x) => html`<details class="ex" key=${x.ts + x.faction}><summary>
-      <span class="mono muted">${new Date(x.ts).toLocaleTimeString()}</span><b class=${facClass(x.faction)}>${x.faction}</b>
+      <span class="mono muted">${fmtClock(x.ts)}</span><b class=${facClass(x.faction)}>${x.faction}</b>
       <span class="muted">${x.provider}${x.model ? " / " + x.model : ""}</span>
       ${x.ok && String(x.reason ?? "").startsWith("skipped") ? html`<span class="badge info">${x.reason}</span>` : x.ok ? html`<span class=${"badge " + (x.orders.length ? "ok" : "warn")}>${x.orders.length ? t("log.ok") : t("log.okNoOrders")}</span>` : html`<span class="badge bad">${t("log.fallback", x.reason)}</span>`}
       ${x.dropped?.length ? html`<span class="badge warn">${t("log.dropped", x.dropped.length)}</span>` : ""}
@@ -1022,7 +1028,7 @@ function PurchasesPanel({ st, faction }) {
   for (const x of st.exchanges ?? []) if ((faction === "all" || x.faction === faction) && x.buy?.length) for (const b of x.buy) list.push({ ts: x.ts, faction: x.faction, ...b });
   return html`<section class="panel"><h2>${t("pur.title")} <span class="sub">${t("pur.sub")}</span></h2><div class="scroll"><table>
     <thead><tr><th>${t("col.time")}</th><th>${t("col.faction")}</th><th>${t("col.order")}</th><th>${t("col.reason")}</th></tr></thead><tbody>
-    ${list.slice(0, 60).map((b, i) => html`<tr key=${i}><td class="mono muted">${new Date(b.ts).toLocaleTimeString()}</td><td class=${facClass(b.faction)}>${b.faction}</td><td><b>${b.count}x ${b.type}</b></td><td class="wrap muted">${dash(b.reason)}</td></tr>`)}
+    ${list.slice(0, 60).map((b, i) => html`<tr key=${i}><td class="mono muted">${fmtClock(b.ts)}</td><td class=${facClass(b.faction)}>${b.faction}</td><td><b>${b.count}x ${b.type}</b></td><td class="wrap muted">${dash(b.reason)}</td></tr>`)}
     </tbody></table>${!list.length && html`<div class="empty">${t("pur.empty")}</div>`}</div></section>`;
 }
 function ForcesView({ st, faction, rows, sel, onSel, act, setAct }) {
@@ -1043,7 +1049,7 @@ function Decision({ st, f }) {
   const sc = st.scheduler?.[f];
   const e = st.factions[f];
   const dropLabel = (d) => { const k = Object.keys(d).find((q) => q !== "reason"); return k ? `${k}: ${J(d[k])}` : ""; };
-  return html`<section class="panel" style=${accent(f)}><h2><span class=${facClass(f)}>${f}</span> ${t("dec.title")} <span class="sub">${x ? new Date(x.ts).toLocaleTimeString() : t("dec.noExchangeShort")}</span></h2><div class="cfgbody">
+  return html`<section class="panel" style=${accent(f)}><h2><span class=${facClass(f)}>${f}</span> ${t("dec.title")} <span class="sub">${x ? fmtClock(x.ts) : t("dec.noExchangeShort")}</span></h2><div class="cfgbody">
     ${sc && html`<div class="muted" title=${(sc.lastWakeTriggers ?? []).join("\n")}>${t("dec.sched", sc.manual ? t("dec.pendingWake") : sc.nextDueInSec > 0 ? t("wake.in", sc.nextDueInSec) : t("wake.due"), dash(sc.intervalSec), dash(sc.chosenSec), sc.chosenReason ? ": " + sc.chosenReason : "", (sc.stretch ?? 1).toFixed(2),
       sc.lastWakeReason ?? "-", sc.lastWakeTriggers?.length ? " (" + sc.lastWakeTriggers.join("; ") + ")" : "", sc.lastLlmAgoSec === null || sc.lastLlmAgoSec === undefined ? t("time.never") : t("time.agoS", sc.lastLlmAgoSec), sc.gated ?? 0, sc.failed ? t("dec.failedSfx") : "")}</div>`}
     ${!x ? html`<div class="empty">${t("dec.noExchange")}</div>` : html`
@@ -1111,11 +1117,11 @@ function MissionsView({ st, faction, rows, sel, onSel, layers, world, act }) {
     <${MapPanel} st=${st} faction=${faction} rows=${rows} sel=${sel} onSel=${onSel} layers=${mapLayers} world=${world} act=${act} focus=${focus} compact=${true} />
     <div class="grid2" style=${{ marginTop: "12px" }}>
       <section class="panel"><h2>${t("mis.events")} <span class="sub">${t("mis.eventsSub")}</span></h2><div class="scroll"><table><tbody>
-        ${evs.slice(0, 40).map((e, i) => html`<tr key=${i}><td class="mono muted">${new Date(e.ts).toLocaleTimeString()}</td><td class=${facClass(e.faction)}>${e.faction}</td><td class="wrap">${e.text}</td></tr>`)}</tbody></table>
+        ${evs.slice(0, 40).map((e, i) => html`<tr key=${i}><td class="mono muted">${fmtClock(e.ts)}</td><td class=${facClass(e.faction)}>${e.faction}</td><td class="wrap">${e.text}</td></tr>`)}</tbody></table>
         ${!evs.length && html`<div class="empty">${t("mis.noEvents")}${why}</div>`}</div></section>
       <section class="panel"><h2>${t("mis.history")} <span class="sub">${t("mis.historySub")}</span></h2><div class="scroll"><table>
         <thead><tr><th>${t("col.time")}</th><th>${t("col.faction")}</th><th>${t("col.squad")}</th><th>${t("col.kind")}</th><th>${t("col.target")}</th><th>${t("col.brief")}</th></tr></thead><tbody>
-        ${hist.slice(0, 60).map((o, i) => { const key = "x:" + i; return html`<tr key=${i} class=${"sqrow" + (focus?.key === key ? " sel" : "")} onClick=${() => go(key, aim(o, o.faction + "/" + o.squad), null)}><td class="mono muted">${new Date(o.ts).toLocaleTimeString()}</td><td class=${facClass(o.faction)}>${o.faction}</td><td><b>${o.squad}</b></td><td>${o.kind}</td><td class="mono">${tgt(o)}</td><td class="wrap muted">${dash(o.brief)}</td></tr>`; })}</tbody></table>
+        ${hist.slice(0, 60).map((o, i) => { const key = "x:" + i; return html`<tr key=${i} class=${"sqrow" + (focus?.key === key ? " sel" : "")} onClick=${() => go(key, aim(o, o.faction + "/" + o.squad), null)}><td class="mono muted">${fmtClock(o.ts)}</td><td class=${facClass(o.faction)}>${o.faction}</td><td><b>${o.squad}</b></td><td>${o.kind}</td><td class="mono">${tgt(o)}</td><td class="wrap muted">${dash(o.brief)}</td></tr>`; })}</tbody></table>
         ${!hist.length && html`<div class="empty">${t("mis.noHistory")}${why}</div>`}</div></section>
     </div></main>`;
 }
@@ -1135,7 +1141,7 @@ function RequestsView({ st, faction }) {
   return html`<main class="view">
     <section class="panel"><h2>${t("req.title")} <span class="sub">${t("req.sub", rows.length, granted)}</span></h2><div class="scroll"><table>
       <thead><tr><th>${t("col.time")}</th><th>${t("col.faction")}</th><th>${t("col.player")}</th><th>${t("col.role")}</th><th>${t("col.request")}</th><th>${t("col.status")}</th><th>${t("col.answer")}</th></tr></thead><tbody>
-      ${rows.map((r, i) => html`<tr key=${r.faction + r.id + i}><td class="mono muted">${r.at ? new Date(r.at).toLocaleTimeString() : "-"}</td><td class=${facClass(r.faction)}>${r.faction}</td><td><b>${dash(r.player)}</b></td><td>${dash(r.role)}</td>
+      ${rows.map((r, i) => html`<tr key=${r.faction + r.id + i}><td class="mono muted">${r.at ? fmtClock(r.at) : "-"}</td><td class=${facClass(r.faction)}>${r.faction}</td><td><b>${dash(r.player)}</b></td><td>${dash(r.role)}</td>
         <td><b>${dash(r.kind)}</b> <span class="mono muted">${dash(r.args)}</span></td><td><span class=${"badge " + (r.status === "granted" ? "ok" : "bad")}>${dash(r.status)}</span></td><td class="wrap muted">${dash(r.reason)}</td></tr>`)}</tbody></table>
       ${!rows.length && html`<div class="empty">${t("req.empty")}</div>`}</div></section>
   </main>`;
@@ -1154,7 +1160,7 @@ function HqChatView({ st, faction }) {
       ${rows.flatMap((h, i) => {
         const [cls, label] = state(h), calls = (h.steps ?? []).flatMap((s) => s.toolCalls ?? []), key = h.faction + h.msg.id + h.ts;
         return [html`<tr key=${key} class=${"sqrow" + (open === key ? " sel" : "")} onClick=${() => setOpen(open === key ? null : key)}>
-          <td class="mono muted">${new Date(h.ts).toLocaleTimeString()}</td><td class=${facClass(h.faction)}>${h.faction}</td>
+          <td class="mono muted">${fmtClock(h.ts)}</td><td class=${facClass(h.faction)}>${h.faction}</td>
           <td><b>${h.msg.player}</b> <span class="muted">${h.msg.role}${h.msg.grid ? ", " + h.msg.grid : ""}</span></td><td class="wrap">${h.msg.text}</td>
           <td class="mono">${t("chat.steps", (h.steps ?? []).length, calls.length)}</td>
           <td class="mono wrap">${(h.actions ?? []).map((a) => a.action + "(" + (a.args ?? []).map((x) => x.name + "=" + x.value).join(", ") + ")").join("; ") || "-"}</td>
@@ -1181,7 +1187,7 @@ function DebugView({ st }) {
   return html`<main class="view"><section class="panel"><h2>${t("dbg.title")} <span class="sub">${t("dbg.sub", rows.length, all.length)}</span></h2>
     <div class="cfgbody"><label class="field"><span>${t("dbg.filter")}</span><input type="text" value=${q} placeholder=${t("dbg.placeholder")} onInput=${(e) => setQ(e.target.value)} /></label></div>
     <div class="scroll"><table><tbody>
-      ${rows.map((d, i) => html`<tr key=${i}><td class="mono muted">${new Date(d.ts).toLocaleTimeString()}</td><td class="mono muted">${clock(d.t)}</td><td class="wrap">${d.msg}</td></tr>`)}</tbody></table>
+      ${rows.map((d, i) => html`<tr key=${i}><td class="mono muted">${fmtClock(d.ts)}</td><td class="mono muted">${clock(d.t)}</td><td class="wrap">${d.msg}</td></tr>`)}</tbody></table>
       ${!rows.length && html`<div class="empty">${all.length ? t("dbg.noMatch") : t("dbg.none")}</div>`}</div></section></main>`;
 }
 
@@ -1196,7 +1202,7 @@ function ActionsView({ st }) {
   const ms = st.manifests ?? { factions: {}, builtin: null };
   const names = Object.keys(ms.factions ?? {}).sort();
   return html`<main class="view">
-    ${names.map((n) => { const m = ms.factions[n]; return html`<section class="panel" key=${n}><h2>${n} <span class="sub">${t("man.sub", m.hash, m.mode || "?", new Date(m.receivedAt).toLocaleTimeString())}</span></h2>
+    ${names.map((n) => { const m = ms.factions[n]; return html`<section class="panel" key=${n}><h2>${n} <span class="sub">${t("man.sub", m.hash, m.mode || "?", fmtClock(m.receivedAt))}</span></h2>
       <div class="cfgbody"><div class="muted">${t("man.caps")} <b>${(m.capabilities ?? []).join(", ") || t("common.none")}</b></div>
       <${ManifestTable} title=${t("man.intents")} rows=${m.intents ?? []} /><${ManifestTable} title=${t("man.primitives")} rows=${m.primitives ?? []} /></div></section>`; })}
     ${!names.length && ms.builtin && html`<section class="panel"><h2>${t("man.builtin")} <span class="sub">${t("man.builtinSub")}</span></h2><div class="cfgbody"><${ManifestTable} title=${t("man.intentsShort")} rows=${ms.builtin.intents ?? []} /></div></section>`}
@@ -1259,11 +1265,16 @@ function Config({ st, toast, refresh }) {
   const [keyMeta, setKeyMeta] = useState({ set: false, last4: "" });
   const [busy, setBusy] = useState(false);
   const [test, setTest] = useState(null);
+  const [testTr, setTestTr] = useState(null);
+  const [weakKeyMeta, setWeakKeyMeta] = useState({ set: false, last4: "" });
   const load = useCallback(async () => {
     try {
       const c = await (await fetch("/api/config", { cache: "no-store" })).json();
-      setF({ provider: c.provider, model: c.model, baseUrl: c.baseUrl, apiKey: "", timeoutSec: c.timeoutSec, maxTokens: c.maxTokens, enabled: !!c.enabled, engine: c.engine ?? "llm", minIntervalSec: c.minIntervalSec ?? 0, skipUnchanged: c.skipUnchanged !== false, stopAtLimit: c.stopAtLimit !== false, wakeup: { ...c.wakeup }, triggers: { ...c.triggers }, memory: { ...c.memory } });
+      setF({ provider: c.provider, model: c.model, baseUrl: c.baseUrl, apiKey: "", timeoutSec: c.timeoutSec, maxTokens: c.maxTokens, enabled: !!c.enabled, engine: c.engine ?? "llm", minIntervalSec: c.minIntervalSec ?? 0, skipUnchanged: c.skipUnchanged !== false, stopAtLimit: c.stopAtLimit !== false, wakeup: { ...c.wakeup }, triggers: { ...c.triggers }, memory: { ...c.memory },
+        weak: { provider: c.weak?.provider ?? "none", model: c.weak?.model ?? "", baseUrl: c.weak?.baseUrl ?? "", apiKey: "", timeoutSec: c.weak?.timeoutSec ?? 30 },
+        i18n: { enabled: c.i18n?.enabled !== false, translateTimeoutSec: c.i18n?.translateTimeoutSec ?? 10 } });
       setKeyMeta({ set: c.apiKeySet, last4: c.apiKeyLast4 });
+      setWeakKeyMeta({ set: !!c.weak?.apiKeySet, last4: c.weak?.apiKeyLast4 ?? "" });
     } catch (e) { toast(t("cfg.loadFail", e.message), "err"); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -1277,6 +1288,9 @@ function Config({ st, toast, refresh }) {
   const body = () => {
     const b = { provider: f.provider, model: f.model, baseUrl: f.baseUrl, timeoutSec: Number(f.timeoutSec), maxTokens: Number(f.maxTokens), enabled: f.enabled, engine: f.engine, minIntervalSec: Number(f.minIntervalSec), skipUnchanged: f.skipUnchanged, stopAtLimit: f.stopAtLimit, wakeup: numG("wakeup"), triggers: numG("triggers"), memory: numG("memory") };
     if (f.apiKey) b.apiKey = f.apiKey;
+    if (f.weak.provider === "none") b.weak = null; // no weak slot: the strong LLM translates
+    else { b.weak = { provider: f.weak.provider, model: f.weak.model, baseUrl: f.weak.baseUrl, timeoutSec: Number(f.weak.timeoutSec) }; if (f.weak.apiKey) b.weak.apiKey = f.weak.apiKey; }
+    b.i18n = { enabled: f.i18n.enabled, translateTimeoutSec: Number(f.i18n.translateTimeoutSec) };
     return b;
   };
   const save = async (e) => {
@@ -1288,6 +1302,16 @@ function Config({ st, toast, refresh }) {
     } catch (err) { toast(t("err.generic", err.message), "err"); }
     setBusy(false);
   };
+  const doTestTr = async () => {
+    setBusy(true); setTestTr({ pending: true });
+    try {
+      const { ok, j } = await postJson("/api/test", { ...body(), slot: "translate" });
+      setTestTr(ok ? j : { ok: false, error: j.error ?? t("err.request") });
+      toast(ok && j.ok ? t("cfg.trTestOk", j.latencyMs) : t("cfg.trTestFailed", j.error ?? t("err.request")), ok && j.ok ? "ok" : "err");
+    } catch (err) { setTestTr({ ok: false, error: err.message }); toast(t("err.generic", err.message), "err"); }
+    setBusy(false);
+  };
+  const weakOn = f.weak.provider !== "none", setW = (k, v) => setG("weak", k, v), setI = (k, v) => setG("i18n", k, v);
   const doTest = async () => {
     setBusy(true); setTest({ pending: true });
     try {
@@ -1299,16 +1323,18 @@ function Config({ st, toast, refresh }) {
   };
   return html`<main class="view"><div class="cfgwrap">${st.usage?.enabled && html`<${UsageCard} u=${st.usage} now=${st.now} toast=${toast} refresh=${refresh} />`}<section class="panel" style=${{ marginTop: "12px" }}><h2>${t("cfg.title")} <span class="sub">${t("cfg.sub")}</span></h2>
     <form class="cfgbody" onSubmit=${save} autocomplete="off">
-      <label class="field"><span>${t("cfg.provider")}</span><select value=${f.provider} onChange=${(e) => set("provider", e.target.value)}>
-        <option value="fake">${t("cfg.opt.fake")}</option>
-        <option value="anthropic">anthropic</option>
-        <option value="openai-compatible">${t("cfg.opt.openai")}</option>
-        <option value="openrouter">${t("cfg.opt.openrouter")}</option></select></label>
       <label class="field"><span>${t("hq.engineLabel")}</span><select value=${f.engine} onChange=${(e) => set("engine", e.target.value)}>
         <option value="llm">${t("cfg.opt.llm")}</option>
         <option value="rules">${t("cfg.opt.rules")}</option>
         <option value="model" disabled>${t("hq.modelSoon")}</option></select>
         <small>${t("cfg.engineHelp")}</small></label>
+      <h3 class="cfgh">${t("cfg.strong")}</h3>
+      <small class="muted">${t("cfg.strongNote")}</small>
+      <label class="field"><span>${t("cfg.provider")}</span><select value=${f.provider} onChange=${(e) => set("provider", e.target.value)}>
+        <option value="fake">${t("cfg.opt.fake")}</option>
+        <option value="anthropic">anthropic</option>
+        <option value="openai-compatible">${t("cfg.opt.openai")}</option>
+        <option value="openrouter">${t("cfg.opt.openrouter")}</option></select></label>
       <label class="field"><span>${t("cfg.model")}</span><input type="text" value=${f.model} onInput=${(e) => set("model", e.target.value)} /></label>
       <label class="field"><span>${t("cfg.baseUrl")}</span><input type="text" value=${f.baseUrl} placeholder=${f.provider === "openrouter" ? t("cfg.baseUrlPhOr") : t("cfg.baseUrlPhOai")} onInput=${(e) => set("baseUrl", e.target.value)} /></label>
       <label class="field"><span>${t("cfg.apiKey")}</span><input type="password" autocomplete="new-password" value=${f.apiKey} placeholder=${keyMeta.set ? t("cfg.keyStored", keyMeta.last4) : t("cfg.keyNotSet")} onInput=${(e) => set("apiKey", e.target.value)} />
@@ -1320,6 +1346,25 @@ function Config({ st, toast, refresh }) {
         <label class="field"><span>${t("cfg.minInterval")}</span><input type="number" min="0" max="600" value=${f.minIntervalSec} onInput=${(e) => set("minIntervalSec", e.target.value)} /></label>
         <label class="switch"><input type="checkbox" checked=${f.skipUnchanged} onChange=${(e) => set("skipUnchanged", e.target.checked)} /><span>${t("cfg.skipUnchanged")}</span></label></div>
       <small class="muted">${t("cfg.batchNote")}</small>
+      <h3 class="cfgh">${t("cfg.weak")}</h3>
+      <small class="muted">${t("cfg.weakNote")}</small>
+      <label class="field"><span>${t("cfg.provider")}</span><select value=${f.weak.provider} onChange=${(e) => setW("provider", e.target.value)}>
+        <option value="none">${t("cfg.opt.none")}</option>
+        <option value="fake">${t("cfg.opt.fake")}</option>
+        <option value="anthropic">anthropic</option>
+        <option value="openai-compatible">${t("cfg.opt.openai")}</option>
+        <option value="openrouter">${t("cfg.opt.openrouter")}</option></select></label>
+      ${weakOn && html`<label class="field"><span>${t("cfg.model")}</span><input type="text" value=${f.weak.model} onInput=${(e) => setW("model", e.target.value)} /></label>
+      <label class="field"><span>${t("cfg.baseUrl")}</span><input type="text" value=${f.weak.baseUrl} placeholder=${f.weak.provider === "openrouter" ? t("cfg.baseUrlPhOr") : t("cfg.baseUrlPhOai")} onInput=${(e) => setW("baseUrl", e.target.value)} /></label>
+      <label class="field"><span>${t("cfg.apiKey")}</span><input type="password" autocomplete="new-password" value=${f.weak.apiKey} placeholder=${weakKeyMeta.set ? t("cfg.keyStored", weakKeyMeta.last4) : t("cfg.keyNotSet")} onInput=${(e) => setW("apiKey", e.target.value)} />
+        <small>${t("cfg.keyNote")}</small></label>
+      <label class="field"><span>${t("cfg.timeout")}</span><input type="number" min="1" max="300" value=${f.weak.timeoutSec} onInput=${(e) => setW("timeoutSec", e.target.value)} /></label>`}
+      <h3 class="cfgh">${t("cfg.i18n")}</h3>
+      <label class="switch"><input type="checkbox" checked=${f.i18n.enabled} onChange=${(e) => setI("enabled", e.target.checked)} /><span>${t("cfg.i18nEnabled")} <span class="muted">${t("cfg.i18nEnabledNote")}</span></span></label>
+      <label class="field"><span>${t("cfg.trTimeout")}</span><input type="number" min="1" max="120" value=${f.i18n.translateTimeoutSec} onInput=${(e) => setI("translateTimeoutSec", e.target.value)} /></label>
+      <div class="muted">${t("cfg.trUses")} <span class=${"badge " + (weakOn ? "info" : "")}>${weakOn ? t("cfg.trWeak") : t("cfg.trStrong")}</span></div>
+      <div class="btns"><button class="btn ghost" type="button" disabled=${busy} onClick=${doTestTr}><${Icon} n="plug" /> ${t("cfg.testTr")}</button></div>
+      ${testTr && html`<pre>${testTr.pending ? t("cfg.testing") : J(testTr)}</pre>`}
       <h3 class="cfgh">${t("cfg.wakeup")}</h3>
       ${gsw("wakeup", "dynamic", t("cfg.w.dynamic"))}
       <div class="pair">${gnum("wakeup", "defaultSec", t("cfg.w.default"), 5, 3600)}${gnum("wakeup", "minSec", t("cfg.w.min"), 5, 3600)}</div>
@@ -1370,7 +1415,7 @@ function UsageCard({ u, now, toast, refresh }) {
   } else if (d) {
     numbers = [[t("use.today"), d.usage_daily], [t("use.week"), d.usage_weekly], [t("use.month"), d.usage_monthly], [t("use.total"), d.usage]];
   }
-  const pc = u.pace, dur = (ms) => { const m = Math.max(0, Math.round(ms / 60000)), dd = Math.floor(m / 1440), hh = Math.floor((m % 1440) / 60); return dd ? `${dd}d ${hh}h` : hh ? `${hh}h ${m % 60}m` : `${m}m`; };
+  const pc = u.pace, dur = (ms) => { const m = Math.max(0, Math.round(ms / 60000)), dd = Math.floor(m / 1440), hh = Math.floor((m % 1440) / 60); return dd ? t("time.dh", dd, hh) : hh ? t("time.hm", hh, m % 60) : t("time.m", m); };
   let chip = null, mark = null;
   if (pc?.kind === "period" && d) {
     mark = Math.min(100, (100 * pc.expected) / d.limit);
