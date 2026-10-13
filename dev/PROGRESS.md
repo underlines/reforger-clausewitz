@@ -139,6 +139,15 @@ Open / known:
 - [ ] RHS: no own compositions for command post / supply / depot / medical / sandbags (RHS ships none, vanilla used); no armor role (no kin tank either)
 - [ ] WCS_Armament AI magazine switch throws VM exceptions (third-party, vanilla null weapMgr)
 
+## Planned: i18n (design `notes/i18n-design.md`, 2026-10-13)
+Mod text and dashboard EN + DE; LLM text in each player's language (game language, override via `/hq language <code>` or HQ
+menu); strong LLM for decisions and one-reader replies, optional weak LLM for broadcast translation.
+- [ ] P1 player language: resolution (override > game language > server default > en), `/hq language`, HQ menu option, join report
+- [ ] P2 `CLW_Loc` + `Language/CLW.st` (EN/DE); static UI and server-built templates on `#CLW-` keys
+- [ ] P3 protocol v4 `lang`: `/hq` replies in the asker's language
+- [ ] P4 sidecar `strong`/`weak` slots, broadcast translation (`langs[]` -> `text_by_lang`), cache, fallbacks
+- [ ] P5 dashboard EN/DE: `i18n/*.json`, `t()` + `data-i18n`, header picker (independent of P1-P4)
+
 ## Done: M3 - Logistics, bases & requests (v0.5.0)
 M3 "Logistics, bases & requests" coded 2026-10-12 on branch `feature/m3-logistics` (phases R, B, Q, F, L, A; design `notes/m3-design.md`).
 All phases compile (Workbench builds #42-#44). Runtime: dedicated server runs without a client (war auto-starts after 180 s), builds #44-#51.
@@ -176,3 +185,4 @@ Open:
 - 2026-10-12: Dynamic squad sweep: `CLW_SquadRegistry` (AIWorld.GetAIAgents -> parent groups, 5 s sweep) replaces the hardcoded squad names; commanders keep per-squad state by id (`CLW_SquadState`). Verified end-to-end (2026-10-12). See VISION 4b.
 - 2026-10-12: Adaptive HQ wakeup (VISION 1b basic): game polls every 10 s (rule fallback throttled to 25 s), sidecar scheduler per faction (scheduled / trigger / manual wake, `next_check_sec` from the model, budget stretch), config groups `wakeup` and `triggers`, `POST /api/wake`, dashboard countdown chips + Wakeup/Triggers settings. Verified end-to-end (2026-10-12).
 - 2026-10-12: M4 (any map, any pack: auto scenario, wrapper worlds + generator, GM takeover, side pools, prop sets, HQ menu, FOB kit + timing gate, garrison) merged into `main` and released as v1.0.0 (local tag). Round 3 (`notes/m4-round3-plan.md`) and the owner client checklist are next.
+- 2026-10-13: i18n designed (`notes/i18n-design.md`): EN + DE stringtable and dashboard, LLM text per player language with override, strong/weak LLM split for broadcast translation. Not started.
