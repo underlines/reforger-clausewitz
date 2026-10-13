@@ -52,6 +52,20 @@
 //     Base structures: the situation carries "structures":[{"base","kind","label","pos":[x,z],"grid"}] (own side, one per placed service, same set as the in-game map markers). Dashboard map layer only (GET /api/state factions[<name>].situation.structures); stripped from the LLM prompt.
 //     Reply channels: orders / buy / missions (same command JSON as v2) + "fobs" (M3 phase F: [{"command":"ESTABLISH_FOB","site":"<fobSites id>"} or {"command":"UPGRADE_FOB","fob":"<fobs id>"}], max 1; phase L adds {"command":"RESUPPLY","fob":"<fobs id>"} and {"command":"CONVOY","origin":"<base id>","dest":"<base id>"}, max 3 per reply in total, only with the logistics capability + blocks convoys[] / logisticsRules; situation blocks fobs[] / fobSites[] / fobRules). New channels need game + sidecar support.
 //
+//   Protocol v4 ("v":4; i18n, design: dev/notes/i18n-design.md) = v3 + languages. v3 stays accepted; no language field = English / old behaviour.
+//     /hq (POST /orders "hq"[] messages): each message may carry "lang" (ISO 639-1, the asker's language). The strong LLM then writes the reply in that
+//       language in the SAME agent call (final text = JSON {"reply","setLanguage"?}). hqReplies[] entries: {msgId,text,setLanguage?}; setLanguage = "<xx>"
+//       or "auto" (validated ^[a-z]{2}$|auto, else dropped), only when the asker asked to be answered in some language; it concerns that player only.
+//     Broadcast texts: the /orders POST may carry "langs":["de","fr"] (recipient languages). When the reply has a "sitrep", it also has
+//       sitrep.text_by_lang = {en:{headline,situation,enemy,mission,execution,logistics}, de:{...}} (canonical English + one weak-LLM translation per
+//       language, parallel, cached by sha1(text)+lang, timeout config i18n.translateTimeoutSec = 10 s -> that language is omitted, flagged in the
+//       exchange "i18n" field). POST /translate {texts:{name:"english"},langs:[..]} -> {ok,text_by_lang,failed,cached} does the same for any broadcast text.
+//     Providers: two slots, strong (the top-level provider/model/baseUrl/apiKey/timeoutSec = the old single provider) and weak (config "weak", provider
+//       "none" = unset). Every LLM call names a role (commander|journal|hq|translate); only translate uses the weak slot, no weak slot = strong translates.
+//       Config API: GET /api/config also returns strong{}, weak{} (apiKey as apiKeySet/apiKeyLast4), roles, translateSlot; POST /api/config accepts
+//       "weak":{provider,model,baseUrl,apiKey,timeoutSec}|null, "strong":{same} and "i18n":{enabled,translateTimeoutSec}; POST /api/test {"slot":"translate"}.
+//     Fake provider: translation = "[<lang>] <text>", /hq reply = "[<lang>] <reply>" (also after setLanguage), so e2e can check routing without a key.
+//
 //   Faction SITREP (design: dev/notes/sitrep-design.md). The game POST may carry "sitrep": the rules SITREP the game built from the
 //     same fog-limited picture {scope,unit,source:"rules",warTimeSec,headline,situation,enemy,mission,execution,logistics}; the sidecar
 //     removes it before the model call. When the config "sitrep" group is enabled the model is asked, inside the SAME commander call
@@ -106,6 +120,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import * as I18N from "./agent/i18n.mjs"; // protocol v4: languages, structured /hq reply, translator (section "i18n" below)
 import * as J from "./agent/journal.mjs"; // HQ war journal (pure functions), see "HQ war journal" below
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -116,7 +131,7 @@ const HOST = process.env.CLW_HOST || "127.0.0.1";	// 0.0.0.0 = reachable in the 
 const COMMANDS = new Set(["MOVE", "ATTACK", "DEFEND"]);
 const MISSION_KINDS = new Set(["CAPTURE", "DEFEND", "RECON", "DESTROY"]);
 const BUY_COMMANDS = new Set(["MOVE", "ATTACK", "DEFEND", "RECON"]); // assignment of bought units (spawn on assignment)
-const isV2 = (sit) => sit?.v === 2 || sit?.v === 3; // v3 = v2 + manifest hash
+const isV2 = (sit) => sit?.v === 2 || sit?.v === 3 || sit?.v === 4; // v3 = v2 + manifest hash; v4 = v3 + languages (lang / langs[] / setLanguage / text_by_lang)
 const PROVIDERS = ["fake", "anthropic", "openai-compatible", "openrouter"];
 // HQ engine: llm = LLM provider decides; rules = sidecar answers {"orders":[]} so the game's rule commander drives (no LLM calls);
 // model = future trained decision-model tier (not implemented: treated like rules, logged once).
@@ -262,6 +277,8 @@ const cfg = {
   apiKey: process.env.ANTHROPIC_API_KEY || "",
   timeoutSec: 20,
   maxTokens: 1024,
+  // weak LLM slot (protocol v4, i18n): provider "none" = no weak slot, the strong slot (the top-level provider/model/baseUrl/apiKey/timeoutSec above) translates
+  weak: { provider: "none", model: "", baseUrl: "", apiKey: "", timeoutSec: 10 },
   enabled: true,
   engine: "llm",
   minIntervalSec: 0,
@@ -280,6 +297,8 @@ const cfg = {
   agent: { enabled: true, maxSteps: 4, timeoutSec: 40, maxConcurrent: 3 },
   // HQ war journal (intent / goals / lessons written by a small review call every reviewMin minutes + the game-counted attack record), see "HQ war journal" below
   memory: { enabled: true, reviewMin: 5 },
+  // broadcast translation (SITREP text_by_lang, POST /translate): translateTimeoutSec per language, then that language is omitted
+  i18n: { enabled: true, translateTimeoutSec: 10 },
 };
 
 // Group settings: "bool" or [min, max] number range per key. Partial objects are merged onto the current group.
@@ -287,6 +306,7 @@ const GROUP_SPECS = {
   sitrep: { enabled: "bool", intervalSec: [30, 3600] },
   agent: { enabled: "bool", maxSteps: [1, 8], timeoutSec: [5, 120], maxConcurrent: [1, 10] },
   memory: { enabled: "bool", reviewMin: [1, 60] },
+  i18n: { enabled: "bool", translateTimeoutSec: [1, 60] },
   wakeup: { dynamic: "bool", defaultSec: [5, 3600], minSec: [5, 3600], maxSec: [5, 7200], budgetStretch: "bool" },
   triggers: { enabled: "bool", newContact: "bool", contactNearSquadM: [0, 5000], casualties: [0, 1000], squadLost: "bool", strengthDropPct: [0, 100], objectiveReached: "bool", squadChange: "bool", cooldownSec: [0, 600],
     objectiveChanged: "bool", ticketsDropPct: [0, 100], unitSpawned: "bool", missionEvent: "bool", idleUnits: "bool", idleSec: [0, 3600] },
@@ -305,32 +325,72 @@ function validateGroup(name, v) {
   return { value: out };
 }
 
+// Slot fields shared by the top-level (strong) config and the weak slot.
+function validateSlotField(k, v) {
+  switch (k) {
+    case "provider":
+      if (!PROVIDERS.includes(v)) return { error: `provider must be one of ${PROVIDERS.join(", ")}` };
+      return { value: v };
+    case "model":
+      if (typeof v !== "string" || v.length > 200) return { error: "model must be a string (max 200)" };
+      return { value: v.trim() };
+    case "baseUrl": {
+      if (typeof v !== "string" || v.length > 300) return { error: "baseUrl must be a string" };
+      const t = v.trim();
+      if (t) {
+        let u; try { u = new URL(t); } catch { return { error: "baseUrl is not a valid URL" }; }
+        if (u.protocol !== "http:" && u.protocol !== "https:") return { error: "baseUrl must be http(s)" };
+      }
+      return { value: t.replace(/\/+$/, "") };
+    }
+    case "apiKey":
+      if (typeof v !== "string" || v.length > 500 || /[\r\n]/.test(v)) return { error: "apiKey must be a single-line string" };
+      return { value: v.trim() };
+    case "timeoutSec":
+      if (!isNum(v) || v < 1 || v > 300) return { error: "timeoutSec must be a number 1..300" };
+      return { value: v };
+  }
+  return { error: `unknown setting ${k}` };
+}
+// weak slot: partial object merged onto the current slot; null / {provider:"none"} = no weak slot; apiKey "" keeps the stored key.
+function validateWeak(v) {
+  if (v === null) return { value: { ...cfg.weak, provider: "none" } };
+  if (!v || typeof v !== "object" || Array.isArray(v)) return { error: "weak must be an object or null" };
+  const out = { ...cfg.weak };
+  for (const [k, x] of Object.entries(v)) {
+    if (k === "provider" && x === "none") { out.provider = "none"; continue; }
+    if (!["provider", "model", "baseUrl", "apiKey", "timeoutSec"].includes(k)) return { error: `unknown setting weak.${k}` };
+    const r = validateSlotField(k, x);
+    if (r.error) return { error: "weak." + r.error };
+    if (k === "apiKey" && r.value === "") continue;
+    out[k] = r.value;
+  }
+  return { value: out };
+}
 function validateConfig(inp) {
   if (!inp || typeof inp !== "object" || Array.isArray(inp)) return { error: "body must be a JSON object" };
   const out = {};
   for (const [k, v] of Object.entries(inp)) {
     switch (k) {
-      case "provider":
-        if (!PROVIDERS.includes(v)) return { error: `provider must be one of ${PROVIDERS.join(", ")}` };
-        out.provider = v; break;
-      case "model":
-        if (typeof v !== "string" || v.length > 200) return { error: "model must be a string (max 200)" };
-        out.model = v.trim(); break;
-      case "baseUrl": {
-        if (typeof v !== "string" || v.length > 300) return { error: "baseUrl must be a string" };
-        const t = v.trim();
-        if (t) {
-          let u; try { u = new URL(t); } catch { return { error: "baseUrl is not a valid URL" }; }
-          if (u.protocol !== "http:" && u.protocol !== "https:") return { error: "baseUrl must be http(s)" };
-        }
-        out.baseUrl = t.replace(/\/+$/, ""); break;
+      case "provider": case "model": case "baseUrl": case "apiKey": case "timeoutSec": {
+        const r = validateSlotField(k, v);
+        if (r.error) return r;
+        out[k] = r.value; break;
       }
-      case "apiKey":
-        if (typeof v !== "string" || v.length > 500 || /[\r\n]/.test(v)) return { error: "apiKey must be a single-line string" };
-        out.apiKey = v.trim(); break;
-      case "timeoutSec":
-        if (!isNum(v) || v < 1 || v > 300) return { error: "timeoutSec must be a number 1..300" };
-        out.timeoutSec = v; break;
+      case "strong": { // the strong slot IS the top-level provider/model/baseUrl/apiKey/timeoutSec (backward compatible); this is a grouped way to set it
+        if (!v || typeof v !== "object" || Array.isArray(v)) return { error: "strong must be an object" };
+        for (const [sk, sv] of Object.entries(v)) {
+          const r = validateSlotField(sk, sv);
+          if (r.error) return { error: "strong." + r.error };
+          out[sk] = r.value;
+        }
+        break;
+      }
+      case "weak": {
+        const r = validateWeak(v);
+        if (r.error) return r;
+        out.weak = r.value; break;
+      }
       case "maxTokens":
         if (!Number.isInteger(v) || v < 16 || v > 32000) return { error: "maxTokens must be an integer 16..32000" };
         out.maxTokens = v; break;
@@ -359,6 +419,7 @@ function validateConfig(inp) {
       case "sitrep":
       case "agent":
       case "memory":
+      case "i18n":
       case "triggers": {
         const g = validateGroup(k, v);
         if (g.error) return g;
@@ -390,8 +451,10 @@ function saveConfig() {
 }
 
 function publicConfig() {
-  const { apiKey, ...rest } = cfg;
-  return { ...rest, apiKeySet: !!apiKey, apiKeyLast4: apiKey ? apiKey.slice(-4) : "" };
+  const { apiKey, weak, ...rest } = cfg;
+  const slot = (o) => ({ provider: o.provider, model: o.model, baseUrl: o.baseUrl, timeoutSec: o.timeoutSec, apiKeySet: !!o.apiKey, apiKeyLast4: o.apiKey ? o.apiKey.slice(-4) : "" });
+  // strong = the top-level provider/model/baseUrl/apiKey/timeoutSec (kept for old clients); weak.provider "none" = no weak slot (strong translates)
+  return { ...rest, apiKeySet: !!apiKey, apiKeyLast4: apiKey ? apiKey.slice(-4) : "", strong: slot(cfg), weak: slot(weak), roles: ROLE_SLOT, translateSlot: weak.provider !== "none" ? "weak" : "strong" };
 }
 
 // ---------- state ----------
@@ -627,9 +690,44 @@ function composeSitrep(faction, sit, gameSitrep) {
     else { st.rules.value = g; st.rules.warTimeSec = sit.time; }
   }
   const age = st.llm && isNum(sit.time) ? sit.time - st.llm.warTimeSec : Infinity;
-  if (st.llm && age >= -5 && age <= SITREP_FRESH_SEC) return sitrepContract(st.llm.value, faction, "llm", st.llm.generatedAt, st.llm.warTimeSec);
+  if (st.llm && age >= -5 && age <= SITREP_FRESH_SEC) return { ...sitrepContract(st.llm.value, faction, "llm", st.llm.generatedAt, st.llm.warTimeSec), ...(st.llm.textByLang ? { text_by_lang: st.llm.textByLang } : {}) };
   if (st.rules) return sitrepContract(st.rules.value, faction, "rules", st.rules.generatedAt, st.rules.warTimeSec);
   return null;
+}
+
+// ---------- i18n (protocol v4) ----------
+// Roles -> slots. Every LLM call names a role; only "translate" maps to the weak slot (no weak slot configured -> strong translates).
+const ROLE_SLOT = { commander: "strong", journal: "strong", hq: "strong", translate: "weak" };
+function slotCfg(c, role = "strong") {
+  const w = c.weak;
+  if (ROLE_SLOT[role] === "weak" && w && w.provider && w.provider !== "none") return { ...c, provider: w.provider, model: w.model || c.model, baseUrl: w.baseUrl, apiKey: w.apiKey, timeoutSec: w.timeoutSec || c.timeoutSec };
+  return c;
+}
+const translator = I18N.createTranslator({
+  callModel: async ({ system, userMsg, maxTokens, timeoutSec }) => {
+    const sc = slotCfg(cfg, "translate");
+    if (budgetStopped(sc)) throw new Error("budget limit reached");
+    session.requests++;
+    const p = await callProvider(cfg, { faction: "i18n" }, { system, userMsg, maxTokens, timeoutSec, role: "translate" });
+    if (sc.provider === "openrouter") recordUsage(sc.model, "i18n", p.usage);
+    return p;
+  },
+  isFake: () => slotCfg(cfg, "translate").provider === "fake",
+  timeoutMs: () => cfg.i18n.translateTimeoutSec * 1000,
+  log: (m) => console.log("  " + m),
+});
+const sitrepFields = (sr) => ({ headline: sr.headline, ...Object.fromEntries(SITREP_KEYS.map((k) => [k, sr[k]])) });
+// POST /translate {texts:{name:"english text"}, langs:["de",..]} -> {ok, text_by_lang:{en:{..}, de:{..}}, failed:[{lang,reason}], cached:[lang]}
+// Generic entry for broadcast texts the game produces itself (announcements); same translator, cache and timeout as the SITREP.
+async function handleTranslate(req, res) {
+  let b;
+  try { b = JSON.parse(await readBody(req)); } catch { return send(res, 400, { error: "invalid JSON" }); }
+  const langs = I18N.normLangs(b?.langs);
+  if (!b || typeof b.texts !== "object" || !b.texts || Array.isArray(b.texts)) return send(res, 400, { error: "texts must be an object {name: text}" });
+  if (!cfg.i18n.enabled || !langs.length) return send(res, 200, { ok: true, text_by_lang: { en: b.texts }, failed: [], cached: [] });
+  const tr = await translator.translateFields(b.texts, langs);
+  state.counters.errors += tr.failed.length;
+  return send(res, 200, { ok: true, text_by_lang: tr.by_lang, failed: tr.failed, cached: tr.cached });
 }
 
 // ---------- providers ----------
@@ -756,10 +854,11 @@ function extractOrders(text, v2 = false) {
 const SITREP_EXTRA_TOKENS = 450; // room for the SITREP object on top of the configured maxTokens
 // Returns {raw, usage:{input,output}}. Throws Error on transport/HTTP failure.
 async function callProvider(c, sit, opts = {}) {
+  c = slotCfg(c, opts.role ?? "strong"); // role -> slot (only "translate" uses the weak slot)
   const { structures: _structures, ...llmSit } = sit ?? {}; // situation.structures[] (base markers, dashboard map only) is not sent to the model
   const userMsg = opts.userMsg ?? ("Current situation:\n" + JSON.stringify(llmSit) + (opts.journal ? "\n\n" + opts.journal : "")); // opts.userMsg / system / maxTokens: the journal review call
   const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), c.timeoutSec * 1000);
+  const timer = setTimeout(() => ac.abort(), (opts.timeoutSec ?? c.timeoutSec) * 1000);
   try {
     let url, headers, body;
     if (c.provider === "anthropic") {
@@ -959,7 +1058,7 @@ async function computeOrders(c, sit, isTest = false, opts = {}) {
       if (c.provider === "fake") { obj = fakeV2(sit, opts.manifest); if (opts.sitrep) obj.sitrep = fakeSitrep(sit, obj); }
       else {
         session.requests++;
-        const p = await callProvider(c, sit, opts);
+        const p = await callProvider(c, sit, { ...opts, role: "commander" });
         if (c.provider === "openrouter") recordUsage(c.model, typeof sit.faction === "string" ? sit.faction : "?", p.usage);
         r.rawReply = p.raw; r.usage = p.usage;
         obj = extractOrders(p.raw, true);
@@ -976,7 +1075,7 @@ async function computeOrders(c, sit, isTest = false, opts = {}) {
     if (c.provider === "fake") raw = fakeOrders(sit);
     else {
       session.requests++;
-      const p = await callProvider(c, sit);
+      const p = await callProvider(c, sit, { role: "commander" });
       if (c.provider === "openrouter") recordUsage(c.model, typeof sit.faction === "string" ? sit.faction : "?", p.usage);
       r.rawReply = p.raw; r.usage = p.usage;
       const obj = extractOrders(p.raw);
@@ -1089,7 +1188,8 @@ function cleanHqMessage(m) {
   if (!m || typeof m !== "object" || !isNum(m.id) || typeof m.text !== "string" || !m.text.trim()) return null;
   const str = (v, n) => (typeof v === "string" ? v.slice(0, n) : "");
   return { id: m.id, player: str(m.player, 60) || "player", role: m.role === "leader" ? "leader" : "soldier", squad: str(m.squad, 60), grid: str(m.grid, 20),
-    pos: Array.isArray(m.pos) && m.pos.length >= 2 && m.pos.every(isNum) ? m.pos.slice(0, 3) : null, text: m.text.trim().slice(0, 400), ageSec: isNum(m.ageSec) ? m.ageSec : 0 };
+    pos: Array.isArray(m.pos) && m.pos.length >= 2 && m.pos.every(isNum) ? m.pos.slice(0, 3) : null, text: m.text.trim().slice(0, 400), ageSec: isNum(m.ageSec) ? m.ageSec : 0,
+    lang: I18N.normLang(m.lang) ?? "" }; // protocol v4: the asker's language (ISO 639-1); "" = v3 message, no language handling
 }
 function hqFallbackReason(c) {
   if (!c.enabled) return "sidecar disabled";
@@ -1103,10 +1203,10 @@ function hqFallbackReason(c) {
 function hqFinish(entry, faction, r) {
   const out = hqOutFor(faction);
   entry.state = "done"; entry.ok = r.ok; entry.error = r.error ?? null; entry.latencyMs = r.latencyMs; entry.usage = r.usage; entry.steps = r.steps; entry.tools = r.tools;
-  entry.actions = r.actions; entry.reply = r.ok ? r.replyText : "";
+  entry.actions = r.actions; entry.reply = r.ok ? r.replyText : ""; entry.lang = entry.msg.lang || null; entry.setLanguage = r.ok ? (r.setLanguage ?? null) : null;
   if (r.ok) {
     for (const a of r.actions) out.actions.push({ msgId: entry.msg.id, id: a.id, action: a.action, args: a.args });
-    out.replies.push({ msgId: entry.msg.id, text: r.replyText });
+    out.replies.push({ msgId: entry.msg.id, text: r.replyText, ...(r.setLanguage ? { setLanguage: r.setLanguage } : {}) }); // setLanguage: v4 only, validated ^[a-z]{2}$|auto
   } else out.replies.push({ msgId: entry.msg.id, text: "", fallback: true });
   console.log(`hq faction=${faction} msg=${entry.msg.id} player=${entry.msg.player} ${r.ok ? `actions=${r.actions.length} steps=${r.steps.length}` : "FAILED " + r.error} ${r.latencyMs}ms${r.usage?.cost ? ` cost=$${r.usage.cost.toFixed(5)}` : ""}`);
 }
@@ -1136,7 +1236,7 @@ function hqIngest(faction, sit, list, manifest, c) {
     if (hqSeen.has(key)) continue;
     hqSeen.add(key);
     if (hqSeen.size > HQ_SEEN_MAX) { const first = hqSeen.values().next().value; hqSeen.delete(first); }
-    const entry = { ts: Date.now(), faction, msg, provider: c.provider, model: c.provider === "fake" ? null : c.model, state: "running", ok: null, error: null, steps: [], tools: [], actions: [], reply: "", usage: null, latencyMs: null };
+    const entry = { ts: Date.now(), faction, msg, provider: c.provider, model: c.provider === "fake" ? null : c.model, state: "running", ok: null, error: null, steps: [], tools: [], actions: [], reply: "", usage: null, latencyMs: null, lang: msg.lang || null, setLanguage: null };
     hqLog.unshift(entry); if (hqLog.length > HQ_MAX) hqLog.length = HQ_MAX;
     const why = hqFallbackReason(c) ?? (msg.ageSec > HQ_MAX_AGE_SEC ? "message too old" : null);
     if (why) {
@@ -1202,7 +1302,7 @@ async function journalReview(faction, c, sit) {
     if (c.provider === "fake") reply = J.fakeReview();
     else {
       session.requests++;
-      const p = await callProvider(c, { faction }, { system: J.reviewSystem(), userMsg: J.reviewUser(sit, j), maxTokens: 400 });
+      const p = await callProvider(c, { faction }, { system: J.reviewSystem(), userMsg: J.reviewUser(sit, j), maxTokens: 400, role: "journal" });
       usage = p.usage;
       if (c.provider === "openrouter") recordUsage(c.model, faction, p.usage);
       reply = p.raw;
@@ -1442,6 +1542,8 @@ async function handleOrders(req, res) {
   if (sit && typeof sit === "object" && "debug" in sit) { addDebugLines(sit.debug); delete sit.debug; } // game debug lines: dashboard only, never the model
   let manifestHash = null; // protocol v3: hash of the action manifest the situation was built for; never goes to the model
   if (sit && typeof sit === "object" && "manifest" in sit) { manifestHash = typeof sit.manifest === "string" && sit.manifest ? sit.manifest.slice(0, 64) : null; delete sit.manifest; }
+  let langs = []; // protocol v4: recipient languages of broadcast texts (SITREP); never goes to the model
+  if (sit && typeof sit === "object" && "langs" in sit) { langs = I18N.normLangs(sit.langs); delete sit.langs; }
   let hqList = null; // pending HQ chat messages (M3 phase A): they start agent turns, they never go to the strategic model
   if (sit && typeof sit === "object" && "hq" in sit) { hqList = sit.hq; delete sit.hq; }
   const t0 = Date.now();
@@ -1504,6 +1606,14 @@ async function handleOrders(req, res) {
         srSt.lastAt = Date.now();
         srSt.llm = { value: r.sitrep, generatedAt: srSt.lastAt, warTimeSec: isNum(sit.time) ? sit.time : 0 };
         console.log(`sitrep faction=${faction} source=${snapshot.provider} headline="${r.sitrep.headline}"`);
+        if (langs.length && snapshot.i18n.enabled) { // one weak-LLM translation call per non-English language, parallel, cached; failures omit that language
+          const tr = await translator.translateFields(sitrepFields(r.sitrep), langs);
+          r.sitrep = { ...r.sitrep, text_by_lang: tr.by_lang };
+          srSt.llm.textByLang = tr.by_lang;
+          r.i18n = { langs, ok: Object.keys(tr.by_lang).filter((l) => l !== "en"), cached: tr.cached, failed: tr.failed, slot: slotCfg(snapshot, "translate") === snapshot ? "strong" : "weak" };
+          state.counters.errors += tr.failed.length;
+          console.log(`sitrep faction=${faction} translated langs=[${r.i18n.ok}] cached=[${tr.cached}] failed=[${tr.failed.map((x) => x.lang + ":" + x.reason)}]`);
+        }
       } else if (wantSitrep && r.ok) console.log(`sitrep faction=${faction}: requested but the reply had none`);
       if (valid) {
         sc.failed = !r.ok;
@@ -1546,7 +1656,7 @@ async function handleOrders(req, res) {
   }
   if (!r.gated) state.exchanges.unshift({
     ts: state.lastRequestTs, faction, provider: snapshot.enabled ? snapshot.provider : "disabled",
-    model: snapshot.provider === "fake" ? null : snapshot.model,
+    model: snapshot.provider === "fake" ? null : snapshot.model, i18n: r.i18n ?? null,
     request: sit, rawReply: r.rawReply, orders: r.orders, buy: r.buy ?? [], missions: r.missions ?? [], fobs: r.fobs ?? [], keep: !!r.keep, sitrep: r.sitrep ?? null, dropped: r.dropped,
     latencyMs, ok: r.ok, reason: r.reason, usage: r.usage,
     wake, nextCheck: r.nextCheck ?? null, intervalSec: interval,
@@ -1811,6 +1921,8 @@ async function handleApi(req, res, url) {
     if (!originOk(req)) return send(res, 403, { error: "forbidden origin" });
     let inp;
     try { inp = JSON.parse((await readBody(req, 100_000)) || "{}"); } catch { return send(res, 400, { error: "invalid JSON" }); }
+    const testTranslate = url === "/api/test" && inp && inp.slot === "translate"; // test the translate slot (weak, else strong) instead of a commander call
+    if (testTranslate) delete inp.slot;
     const v = validateConfig(inp);
     if (v.error) return send(res, 400, { error: v.error });
     if (v.value.apiKey === "") delete v.value.apiKey; // empty = keep stored key
@@ -1826,6 +1938,11 @@ async function handleApi(req, res, url) {
     }
     // /api/test: optional overrides in the body are used for this test only (not saved)
     const tcfg = { ...cfg, ...v.value };
+    if (testTranslate) {
+      const t0 = Date.now(), sc = slotCfg(tcfg, "translate");
+      const tr = await translator.translateFields({ test: "Enemy infantry sighted near the bridge." }, ["de"], { fresh: true });
+      return send(res, 200, { ok: !tr.failed.length, text: tr.by_lang.de?.test ?? null, error: tr.failed[0]?.reason ?? null, latencyMs: Date.now() - t0, provider: sc.provider, model: sc.provider === "fake" ? null : sc.model, slot: sc === tcfg ? "strong" : "weak" });
+    }
     const sit = {
       faction: "TEST", time: 0,
       squads: [{ id: "TEST_Squad1", pos: [1000, 0, 1000], agents: 8, startAgents: 8, mode: "NONE", humanLed: false }],
@@ -1843,6 +1960,9 @@ http.createServer((req, res) => {
   if (req.method === "GET" && url === "/health") return send(res, 200, { ok: true, mode: cfg.provider });
   if (req.method === "POST" && url === "/manifest") {
     return void handleManifest(req, res).catch((e) => { if (!res.headersSent) send(res, 500, { error: String(e?.message ?? e) }); });
+  }
+  if (req.method === "POST" && url === "/translate") {
+    return void handleTranslate(req, res).catch((e) => { if (!res.headersSent) send(res, 500, { error: String(e?.message ?? e) }); });
   }
   if (req.method === "POST" && url === "/orders") {
     return void handleOrders(req, res).catch((e) => { console.log(`  handler error: ${e?.message ?? e}`); if (!res.headersSent) send(res, 500, { error: "internal" }); });

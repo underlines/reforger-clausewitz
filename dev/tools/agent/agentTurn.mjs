@@ -16,6 +16,7 @@ import { ToolLoopAgent, tool, stepCountIs, toolSearch } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 import { JOURNAL_RULE } from "./journal.mjs";
+import { normLang, normSetLanguage, hqLanguageRules, parseStructuredReply } from "./i18n.mjs";
 
 export const DEFAULTS = { maxSteps: 4, timeoutSec: 40, maxActions: 3, coreToolsMax: 6, maxOutputTokens: 700 };
 const isNum = (n) => typeof n === "number" && Number.isFinite(n);
@@ -150,7 +151,7 @@ export function buildTools(manifest, situation, message, limits = {}) {
 }
 
 // ---------- prompt ----------
-export function systemPrompt(situation, message, tools, journal = "") {
+export function systemPrompt(situation, message, tools, journal = "", lang = null) {
   return `You are the HQ radio operator of one faction in a tactical war game (Arma Reforger). A player talks to HQ over the radio and you answer in a short radio style.
 Player: ${message.player} (${message.role}, squad ${message.squad || "none"}, grid ${message.grid || "?"}). Faction ${situation?.faction ?? "?"}, supplies ${situation?.war?.supplies ?? "?"}.
 Rules:
@@ -158,7 +159,8 @@ Rules:
 - Soldiers may only get resupply and vehicles; squad, reinforce and recon are for squad leaders. If the role cannot do it, say so and offer the alternative instead of calling.
 - Use the query_* tools only when the player asks about forces, bases or enemies. HQ knows only what units reported (fog of war).
 - Do not invent ids, types, grids or numbers. If something is unclear, ask one short question instead of guessing.
-- Your final text is the radio reply: 1-2 short sentences, in the language the player wrote. After calling a tool, only acknowledge (for example "Roger, requesting a truck for you.").
+- The radio reply is 1-2 short sentences. After calling a tool, only acknowledge (for example "Roger, requesting a truck for you.").
+${lang ? hqLanguageRules(lang) : "- Your final text is the radio reply, in the language the player wrote."}
 ${tools.find_tools ? "- Tools not shown are found with find_tools.\n" : ""}${journal ? `\n${journal}\n${JOURNAL_RULE}\n` : ""}`;
 }
 
@@ -201,6 +203,14 @@ const FAKE_RULES = [
   [/\b(reinforce|reinforcement|backup|help|support|verst[aä]rkung)\b/i, "REQUEST_REINFORCE"],
   [/\b(recon|scout|look|observe|aufkl[aä]r)\b/i, "REQUEST_RECON"],
 ];
+const FAKE_LANGS = { english: "en", englisch: "en", german: "de", deutsch: "de", french: "fr", franzoesisch: "fr", spanish: "es", spanisch: "es", japanese: "ja", japanisch: "ja", russian: "ru", russisch: "ru", polish: "pl", polnisch: "pl", italian: "it", italienisch: "it" };
+export function fakeSetLanguage(text) {
+  const t = String(text ?? "").toLowerCase();
+  if (!/\b(respond|answer|reply|speak|talk|antworte?|sprich|sprechen|auf)\b/.test(t)) return null;
+  for (const [name, code] of Object.entries(FAKE_LANGS)) if (new RegExp(`\\b${name}\\b`).test(t)) return code;
+  if (/\b(auto|default|standard)\b/.test(t)) return "auto";
+  return null;
+}
 async function fakeTurn({ tools, message, manifest }) {
   const steps = [];
   const text = String(message.text ?? "");
@@ -221,25 +231,33 @@ async function fakeTurn({ tools, message, manifest }) {
     steps.push({ n: 1, text: "", finishReason: "tool-calls", toolCalls: [{ name: "query_contacts", input: {}, output }], usage: { input: 0, output: 0, cost: null } });
     reply = output.count ? `HQ knows ${output.count} contact(s), nearest at grid ${output.contacts[0].grid}.` : "No enemy contacts on record.";
   } else reply = "HQ here. Request a vehicle, squad, ammo, reinforcements or recon.";
+  let setLanguage = null;
+  if (message.lang) { // protocol v4: fake language routing (no key): "[<lang>] <reply>", setLanguage from a simple phrase match
+    setLanguage = fakeSetLanguage(text);
+    const eff = setLanguage && setLanguage !== "auto" ? setLanguage : message.lang;
+    if (eff !== "en") reply = `[${eff}] ${reply}`;
+  }
   steps.push({ n: steps.length + 1, text: reply, finishReason: "stop", toolCalls: [], usage: { input: 0, output: 0, cost: null } });
-  return { text: reply, steps, usage: { input: 0, output: 0, cost: 0, calls: 0 } };
+  return { text: reply, setLanguage, steps, usage: { input: 0, output: 0, cost: 0, calls: 0 } };
 }
 
 // ---------- entry point ----------
 export async function runAgentTurn({ manifest, situation, message, config, agentConfig = {}, journal = "" }) {
   const t0 = Date.now();
   const lim = { ...DEFAULTS, ...agentConfig };
-  const out = { msgId: message.id, ok: true, replyText: "", actions: [], steps: [], usage: { input: 0, output: 0, cost: 0, calls: 0 }, latencyMs: 0, provider: config.provider, model: config.provider === "fake" ? null : config.model, tools: [], error: null };
+  const out = { msgId: message.id, ok: true, replyText: "", actions: [], steps: [], usage: { input: 0, output: 0, cost: 0, calls: 0 }, latencyMs: 0, provider: config.provider, model: config.provider === "fake" ? null : config.model, tools: [], error: null, lang: normLang(message.lang), setLanguage: null };
   try {
     const built = buildTools(manifest, situation, message, lim);
     out.tools = Object.keys(built.tools);
-    const system = systemPrompt(situation, message, built.tools, journal);
+    const lang = normLang(message.lang); // protocol v4: reply language of the asker (no lang = v3 behaviour)
+    const system = systemPrompt(situation, message, built.tools, journal, lang);
     const prompt = String(message.text ?? "").slice(0, 500);
     let r;
     if (config.provider === "fake") r = await fakeTurn({ tools: built.tools, message, manifest });
     else r = await callModel({ model: createModel(config), system, prompt, tools: built.tools, maxSteps: lim.maxSteps, maxOutputTokens: lim.maxOutputTokens, timeoutSec: lim.timeoutSec });
     out.steps = r.steps; out.usage = r.usage; out.actions = built.ctx.actions;
-    out.replyText = String(r.text ?? "").trim().slice(0, 300);
+    if (lang && config.provider !== "fake") { const sr = parseStructuredReply(r.text); out.replyText = sr.reply.slice(0, 300); out.setLanguage = sr.setLanguage; }
+    else { out.replyText = String(r.text ?? "").trim().slice(0, 300); if (lang) out.setLanguage = normSetLanguage(r.setLanguage); }
     if (!out.replyText) out.replyText = out.actions.length ? "Roger, request passed on." : "HQ copies, nothing to do.";
   } catch (e) {
     out.ok = false;
