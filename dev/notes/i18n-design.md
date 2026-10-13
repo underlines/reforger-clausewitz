@@ -75,3 +75,6 @@ Sidecar protocol: response field `setLanguage` (optional, string); the v4 reques
 3. Protocol v4 `lang` for one-reader replies.
 4. Weak slot + broadcast translation + cache.
 5. Dashboard EN/DE (independent of 1-4, can run in parallel).
+
+## Test setup
+- The dedicated server's `overrides.json` preset asks for RHS factions. Run the server with a packs file (e.g. `-Packs packs-e2e.txt`), otherwise the war is refused at start (factions missing).

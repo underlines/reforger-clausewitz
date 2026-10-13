@@ -1,5 +1,85 @@
 StringTable {
  Items {
+  CustomStringTableItem CLW-Act_Authority {
+   Target_en_us "%1 is not open to you."
+   Target_de_de "%1 steht dir nicht offen."
+  }
+  CustomStringTableItem CLW-Act_BadValue {
+   Target_en_us "%1: %2 '%3' is not an allowed value"
+   Target_de_de "%1: %2 '%3' ist kein erlaubter Wert"
+  }
+  CustomStringTableItem CLW-Act_Bought {
+   Target_en_us "Purchase started: %1 x%2."
+   Target_de_de "Kauf gestartet: %1 x%2."
+  }
+  CustomStringTableItem CLW-Act_CapOff {
+   Target_en_us "%1 is not available in this war mode."
+   Target_de_de "%1 ist in diesem Kriegsmodus nicht verfügbar."
+  }
+  CustomStringTableItem CLW-Act_Convoy {
+   Target_en_us "Convoy %1 -> %2 started."
+   Target_de_de "Konvoi %1 -> %2 gestartet."
+  }
+  CustomStringTableItem CLW-Act_FobOrdered {
+   Target_en_us "FOB ordered at site %1."
+   Target_de_de "FOB am Standort %1 beauftragt."
+  }
+  CustomStringTableItem CLW-Act_FobUpgrade {
+   Target_en_us "FOB %1: upgrade ordered."
+   Target_de_de "FOB %1: Ausbau beauftragt."
+  }
+  CustomStringTableItem CLW-Act_MacroDeep {
+   Target_en_us "%1 is nested too deep."
+   Target_de_de "%1 ist zu tief verschachtelt."
+  }
+  CustomStringTableItem CLW-Act_MacroStopped {
+   Target_en_us "%1 stopped at %2: %3"
+   Target_de_de "%1 bei %2 abgebrochen: %3"
+  }
+  CustomStringTableItem CLW-Act_MissingParam {
+   Target_en_us "%1: missing parameter %2"
+   Target_de_de "%1: Parameter %2 fehlt"
+  }
+  CustomStringTableItem CLW-Act_NoOffers {
+   Target_en_us "No mission offers were made."
+   Target_de_de "Es wurden keine Aufträge angeboten."
+  }
+  CustomStringTableItem CLW-Act_NoSpawner {
+   Target_en_us "HQ cannot field units right now."
+   Target_de_de "Das HQ kann gerade keine Einheiten stellen."
+  }
+  CustomStringTableItem CLW-Act_NotAvailable {
+   Target_en_us "%1 is not available to your side."
+   Target_de_de "%1 ist für deine Seite nicht verfügbar."
+  }
+  CustomStringTableItem CLW-Act_NotNumber {
+   Target_en_us "%1: %2 is not a number"
+   Target_de_de "%1: %2 ist keine Zahl"
+  }
+  CustomStringTableItem CLW-Act_Offers {
+   Target_en_us "%1: %2 mission offer(s) sent."
+   Target_de_de "%1: %2 Auftragsangebot(e) gesendet."
+  }
+  CustomStringTableItem CLW-Act_Ordered {
+   Target_en_us "%1: order %2 given."
+   Target_de_de "%1: Befehl %2 erteilt."
+  }
+  CustomStringTableItem CLW-Act_PosInvalid {
+   Target_en_us "%1: %2 is not a valid position"
+   Target_de_de "%1: %2 ist keine gültige Position"
+  }
+  CustomStringTableItem CLW-Act_Resupply {
+   Target_en_us "Resupply convoy to %1 started."
+   Target_de_de "Nachschubkonvoi zu %1 gestartet."
+  }
+  CustomStringTableItem CLW-Act_Unknown {
+   Target_en_us "HQ does not know the action %1."
+   Target_de_de "Das HQ kennt die Aktion %1 nicht."
+  }
+  CustomStringTableItem CLW-Act_UnknownStep {
+   Target_en_us "%1: unknown step %2"
+   Target_de_de "%1: unbekannter Schritt %2"
+  }
   CustomStringTableItem CLW-Choice_battleSize_large {
    Target_en_us "large"
    Target_de_de "groß"
@@ -575,6 +655,10 @@ StringTable {
   CustomStringTableItem CLW-Lang_auto {
    Target_en_us "Automatic"
    Target_de_de "Automatisch"
+  }
+  CustomStringTableItem CLW-Lang_AutoOf {
+   Target_en_us "auto (%1)"
+   Target_de_de "auto (%1)"
   }
   CustomStringTableItem CLW-Lang_de {
    Target_en_us "German"

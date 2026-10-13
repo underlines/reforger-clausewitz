@@ -48,6 +48,7 @@ class CLW_Action_Order : CLW_ActionExecutor
 		if (!call.m_Rules)
 		{
 			result = "no commander";
+			call.m_sResultWire = CLW_Loc.W("#CLW-Req_NoCommander");
 			return false;
 		}
 
@@ -63,6 +64,7 @@ class CLW_Action_Order : CLW_ActionExecutor
 
 		call.m_iApplied = 1;
 		result = squad + " " + call.m_sAction;
+		call.m_sResultWire = CLW_Loc.W("#CLW-Act_Ordered", squad, call.m_sAction);
 		return true;
 	}
 }
@@ -180,6 +182,7 @@ class CLW_Action_Buy : CLW_ActionExecutor
 		if (!spawner)
 		{
 			result = "no spawner";
+			call.m_sResultWire = CLW_Loc.W("#CLW-Act_NoSpawner");
 			return false;
 		}
 
@@ -243,7 +246,11 @@ class CLW_Action_Buy : CLW_ActionExecutor
 
 		call.m_iApplied = applied;
 		if (applied > 0)
+		{
 			result = summary;
+			call.m_sResultWire = CLW_Loc.W("#CLW-Act_Bought", type, CLW_Loc.N(applied));
+		}
+
 		return applied > 0;
 	}
 }
@@ -288,6 +295,7 @@ class CLW_Action_OfferMission : CLW_ActionExecutor
 		if (!mission || !mission.offers)
 		{
 			result = "no offers";
+			call.m_sResultWire = CLW_Loc.W("#CLW-Act_NoOffers");
 			return false;
 		}
 
@@ -306,12 +314,14 @@ class CLW_Action_OfferMission : CLW_ActionExecutor
 		if (offers.IsEmpty())
 		{
 			result = "no valid offer";
+			call.m_sResultWire = CLW_Loc.W("#CLW-Act_NoOffers");
 			return false;
 		}
 
 		CLW_MissionHook.Get().OnOffers(call.m_sFaction, squad, offers);
 		call.m_iApplied = offers.Count();
 		result = squad + " " + offers.Count() + " offer(s)";
+		call.m_sResultWire = CLW_Loc.W("#CLW-Act_Offers", squad, CLW_Loc.N(offers.Count()));
 		Print(string.Format("CLW: RemoteCommander %1: MISSION offers for %2: %3", call.m_sFaction, squad, offers.Count()), LogLevel.NORMAL);
 		return true;
 	}

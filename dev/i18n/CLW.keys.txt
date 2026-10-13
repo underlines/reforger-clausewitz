@@ -555,3 +555,24 @@ CLW-HqMenu_LangCurrent ::: HQ answers in: %1 ::: Das HQ antwortet auf: %1
 CLW-HqMenu_LangSpin ::: HQ language ::: HQ-Sprache
 CLW-HqMenu_LangHint ::: Other languages: /hq language <code>, for example fr or ja. ::: Andere Sprachen: /hq language <Code>, zum Beispiel fr oder ja.
 CLW-HqMenu_Marker ::: Requested vehicle ::: Angefordertes Fahrzeug
+CLW-Lang_AutoOf ::: auto (%1) ::: auto (%1)
+CLW-Act_Unknown ::: HQ does not know the action %1. ::: Das HQ kennt die Aktion %1 nicht.
+CLW-Act_MacroDeep ::: %1 is nested too deep. ::: %1 ist zu tief verschachtelt.
+CLW-Act_CapOff ::: %1 is not available in this war mode. ::: %1 ist in diesem Kriegsmodus nicht verfügbar.
+CLW-Act_Authority ::: %1 is not open to you. ::: %1 steht dir nicht offen.
+CLW-Act_NotAvailable ::: %1 is not available to your side. ::: %1 ist für deine Seite nicht verfügbar.
+CLW-Act_UnknownStep ::: %1: unknown step %2 ::: %1: unbekannter Schritt %2
+CLW-Act_MacroStopped ::: %1 stopped at %2: %3 ::: %1 bei %2 abgebrochen: %3
+CLW-Act_MissingParam ::: %1: missing parameter %2 ::: %1: Parameter %2 fehlt
+CLW-Act_PosInvalid ::: %1: %2 is not a valid position ::: %1: %2 ist keine gültige Position
+CLW-Act_NotNumber ::: %1: %2 is not a number ::: %1: %2 ist keine Zahl
+CLW-Act_BadValue ::: %1: %2 '%3' is not an allowed value ::: %1: %2 '%3' ist kein erlaubter Wert
+CLW-Act_Ordered ::: %1: order %2 given. ::: %1: Befehl %2 erteilt.
+CLW-Act_NoSpawner ::: HQ cannot field units right now. ::: Das HQ kann gerade keine Einheiten stellen.
+CLW-Act_Bought ::: Purchase started: %1 x%2. ::: Kauf gestartet: %1 x%2.
+CLW-Act_NoOffers ::: No mission offers were made. ::: Es wurden keine Aufträge angeboten.
+CLW-Act_Offers ::: %1: %2 mission offer(s) sent. ::: %1: %2 Auftragsangebot(e) gesendet.
+CLW-Act_FobOrdered ::: FOB ordered at site %1. ::: FOB am Standort %1 beauftragt.
+CLW-Act_FobUpgrade ::: FOB %1: upgrade ordered. ::: FOB %1: Ausbau beauftragt.
+CLW-Act_Resupply ::: Resupply convoy to %1 started. ::: Nachschubkonvoi zu %1 gestartet.
+CLW-Act_Convoy ::: Convoy %1 -> %2 started. ::: Konvoi %1 -> %2 gestartet.

@@ -183,6 +183,21 @@ class CLW_PlayerLang
 		Print("CLW: lang override cleared player " + playerId + " (" + key + "), now " + Resolve(playerId), LogLevel.NORMAL);
 	}
 
+	// The stored override code of the player ("" = none, the language is automatic). Never "auto".
+	static string GetOverride(int playerId)
+	{
+		EnsureLoaded();
+		string key = KeyOf(playerId);
+		if (key.IsEmpty())
+			return "";
+
+		string code;
+		if (s_mOverride.Find(key, code))
+			return code;
+
+		return "";
+	}
+
 	// True when the player has a stored override (the menu can show "auto" otherwise).
 	static bool HasOverride(int playerId)
 	{

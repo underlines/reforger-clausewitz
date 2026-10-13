@@ -283,22 +283,30 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 		if (!m_wLangBox || !m_Data.m_bRunning)
 			return;
 
+		// the item that shows is the stored override; "auto" when none is set (the effective language is in the status text)
+		string selected = "auto";
+		if (!m_Data.m_sLangOverride.IsEmpty())
+			selected = m_Data.m_sLangOverride;
+
 		m_aLangCodes.Clear();
 		m_aLangCodes.Insert("auto");
 		CLW_HqLang.GetMenuCodes(m_aLangCodes);
-		if (!m_aLangCodes.Contains(m_Data.m_sLang))
-			m_aLangCodes.Insert(m_Data.m_sLang);
+		if (!m_aLangCodes.Contains(selected))
+			m_aLangCodes.Insert(selected);
 
 		array<string> names = {};
 		int current;
 		foreach (int i, string code : m_aLangCodes)
 		{
 			names.Insert(CLW_Loc.F(CLW_HqLang.Label(code)));
-			if (code == m_Data.m_sLang)
+			if (code == selected)
 				current = i;
 		}
 
-		AddText(m_wLangBox, CLW_Loc.F("#CLW-HqMenu_LangCurrent", CLW_HqLang.Label(m_Data.m_sLang)), null);
+		string currentText = selected;
+		if (selected == "auto")
+			currentText = CLW_Loc.W("#CLW-Lang_AutoOf", m_Data.m_sLang);
+		AddText(m_wLangBox, CLW_Loc.F("#CLW-HqMenu_LangCurrent", currentText), null);
 		m_LangComp = AddSpin(m_wLangBox, CLW_Loc.F("#CLW-HqMenu_LangSpin"), names, current);
 		AddText(m_wLangBox, CLW_Loc.F("#CLW-HqMenu_LangHint"), Color.FromSRGBA(160, 160, 160, 255));
 	}

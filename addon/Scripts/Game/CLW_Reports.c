@@ -43,6 +43,14 @@ class CLW_Reports
 	// args: "<count> <inf|veh|armor> <dist> <dir>". Runs on the server; answers the player. Returns the answer.
 	static string Chat(int playerId, string args)
 	{
+		string answerWire;
+		return ChatWire(playerId, args, answerWire);
+	}
+
+	// Same as Chat; answerWire = the answer the player got (a CLW_Loc wire, "" when not on the server), e.g. for the HQ menu status line.
+	static string ChatWire(int playerId, string args, out string answerWire)
+	{
+		answerWire = "";
 		if (!Replication.IsServer())
 			return "";
 
@@ -54,7 +62,8 @@ class CLW_Reports
 			verdict = "ACCEPTED";
 
 		Print(string.Format("CLW: report player=%1(%2) args='%3' -> %4: %5", playerId, CLW_RequestService.PlayerName(playerId), args, verdict, reply), LogLevel.NORMAL);
-		CLW_RequestService.Answer(playerId, CLW_Loc.W("#CLW-Req_Granted", replyWire), true);
+		answerWire = CLW_Loc.W("#CLW-Req_Granted", replyWire);
+		CLW_RequestService.Answer(playerId, answerWire, true);
 		return reply;
 	}
 

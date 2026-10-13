@@ -50,6 +50,7 @@ class CLW_HqMenuData
 	bool m_bReport;
 	string m_sReportReason;
 	string m_sLang = "en";			// wire line G: the HQ language of the player (CLW_PlayerLang.Resolve on the server)
+	string m_sLangOverride;			// wire line G: the stored override ("" = automatic)
 	ref array<ref CLW_HqRequest> m_aRequests = {};
 	ref array<ref CLW_HqSquad> m_aSquads = {};
 	ref array<string> m_aLines = {};
@@ -146,6 +147,8 @@ class CLW_HqMenuData
 			else if (type == "G" && f.Count() >= 2)
 			{
 				data.m_sLang = f[1];
+				if (f.Count() >= 3)
+					data.m_sLangOverride = f[2];
 			}
 			else if (type == "K" && f.Count() >= 2)
 			{

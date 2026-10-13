@@ -631,9 +631,17 @@ class CLW_RequestService
 		return true;
 	}
 
-	// One request: validates and executes through the registry, records and answers. Returns the answer text.
+	// One request: validates and executes through the registry, records and answers. Returns the (English) answer text.
 	static string Handle(int playerId, string kind, string arg, vector terminalPos = vector.Zero)
 	{
+		string answerWire;
+		return HandleWire(playerId, kind, arg, terminalPos, answerWire);
+	}
+
+	// Same as Handle; answerWire = the answer the player got (a CLW_Loc wire, "" for the menu), e.g. for the HQ menu status line.
+	static string HandleWire(int playerId, string kind, string arg, vector terminalPos, out string answerWire)
+	{
+		answerWire = "";
 		string faction = FactionKeyOf(playerId);
 		string role = RoleOf(playerId);
 		bool granted;
@@ -688,11 +696,11 @@ class CLW_RequestService
 			string result;
 			granted = CLW_ActionRegistry.Get().Run(call, result);
 			reply = result;
-			replyWire = call.m_sResultWire;
+			replyWire = call.PlayerWire(result);
 		}
 
 		if (replyWire.IsEmpty())
-			replyWire = reply;	// no wire from the executor: the English text is shown as it is
+			replyWire = CLW_HqText.Param(reply);	// no wire: the English text is shown as it is
 
 		CLW_RequestRecord record = new CLW_RequestRecord();
 		s_iSeq++;
@@ -716,7 +724,7 @@ class CLW_RequestService
 
 		Print(string.Format("CLW: request #%1 player=%2(%3) faction=%4 role=%5 kind=%6 arg='%7' -> %8: %9", record.m_iId, playerId, record.m_sName, faction, role, kind, arg, verdict, reply), LogLevel.NORMAL);
 		string answer = "HQ: request " + kind + " refused - " + reply;	// English: the return value (callers, log)
-		string answerWire = CLW_Loc.W("#CLW-Req_Refused", CLW_RequestKind.LabelKey(kind), replyWire);
+		answerWire = CLW_Loc.W("#CLW-Req_Refused", CLW_RequestKind.LabelKey(kind), replyWire);
 		if (granted)
 		{
 			answer = "HQ: " + reply;

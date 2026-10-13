@@ -1,4 +1,4 @@
-// Protocol v3 (= v2 + manifest hash, added by CLW_RemoteCommander) situation builder (spec section 8): serialises one faction's view of the war as the sidecar's POST /orders body.
+// Protocol v4 (= v3 + languages: hq[].lang; v3 = v2 + manifest hash, added by CLW_RemoteCommander) situation builder (spec section 8): serialises one faction's view of the war as the sidecar's POST /orders body.
 // Server only. Pure read access to the war systems; the only side effect is draining the faction's event queue.
 // Keys, kinds, catalog types and objective ids all come from the data, nothing is hard-wired.
 class CLW_Situation
@@ -76,7 +76,7 @@ class CLW_Situation
 		}
 
 		// concatenate: string.Format truncates its result at ~8 KB
-		string head = "{\"v\":3,\"faction\":\"" + Escape(m_sFaction) + "\",\"side\":" + SideIndex(m_sFaction);
+		string head = "{\"v\":4,\"faction\":\"" + Escape(m_sFaction) + "\",\"side\":" + SideIndex(m_sFaction);
 		head += ",\"identity\":\"" + Escape(CLW_ScenarioConfig.GetIdentityText(m_sFaction)) + "\",\"time\":" + Math.Round(now) + ",\"timeLeftSec\":" + war.GetTimeLeftSec();
 		json = head + ",\"war\":" + warJson + ",\"objectives\":[" + objectivesJson + "],\"bases\":[" + basesJson + "],\"catalog\":[" + catalogJson + "],\"squads\":[" + squadsJson + "],\"contacts\":[" + contactsJson + "],\"events\":[" + eventsJson + "]}";
 		if (json.Length() > MAX_BODY)

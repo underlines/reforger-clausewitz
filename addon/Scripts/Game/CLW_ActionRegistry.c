@@ -176,7 +176,7 @@ class CLW_ActionCall
 	CLW_RuleCommander m_Rules;		// weak: the faction's rule commander (squad checks, orders), set by the HQ callers
 	ref Managed m_Payload;			// structured extra input an executor understands (e.g. the mission offers of a squad)
 	int m_iApplied;					// set by executors: how many items were done (buys, offers)
-	string m_sResultWire;			// player-facing version of the result / refusal as a CLW_Loc wire ("" = only the English text); player request executors set it
+	string m_sResultWire;			// player-facing version of the result / refusal as a CLW_Loc wire ("" = only the English text); the registry and the executors set it
 	int m_iDepth;					// macro nesting
 
 	protected ref map<string, string> m_mArgs = new map<string, string>();
@@ -235,6 +235,16 @@ class CLW_ActionCall
 			return vector.Zero;
 
 		return Vector(x, 0, z);
+	}
+
+	// What the player reads about the result: the wire when the registry / executor set one, else the English text as a flat param
+	// (a deep reason from a service stays English). English text stays for logs, history, dashboard and the LLM.
+	string PlayerWire(string english)
+	{
+		if (!m_sResultWire.IsEmpty())
+			return m_sResultWire;
+
+		return CLW_HqText.Param(english);
 	}
 
 	// Same call under another action name (macro steps).
@@ -429,35 +439,31 @@ class CLW_ActionRegistry
 
 	// ---- validate / execute ----
 
+	// Refusal of the registry itself: English text for log / history / LLM, wire for the player. Always returns false.
+	protected bool Fail(CLW_ActionCall call, out string text, string english, string wire)
+	{
+		text = english;
+		call.m_sResultWire = wire;
+		return false;
+	}
+
 	bool Validate(CLW_ActionCall call, out string error)
 	{
 		CLW_ActionEntry entry = Find(call.m_sAction);
 		if (!entry)
-		{
-			error = "unknown action " + call.m_sAction;
-			return false;
-		}
+			return Fail(call, error, "unknown action " + call.m_sAction, CLW_Loc.W("#CLW-Act_Unknown", call.m_sAction));
 
 		if (call.m_iDepth > MAX_MACRO_DEPTH)
-		{
-			error = "macro nested too deep at " + call.m_sAction;
-			return false;
-		}
+			return Fail(call, error, "macro nested too deep at " + call.m_sAction, CLW_Loc.W("#CLW-Act_MacroDeep", call.m_sAction));
 
 		foreach (string capability : entry.m_aRequires)
 		{
 			if (!CLW_Capabilities.Has(capability))
-			{
-				error = string.Format("%1 needs capability '%2', which is off in this war mode", entry.m_sName, capability);
-				return false;
-			}
+				return Fail(call, error, string.Format("%1 needs capability '%2', which is off in this war mode", entry.m_sName, capability), CLW_Loc.W("#CLW-Act_CapOff", entry.m_sName));
 		}
 
 		if (call.m_sAuthority != CLW_ActionEntry.AUTH_ADMIN && call.m_sAuthority != entry.m_sAuthority)
-		{
-			error = string.Format("%1 needs authority '%2', caller has '%3'", entry.m_sName, entry.m_sAuthority, call.m_sAuthority);
-			return false;
-		}
+			return Fail(call, error, string.Format("%1 needs authority '%2', caller has '%3'", entry.m_sName, entry.m_sAuthority, call.m_sAuthority), CLW_Loc.W("#CLW-Act_Authority", entry.m_sName));
 
 		if (!ValidateParams(entry, call, error))
 			return false;
@@ -465,10 +471,7 @@ class CLW_ActionRegistry
 		if (entry.m_Executor)
 		{
 			if (!entry.m_Executor.IsAvailable(call.m_sFaction))
-			{
-				error = entry.m_sName + " is not available to " + call.m_sFaction;
-				return false;
-			}
+				return Fail(call, error, entry.m_sName + " is not available to " + call.m_sFaction, CLW_Loc.W("#CLW-Act_NotAvailable", entry.m_sName));
 
 			return entry.m_Executor.Validate(call, error);
 		}
@@ -476,10 +479,7 @@ class CLW_ActionRegistry
 		foreach (string step : entry.m_aSteps)
 		{
 			if (!Find(step))
-			{
-				error = string.Format("%1: unknown step %2", entry.m_sName, step);
-				return false;
-			}
+				return Fail(call, error, string.Format("%1: unknown step %2", entry.m_sName, step), CLW_Loc.W("#CLW-Act_UnknownStep", entry.m_sName, step));
 		}
 
 		return true;
@@ -490,30 +490,37 @@ class CLW_ActionRegistry
 	{
 		CLW_ActionEntry entry = Find(call.m_sAction);
 		if (!entry)
-		{
-			result = "unknown action " + call.m_sAction;
-			return false;
-		}
+			return Fail(call, result, "unknown action " + call.m_sAction, CLW_Loc.W("#CLW-Act_Unknown", call.m_sAction));
 
 		if (entry.m_Executor)
 			return entry.m_Executor.Execute(call, result);
 
 		string summary;
+		string summaryWire;
 		foreach (string step : entry.m_aSteps)
 		{
 			string stepResult;
-			if (!Run(call.CopyAs(step), stepResult))
+			CLW_ActionCall stepCall = call.CopyAs(step);
+			if (!Run(stepCall, stepResult))
 			{
 				result = string.Format("%1 stopped at %2: %3", entry.m_sName, step, stepResult);
+				call.m_sResultWire = CLW_Loc.W("#CLW-Act_MacroStopped", entry.m_sName, step, stepCall.PlayerWire(stepResult));
 				return false;
 			}
 
 			if (!summary.IsEmpty())
+			{
 				summary += "; ";
+				summaryWire += "
+";
+			}
+
 			summary += stepResult;
+			summaryWire += stepCall.PlayerWire(stepResult);
 		}
 
 		result = summary;
+		call.m_sResultWire = summaryWire;
 		return true;
 	}
 
@@ -546,10 +553,7 @@ class CLW_ActionRegistry
 			if (!present)
 			{
 				if (param.m_bRequired)
-				{
-					error = string.Format("%1: missing parameter %2", entry.m_sName, param.m_sName);
-					return false;
-				}
+					return Fail(call, error, string.Format("%1: missing parameter %2", entry.m_sName, param.m_sName), CLW_Loc.W("#CLW-Act_MissingParam", entry.m_sName, param.m_sName));
 
 				continue;
 			}
@@ -561,10 +565,7 @@ class CLW_ActionRegistry
 				{
 					float coordinate = pos[k];
 					if (coordinate != coordinate || coordinate > 100000 || coordinate < -100000)
-					{
-						error = string.Format("%1: %2 not finite", entry.m_sName, param.m_sName);
-						return false;
-					}
+						return Fail(call, error, string.Format("%1: %2 not finite", entry.m_sName, param.m_sName), CLW_Loc.W("#CLW-Act_PosInvalid", entry.m_sName, param.m_sName));
 				}
 
 				continue;
@@ -572,16 +573,10 @@ class CLW_ActionRegistry
 
 			string value = call.GetString(param.m_sName);
 			if (param.m_sType == CLW_ActionParam.TYPE_INT && !CLW_ModeParam.IsNumber(value))
-			{
-				error = string.Format("%1: %2 is not a number", entry.m_sName, param.m_sName);
-				return false;
-			}
+				return Fail(call, error, string.Format("%1: %2 is not a number", entry.m_sName, param.m_sName), CLW_Loc.W("#CLW-Act_NotNumber", entry.m_sName, param.m_sName));
 
 			if (param.m_sType == CLW_ActionParam.TYPE_ENUM && param.m_aEnum && !param.m_aEnum.IsEmpty() && !param.m_aEnum.Contains(value))
-			{
-				error = string.Format("%1: %2 '%3' is not one of the allowed values", entry.m_sName, param.m_sName, value);
-				return false;
-			}
+				return Fail(call, error, string.Format("%1: %2 '%3' is not one of the allowed values", entry.m_sName, param.m_sName, value), CLW_Loc.W("#CLW-Act_BadValue", entry.m_sName, param.m_sName, CLW_HqText.Param(value)));
 		}
 
 		return true;

@@ -63,6 +63,16 @@ class CLW_HqLang
 		return code;
 	}
 
+	// The player's setting as a param: the stored code ("de"), or "auto (de)" with the language it resolves to now (a wire part).
+	static string Current(int playerId)
+	{
+		string stored = CLW_PlayerLang.GetOverride(playerId);
+		if (!stored.IsEmpty())
+			return stored;
+
+		return CLW_Loc.W("#CLW-Lang_AutoOf", CLW_PlayerLang.Resolve(playerId));
+	}
+
 	// Lower case, trimmed; "" when it is neither "auto" nor a valid code.
 	static string Normalize(string raw)
 	{
@@ -266,7 +276,7 @@ class CLW_HqChat
 
 		if (words.Count() == 1)
 		{
-			CLW_RequestService.Answer(playerId, CLW_Loc.W("#CLW-Hq_LangCurrent", CLW_HqLang.Label(CLW_PlayerLang.Resolve(playerId))), true);
+			CLW_RequestService.Answer(playerId, CLW_Loc.W("#CLW-Hq_LangCurrent", CLW_HqLang.Current(playerId)), true);
 			return true;
 		}
 
@@ -506,9 +516,9 @@ class CLW_HqChat
 			string result;
 			bool granted = registry.Run(call, result);
 			if (granted)
-				answer = CLW_Loc.W("#CLW-Req_Granted", CLW_HqText.Param(result));
+				answer = CLW_Loc.W("#CLW-Req_Granted", call.PlayerWire(result));
 			else
-				answer = CLW_Loc.W("#CLW-Req_Refused", dto.action, CLW_HqText.Param(result));
+				answer = CLW_Loc.W("#CLW-Req_Refused", dto.action, call.PlayerWire(result));
 
 			Print(string.Format("CLW: hq #%1 %2 action %3 %4 -> %5: %6", msg.m_iId, msg.m_sName, dto.id, dto.action, granted, result), LogLevel.NORMAL);
 		}

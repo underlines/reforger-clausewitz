@@ -10,7 +10,7 @@
 //   Q <squadId> <name> <humans> <members> <mine 0|1> <full 0|1>         a joinable HQ squad of the player's side
 //   L <text>                                                            a base line (stock, FOB, convoy)
 //   K <allowed 0|1> <reason>                                            contact report available
-//   G <language code>                                                   the player's HQ language (CLW_PlayerLang.Resolve)
+//   G <language code> <override or empty>                              the player's HQ language (CLW_PlayerLang.Resolve) and the stored override (CLW_PlayerLang.GetOverride, empty = auto)
 // i18n: every text field (S, R title / blocked reason, O label, L, K reason) is a CLW_Loc wire (or plain content text such as a vehicle
 // name), formatted by the client in its own language (CLW_HqMenuClient / CLW_HqMenuDialog). Wire params are content names or numbers.
 // Server only. Log prefix: "CLW: hqmenu".
@@ -83,8 +83,9 @@ class CLW_HqMenuServer
 			if (parts.Count() > 1)
 				typeArg = parts[1];
 			kind.ToLower();
-			CLW_RequestService.Handle(playerId, kind, typeArg, terminalPos);	// answers chat + hint itself (the returned English text is for logs)
-			status = CLW_Loc.W("#CLW-HqMenu_Answered");
+			CLW_RequestService.HandleWire(playerId, kind, typeArg, terminalPos, status);	// answers chat + hint itself; the status line shows the same translated answer (the returned English text is for logs)
+			if (status.IsEmpty())
+				status = CLW_Loc.W("#CLW-HqMenu_Answered");
 		}
 		else if (action == "vpage")
 		{
@@ -93,14 +94,16 @@ class CLW_HqMenuServer
 		else if (action == "vreq")
 		{
 			// depot menu: arg = exact catalog type id; the server re-validates side, distance to the depot, cost and caps (Handle)
-			string depotResult = CLW_RequestService.Handle(playerId, CLW_RequestKind.VEHICLE, arg, terminalPos);
-			status = CLW_Loc.W("#CLW-HqMenu_Answered");
+			string depotResult = CLW_RequestService.HandleWire(playerId, CLW_RequestKind.VEHICLE, arg, terminalPos, status);
+			if (status.IsEmpty())
+				status = CLW_Loc.W("#CLW-HqMenu_Answered");
 			Print(string.Format("CLW: depot request %1 %2 -> %3", CLW_RequestService.PlayerName(playerId), arg, depotResult), LogLevel.NORMAL);
 		}
 		else if (action == "report")
 		{
-			CLW_Reports.Chat(playerId, arg);	// answers chat + hint itself
-			status = CLW_Loc.W("#CLW-HqMenu_Answered");
+			CLW_Reports.ChatWire(playerId, arg, status);	// answers chat + hint itself; the status line shows the same translated answer
+			if (status.IsEmpty())
+				status = CLW_Loc.W("#CLW-HqMenu_Answered");
 		}
 		else if (action == "join")
 		{
@@ -266,7 +269,7 @@ class CLW_HqMenuServer
 			wire = Line("H", faction, role, supplies.ToString(), baseLabel, "1");
 		if (!status.IsEmpty())
 			wire += Line("S", status);
-		wire += Line("G", CLW_PlayerLang.Resolve(playerId));
+		wire += Line("G", CLW_PlayerLang.Resolve(playerId), CLW_PlayerLang.GetOverride(playerId));
 
 		if (!running || faction.IsEmpty())
 		{

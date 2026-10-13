@@ -50,6 +50,7 @@ class CLW_Action_EstablishFob : CLW_ActionExecutor
 
 		call.m_iApplied = 1;
 		result = "ESTABLISH_FOB " + siteId;
+		call.m_sResultWire = CLW_Loc.W("#CLW-Act_FobOrdered", siteId);
 		return true;
 	}
 }
@@ -79,6 +80,7 @@ class CLW_Action_UpgradeFob : CLW_ActionExecutor
 
 		call.m_iApplied = 1;
 		result = "UPGRADE_FOB " + fobId;
+		call.m_sResultWire = CLW_Loc.W("#CLW-Act_FobUpgrade", fobId);
 		return true;
 	}
 }

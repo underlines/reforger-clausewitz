@@ -42,6 +42,7 @@ class CLW_Action_Resupply : CLW_ActionExecutor
 
 		call.m_iApplied = 1;
 		result = "RESUPPLY " + fobId;
+		call.m_sResultWire = CLW_Loc.W("#CLW-Act_Resupply", fobId);
 		return true;
 	}
 }
@@ -69,6 +70,7 @@ class CLW_Action_Convoy : CLW_ActionExecutor
 
 		call.m_iApplied = 1;
 		result = "CONVOY " + call.GetString("origin") + " -> " + call.GetString("dest");
+		call.m_sResultWire = CLW_Loc.W("#CLW-Act_Convoy", call.GetString("origin"), call.GetString("dest"));
 		return true;
 	}
 }
