@@ -223,6 +223,22 @@ class CLW_Services
 		return count;
 	}
 
+	// Every spawned service of every side (footprints for CLW_VehicleSpot).
+	static int GetAllInstances(notnull array<CLW_ServiceInstance> outInstances)
+	{
+		int count;
+		foreach (CLW_ServiceInstance inst : s_aInst)
+		{
+			if (!inst || !inst.m_Entity || inst.m_Entity.IsDeleted())
+				continue;
+
+			outInstances.Insert(inst);
+			count++;
+		}
+
+		return count;
+	}
+
 	// Same with the instance data (kind, base, position).
 	static int GetInstances(string sideKey, string baseId, notnull array<CLW_ServiceInstance> outInstances)
 	{

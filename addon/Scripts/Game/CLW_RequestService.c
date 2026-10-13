@@ -451,7 +451,7 @@ class CLW_RequestService
 	//   chat request further away               near the requester: the nearest road within REQUEST_ROAD_M (road edge, aligned with the
 	//                                           road), else open ground within REQUEST_GROUND_M; if neither exists the nearest depot
 	// False when no clear spot was found. where = text for the answer ("depot", "HQ", "FOB1", "roadside near you", ...).
-	static bool FindVehicleSpot(string factionKey, out vector spot, out float yaw, out string via, out string where, string baseId = "", vector requesterPos = vector.Zero)
+	static bool FindVehicleSpot(string factionKey, out vector spot, out float yaw, out string via, out string where, string baseId = "", vector requesterPos = vector.Zero, ResourceName vehiclePrefab = "")
 	{
 		CLW_Bases bases = CLW_GameMode.GetBases();
 		vector anchor;
@@ -472,21 +472,7 @@ class CLW_RequestService
 				if (!depot)
 				{
 					where = baseId;
-					CLW_SpotParams fobParams = CLW_FreeSpot.VehicleParams(label + " " + baseId, anchor);
-					fobParams.m_fMinRadius = 12;
-					fobParams.m_fMaxRadius = 60;
-					fobParams.m_fRoadWeight = 0.5;
-					fobParams.m_bRoadYaw = true;
-					CLW_SpotResult fobRes = new CLW_SpotResult();
-					if (CLW_FreeSpot.FindFreeSpot(fobParams, fobRes))
-					{
-						spot = fobRes.m_vPos;
-						yaw = fobRes.m_fYaw;
-						via = fobRes.m_sVia;
-						return true;
-					}
-
-					return false;
+					return CLW_VehicleSpot.FindEx(vehiclePrefab, anchor, factionKey, 50, 12, 60, null, spot, yaw, via);
 				}
 			}
 		}
@@ -506,10 +492,10 @@ class CLW_RequestService
 
 			if (!atBase)
 			{
-				if (CLW_FreeSpot.FindNearRequester(label, requesterPos, spot, yaw, via))
+				if (CLW_VehicleSpot.FindEx(vehiclePrefab, requesterPos, factionKey, 50, 5, 30, null, spot, yaw, via))
 				{
 					where = "roadside near you";
-					if (via == "open-ground")
+					if (via != "road")
 						where = "open ground near you";
 
 					return true;
@@ -527,10 +513,10 @@ class CLW_RequestService
 		{
 			where = "depot";
 			vector depotPos = depot.GetOrigin();
-			if (CLW_FreeSpot.FindDepotSpot(label + " depot", depotPos, 8, 45, anchor, spot, yaw, via))
+			if (CLW_VehicleSpot.FindEx(vehiclePrefab, depotPos, factionKey, 50, 8, 45, null, spot, yaw, via))
 				return true;
 
-			if (CLW_FreeSpot.FindDepotSpot(label + " depot wide", depotPos, 8, 90, anchor, spot, yaw, via))
+			if (CLW_VehicleSpot.FindEx(vehiclePrefab, depotPos, factionKey, 50, 8, 90, null, spot, yaw, via))
 				return true;
 		}
 
@@ -543,7 +529,7 @@ class CLW_RequestService
 	}
 
 	// Spawn an empty vehicle. Null (logged) on failure.
-	static IEntity SpawnVehicle(ResourceName prefab, vector spot, float yaw)
+	static IEntity SpawnVehicle(ResourceName prefab, vector spot, float yaw, string factionKey = "")
 	{
 		Resource resource = Resource.Load(prefab);
 		if (!resource || !resource.IsValid())
@@ -553,7 +539,7 @@ class CLW_RequestService
 		}
 
 		vector pos = spot;
-		pos[1] = GetGame().GetWorld().GetSurfaceY(pos[0], pos[2]);
+		pos[1] = GetGame().GetWorld().GetSurfaceY(pos[0], pos[2]) + CLW_VehicleSpotConfig.LIFT_M;
 		EntitySpawnParams params = new EntitySpawnParams();
 		params.TransformMode = ETransformMode.WORLD;
 		vector mat[4];
@@ -562,7 +548,11 @@ class CLW_RequestService
 		params.Transform[1] = mat[1];
 		params.Transform[2] = mat[2];
 		params.Transform[3] = pos;
-		return GetGame().SpawnEntityPrefab(resource, GetGame().GetWorld(), params);
+		IEntity spawned = GetGame().SpawnEntityPrefab(resource, GetGame().GetWorld(), params);
+		if (spawned)
+			CLW_VehicleSpot.Watch(spawned, prefab, factionKey, spot, 50);
+
+		return spawned;
 	}
 
 	// ---- entry points ----

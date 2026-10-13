@@ -702,6 +702,8 @@ class CLW_ForceCatalog
 			return probe;
 		}
 
+		CLW_VehicleSpot.Learn(prefab, vehicle);	// real bounds for the spawn spot search (no spawn needed later)
+
 		BaseCompartmentManagerComponent compartments = BaseCompartmentManagerComponent.Cast(vehicle.FindComponent(BaseCompartmentManagerComponent));
 		if (compartments)
 		{

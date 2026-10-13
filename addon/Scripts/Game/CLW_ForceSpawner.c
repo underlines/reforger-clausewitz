@@ -343,7 +343,11 @@ class CLW_ForceSpawner
 			if (source.HasVehicle())
 			{
 				kindLabel = "vehicle";
-				placed = bases.FindVehicleSpot(factionKey, CLW_WarConfig.SPAWN_RADIUS_M, CLW_WarConfig.SPAWN_VEHICLE_CYLINDER_R, CLW_WarConfig.SPAWN_VEHICLE_CYLINDER_H, spot, spotYaw, via);
+				// one robust vehicle spot service (road within 50 m of the HQ first, then clear ground); the scenario slots / road spots
+				// of the base are the last resort
+				placed = CLW_VehicleSpot.Find(source.m_VehiclePrefab, bases.GetBasePos(factionKey), factionKey, 50, spot, spotYaw, via);
+				if (!placed)
+					placed = bases.FindVehicleSpot(factionKey, CLW_WarConfig.SPAWN_RADIUS_M, CLW_WarConfig.SPAWN_VEHICLE_CYLINDER_R, CLW_WarConfig.SPAWN_VEHICLE_CYLINDER_H, spot, spotYaw, via);
 			}
 			else
 			{
@@ -568,7 +572,7 @@ class CLW_ForceSpawner
 		}
 
 		vector pos = job.m_vPos;
-		pos[1] = GetGame().GetWorld().GetSurfaceY(pos[0], pos[2]);
+		pos[1] = GetGame().GetWorld().GetSurfaceY(pos[0], pos[2]) + CLW_VehicleSpotConfig.LIFT_M;
 		EntitySpawnParams params = new EntitySpawnParams();
 		params.TransformMode = ETransformMode.WORLD;
 		vector mat[4];
@@ -585,6 +589,10 @@ class CLW_ForceSpawner
 		}
 
 		job.m_Vehicle = vehicle;
+		CLW_Bases spotBases = CLW_GameMode.GetBases();
+		if (spotBases)
+			CLW_VehicleSpot.Watch(vehicle, entry.m_VehiclePrefab, job.m_sFaction, spotBases.GetBasePos(job.m_sFaction), 50);
+
 		CLW_WarState war = CLW_GameMode.GetWarState();
 		if (war)
 			war.RegisterVehicle(vehicle, job.m_sFaction);
