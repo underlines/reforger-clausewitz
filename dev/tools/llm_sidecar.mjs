@@ -1858,6 +1858,9 @@ http.createServer((req, res) => {
     if (url === "/" || url === "/index.html") return serveStatic(res, "index.html");
     if (url === "/app.js") return serveStatic(res, "app.js");
     if (url === "/journal.js") return serveStatic(res, "journal.js");
+    if (url === "/i18n.js") return serveStatic(res, "i18n.js");
+    const li = /^\/i18n\/([a-z]{2,3})\.json$/.exec(url); // dashboard dictionaries (dashboard/i18n/<lang>.json)
+    if (li) return serveStatic(res, "i18n/" + li[1] + ".json");
     if (url === "/style.css") return serveStatic(res, "style.css");
     // vendored libraries: flat names only (no slashes, no dot-dot), known extensions
     const m = /^\/vendor\/([A-Za-z0-9][A-Za-z0-9._-]*)$/.exec(url);
