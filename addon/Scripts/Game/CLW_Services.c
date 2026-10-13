@@ -19,6 +19,7 @@ class CLW_ServiceInstance
 	string m_sSource;		// faction key of the profile the prefab came from (differs from m_sSide on a kin fallback)
 	ResourceName m_Prefab;
 	IEntity m_Entity;
+	ref array<IEntity> m_aHelpers = {};	// CLW_ArsenalActions.et helpers spawned at this service's arsenal boxes (deleted with it)
 	vector m_vPos;
 	float m_fRadius;
 	vector m_vRectCenter;	// centre of the placed footprint (position + footprint offset), round 3
@@ -85,6 +86,7 @@ class CLW_Services
 	static const int LINK_RETRIES = 6;
 	static const int ARSENAL_DELAY_MS = 1500;
 	static const int ARSENAL_LOG_MS = 6000;
+	static const ResourceName ACTIONS_HELPER_PREFAB = "{4E8A2F1B7C3D9065}Prefabs/Systems/CLW_ArsenalActions.et";
 	static const int SYNC_MS = 1500;
 
 	protected static ref array<ref CLW_ServiceInstance> s_aInst = {};
@@ -167,6 +169,7 @@ class CLW_Services
 		{
 			if (inst.m_Entity)
 			{
+				DeleteHelpers(inst);
 				SCR_EntityHelper.DeleteEntityAndChildren(inst.m_Entity);
 				removed++;
 			}
@@ -274,6 +277,7 @@ class CLW_Services
 			if (inst.m_sSide != sideKey || inst.m_sBase != baseId)
 				continue;
 
+			DeleteHelpers(inst);
 			if (inst.m_Entity)
 				SCR_EntityHelper.DeleteEntityAndChildren(inst.m_Entity);
 
@@ -1211,11 +1215,75 @@ class CLW_Services
 
 				Print(string.Format("CLW: services arsenal %1 %2 at %3: kitCost=%4 (%5) saveType=FRIENDLY_AND_FACTION_ITEMS_ONLY service=%6 prefab=%7", sideKey, baseId, inst.m_vPos, kitCost, cost, inst.m_sKind, inst.m_Prefab.GetPath()), LogLevel.NORMAL);
 				GetGame().GetCallqueue().CallLater(LogArsenal, ARSENAL_LOG_MS, false, sideKey, entity, inst.m_sKind + " " + inst.m_Prefab.GetPath() + " at " + inst.m_vPos.ToString());
+				EnsureActionsHelper(inst, entity, sideKey, baseId);
 			}
 		}
 
 		if (count == 0)
 			Print(string.Format("CLW: services arsenal %1 %2: none in the services (kit cost: nothing to switch)", sideKey, baseId), LogLevel.NORMAL);
+	}
+
+	// Pack arsenal boxes (RHS ArsenalBox_RHS / _USMC ...) bring their own action list without the vanilla "Save loadout" and our "Load
+	// loadout". Server: when the box lacks either, spawn the replicated helper CLW_ArsenalActions.et at its transform (not parented, boxes
+	// are static); the helper's actions find the box through CLW_ArsenalFind. One helper per box (re-setup is a no-op), deleted with the service.
+	protected static void EnsureActionsHelper(CLW_ServiceInstance inst, IEntity box, string sideKey, string baseId)
+	{
+		bool hasSave;
+		bool hasLoad;
+		ActionsManagerComponent actions = ActionsManagerComponent.Cast(box.FindComponent(ActionsManagerComponent));
+		if (actions)
+		{
+			array<BaseUserAction> list = {};
+			actions.GetActionsList(list);
+			foreach (BaseUserAction action : list)
+			{
+				if (SCR_SaveArsenalLoadout.Cast(action))
+					hasSave = true;
+				else if (CLW_LoadLoadoutAction.Cast(action))
+					hasLoad = true;
+			}
+		}
+
+		bool needed = !hasSave || !hasLoad;
+		bool helper;
+		if (needed)
+		{
+			foreach (IEntity existing : inst.m_aHelpers)
+			{
+				if (existing && !existing.IsDeleted() && vector.DistanceSq(existing.GetOrigin(), box.GetOrigin()) < 0.25)
+					helper = true;
+			}
+
+			if (!helper)
+			{
+				Resource resource = Resource.Load(ACTIONS_HELPER_PREFAB);
+				if (resource && resource.IsValid())
+				{
+					EntitySpawnParams params = new EntitySpawnParams();
+					params.TransformMode = ETransformMode.WORLD;
+					box.GetWorldTransform(params.Transform);
+					IEntity spawned = GetGame().SpawnEntityPrefab(resource, GetGame().GetWorld(), params);
+					if (spawned)
+					{
+						inst.m_aHelpers.Insert(spawned);
+						helper = true;
+					}
+				}
+			}
+		}
+
+		Print(string.Format("CLW: services arsenal actions %1 %2 helper=%3 (save=%4 load=%5 on box)", sideKey, baseId, helper, hasSave, hasLoad), LogLevel.NORMAL);
+	}
+
+	protected static void DeleteHelpers(CLW_ServiceInstance inst)
+	{
+		foreach (IEntity helperEntity : inst.m_aHelpers)
+		{
+			if (helperEntity && !helperEntity.IsDeleted())
+				SCR_EntityHelper.DeleteEntityAndChildren(helperEntity);
+		}
+
+		inst.m_aHelpers.Clear();
 	}
 
 	// Vehicle depot (owner playtest 2026-10-12: "request vehicle" showed vanilla vehicles for an RHS side). The vanilla spawner builds its

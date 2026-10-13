@@ -1,0 +1,54 @@
+GenericEntity {
+ ID "30190C2A5F166306"
+ components {
+  MeshObject "{18556C6239356A9E}" {
+   Object "{56326B665211D386}Assets/Props/Military/AmmoBox/ArsenalBox_01/ArsenalBox_01.xob"
+  }
+  RigidBody "{3C3B1BB0081256A8}" {
+   Mass 10
+   ModelGeometry 1
+   Static 1
+  }
+  ActionsManagerComponent "{77F50D850E33334F}" {
+   Enabled 1
+   ActionContexts {
+    UserActionContext "{5F30304F05936526}" {
+     ContextName "default"
+     Position PointInfo "{64BF1E230EE43156}" {
+      Offset 0 0.9 0
+     }
+     Radius 1.5
+    }
+   }
+   additionalActions {
+    CLW_SaveArsenalLoadoutAction "{39237DC9580C2D97}" {
+     ParentContextList {
+      "default"
+     }
+     UIInfo UIInfo "{30BA1E8B1659403F}" {
+      Name "#AR-Loadout_Action_SaveLoadout"
+     }
+     Duration 1
+     "Sort Priority" 10
+    }
+    CLW_LoadLoadoutAction "{555B40B600A22AFC}" {
+     ParentContextList {
+      "default"
+     }
+     UIInfo UIInfo "{434A1C07D5E2B9A1}" {
+      Name "#CLW-Loadout_Load"
+     }
+     Duration 1
+     "Sort Priority" 11
+    }
+   }
+  }
+  RplComponent "{6A21F0B3C94E7D15}" {
+   Enabled 1
+   "Rpl State Override" Runtime
+  }
+  Hierarchy "{2B7E58D1A03C9F64}" {
+   Enabled 1
+  }
+ }
+}

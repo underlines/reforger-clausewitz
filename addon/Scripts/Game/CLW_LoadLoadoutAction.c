@@ -79,14 +79,8 @@ class CLW_LoadLoadoutAction : ScriptedUserAction
 		if (m_Arsenal)
 			return m_Arsenal;
 
-		IEntity owner = GetOwner();
-		if (!owner)
-			return null;
-
-		m_Arsenal = SCR_ArsenalComponent.FindArsenalComponent(owner);
-		if (!m_Arsenal && owner.GetParent())
-			m_Arsenal = SCR_ArsenalComponent.FindArsenalComponent(owner.GetParent());
-
+		// self, parent, else the nearest arsenal within 4 m (the action may sit on the CLW_ArsenalActions helper next to a pack box)
+		m_Arsenal = CLW_ArsenalFind.Of(GetOwner());
 		return m_Arsenal;
 	}
 
@@ -147,9 +141,7 @@ class CLW_LoadLoadout
 		}
 
 		string factionKey = userFaction.GetFactionKey();
-		SCR_ArsenalComponent arsenal = SCR_ArsenalComponent.FindArsenalComponent(arsenalEntity);
-		if (!arsenal && arsenalEntity.GetParent())
-			arsenal = SCR_ArsenalComponent.FindArsenalComponent(arsenalEntity.GetParent());
+		SCR_ArsenalComponent arsenal = CLW_ArsenalFind.Of(arsenalEntity);
 
 		if (!arsenal || !arsenal.IsArsenalEnabled())
 		{
