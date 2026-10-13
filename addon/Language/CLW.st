@@ -720,6 +720,10 @@ StringTable {
    Target_en_us "Loadout loaded, %1 items unavailable (%2 supplies)."
    Target_de_de "Loadout geladen, %1 Gegenstände nicht verfügbar (%2 Vorräte)."
   }
+  CustomStringTableItem CLW-Loadout_MySaved {
+   Target_en_us "My saved loadout"
+   Target_de_de "Mein gespeichertes Loadout"
+  }
   CustomStringTableItem CLW-Loadout_NoneSaved {
    Target_en_us "No saved loadout for your faction"
    Target_de_de "Kein gespeichertes Loadout für deine Fraktion"

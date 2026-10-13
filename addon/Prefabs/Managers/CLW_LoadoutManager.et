@@ -55,7 +55,7 @@ SCR_LoadoutManager : "{B54D08AEA74A5354}Prefabs/MP/Managers/Loadouts/LoadoutMana
    m_iSlot 7
   }
   CLW_SideCustomLoadout "{753D5B0240770B69}" {
-   m_sLoadoutName "#AR-Loadout_Editor_SavedArsenalLoadout_Name"
+   m_sLoadoutName "#CLW-Loadout_MySaved"
    m_iSide 0
   }
   CLW_ServerLoadout "{2314550A5B407176}" {
@@ -94,7 +94,7 @@ SCR_LoadoutManager : "{B54D08AEA74A5354}Prefabs/MP/Managers/Loadouts/LoadoutMana
    m_iSlot 7
   }
   CLW_SideCustomLoadout "{072979A641AE1BA7}" {
-   m_sLoadoutName "#AR-Loadout_Editor_SavedArsenalLoadout_Name"
+   m_sLoadoutName "#CLW-Loadout_MySaved"
    m_iSide 1
   }
  }
