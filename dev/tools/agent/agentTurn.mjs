@@ -17,6 +17,7 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 import { JOURNAL_RULE } from "./journal.mjs";
 import { normLang, normSetLanguage, hqLanguageRules, parseStructuredReply } from "./i18n.mjs";
+import { isRetryable } from "./fallback.mjs";
 
 export const DEFAULTS = { maxSteps: 4, timeoutSec: 40, maxActions: 3, coreToolsMax: 6, maxOutputTokens: 700 };
 const isNum = (n) => typeof n === "number" && Number.isFinite(n);
@@ -175,11 +176,44 @@ export function createModel(config) {
   throw new Error(`agent turns support openrouter / openai-compatible, not ${provider}`);
 }
 
+// Backup model for the tool loop: a LanguageModel that answers with `primary` and, after a RETRYABLE failure of a step (429, 5xx, timeout, network),
+// switches to `backup` for that step and all remaining steps of the same call (steps that already succeeded are kept, nothing restarts).
+// hooks: primaryCooling() -> bool (skip the primary right away), attemptMs (per-attempt cap of the primary), names {primary, backup},
+//        onFailure(which, err), onFallback(err). `state` reports { fellBack, primaryError, modelUsed } after the call.
+export function createFallbackModel(primary, backup, hooks = {}) {
+  const state = { fellBack: false, primaryError: null, modelUsed: hooks.names?.primary ?? null };
+  let sticky = false;
+  const capped = (o) => (hooks.attemptMs ? { ...o, abortSignal: o.abortSignal ? AbortSignal.any([o.abortSignal, AbortSignal.timeout(hooks.attemptMs)]) : AbortSignal.timeout(hooks.attemptMs) } : o);
+  const run = async (method, options) => {
+    if (!sticky) {
+      if (hooks.primaryCooling?.()) {
+        sticky = true; state.fellBack = true; state.primaryError = "provider cooling down after rate limit/server error";
+        hooks.onFallback?.(Object.assign(new Error(state.primaryError), { cooling: true }));
+      } else {
+        try { const r = await primary[method](capped(options)); state.modelUsed = hooks.names?.primary ?? state.modelUsed; return r; }
+        catch (err) {
+          if (options.abortSignal?.aborted || !isRetryable(err)) throw err; // the whole call was cancelled / not retryable: no fallback
+          hooks.onFailure?.("primary", err);
+          sticky = true; state.fellBack = true; state.primaryError = String(err?.message ?? err).slice(0, 200);
+          hooks.onFallback?.(err);
+        }
+      }
+    }
+    try { const r = await backup[method](options); state.modelUsed = hooks.names?.backup ?? state.modelUsed; return r; }
+    catch (err) { hooks.onFailure?.("fallback", err); throw err; }
+  };
+  const wrapped = Object.create(primary, {
+    doGenerate: { value: (options) => run("doGenerate", options) },
+    doStream: { value: (options) => run("doStream", options) },
+  });
+  return { model: wrapped, state };
+}
+
 // Runs the tool loop. Everything the rest of the sidecar needs from the SDK is normalised here:
 // -> { text, steps:[{n, text, finishReason, toolCalls:[{name,input,output,error}], usage}], usage:{input,output,cost,calls} }
-export async function callModel({ model, system, prompt, tools, maxSteps, maxOutputTokens, timeoutSec }) {
+export async function callModel({ model, system, prompt, tools, maxSteps, maxOutputTokens, timeoutSec, maxRetries }) {
   const agent = new ToolLoopAgent({
-    model, instructions: system, tools, stopWhen: stepCountIs(maxSteps), maxOutputTokens, temperature: 0.2,
+    model, instructions: system, tools, stopWhen: stepCountIs(maxSteps), maxOutputTokens, temperature: 0.2, ...(maxRetries !== undefined ? { maxRetries } : {}),
   });
   const res = await agent.generate({ prompt, abortSignal: AbortSignal.timeout(timeoutSec * 1000) });
   const steps = res.steps.map((s, i) => {
@@ -242,10 +276,13 @@ async function fakeTurn({ tools, message, manifest }) {
 }
 
 // ---------- entry point ----------
-export async function runAgentTurn({ manifest, situation, message, config, agentConfig = {}, journal = "" }) {
+// fallback (optional, from the sidecar): { config: <full provider config of the backup model>, primaryCooling(), onFailure(which, err), onFallback(err) }.
+//   Result then also has modelUsed (the model that answered the last step), fellBack, primaryError.
+export async function runAgentTurn({ manifest, situation, message, config, agentConfig = {}, journal = "", fallback = null }) {
   const t0 = Date.now();
   const lim = { ...DEFAULTS, ...agentConfig };
-  const out = { msgId: message.id, ok: true, replyText: "", actions: [], steps: [], usage: { input: 0, output: 0, cost: 0, calls: 0 }, latencyMs: 0, provider: config.provider, model: config.provider === "fake" ? null : config.model, tools: [], error: null, lang: normLang(message.lang), setLanguage: null };
+  const out = { msgId: message.id, ok: true, replyText: "", actions: [], steps: [], usage: { input: 0, output: 0, cost: 0, calls: 0 }, latencyMs: 0, provider: config.provider, model: config.provider === "fake" ? null : config.model, tools: [], error: null, lang: normLang(message.lang), setLanguage: null, modelUsed: config.provider === "fake" ? null : config.model, fellBack: false, primaryError: null };
+  let fbState = null;
   try {
     const built = buildTools(manifest, situation, message, lim);
     out.tools = Object.keys(built.tools);
@@ -254,13 +291,30 @@ export async function runAgentTurn({ manifest, situation, message, config, agent
     const prompt = String(message.text ?? "").slice(0, 500);
     let r;
     if (config.provider === "fake") r = await fakeTurn({ tools: built.tools, message, manifest });
-    else r = await callModel({ model: createModel(config), system, prompt, tools: built.tools, maxSteps: lim.maxSteps, maxOutputTokens: lim.maxOutputTokens, timeoutSec: lim.timeoutSec });
+    else {
+      let model = createModel(config), maxRetries;
+      if (fallback?.config) {
+        let backup = null;
+        try { backup = createModel(fallback.config); } catch { /* backup unusable for agent turns (provider / key): run without it */ }
+        if (backup) {
+          const fm = createFallbackModel(model, backup, {
+            primaryCooling: fallback.primaryCooling, onFailure: fallback.onFailure, onFallback: fallback.onFallback,
+            names: { primary: config.model, backup: fallback.config.model },
+            attemptMs: Math.min(config.timeoutSec ?? lim.timeoutSec, lim.timeoutSec / 2) * 1000, // the primary must leave time for the backup inside the turn budget
+          });
+          model = fm.model; fbState = fm.state; maxRetries = 0; // failures are handled by the backup, not by the SDK's slow retries
+        }
+      }
+      r = await callModel({ model, system, prompt, tools: built.tools, maxSteps: lim.maxSteps, maxOutputTokens: lim.maxOutputTokens, timeoutSec: lim.timeoutSec, maxRetries });
+      if (fbState) { out.modelUsed = fbState.modelUsed; out.fellBack = fbState.fellBack; out.primaryError = fbState.primaryError; }
+    }
     out.steps = r.steps; out.usage = r.usage; out.actions = built.ctx.actions;
     if (lang && config.provider !== "fake") { const sr = parseStructuredReply(r.text); out.replyText = sr.reply.slice(0, 300); out.setLanguage = sr.setLanguage; }
     else { out.replyText = String(r.text ?? "").trim().slice(0, 300); if (lang) out.setLanguage = normSetLanguage(r.setLanguage); }
     if (!out.replyText) out.replyText = out.actions.length ? "Roger, request passed on." : "HQ copies, nothing to do.";
   } catch (e) {
     out.ok = false;
+    if (fbState) { out.fellBack = fbState.fellBack; out.primaryError = fbState.primaryError; out.modelUsed = null; }
     out.error = e?.name === "TimeoutError" || e?.name === "AbortError" ? "timeout" : String(e?.message ?? e).slice(0, 300);
     out.actions = [];
   }

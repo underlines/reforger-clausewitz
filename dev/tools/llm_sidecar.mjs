@@ -64,6 +64,12 @@
 //       "none" = unset). Every LLM call names a role (commander|journal|hq|translate); only translate uses the weak slot, no weak slot = strong translates.
 //       Config API: GET /api/config also returns strong{}, weak{} (apiKey as apiKeySet/apiKeyLast4), roles, translateSlot; POST /api/config accepts
 //       "weak":{provider,model,baseUrl,apiKey,timeoutSec}|null, "strong":{same} and "i18n":{enabled,translateTimeoutSec}; POST /api/test {"slot":"translate"}.
+//     Backup (fallback) model per slot: strong.fallback / top-level "fallback" (strong) and weak.fallback = null | {model, provider?, baseUrl?, apiKey?, timeoutSec?}
+//       (omitted fields inherit from the slot; the slot's key is only inherited while provider + baseUrl stay the same). A call goes to the primary and, after a
+//       RETRYABLE failure (HTTP 408/429/5xx, timeout, network error, "cooling down"), ONCE to the backup (agent turns: the backup takes over the remaining steps).
+//       400/401/403/404 and invalid model output never fall back. Cooldown is per (slot, model) (20 s after 429/5xx, also after a timeout when a backup exists).
+//       Exchange log + /api/state hq[]: modelUsed, fellBack, primaryError; /api/state counters.modelFallbacks {strong,weak}, modelCooldowns {"<slot>|<model>": sec}.
+//       POST /api/config "fallback":null clears; POST /api/test {"slot":"strong|weak|translate","which":"primary|fallback"} tests one model alone.
 //     Fake provider: translation = "[<lang>] <text>", /hq reply = "[<lang>] <reply>" (also after setLanguage), so e2e can check routing without a key.
 //
 //   Faction SITREP (design: dev/notes/sitrep-design.md). The game POST may carry "sitrep": the rules SITREP the game built from the
@@ -122,6 +128,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as I18N from "./agent/i18n.mjs"; // protocol v4: languages, structured /hq reply, translator (section "i18n" below)
 import * as J from "./agent/journal.mjs"; // HQ war journal (pure functions), see "HQ war journal" below
+import * as FB from "./agent/fallback.mjs"; // backup (fallback) model per slot, see "model fallback" below
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const DASH_DIR = path.join(DIR, "dashboard");
@@ -276,9 +283,10 @@ const cfg = {
   baseUrl: "",
   apiKey: process.env.ANTHROPIC_API_KEY || "",
   timeoutSec: 20,
+  fallback: null,    // backup model of the strong slot: null | {model, provider?, baseUrl?, apiKey?, timeoutSec?} (omitted fields inherit from the slot)
   maxTokens: 1024,
   // weak LLM slot (protocol v4, i18n): provider "none" = no weak slot, the strong slot (the top-level provider/model/baseUrl/apiKey/timeoutSec above) translates
-  weak: { provider: "none", model: "", baseUrl: "", apiKey: "", timeoutSec: 10 },
+  weak: { provider: "none", model: "", baseUrl: "", apiKey: "", timeoutSec: 10, fallback: null },
   enabled: true,
   engine: "llm",
   minIntervalSec: 0,
@@ -352,6 +360,25 @@ function validateSlotField(k, v) {
   }
   return { error: `unknown setting ${k}` };
 }
+// Backup model of a slot: null clears; an object is merged onto the current one. model is required; provider/baseUrl/timeoutSec may be ""/null
+// (= inherit from the slot); apiKey "" keeps the stored key. Only the fields that are set are stored.
+function validateFallback(v, cur, label) {
+  if (v === null) return { value: null };
+  if (!v || typeof v !== "object" || Array.isArray(v)) return { error: `${label} must be an object or null` };
+  const out = { ...(cur ?? {}) };
+  for (const [k, x] of Object.entries(v)) {
+    if (!["model", "provider", "baseUrl", "apiKey", "timeoutSec"].includes(k)) return { error: `unknown setting ${label}.${k}` };
+    if ((k === "provider" || k === "baseUrl") && x === "") { delete out[k]; continue; }
+    if (k === "timeoutSec" && x === null) { delete out[k]; continue; }
+    const r = validateSlotField(k, x);
+    if (r.error) return { error: `${label}.` + r.error };
+    if (k === "apiKey" && r.value === "") continue;
+    if (k === "baseUrl" && !r.value) { delete out[k]; continue; }
+    out[k] = r.value;
+  }
+  if (!out.model) return { error: `${label}.model is required` };
+  return { value: out };
+}
 // weak slot: partial object merged onto the current slot; null / {provider:"none"} = no weak slot; apiKey "" keeps the stored key.
 function validateWeak(v) {
   if (v === null) return { value: { ...cfg.weak, provider: "none" } };
@@ -359,6 +386,11 @@ function validateWeak(v) {
   const out = { ...cfg.weak };
   for (const [k, x] of Object.entries(v)) {
     if (k === "provider" && x === "none") { out.provider = "none"; continue; }
+    if (k === "fallback") {
+      const f = validateFallback(x, cfg.weak.fallback, "weak.fallback");
+      if (f.error) return f;
+      out.fallback = f.value; continue;
+    }
     if (!["provider", "model", "baseUrl", "apiKey", "timeoutSec"].includes(k)) return { error: `unknown setting weak.${k}` };
     const r = validateSlotField(k, x);
     if (r.error) return { error: "weak." + r.error };
@@ -380,11 +412,21 @@ function validateConfig(inp) {
       case "strong": { // the strong slot IS the top-level provider/model/baseUrl/apiKey/timeoutSec (backward compatible); this is a grouped way to set it
         if (!v || typeof v !== "object" || Array.isArray(v)) return { error: "strong must be an object" };
         for (const [sk, sv] of Object.entries(v)) {
+          if (sk === "fallback") {
+            const f = validateFallback(sv, cfg.fallback, "strong.fallback");
+            if (f.error) return f;
+            out.fallback = f.value; continue;
+          }
           const r = validateSlotField(sk, sv);
           if (r.error) return { error: "strong." + r.error };
           out[sk] = r.value;
         }
         break;
+      }
+      case "fallback": { // top-level way to set the strong slot's backup model (same as strong.fallback)
+        const f = validateFallback(v, cfg.fallback, "fallback");
+        if (f.error) return f;
+        out.fallback = f.value; break;
       }
       case "weak": {
         const r = validateWeak(v);
@@ -451,10 +493,10 @@ function saveConfig() {
 }
 
 function publicConfig() {
-  const { apiKey, weak, ...rest } = cfg;
-  const slot = (o) => ({ provider: o.provider, model: o.model, baseUrl: o.baseUrl, timeoutSec: o.timeoutSec, apiKeySet: !!o.apiKey, apiKeyLast4: o.apiKey ? o.apiKey.slice(-4) : "" });
+  const { apiKey, weak, fallback, ...rest } = cfg;
+  const slot = (o) => ({ provider: o.provider, model: o.model, baseUrl: o.baseUrl, timeoutSec: o.timeoutSec, apiKeySet: !!o.apiKey, apiKeyLast4: o.apiKey ? o.apiKey.slice(-4) : "", fallback: FB.publicFallback(o.fallback) });
   // strong = the top-level provider/model/baseUrl/apiKey/timeoutSec (kept for old clients); weak.provider "none" = no weak slot (strong translates)
-  return { ...rest, apiKeySet: !!apiKey, apiKeyLast4: apiKey ? apiKey.slice(-4) : "", strong: slot(cfg), weak: slot(weak), roles: ROLE_SLOT, translateSlot: weak.provider !== "none" ? "weak" : "strong" };
+  return { ...rest, apiKeySet: !!apiKey, apiKeyLast4: apiKey ? apiKey.slice(-4) : "", fallback: FB.publicFallback(fallback), strong: slot(cfg), weak: slot(weak), roles: ROLE_SLOT, translateSlot: weak.provider !== "none" ? "weak" : "strong" };
 }
 
 // ---------- state ----------
@@ -462,7 +504,7 @@ const state = {
   startedAt: Date.now(),
   factions: {},   // name -> {ts, situation, orders}
   exchanges: [],  // newest first, max RING_MAX
-  counters: { requests: 0, gated: 0, skipped: 0, errors: 0, fallbacks: 0, inputTokens: 0, outputTokens: 0 },
+  counters: { requests: 0, gated: 0, skipped: 0, errors: 0, fallbacks: 0, inputTokens: 0, outputTokens: 0, modelFallbacks: { strong: 0, weak: 0 } }, // fallbacks = rule-commander fallbacks; modelFallbacks = calls answered by the backup model
   lastRequestTs: 0,
   debugLog: [],   // game debug lines (CLW_Debug), newest first, max DEBUG_MAX, deduped across the factions' posts
 };
@@ -703,17 +745,69 @@ function slotCfg(c, role = "strong") {
   if (ROLE_SLOT[role] === "weak" && w && w.provider && w.provider !== "none") return { ...c, provider: w.provider, model: w.model || c.model, baseUrl: w.baseUrl, apiKey: w.apiKey, timeoutSec: w.timeoutSec || c.timeoutSec };
   return c;
 }
+// ---------- model fallback ----------
+// Every slot (strong, weak) may carry a backup model (config "fallback", see agent/fallback.mjs). callWithFallback() is the one place that
+// routes a call: primary first, ONE retry on the backup after a retryable failure (429, 5xx, timeout, network error, cooling down).
+// Cooldown state is per (slot, model): a rate-limited primary does not block the backup, and while it cools down calls go straight to the
+// backup until the cooldown expires, then the primary is tried again. No backup configured = exactly the old single-model behaviour.
+const RATE_COOLDOWN_MS = Number(process.env.CLW_RATE_COOLDOWN_MS) || 20000; // after a 429/5xx the model is skipped for this long (or its Retry-After); the env override is for tests
+const cooldowns = new Map();   // "<slot>|<model>" -> until (epoch ms)
+const coolKey = (slot, c) => slot + "|" + c.model;
+const coolLeftMs = (slot, c) => Math.max(0, (cooldowns.get(coolKey(slot, c)) ?? 0) - Date.now());
+/** { slot: "strong"|"weak" (the slot that really answers), primary: full provider config, fallback: full provider config | null } */
+function slotChain(c, role = "strong") {
+  const weak = ROLE_SLOT[role] === "weak" && c.weak?.provider && c.weak.provider !== "none";
+  const primary = weak ? slotCfg(c, role) : c;
+  return { slot: weak ? "weak" : "strong", primary, fallback: primary.provider === "fake" ? null : FB.resolveFallback(primary, weak ? c.weak.fallback : c.fallback) };
+}
+function noteCooldown(slot, c, err, hasFallback) {
+  const ms = FB.cooldownFor(err, RATE_COOLDOWN_MS, hasFallback);
+  if (ms > 0) cooldowns.set(coolKey(slot, c), Date.now() + ms);
+}
+function noteFellBack(slot, primaryModel, err) {
+  state.counters.modelFallbacks[slot]++;
+  console.log(`  ${slot} model ${primaryModel} failed (${String(err?.message ?? err).slice(0, 120)}): using the backup model`);
+}
+/** True when no model of the slot can be called right now (all cooling down). */
+function slotBlocked(c, role = "strong") {
+  const ch = slotChain(c, role);
+  return ch.primary.provider !== "fake" && coolLeftMs(ch.slot, ch.primary) > 0 && (!ch.fallback || coolLeftMs(ch.slot, ch.fallback) > 0);
+}
+/** callProvider through the slot chain. Result: callProvider's {raw, usage} + {modelUsed, provider, fellBack, primaryError}. On total failure the thrown error carries primaryError / fellBack. opts.test = primary only, no cooldown bookkeeping. */
+async function callWithFallback(c, sit, opts = {}) {
+  const ch = slotChain(c, opts.role ?? "strong");
+  const cools = !opts.test && (!!ch.fallback || opts.role === "commander" || opts.role === "journal"); // without a backup only the commander/journal calls use the cooldown (as before)
+  const attempt = async (cx) => {
+    if (cools && cx.provider !== "fake") { const left = coolLeftMs(ch.slot, cx); if (left > 0) throw Object.assign(new Error(`provider cooling down after rate limit/server error (${Math.ceil(left / 1000)}s left)`), { cooling: true }); }
+    try { const p = await callProvider(c, sit, { ...opts, slotCfg: cx }); return { ...p, modelUsed: cx.model, provider: cx.provider }; }
+    catch (e) { if (cools) noteCooldown(ch.slot, cx, e, !!ch.fallback); throw e; }
+  };
+  try { return { ...(await attempt(ch.primary)), fellBack: false, primaryError: null }; }
+  catch (e) {
+    if (opts.test || !ch.fallback || !FB.isRetryable(e)) throw e;
+    const primaryError = String(e?.message ?? e).slice(0, 200);
+    noteFellBack(ch.slot, ch.primary.model, e);
+    try { return { ...(await attempt(ch.fallback)), fellBack: true, primaryError }; }
+    catch (e2) { e2.fellBack = true; e2.primaryError = primaryError; e2.modelUsed = null; throw e2; }
+  }
+}
+function cooldownsView() { // "<slot>|<model>" -> seconds left (only the ones still cooling down)
+  const out = {};
+  for (const [k, until] of cooldowns) { const left = Math.ceil((until - Date.now()) / 1000); if (left > 0) out[k] = left; else cooldowns.delete(k); }
+  return out;
+}
 const translator = I18N.createTranslator({
   callModel: async ({ system, userMsg, maxTokens, timeoutSec }) => {
     const sc = slotCfg(cfg, "translate");
     if (budgetStopped(sc)) throw new Error("budget limit reached");
     session.requests++;
-    const p = await callProvider(cfg, { faction: "i18n" }, { system, userMsg, maxTokens, timeoutSec, role: "translate" });
-    if (sc.provider === "openrouter") recordUsage(sc.model, "i18n", p.usage);
+    const p = await callWithFallback(cfg, { faction: "i18n" }, { system, userMsg, maxTokens, timeoutSec, role: "translate" });
+    if (p.provider === "openrouter") recordUsage(p.modelUsed, "i18n", p.usage);
     return p;
   },
   isFake: () => slotCfg(cfg, "translate").provider === "fake",
   timeoutMs: () => cfg.i18n.translateTimeoutSec * 1000,
+  attempts: () => (slotChain(cfg, "translate").fallback ? 2 : 1), // the budget is per attempt: a hanging primary must leave time for the backup
   log: (m) => console.log("  " + m),
 });
 const sitrepFields = (sr) => ({ headline: sr.headline, ...Object.fromEntries(SITREP_KEYS.map((k) => [k, sr[k]])) });
@@ -854,7 +948,7 @@ function extractOrders(text, v2 = false) {
 const SITREP_EXTRA_TOKENS = 450; // room for the SITREP object on top of the configured maxTokens
 // Returns {raw, usage:{input,output}}. Throws Error on transport/HTTP failure.
 async function callProvider(c, sit, opts = {}) {
-  c = slotCfg(c, opts.role ?? "strong"); // role -> slot (only "translate" uses the weak slot)
+  c = opts.slotCfg ?? slotCfg(c, opts.role ?? "strong"); // role -> slot (only "translate" uses the weak slot); opts.slotCfg = already resolved (primary or backup)
   const { structures: _structures, ...llmSit } = sit ?? {}; // situation.structures[] (base markers, dashboard map only) is not sent to the model
   const userMsg = opts.userMsg ?? ("Current situation:\n" + JSON.stringify(llmSit) + (opts.journal ? "\n\n" + opts.journal : "")); // opts.userMsg / system / maxTokens: the journal review call
   const ac = new AbortController();
@@ -878,10 +972,16 @@ async function callProvider(c, sit, opts = {}) {
     const r = await fetch(url, { method: "POST", signal: ac.signal, headers, body: JSON.stringify(body) });
     if (!r.ok) {
       const err = new Error(`HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
+      err.status = r.status;
       if (r.status === 429 || r.status >= 500) err.cooldownMs = Math.max(RATE_COOLDOWN_MS, (Number(r.headers.get("retry-after")) || 0) * 1000);
       throw err;
     }
     const j = await r.json();
+    if (j?.error && !j.choices && !j.content) { // some gateways answer 200 with {error:{code,message}}
+      const err = new Error(`HTTP ${j.error.code ?? "?"}: ${String(j.error.message ?? JSON.stringify(j.error)).slice(0, 200)}`);
+      if (typeof j.error.code === "number") { err.status = j.error.code; if (j.error.code === 429 || j.error.code >= 500) err.cooldownMs = RATE_COOLDOWN_MS; }
+      throw err;
+    }
     let text, usage;
     if (c.provider === "anthropic") {
       text = (j.content ?? []).filter((b) => b.type === "text").map((b) => b.text).join("");
@@ -1042,14 +1142,11 @@ function validateV2(obj, sit, dropped = [], manifest = DEFAULT_MANIFEST) {
 }
 
 // After a 429/5xx the provider is skipped for a while; the game falls back to the rule commander meanwhile.
-const RATE_COOLDOWN_MS = 20000;
-let cooldownUntil = 0;
 
 // Runs one situation through the given config. Never throws.
 async function computeOrders(c, sit, isTest = false, opts = {}) {
   const r = { orders: [], buy: [], missions: [], fobs: [], keep: false, dropped: [], rawReply: null, usage: null, ok: true, reason: null };
   try {
-    if (!isTest && c.provider !== "fake" && Date.now() < cooldownUntil) throw new Error(`provider cooling down after rate limit/server error (${Math.ceil((cooldownUntil - Date.now()) / 1000)}s left)`);
     if (!sit || typeof sit !== "object" || !Array.isArray(sit.squads)) throw new Error("no squads array");
     const v2 = isV2(sit);
     let raw;
@@ -1058,9 +1155,9 @@ async function computeOrders(c, sit, isTest = false, opts = {}) {
       if (c.provider === "fake") { obj = fakeV2(sit, opts.manifest); if (opts.sitrep) obj.sitrep = fakeSitrep(sit, obj); }
       else {
         session.requests++;
-        const p = await callProvider(c, sit, { ...opts, role: "commander" });
-        if (c.provider === "openrouter") recordUsage(c.model, typeof sit.faction === "string" ? sit.faction : "?", p.usage);
-        r.rawReply = p.raw; r.usage = p.usage;
+        const p = await callWithFallback(c, sit, { ...opts, role: "commander", test: isTest });
+        if (p.provider === "openrouter") recordUsage(p.modelUsed, typeof sit.faction === "string" ? sit.faction : "?", p.usage);
+        r.rawReply = p.raw; r.usage = p.usage; r.modelUsed = p.modelUsed; r.fellBack = p.fellBack; r.primaryError = p.primaryError;
         obj = extractOrders(p.raw, true);
         if (isNum(obj.next_check_sec)) r.nextCheck = { sec: Math.round(obj.next_check_sec), reason: typeof obj.next_check_reason === "string" ? obj.next_check_reason.slice(0, 120) : "" };
       }
@@ -1075,16 +1172,16 @@ async function computeOrders(c, sit, isTest = false, opts = {}) {
     if (c.provider === "fake") raw = fakeOrders(sit);
     else {
       session.requests++;
-      const p = await callProvider(c, sit, { role: "commander" });
-      if (c.provider === "openrouter") recordUsage(c.model, typeof sit.faction === "string" ? sit.faction : "?", p.usage);
-      r.rawReply = p.raw; r.usage = p.usage;
+      const p = await callWithFallback(c, sit, { role: "commander", test: isTest });
+      if (p.provider === "openrouter") recordUsage(p.modelUsed, typeof sit.faction === "string" ? sit.faction : "?", p.usage);
+      r.rawReply = p.raw; r.usage = p.usage; r.modelUsed = p.modelUsed; r.fellBack = p.fellBack; r.primaryError = p.primaryError;
       const obj = extractOrders(p.raw);
       raw = obj.orders;
       if (isNum(obj.next_check_sec)) r.nextCheck = { sec: Math.round(obj.next_check_sec), reason: typeof obj.next_check_reason === "string" ? obj.next_check_reason.slice(0, 120) : "" };
     }
     r.orders = validate(raw, sit, r.dropped);
   } catch (e) {
-    if (e?.cooldownMs && !isTest) cooldownUntil = Date.now() + e.cooldownMs;
+    if (e?.fellBack) { r.fellBack = true; r.primaryError = e.primaryError; }
     r.ok = false;
     r.reason = e?.name === "AbortError" ? "timeout" : String(e?.message ?? e);
     r.orders = []; r.buy = []; r.missions = []; r.fobs = []; r.keep = false;
@@ -1203,6 +1300,7 @@ function hqFallbackReason(c) {
 function hqFinish(entry, faction, r) {
   const out = hqOutFor(faction);
   entry.state = "done"; entry.ok = r.ok; entry.error = r.error ?? null; entry.latencyMs = r.latencyMs; entry.usage = r.usage; entry.steps = r.steps; entry.tools = r.tools;
+  entry.modelUsed = r.ok ? (r.modelUsed ?? entry.model) : null; entry.fellBack = !!r.fellBack; entry.primaryError = r.primaryError ?? null;
   entry.actions = r.actions; entry.reply = r.ok ? r.replyText : ""; entry.lang = entry.msg.lang || null; entry.setLanguage = r.ok ? (r.setLanguage ?? null) : null;
   if (r.ok) {
     for (const a of r.actions) out.actions.push({ msgId: entry.msg.id, id: a.id, action: a.action, args: a.args });
@@ -1216,8 +1314,11 @@ async function hqRun(job) {
   try {
     const mod = await loadAgent();
     if (c.provider !== "fake") { session.requests++; }
-    const r = await mod.runAgentTurn({ manifest, situation: sit, message: entry.msg, config: c, agentConfig: { maxSteps: c.agent.maxSteps, timeoutSec: c.agent.timeoutSec }, journal: journalBlock(faction, c, sit) });
-    if (c.provider === "openrouter") recordUsage(c.model, faction, r.usage);
+    const ch = slotChain(c, "hq");
+    const fallback = ch.fallback ? { config: ch.fallback, primaryCooling: () => coolLeftMs(ch.slot, ch.primary) > 0,
+      onFailure: (which, err) => noteCooldown(ch.slot, which === "primary" ? ch.primary : ch.fallback, err, true), onFallback: (err) => noteFellBack(ch.slot, ch.primary.model, err) } : null;
+    const r = await mod.runAgentTurn({ manifest, situation: sit, message: entry.msg, config: c, agentConfig: { maxSteps: c.agent.maxSteps, timeoutSec: c.agent.timeoutSec }, journal: journalBlock(faction, c, sit), fallback });
+    if ((r.fellBack ? ch.fallback?.provider : c.provider) === "openrouter") recordUsage(r.modelUsed ?? c.model, faction, r.usage);
     hqFinish(entry, faction, r);
   } catch (e) {
     hqFinish(entry, faction, { ok: false, error: String(e?.message ?? e).slice(0, 300), replyText: "", actions: [], steps: [], tools: [], usage: null, latencyMs: Date.now() - entry.ts });
@@ -1236,7 +1337,7 @@ function hqIngest(faction, sit, list, manifest, c) {
     if (hqSeen.has(key)) continue;
     hqSeen.add(key);
     if (hqSeen.size > HQ_SEEN_MAX) { const first = hqSeen.values().next().value; hqSeen.delete(first); }
-    const entry = { ts: Date.now(), faction, msg, provider: c.provider, model: c.provider === "fake" ? null : c.model, state: "running", ok: null, error: null, steps: [], tools: [], actions: [], reply: "", usage: null, latencyMs: null, lang: msg.lang || null, setLanguage: null };
+    const entry = { ts: Date.now(), faction, msg, provider: c.provider, model: c.provider === "fake" ? null : c.model, modelUsed: null, fellBack: false, primaryError: null, state: "running", ok: null, error: null, steps: [], tools: [], actions: [], reply: "", usage: null, latencyMs: null, lang: msg.lang || null, setLanguage: null };
     hqLog.unshift(entry); if (hqLog.length > HQ_MAX) hqLog.length = HQ_MAX;
     const why = hqFallbackReason(c) ?? (msg.ageSec > HQ_MAX_AGE_SEC ? "message too old" : null);
     if (why) {
@@ -1302,9 +1403,9 @@ async function journalReview(faction, c, sit) {
     if (c.provider === "fake") reply = J.fakeReview();
     else {
       session.requests++;
-      const p = await callProvider(c, { faction }, { system: J.reviewSystem(), userMsg: J.reviewUser(sit, j), maxTokens: 400, role: "journal" });
+      const p = await callWithFallback(c, { faction }, { system: J.reviewSystem(), userMsg: J.reviewUser(sit, j), maxTokens: 400, role: "journal" });
       usage = p.usage;
-      if (c.provider === "openrouter") recordUsage(c.model, faction, p.usage);
+      if (p.provider === "openrouter") recordUsage(p.modelUsed, faction, p.usage);
       reply = p.raw;
     }
     const v = J.validateReview(reply);
@@ -1318,7 +1419,6 @@ async function journalReview(faction, c, sit) {
     j.reviews++; j.reviewedAt = Date.now(); j.reviewWarTime = isNum(sit?.time) ? sit.time : null; j.lastError = "";
     console.log(`journal faction=${faction} review ok (${c.provider === "fake" ? "fake" : c.model}) intent="${j.intent}" goals=${j.goals.length} lessons=${j.lessons.length}${v.notes.length ? " notes=[" + v.notes.join("; ") + "]" : ""} ${Date.now() - t0}ms${usage ? ` tokens=${usage.input}+${usage.output}` : ""}${isNum(usage?.cost) ? ` cost=$${usage.cost.toFixed(5)}` : ""}`);
   } catch (e) {
-    if (e?.cooldownMs) cooldownUntil = Date.now() + e.cooldownMs;
     j.rejected++; j.lastError = e?.name === "AbortError" ? "timeout" : String(e?.message ?? e).slice(0, 200);
     j.nextReviewAt = Math.min(j.nextReviewAt, Date.now() + 60000);
     console.log(`journal faction=${faction} review FAILED (${j.lastError}), keeping the old journal`);
@@ -1331,7 +1431,7 @@ function journalMaybeReview(faction, c, sit) {
   if (!c.memory?.enabled || !c.enabled || c.engine !== "llm" || paused || sit?.war?.phase !== "running") return;
   const j = journalFor(faction);
   if (j.reviewing || Date.now() < j.nextReviewAt) return;
-  if (c.provider !== "fake" && (budgetStopped(c) || Date.now() < cooldownUntil)) return;
+  if (c.provider !== "fake" && (budgetStopped(c) || slotBlocked(c, "journal"))) return;
   console.log(`journal faction=${faction} review due (every ${c.memory.reviewMin} min, ${j.reviews} done)`);
   void journalReview(faction, { ...c, memory: { ...c.memory } }, sit).catch((e) => console.log(`journal faction=${faction} review error: ${e?.message ?? e}`));
 }
@@ -1656,7 +1756,7 @@ async function handleOrders(req, res) {
   }
   if (!r.gated) state.exchanges.unshift({
     ts: state.lastRequestTs, faction, provider: snapshot.enabled ? snapshot.provider : "disabled",
-    model: snapshot.provider === "fake" ? null : snapshot.model, i18n: r.i18n ?? null,
+    model: snapshot.provider === "fake" ? null : snapshot.model, modelUsed: r.modelUsed ?? (snapshot.provider === "fake" ? null : snapshot.model), fellBack: !!r.fellBack, primaryError: r.primaryError ?? null, i18n: r.i18n ?? null,
     request: sit, rawReply: r.rawReply, orders: r.orders, buy: r.buy ?? [], missions: r.missions ?? [], fobs: r.fobs ?? [], keep: !!r.keep, sitrep: r.sitrep ?? null, dropped: r.dropped,
     latencyMs, ok: r.ok, reason: r.reason, usage: r.usage,
     wake, nextCheck: r.nextCheck ?? null, intervalSec: interval,
@@ -1885,7 +1985,7 @@ async function handleApi(req, res, url) {
     return send(res, 200, {
       now: Date.now(), startedAt: state.startedAt, lastRequestTs: state.lastRequestTs,
       factions: state.factions, activeFactions: activeFactions(), staleAfterSec: STALE_FACTION_MS / 1000,
-      exchanges: state.exchanges, hq: hqLog, debugLog: state.debugLog, manifests: manifestsView(), counters: state.counters, config: publicConfig(), usage: usageView(), scheduler: schedulerView(), journals: journalsView(), paused,
+      exchanges: state.exchanges, hq: hqLog, debugLog: state.debugLog, manifests: manifestsView(), counters: state.counters, modelCooldowns: cooldownsView(), config: publicConfig(), usage: usageView(), scheduler: schedulerView(), journals: journalsView(), paused,
     });
   }
   if (req.method === "POST" && url === "/api/pause") {
@@ -1921,8 +2021,14 @@ async function handleApi(req, res, url) {
     if (!originOk(req)) return send(res, 403, { error: "forbidden origin" });
     let inp;
     try { inp = JSON.parse((await readBody(req, 100_000)) || "{}"); } catch { return send(res, 400, { error: "invalid JSON" }); }
-    const testTranslate = url === "/api/test" && inp && inp.slot === "translate"; // test the translate slot (weak, else strong) instead of a commander call
-    if (testTranslate) delete inp.slot;
+    // /api/test {slot:"strong"|"weak"|"translate", which:"primary"|"fallback"}: slot "strong" (default) = a commander call; "weak" / "translate" = a translation call
+    // (translate = the weak slot, else strong); which "fallback" tests the slot's backup model on its own. Both are tested without any fallback routing.
+    let testSlot = "strong", testWhich = "primary";
+    if (url === "/api/test" && inp && typeof inp === "object") {
+      if (inp.slot !== undefined) { if (!["strong", "weak", "translate"].includes(inp.slot)) return send(res, 400, { error: "slot must be strong, weak or translate" }); testSlot = inp.slot; delete inp.slot; }
+      if (inp.which !== undefined) { if (!["primary", "fallback"].includes(inp.which)) return send(res, 400, { error: "which must be primary or fallback" }); testWhich = inp.which; delete inp.which; }
+    }
+    const testTranslate = testSlot !== "strong";
     const v = validateConfig(inp);
     if (v.error) return send(res, 400, { error: v.error });
     if (v.value.apiKey === "") delete v.value.apiKey; // empty = keep stored key
@@ -1939,9 +2045,23 @@ async function handleApi(req, res, url) {
     // /api/test: optional overrides in the body are used for this test only (not saved)
     const tcfg = { ...cfg, ...v.value };
     if (testTranslate) {
-      const t0 = Date.now(), sc = slotCfg(tcfg, "translate");
-      const tr = await translator.translateFields({ test: "Enemy infantry sighted near the bridge." }, ["de"], { fresh: true });
-      return send(res, 200, { ok: !tr.failed.length, text: tr.by_lang.de?.test ?? null, error: tr.failed[0]?.reason ?? null, latencyMs: Date.now() - t0, provider: sc.provider, model: sc.provider === "fake" ? null : sc.model, slot: sc === tcfg ? "strong" : "weak" });
+      if (testSlot === "weak" && (!tcfg.weak || tcfg.weak.provider === "none")) return send(res, 400, { error: "no weak slot configured" });
+      const ch = slotChain(tcfg, "translate");
+      const sc = testWhich === "fallback" ? ch.fallback : ch.primary;
+      if (!sc) return send(res, 400, { error: "no backup model configured for this slot" });
+      const t0 = Date.now();
+      const one = I18N.createTranslator({ // one-off translator on exactly this model: no cache, no fallback routing, the body overrides apply
+        callModel: async ({ system, userMsg, maxTokens, timeoutSec }) => callProvider(tcfg, { faction: "i18n" }, { system, userMsg, maxTokens, timeoutSec, role: "translate", slotCfg: sc }),
+        isFake: () => sc.provider === "fake", timeoutMs: () => tcfg.i18n.translateTimeoutSec * 1000,
+      });
+      const tr = await one.translateFields({ test: "Enemy infantry sighted near the bridge." }, ["de"], { fresh: true });
+      return send(res, 200, { ok: !tr.failed.length, text: tr.by_lang.de?.test ?? null, error: tr.failed[0]?.reason ?? null, latencyMs: Date.now() - t0, provider: sc.provider, model: sc.provider === "fake" ? null : sc.model, slot: ch.slot, which: testWhich });
+    }
+    let ccfg = tcfg;
+    if (testWhich === "fallback") {
+      const ch = slotChain(tcfg, "commander");
+      if (!ch.fallback) return send(res, 400, { error: "no backup model configured for this slot" });
+      ccfg = ch.fallback;
     }
     const sit = {
       faction: "TEST", time: 0,
@@ -1949,8 +2069,8 @@ async function handleApi(req, res, url) {
       contacts: [{ pos: [1500, 0, 1200], desc: "2x infantry", ageSec: 10 }],
     };
     const t0 = Date.now();
-    const r = await computeOrders(tcfg, sit, true);
-    return send(res, 200, { ok: r.ok, orders: r.orders, dropped: r.dropped, rawReply: r.rawReply, error: r.reason, latencyMs: Date.now() - t0, provider: tcfg.provider });
+    const r = await computeOrders(ccfg, sit, true);
+    return send(res, 200, { ok: r.ok, orders: r.orders, dropped: r.dropped, rawReply: r.rawReply, error: r.reason, latencyMs: Date.now() - t0, provider: ccfg.provider, model: ccfg.provider === "fake" ? null : ccfg.model, slot: "strong", which: testWhich });
   }
   return send(res, 404, { error: "not found" });
 }

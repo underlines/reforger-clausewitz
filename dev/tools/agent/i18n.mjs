@@ -64,10 +64,11 @@ const sha1 = (s) => crypto.createHash("sha1").update(s).digest("hex");
  * deps:
  *   callModel({system, userMsg, maxTokens, timeoutSec}) -> Promise<{raw}>   (the sidecar maps the call to the weak slot, or strong without one)
  *   isFake() -> bool        translate slot is the fake provider: "[<lang>] <text>", no call
- *   timeoutMs() -> number   per-language budget (default 10 s)
+ *   timeoutMs() -> number   per-language, per-attempt budget (default 10 s)
+ *   attempts() -> number    model attempts per language (2 with a backup model, the budget is per attempt; default 1)
  *   cacheMax                entries kept (default 500)
  */
-export function createTranslator({ callModel, isFake = () => false, timeoutMs = () => 10000, cacheMax = 500, log = () => {} }) {
+export function createTranslator({ callModel, isFake = () => false, timeoutMs = () => 10000, attempts = () => 1, cacheMax = 500, log = () => {} }) {
   const cache = new Map(); // `${sha1}|${lang}` -> translated fields
   const stats = { calls: 0, hits: 0, failures: 0 };
   async function one(fields, lang, key) {
@@ -75,7 +76,7 @@ export function createTranslator({ callModel, isFake = () => false, timeoutMs = 
     stats.calls++;
     const ms = timeoutMs();
     let timer;
-    const limit = new Promise((_, rej) => { timer = setTimeout(() => rej(Object.assign(new Error("timeout"), { timeout: true })), ms); });
+    const limit = new Promise((_, rej) => { timer = setTimeout(() => rej(Object.assign(new Error("timeout"), { timeout: true })), ms * Math.max(1, attempts())); });
     try {
       const p = await Promise.race([callModel({ system: translateSystem(lang), userMsg: translateUser(fields), maxTokens: 1200, timeoutSec: ms / 1000 }), limit]);
       const raw = String(p?.raw ?? ""), a = raw.indexOf("{"), b = raw.lastIndexOf("}");
