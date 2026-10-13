@@ -30,6 +30,8 @@ function warnOnce(key, what) {
 }
 
 export const getLang = () => lang;
+// wall-clock time of an epoch-ms timestamp in the dashboard language (locale = language code)
+export const fmtClock = (ms) => new Date(ms).toLocaleTimeString(lang);
 export const has = (key) => dicts[lang]?.[key] !== undefined || dicts.en?.[key] !== undefined;
 export function t(key, ...p) {
   let s = dicts[lang]?.[key];
