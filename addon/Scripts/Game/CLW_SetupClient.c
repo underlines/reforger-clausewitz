@@ -1,4 +1,6 @@
 // Client entry points of the war setup menu (called from CLW_SetupPlayerController RPCs, or directly on the listen-server host).
+// Players have no character during SETUP, so the /war chat command is registered from Open / Wait as well (not only on the
+// first controlled entity), and Open tells the server it is showing the menu (CLW_SendSetupAck) so the server stops re-sending.
 class CLW_SetupClient
 {
 	static const ResourceName PRESET_CONFIG = "{7D3A91C45E20B6F9}Configs/CLW/UI/SetupDialog.conf";
@@ -9,9 +11,11 @@ class CLW_SetupClient
 	// Server asks this player to set up the war: parse the payload and open the dialog (ignored while it is already open).
 	static void Open(string wire)
 	{
+		RegisterChatCommand();
 		if (s_Dialog && s_Dialog.IsOpen())
 		{
 			Print("CLW: setup menu already open, ignoring the new payload", LogLevel.NORMAL);
+			SendAck();
 			return;
 		}
 
@@ -34,11 +38,20 @@ class CLW_SetupClient
 		}
 
 		s_Dialog = dialog;
+		SendAck();
+	}
+
+	protected static void SendAck()
+	{
+		SCR_PlayerController controller = SCR_PlayerController.Cast(GetGame().GetPlayerController());
+		if (controller)
+			controller.CLW_SendSetupAck();
 	}
 
 	// Another player is the setup owner.
 	static void Wait(string ownerName)
 	{
+		RegisterChatCommand();
 		string text = CLW_Loc.F("#CLW-Setup_Waiting", ownerName);
 		Print("CLW: " + text, LogLevel.NORMAL);
 		CLW_Debug.Show(text);
@@ -76,6 +89,9 @@ class CLW_SetupClient
 
 	static void RegisterChatCommand()
 	{
+		if (SCR_PlayerController.CLW_IsChatRegistered())
+			return;
+
 		SCR_ChatPanelManager chat = SCR_ChatPanelManager.GetInstance();
 		if (!chat)
 			return;

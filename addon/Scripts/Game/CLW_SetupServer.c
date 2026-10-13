@@ -1,6 +1,9 @@
 // Server side of the war setup menu (spec 2a, phase P5). Server only.
-// - tracks the setup owner (CLW_WarState owns the id; this class re-assigns it when the owner leaves),
-// - sends the owner the setup data (wire text, see BuildWire) so the owner's client opens the menu, and the others a "waiting" hint,
+// - tracks the setup owner (CLW_WarState owns the id; this class re-assigns it when the owner leaves). The owner is the lowest
+//   player id with a player controller: players have NO character during SETUP (CLW_SpawnLogic parks them until the war starts),
+// - sends the owner the setup data (wire text, see BuildWire) so the owner's client opens the menu, and re-sends it every RESEND_MS
+//   until the client acknowledged it (OnMenuAck, CLW_SetupClient.Open; the menu may be sent before the client UI is ready), at most
+//   MAX_SEND_ATTEMPTS times. The others get a "waiting" hint, sent once a player has been seen in two polls,
 // - validates the submit (sender == owner or admin, phase == SETUP, mode + values + factions) and calls CLW_WarState.StartWar,
 // - announces the started war and closes the menus.
 // A rematch (CLW_Rematch.c) calls Start again for the next round: the owner is picked anew and the menu is re-sent.
@@ -10,16 +13,22 @@ class CLW_SetupServer
 	static const string PARAM_FACTION_A = "factionA";
 	static const string PARAM_FACTION_B = "factionB";
 	static const int POLL_MS = 1500;
+	static const int RESEND_MS = 5000;			// menu re-send interval until the owner acknowledged it
+	static const int MAX_SEND_ATTEMPTS = 12;
 
 	protected static ref CLW_SetupServer s_Instance;
 
 	protected CLW_WarState m_War;
 	protected CLW_ScenarioConfig m_Scenario;
 	protected int m_iOwner = -1;				// owner we last sent the menu to
-	protected IEntity m_OwnerEntity;			// to detect a respawn (re-send)
+	protected bool m_bMenuAck;					// the owner's client confirmed the menu is open
+	protected int m_iSendAttempts;
+	protected int m_iLastSendTick;
+	protected bool m_bGaveUp;
 	protected bool m_bAnnounced;
 	protected string m_sBattleText;
 	protected ref array<int> m_aWaitSent = {};
+	protected ref array<int> m_aSeen = {};		// players seen in one poll (waiting hint goes out on the second)
 
 	// Called by CLW_WarState.Init (server only).
 	static void Start(CLW_WarState war, CLW_ScenarioConfig scenario)
@@ -76,6 +85,16 @@ class CLW_SetupServer
 		return s_Instance.BuildSetupJson();
 	}
 
+	// The owner's client opened (or already had open) the menu. playerId comes from the RPC receiver, never from the client.
+	static void OnMenuAck(int playerId)
+	{
+		if (!s_Instance || playerId != s_Instance.m_iOwner || s_Instance.m_bMenuAck)
+			return;
+
+		s_Instance.m_bMenuAck = true;
+		Print("CLW: setup menu acknowledged by player " + playerId, LogLevel.NORMAL);
+	}
+
 	// ---- polling: owner tracking, menu delivery, waiting hints, start announcement ----
 
 	protected void Poll()
@@ -113,23 +132,33 @@ class CLW_SetupServer
 			Print("CLW: setup owner is now player " + owner + " (" + players.GetPlayerName(owner) + ")", LogLevel.NORMAL);
 		}
 
-		IEntity entity = players.GetPlayerControlledEntity(owner);
 		if (owner != m_iOwner)
 		{
 			m_iOwner = owner;
-			m_OwnerEntity = entity;
+			m_bMenuAck = false;
+			m_bGaveUp = false;
+			m_iSendAttempts = 0;
 			m_aWaitSent.Clear();
-			SendOpen(owner);
+			m_aSeen.Clear();
 		}
-		else if (entity && entity != m_OwnerEntity)
+
+		// (a respawn of the owner needs no special case: the open menu survives it and Open ignores a second payload)
+		if (!m_bMenuAck && !m_bGaveUp)
 		{
-			m_OwnerEntity = entity;
-			Print("CLW: setup owner respawned, re-sending the menu", LogLevel.NORMAL);
-			SendOpen(owner);
-		}
-		else if (!entity)
-		{
-			m_OwnerEntity = null;
+			if (m_iSendAttempts >= MAX_SEND_ATTEMPTS)
+			{
+				if ((System.GetTickCount() - m_iLastSendTick) >= RESEND_MS)
+				{
+					m_bGaveUp = true;
+					Print("CLW: setup menu never acknowledged by player " + owner + " after " + m_iSendAttempts + " attempts, giving up (use /war setup)", LogLevel.WARNING);
+				}
+			}
+			else if (m_iSendAttempts == 0 || (System.GetTickCount() - m_iLastSendTick) >= RESEND_MS)
+			{
+				m_iSendAttempts++;
+				m_iLastSendTick = System.GetTickCount();
+				SendOpen(owner, m_iSendAttempts);
+			}
 		}
 
 		string ownerName = players.GetPlayerName(owner);
@@ -139,6 +168,12 @@ class CLW_SetupServer
 		{
 			if (id == owner || m_aWaitSent.Contains(id))
 				continue;
+
+			if (!m_aSeen.Contains(id))
+			{
+				m_aSeen.Insert(id);
+				continue;
+			}
 
 			m_aWaitSent.Insert(id);
 			SendWait(id, ownerName);
@@ -152,7 +187,7 @@ class CLW_SetupServer
 		int best = -1;
 		foreach (int id : ids)
 		{
-			if (id <= 0 || !players.GetPlayerControlledEntity(id))
+			if (id <= 0 || !players.GetPlayerController(id))
 				continue;
 
 			if (best < 0 || id < best)
@@ -199,10 +234,10 @@ class CLW_SetupServer
 		return SCR_PlayerController.Cast(players.GetPlayerController(playerId));
 	}
 
-	protected void SendOpen(int playerId)
+	protected void SendOpen(int playerId, int attempt)
 	{
 		string wire = BuildWire();
-		Print(string.Format("CLW: setup send menu to player %1 (%2 bytes)", playerId, wire.Length()), LogLevel.NORMAL);
+		Print(string.Format("CLW: setup send menu to player %1 (%2 bytes, attempt %3)", playerId, wire.Length(), attempt), LogLevel.NORMAL);
 		if (IsLocal(playerId))
 		{
 			CLW_SetupClient.Open(wire);
@@ -274,7 +309,7 @@ class CLW_SetupServer
 		}
 
 		Print("CLW: setup menu requested by player " + playerId, LogLevel.NORMAL);
-		s_Instance.SendOpen(playerId);
+		s_Instance.SendOpen(playerId, 0);		// manual request: no ack bookkeeping
 	}
 
 	// ---- submit ----

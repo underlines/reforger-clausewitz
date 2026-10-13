@@ -1,5 +1,5 @@
 // RPC glue of the war setup menu (phase P5), same pattern as CLW_DebugPlayerController.c.
-// Server -> owner: open menu / waiting hint / result / war started. Client -> server: submit, chat command.
+// Server -> owner: open menu / waiting hint / result / war started. Client -> server: submit, chat command, menu ack.
 // The listen-server host never uses RPCs: CLW_SetupServer / the methods below call the local code directly.
 modded class SCR_PlayerController
 {
@@ -67,6 +67,18 @@ modded class SCR_PlayerController
 		Rpc(CLW_RpcAsk_SubmitSetup, battleJson, modeId, modeValuesJson);
 	}
 
+	// The menu is open on this client (server stops re-sending). The sender id is GetPlayerId(), never a parameter.
+	void CLW_SendSetupAck()
+	{
+		if (Replication.IsServer())
+		{
+			CLW_SetupServer.OnMenuAck(GetPlayerId());
+			return;
+		}
+
+		Rpc(CLW_RpcAsk_SetupAck);
+	}
+
 	// Chat command text after "/war" (see CLW_SetupClient.OnChatCommand).
 	void CLW_SendWarCommand(string args)
 	{
@@ -90,6 +102,12 @@ modded class SCR_PlayerController
 	}
 
 	[RplRpc(RplChannel.Reliable, RplRcver.Server)]
+	protected void CLW_RpcAsk_SetupAck()
+	{
+		CLW_SetupServer.OnMenuAck(GetPlayerId());
+	}
+
+	[RplRpc(RplChannel.Reliable, RplRcver.Server)]
 	protected void CLW_RpcAsk_WarCommand(string args)
 	{
 		string reply = CLW_SetupServer.ChatCommand(GetPlayerId(), args);
@@ -97,7 +115,7 @@ modded class SCR_PlayerController
 			CLW_RpcShow(reply);
 	}
 
-	// ---- client hook: register the /war chat command once the local controller has an entity ----
+	// ---- client hook: register the /war chat command (also done by CLW_SetupClient.Open / Wait for players without a character) ----
 
 	override void OnControlledEntityChanged(IEntity from, IEntity to)
 	{
@@ -105,6 +123,11 @@ modded class SCR_PlayerController
 
 		if (!s_bClwChatRegistered && this == GetGame().GetPlayerController())
 			CLW_SetupClient.RegisterChatCommand();
+	}
+
+	static bool CLW_IsChatRegistered()
+	{
+		return s_bClwChatRegistered;
 	}
 
 	static void CLW_MarkChatRegistered()
