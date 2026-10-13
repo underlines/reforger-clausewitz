@@ -1165,7 +1165,7 @@ function HqChatView({ st, faction }) {
         const [cls, label] = state(h), calls = (h.steps ?? []).flatMap((s) => s.toolCalls ?? []), key = h.faction + h.msg.id + h.ts;
         return [html`<tr key=${key} class=${"sqrow" + (open === key ? " sel" : "")} onClick=${() => setOpen(open === key ? null : key)}>
           <td class="mono muted">${fmtClock(h.ts)}</td><td class=${facClass(h.faction)}>${h.faction}</td>
-          <td><b>${h.msg.player}</b> <span class="muted">${h.msg.role}${h.msg.grid ? ", " + h.msg.grid : ""}</span></td><td class="wrap">${h.msg.text}</td>
+          <td><b>${h.msg.player}</b> <span class="muted">${h.msg.role}${h.msg.grid ? ", " + h.msg.grid : ""}</span></td><td class="wrap">${h.msg.text}${h.historyCount ? html` <span class="badge" title=${t("chat.historyTip")}>${t("chat.history", h.historyCount)}</span>` : ""}</td>
           <td class="mono">${t("chat.steps", (h.steps ?? []).length, calls.length)}</td>
           <td class="mono wrap">${(h.actions ?? []).map((a) => a.action + "(" + (a.args ?? []).map((x) => x.name + "=" + x.value).join(", ") + ")").join("; ") || "-"}</td>
           <td class="wrap">${dash(h.reply || h.error)}</td><td><span class=${"badge " + cls}>${label}</span> <${FbBadge} x=${h} /></td>
@@ -1175,6 +1175,7 @@ function HqChatView({ st, faction }) {
           ${(h.steps ?? []).map((s) => html`<div key=${s.n} class="wrap"><b>${t("chat.step", s.n)}</b> <span class="muted">${s.finishReason}</span>
             ${(s.toolCalls ?? []).map((c, j) => html`<div key=${j} class="mono wrap">&rarr; ${c.name}(${JSON.stringify(c.input)}) = ${JSON.stringify(c.output)}</div>`)}
             ${s.text && html`<div>${s.text}</div>`}</div>`)}
+          ${(h.msg.history ?? []).length > 0 && html`<div class="wrap"><b>${t("chat.historyHead")}</b>${h.msg.history.map((x, j) => html`<div key=${j} class="mono wrap muted">${x.p} &rarr; ${x.hq}</div>`)}</div>`}
           ${h.error && html`<div class="wrap"><span class="badge bad">${h.error}</span></div>`}</div></td></tr>`];
       })}</tbody></table>
       ${!rows.length && html`<div class="empty">${t("chat.empty")}</div>`}</div></section>

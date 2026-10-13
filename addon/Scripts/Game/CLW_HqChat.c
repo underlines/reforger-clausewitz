@@ -170,6 +170,7 @@ class CLW_HqChat
 	{
 		s_aPending.Clear();
 		s_mLastMessage.Clear();
+		CLW_HqHistory.Reset();	// war rematch / new war: no conversation memory carried over
 		s_iSeq = 0;
 		if (s_bTicking)
 		{
@@ -316,7 +317,11 @@ class CLW_HqChat
 			text += "{\"id\":" + msg.m_iId + ",\"player\":\"" + CLW_Situation.Escape(msg.m_sName) + "\",\"role\":\"" + msg.m_sRole + "\",\"squad\":\"" + CLW_Situation.Escape(msg.m_sSquad) + "\"";
 			text += ",\"grid\":\"" + CLW_Places.Grid(msg.m_vPos) + "\",\"pos\":[" + Math.Round(msg.m_vPos[0]) + "," + Math.Round(msg.m_vPos[2]) + "]";
 			text += ",\"lang\":\"" + CLW_Situation.Escape(CLW_PlayerLang.Resolve(msg.m_iPlayer)) + "\"";
-			text += ",\"text\":\"" + CLW_Situation.Escape(msg.m_sText) + "\",\"ageSec\":" + Math.Round(Math.Max(0, now - msg.m_fTime)) + "}";
+			text += ",\"text\":\"" + CLW_Situation.Escape(msg.m_sText) + "\",\"ageSec\":" + Math.Round(Math.Max(0, now - msg.m_fTime));
+			string history = CLW_HqHistory.GetJson(msg.m_iPlayer);	// the asker's own last exchanges, oldest first (sidecar: "Recent conversation")
+			if (!history.IsEmpty())
+				text += ",\"history\":" + history;
+			text += "}";
 			written++;
 		}
 
@@ -394,6 +399,7 @@ class CLW_HqChat
 				// one hint with reply + action result (a second hint would replace the first at once; the reply alone was a
 				// short chat line the owner did not see, DS e2e 2026-10-12)
 				msg.m_sReply = line;
+				CLW_HqHistory.Record(msg.m_iPlayer, msg.m_sText, reply.text);	// LLM reply only; fallback / rules answers are not recorded
 				if (!HasActionsFor(msg, actions))
 					CLW_RequestService.Answer(msg.m_iPlayer, CLW_Loc.W("#CLW-Req_Granted", line), true);
 				RunActions(msg, actions);
@@ -570,6 +576,7 @@ class CLW_HqChat
 
 	protected static void Tick()
 	{
+		CLW_HqHistory.Prune();
 		float now = CLW_RequestService.Now();
 		for (int i = s_aPending.Count() - 1; i >= 0; i--)
 		{
