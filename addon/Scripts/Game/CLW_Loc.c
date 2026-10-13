@@ -198,7 +198,7 @@ class CLW_Loc
 	// it, else the value itself. A value that is a key (faction "#AR-Faction_US") is translated.
 	static string Choice(string paramId, string value)
 	{
-		if (IsWire(value))
+		if (IsWire(value) || paramId.StartsWith("faction"))	// faction keys ("US") are shown as they are
 			return Resolve(value);
 
 		string key = "#CLW-Choice_" + paramId + "_" + value;
