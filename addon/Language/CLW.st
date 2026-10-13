@@ -704,6 +704,10 @@ StringTable {
    Target_en_us "%1 supply convoy %2 was lost with %3 supplies."
    Target_de_de "Der Nachschubkonvoi %2 von %1 ging mit %3 Nachschub verloren."
   }
+  CustomStringTableItem CLW-Map_Me {
+   Target_en_us "You"
+   Target_de_de "Du"
+  }
   CustomStringTableItem CLW-Marker_V0_I1 {
    Target_en_us "few inf"
    Target_de_de "wenige Inf"

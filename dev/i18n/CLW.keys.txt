@@ -604,3 +604,4 @@ CLW-Param_mapSquads ::: Show friendly squads ::: Befreundete Trupps anzeigen
 CLW-Param_mapSquads_Desc ::: One symbol per friendly group at its leader. ::: Ein Symbol je befreundeter Gruppe an ihrem Anführer.
 CLW-Param_mapVehicles ::: Show friendly vehicles ::: Befreundete Fahrzeuge anzeigen
 CLW-Param_mapVehicles_Desc ::: Crewed or claimed friendly vehicles, symbol by type. ::: Besetzte oder zugeteilte befreundete Fahrzeuge, Symbol nach Typ.
+CLW-Map_Me ::: You ::: Du
