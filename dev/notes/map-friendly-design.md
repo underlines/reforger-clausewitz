@@ -70,6 +70,8 @@ what `OnAddSynchedMarker` does: `marker.SetMarkerOwnerID(-1)`, `m_aStaticMarkers
 After each picture while the map is open: `SetStaticMarkerDisabled(marker, false)` for our markers (the next frame's `OnUpdate` culls out-of-view ones again) so a unit that moved
 into view appears without a pan. Known vanilla quirk: `CheckMarkersUserRestrictions` blocks ALL static markers for accounts without the UGC privilege (parental controls), same as our contact markers.
 
+**[2026-10-13 map-fix, supersedes the PLACED_CUSTOM arrow below]** The marker config has no PLACED_CUSTOM entry, so "me" is drawn as a PLACED_MILITARY infantry symbol of the player faction identity labelled "#CLW-Map_Me" (You / Du), position only (a military symbol cannot rotate). With an active picture all vanilla leader / member markers are hidden (the picture already carries every group the switches allow; the own-group leader is also one of the drawn members, so keeping it duplicated it). Map hooks are re-inserted on every picture (~SCR_MapEntity clears the static invokers). Diagnostics: log lines "friendly client apply ...", "map open markers=.. widgetsCreated=.." (+1.5 s repeat), "symbol kind=..".
+
 **"Me" needs no server data**: the client draws its own controlled entity (`SCR_PlayerController.GetLocalControlledEntity()`: position + yaw) from a 0.5 s `CallLater` while the map
 is open; the server only tells it the switch. Symbol: `PLACED_CUSTOM` marker (not NATO): icon index = first entry of `SCR_MapMarkerEntryPlaced.GetIconEntries()` whose quad is `arrow-small`
 (fallback `dot-2`, then 0; found by name at runtime, never by a hard-wired index; via `GetIconResource`), colour entry named `white` or `orange` (fallback 0), `marker.GetMarkerComponent().SetRotation(yawDeg)`.
