@@ -361,6 +361,7 @@ progress), HQ intent from the SITREP. Enemy side: only what the faction already 
     that the server sends only to that faction's players every 5-10 s, the same path as the SITREP delivery (`CLW_SitrepStore` /
     player-controller RPC). No enemy leak, low bandwidth, updates smoothly.
 - Toggle per layer in the map legend (squads, orders, objectives); off by default for realism-focused servers (server setting).
+- **Superseded 2026-10-13:** four independent on/off switches (me, squad members, friendly squads, friendly vehicles) instead of one level, see `notes/map-friendly-design.md`.
 - **Friendly marker level as a setup-menu option (owner request 2026-10-12):** "See friendly map markers": `off` | `me` (own
   position only) | `my group` (members of the player's squad) | `all groups` (one symbol per friendly group, at its leader / centre) |
   `all units` (every friendly soldier and vehicle individually). A war-mode param like the others (setup menu, `CLW_ModeParam` choice),
