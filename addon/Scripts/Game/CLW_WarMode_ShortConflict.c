@@ -57,6 +57,7 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("convoyMinLoad", "#CLW-Param_convoyMinLoad", "#CLW-Param_convoyMinLoad_Desc", CLW_ModeParam.TYPE_INT, 10, 400, 10, 60));
 		m_aParams.Insert(CLW_ModeParam.CreateBool("cap_logistics", "#CLW-Param_cap_logistics", "#CLW-Param_cap_logistics_Desc", true));
 		m_aParams.Insert(CLW_ModeParam.CreateBool("cap_kitCost", "#CLW-Param_cap_kitCost", "#CLW-Param_cap_kitCost_Desc", true));
+		m_aParams.Insert(CLW_ModeParam.CreateBool("cap_serverKitCost", "#CLW-Param_cap_serverKitCost", "#CLW-Param_cap_serverKitCost_Desc", true));	// loadouts plan R3: spawning with a server loadout costs supplies
 		// friendly units on the player map (CLW_FriendlyMapSettings): mapMe, mapSquadmates, mapSquads, mapVehicles
 		CLW_FriendlyMapSettings.AddParams(m_aParams);
 	}
@@ -84,6 +85,7 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 		caps.Insert("requests");
 		caps.Insert("reports");
 		caps.Insert("kitCost");
+		caps.Insert("serverKitCost");
 	}
 
 	override float GetDistanceScale()
