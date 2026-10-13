@@ -183,6 +183,11 @@ button.btn:disabled { opacity: .55; cursor: default; }
 .chip .engsel { display: flex; align-items: center; gap: 4px; }
 .chip .engsel select { font: inherit; font-size: 11px; background: rgba(255,255,255,.06); color: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 0 4px; }
 .chip.hqnote { color: #e0a030; }
+.fbbox { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: rgba(255,255,255,.02); }
+.fbbox > summary, .fbadv > summary { cursor: pointer; color: var(--mut); font-size: 12px; }
+.fbin { display: flex; flex-direction: column; gap: 10px; padding-top: 8px; }
+.fbadv { display: flex; flex-direction: column; gap: 8px; }
+.fbadv[open] { gap: 10px; }
 .cfgh { margin: 6px 0 0; padding-top: 10px; border-top: 1px solid var(--line); font-size: 11px; color: var(--mut); text-transform: uppercase; letter-spacing: .06em; }
 
 /* views / tabs */

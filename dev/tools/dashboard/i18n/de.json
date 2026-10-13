@@ -507,5 +507,22 @@
   "sitrep.sec.logistics": "Logistik",
   "time.dh": "{0} T {1} Std.",
   "time.hm": "{0} Std. {1} Min.",
-  "time.m": "{0} Min."
+  "time.m": "{0} Min.",
+  "fb.title": "Backup-Modell (wird genutzt, wenn das Hauptmodell rate-limitiert ist oder ausfällt)",
+  "fb.note": "Bei HTTP 429, 5xx, Timeout oder Netzwerkfehler wird der Aufruf einmal auf dem Backup-Modell wiederholt. Fehler wie 400/401 wechseln nicht. Modell leer lassen = kein Backup.",
+  "fb.model": "Backup-Modell",
+  "fb.modelPh": "z. B. ein bezahltes Modell beim selben Anbieter",
+  "fb.advanced": "Erweitert (Anbieter, URL, Schlüssel, Timeout)",
+  "fb.inherit": "Leer = wie das Hauptmodell.",
+  "fb.sameAsMain": "wie Hauptmodell",
+  "fb.keyNote": "Nur schreibend. Leer = der Hauptschlüssel, nur solange Anbieter und URL gleich bleiben.",
+  "fb.test": "Backup-Modell testen",
+  "fb.testOk": "Backup-Modell OK ({0} ms)",
+  "fb.testFailed": "Backup-Modell-Test fehlgeschlagen: {0}",
+  "fb.badge": "Backup",
+  "fb.tip": "Das Hauptmodell ist fehlgeschlagen ({0}); das Backup-Modell hat geantwortet.",
+  "fb.chip": "Backup genutzt",
+  "fb.chipTip": "Vom Backup-Modell beantwortete Aufrufe: stark {0}, schwach {1}",
+  "fb.cooling": "Pausiert",
+  "fb.coolTip": "Diese Modelle waren zuletzt rate-limitiert oder sind ausgefallen und werden kurz übersprungen; solange wird das Backup-Modell genutzt."
 }
