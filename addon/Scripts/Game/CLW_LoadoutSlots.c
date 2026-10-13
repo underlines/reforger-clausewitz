@@ -282,6 +282,28 @@ class CLW_LoadoutSlots
 			if (custom)
 				custom.Bind();
 		}
+
+		// Vanilla computes SCR_Faction.IsCustomLoadoutSupported once at faction init (an SCR_PlayerArsenalLoadout with that faction key in the
+		// manager). Our custom entry gets its faction only now, so refresh it: without this the vanilla "save loadout" arsenal action stays hidden.
+		FactionManager factions = GetGame().GetFactionManager();
+		if (!factions)
+			return;
+
+		array<Faction> list = {};
+		factions.GetFactionsList(list);
+		string supported;
+		foreach (Faction item : list)
+		{
+			SCR_Faction faction = SCR_Faction.Cast(item);
+			if (!faction)
+				continue;
+
+			faction.UpdateCustomLoadoutSupportState(manager);
+			if (faction.IsCustomLoadoutSupported())
+				supported += " " + faction.GetFactionKey();
+		}
+
+		Print("CLW: loadouts custom loadout supported:" + supported, LogLevel.NORMAL);
 	}
 
 	protected static void LogSlots(string where)
