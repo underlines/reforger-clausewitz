@@ -142,11 +142,11 @@ Open / known:
 ## Planned: i18n (design `notes/i18n-design.md`, 2026-10-13)
 Mod text and dashboard EN + DE; LLM text in each player's language (game language, override via `/hq language <code>` or HQ
 menu); strong LLM for decisions and one-reader replies, optional weak LLM for broadcast translation.
-- [ ] P1 player language: resolution (override > game language > server default > en), `/hq language`, HQ menu option, join report
-- [ ] P2 `CLW_Loc` + `Language/CLW.st` (EN/DE); static UI and server-built templates on `#CLW-` keys
-- [ ] P3 protocol v4 `lang`: `/hq` replies in the asker's language
-- [ ] P4 sidecar `strong`/`weak` slots, broadcast translation (`langs[]` -> `text_by_lang`), cache, fallbacks
-- [ ] P5 dashboard EN/DE: `i18n/*.json`, `t()` + `data-i18n`, header picker (independent of P1-P4)
+- [x] P1 player language (coded + DS compile OK; client e2e pending): resolution (override > game language > server default > en), `/hq language`, HQ menu option, join report
+- [x] P2 (coded; string table registered via Workbench; German render pending client check) `CLW_Loc` + `Language/CLW.st` (EN/DE); static UI and server-built templates on `#CLW-` keys
+- [x] P3 protocol v4 (real LLM: ja reply + setLanguage verified 2026-10-13, ling-3.1-flash) `lang`: `/hq` replies in the asker's language
+- [x] P4 sidecar `strong`/`weak` slots, broadcast translation (`langs[]` -> `text_by_lang`), cache, fallbacks
+- [x] P5 dashboard EN/DE: `i18n/*.json`, `t()` + `data-i18n`, header picker (independent of P1-P4)
 
 ## Done: M3 - Logistics, bases & requests (v0.5.0)
 M3 "Logistics, bases & requests" coded 2026-10-12 on branch `feature/m3-logistics` (phases R, B, Q, F, L, A; design `notes/m3-design.md`).
