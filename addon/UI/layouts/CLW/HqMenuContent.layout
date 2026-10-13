@@ -41,7 +41,7 @@ VerticalLayoutWidgetClass {
           Padding 0 8 0 4
          }
          Color 0.88 0.451 0.084 1
-         Text "REQUESTS"
+         Text "#CLW-HqMenu_Requests"
         }
         VerticalLayoutWidgetClass "{B3F0A21D7C58000B}" {
          Name "RequestBox"
@@ -55,7 +55,7 @@ VerticalLayoutWidgetClass {
           Padding 0 18 0 4
          }
          Color 0.88 0.451 0.084 1
-         Text "SQUAD"
+         Text "#CLW-HqMenu_Squad"
         }
         VerticalLayoutWidgetClass "{B3F0A21D7C58000F}" {
          Name "SquadBox"
@@ -69,7 +69,7 @@ VerticalLayoutWidgetClass {
           Padding 0 18 0 4
          }
          Color 0.88 0.451 0.084 1
-         Text "BASE"
+         Text "#CLW-HqMenu_Base"
         }
         VerticalLayoutWidgetClass "{B3F0A21D7C580013}" {
          Name "BaseBox"
@@ -83,11 +83,25 @@ VerticalLayoutWidgetClass {
           Padding 0 18 0 4
          }
          Color 0.88 0.451 0.084 1
-         Text "CONTACT REPORT"
+         Text "#CLW-HqMenu_Report"
         }
         VerticalLayoutWidgetClass "{B3F0A21D7C580017}" {
          Name "ReportBox"
          Slot LayoutSlot "{B3F0A21D7C580018}" {
+          HorizontalAlign 3
+         }
+        }
+        RichTextWidgetClass "{B3F0A21D7C580019}" : "{3FF33FC224E0C76C}UI/layouts/WidgetLibrary/RichTextWidgets/RichText_BodySmall.layout" {
+         Name "LanguageHeader"
+         Slot LayoutSlot "{B3F0A21D7C58001A}" {
+          Padding 0 18 0 4
+         }
+         Color 0.88 0.451 0.084 1
+         Text "#CLW-HqMenu_Language"
+        }
+        VerticalLayoutWidgetClass "{B3F0A21D7C58001B}" {
+         Name "LanguageBox"
+         Slot LayoutSlot "{B3F0A21D7C58001C}" {
           HorizontalAlign 3
          }
         }
