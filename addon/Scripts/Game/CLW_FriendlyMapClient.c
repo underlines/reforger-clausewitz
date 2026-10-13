@@ -1,6 +1,6 @@
 // Client map layer for friendly units (design: dev/notes/map-friendly-design.md 2.2 / 3 / WP-C). Client only.
 // The server sends one picture string per player (CLW_FriendlyPic wire); this class keeps LOCAL PLACED_MILITARY markers in sync with it
-// (SetWorldPos on the same object, no widget churn), draws the "me" arrow from the local entity, and tells the modded vanilla group markers
+// (SetWorldPos on the same object, no widget churn), draws the "me" marker (a PLACED_MILITARY symbol) from the local entity, and tells the modded vanilla group markers
 // (CLW_FriendlyMapSuppress.c) whether they may show. No CLW picture (non-CLW scenario, between wars) => vanilla is left untouched.
 class CLW_FriendlyMarkerState
 {
@@ -14,16 +14,18 @@ class CLW_FriendlyMapClient
 {
 	static const int ME_TICK_MS = 500;
 	static const int REQUEST_GAP_MS = 10000;
+	static const int MAP_CHECK_MS = 1500;
 
 	protected static ref CLW_FriendlyPic s_Pic;
 	protected static ref map<string, ref CLW_FriendlyMarkerState> s_mMarkers;
 	protected static SCR_MapMarkerBase s_MeMarker;
+	protected static int s_iApplyLogs;
+	protected static ref map<string, bool> s_mOnce;
 	protected static bool s_bHooked;
 	protected static bool s_bMapOpen;
 	protected static bool s_bTimerOn;
 	protected static int s_iLastRequestMs = -1000000;
 	protected static string s_sRefreshState = "";
-	protected static bool s_bSymbolFailLogged;
 
 	// ---- public API ----
 
@@ -75,28 +77,18 @@ class CLW_FriendlyMapClient
 		return s_Pic.m_iMask;
 	}
 
-	// Vanilla leader marker of this group may show?
+	// Vanilla leader marker of this group may show? With an active CLW picture the answer is no: the picture already carries every
+	// group the switches allow (own group as individual members, other groups as one squad symbol at the leader, human-led ones included),
+	// so a vanilla leader marker would only draw the same unit a second time (the leader of the own group is also one of the members).
+	// No picture (non-CLW scenario, between wars) => vanilla untouched.
 	static bool KeepVanillaLeader(SCR_AIGroup group)
 	{
-		if (!IsActive())
-			return true;
-
-		int mask = s_Pic.m_iMask;
-		if (mask & 4)
-			return true;
-
-		if ((mask & 2) && group && group == LocalGroup())
-			return true;
-
-		return false;
+		return !IsActive();
 	}
 
 	static bool KeepVanillaMember()
 	{
-		if (!IsActive())
-			return true;
-
-		return (s_Pic.m_iMask & 2) != 0;
+		return !IsActive();
 	}
 
 	// Re-evaluates every vanilla leader / member marker (map open, picture state change, local faction change).
@@ -128,16 +120,35 @@ class CLW_FriendlyMapClient
 		}
 	}
 
-	// Registers the map events once (called from the marker manager's OnPostInit and from Receive).
+	// Registers the map events. Called from the marker manager's OnPostInit and from every Receive: the invokers are static and
+	// ~SCR_MapEntity clears them, so a recreated map entity would silently drop the hook; Remove + Insert keeps it idempotent.
 	static void Hook()
 	{
-		if (s_bHooked || System.IsConsoleApp())
+		if (System.IsConsoleApp())
 			return;
 
-		s_bHooked = true;
+		SCR_MapEntity.GetOnMapOpenComplete().Remove(OnMapOpened);
+		SCR_MapEntity.GetOnMapClose().Remove(OnMapClosed);
 		SCR_MapEntity.GetOnMapOpenComplete().Insert(OnMapOpened);
 		SCR_MapEntity.GetOnMapClose().Insert(OnMapClosed);
-		Print("CLW: friendly client hooked the map events", LogLevel.NORMAL);
+		if (!s_bHooked)
+		{
+			s_bHooked = true;
+			Print("CLW: friendly client hooked the map events", LogLevel.NORMAL);
+		}
+	}
+
+	// true the first time a key is seen (every failure path logs once per cause, never per picture)
+	protected static bool Once(string key)
+	{
+		if (!s_mOnce)
+			s_mOnce = new map<string, bool>();
+
+		if (s_mOnce.Contains(key))
+			return false;
+
+		s_mOnce.Set(key, true);
+		return true;
 	}
 
 	// ---- internals ----
@@ -191,9 +202,13 @@ class CLW_FriendlyMapClient
 		s_bMapOpen = true;
 		CheckState();
 
-		Apply();	// markers created while closed get their widgets from the map UI; this only re-enables the culled ones
+		Apply();	// markers created while closed got their widgets from SCR_MapMarkersUI.CreateStaticMarkers (it ran before this event); this re-enables the culled ones
 		RefreshVanilla();
 		UpdateMe();
+		LogMapState("map open");
+
+		GetGame().GetCallqueue().Remove(MapCheck);
+		GetGame().GetCallqueue().CallLater(MapCheck, MAP_CHECK_MS, false);
 
 		if (!s_bTimerOn)
 		{
@@ -207,6 +222,68 @@ class CLW_FriendlyMapClient
 		s_bMapOpen = false;
 		s_bTimerOn = false;
 		GetGame().GetCallqueue().Remove(MeTick);
+		GetGame().GetCallqueue().Remove(MapCheck);
+	}
+
+	// One look at the markers a moment after the map opened (after the first frames of the vanilla update culled / placed them).
+	protected static void MapCheck()
+	{
+		if (s_bMapOpen)
+			LogMapState("map open +" + MAP_CHECK_MS.ToString() + "ms");
+	}
+
+	// All our local markers (members / squads / vehicles + me).
+	protected static void CollectMine(notnull array<SCR_MapMarkerBase> mine)
+	{
+		if (s_mMarkers)
+		{
+			foreach (string key, CLW_FriendlyMarkerState state : s_mMarkers)
+			{
+				if (state && state.m_Marker)
+					mine.Insert(state.m_Marker);
+			}
+		}
+
+		if (s_MeMarker)
+			mine.Insert(s_MeMarker);
+	}
+
+	// "CLW: friendly client map open markers=<n> widgetsCreated=<n> ..." (widgetsCreated = our markers that own a widget; ensured = ones we had to create ourselves).
+	protected static void LogMapState(string what)
+	{
+		SCR_MapMarkerManagerComponent manager = SCR_MapMarkerManagerComponent.GetInstance();
+		if (!manager)
+		{
+			if (Once("mapstate-nomanager"))
+				Print("CLW: friendly client map open but no marker manager instance", LogLevel.WARNING);
+
+			return;
+		}
+
+		array<SCR_MapMarkerBase> mine = {};
+		CollectMine(mine);
+		int listed, withWidget, ensured, visible;
+		string detail = manager.CLW_CheckLocalMarkers(mine, listed, withWidget, ensured, visible);
+		int mapUi = 0;
+		SCR_MapEntity mapEnt = SCR_MapEntity.GetMapInstance();
+		if (mapEnt && mapEnt.GetMapUIComponent(SCR_MapMarkersUI))
+			mapUi = 1;
+
+		Print(string.Format("CLW: friendly client %1 markers=%2 widgetsCreated=%3 ensured=%4 visible=%5 %6 markersUi=%7 active=%8", what, mine.Count(), withWidget, ensured, visible, detail, mapUi, IsActiveInt()), LogLevel.NORMAL);
+
+		if (mine.Count() > 0 && mapUi == 0 && Once("mapstate-noui"))
+			Print("CLW: friendly client this map has no SCR_MapMarkersUI component, local markers cannot get widgets here", LogLevel.WARNING);
+
+		if (mine.Count() > 0 && withWidget == 0 && Once("mapstate-nowidget-" + what))
+			Print("CLW: friendly client " + what + ": " + mine.Count().ToString() + " marker(s) but none owns a widget (OnCreateMarker produced nothing: no map menu root / frame / layout?)", LogLevel.WARNING);
+	}
+
+	protected static int IsActiveInt()
+	{
+		if (IsActive())
+			return 1;
+
+		return 0;
 	}
 
 	protected static void MeTick()
@@ -253,21 +330,48 @@ class CLW_FriendlyMapClient
 	// Reconcile the local markers with the picture: same key + same look => move only; changed => recreate; missing => delete.
 	protected static void Apply()
 	{
+		int mapOpen = 0;
+		if (s_bMapOpen)
+			mapOpen = 1;
+
 		if (!IsActive())
+		{
+			string why = "no picture";
+			if (s_Pic)
+				why = string.Format("picture faction '%1' active=%2, local faction '%3'", s_Pic.m_sFaction, s_Pic.m_bActive, LocalFactionKey());
+
+			if (Once("apply-inactive-" + why))
+				Print("CLW: friendly client apply skipped, not active: " + why, LogLevel.WARNING);
+
 			return;
+		}
 
 		SCR_MapMarkerManagerComponent manager = SCR_MapMarkerManagerComponent.GetInstance();
 		if (!manager)
+		{
+			if (Once("apply-nomanager"))
+				Print("CLW: friendly client apply skipped, no marker manager instance", LogLevel.WARNING);
+
 			return;
+		}
 
 		int mask = s_Pic.m_iMask;
 		map<string, ref CLW_FriendlyMarkerState> markers = Markers();
 		map<string, bool> seen = new map<string, bool>();
+		int created = 0;
+		int existing = 0;
+		int removed = 0;
+		int skipped = 0;
 
 		foreach (CLW_FriendlyEntry entry : s_Pic.m_aEntries)
 		{
 			if (!entry || entry.m_sKey.IsEmpty())
+			{
+				if (Once("apply-emptykey"))
+					Print("CLW: friendly client apply: entry without a key skipped", LogLevel.WARNING);
+
 				continue;
+			}
 
 			bool allowed = false;
 			if (entry.m_sType == "m")
@@ -276,9 +380,14 @@ class CLW_FriendlyMapClient
 				allowed = (mask & 4) != 0;
 			else if (entry.m_sType == "v")
 				allowed = (mask & 8) != 0;
+			else if (Once("apply-type-" + entry.m_sType))
+				Print("CLW: friendly client apply: unknown entry type '" + entry.m_sType + "' skipped", LogLevel.WARNING);
 
 			if (!allowed)
+			{
+				skipped++;
 				continue;
+			}
 
 			string key = entry.m_sType + ":" + entry.m_sKey;
 			int worldX = entry.m_iX5 * 5 + 2;
@@ -291,6 +400,7 @@ class CLW_FriendlyMapClient
 				if (state.m_sKind == entry.m_sKind && state.m_sLabel == entry.m_sLabel && state.m_iCount == entry.m_iCount)
 				{
 					state.m_Marker.SetWorldPos(worldX, worldZ);
+					existing++;
 					continue;
 				}
 
@@ -300,22 +410,28 @@ class CLW_FriendlyMapClient
 
 			SCR_MapMarkerBase marker = CLW_FriendlySymbols.CreateMilitary(s_Pic.m_iIdentity, entry.m_sKind, entry.m_sType == "s", entry.m_sLabel, worldX, worldZ);
 			if (!marker)
+			{
+				if (Once("apply-create-" + entry.m_sKind))
+					Print("CLW: friendly client apply: no marker for entry " + key + " kind '" + entry.m_sKind + "' (see the PrepareMilitaryMarker warning)", LogLevel.WARNING);
+
 				continue;
+			}
 
 			manager.CLW_AddLocalMarker(marker);
-			CLW_FriendlyMarkerState created = new CLW_FriendlyMarkerState();
-			created.m_Marker = marker;
-			created.m_sKind = entry.m_sKind;
-			created.m_sLabel = entry.m_sLabel;
-			created.m_iCount = entry.m_iCount;
-			markers.Set(key, created);
+			CLW_FriendlyMarkerState createdState = new CLW_FriendlyMarkerState();
+			createdState.m_Marker = marker;
+			createdState.m_sKind = entry.m_sKind;
+			createdState.m_sLabel = entry.m_sLabel;
+			createdState.m_iCount = entry.m_iCount;
+			markers.Set(key, createdState);
+			created++;
 		}
 
 		array<string> stale = {};
-		foreach (string existing, CLW_FriendlyMarkerState existingState : markers)
+		foreach (string existingKey, CLW_FriendlyMarkerState existingState : markers)
 		{
-			if (!seen.Contains(existing))
-				stale.Insert(existing);
+			if (!seen.Contains(existingKey))
+				stale.Insert(existingKey);
 		}
 
 		foreach (string staleKey : stale)
@@ -325,6 +441,14 @@ class CLW_FriendlyMapClient
 				manager.CLW_RemoveLocalMarker(gone.m_Marker);
 
 			markers.Remove(staleKey);
+			removed++;
+		}
+
+		// compact: every change, plus the first few pictures (a steady picture every 4 s does not repeat)
+		if (created > 0 || removed > 0 || s_iApplyLogs < 3)
+		{
+			s_iApplyLogs++;
+			Print(string.Format("CLW: friendly client apply entries=%1 created=%2 existing=%3 removed=%4 mapOpen=%5 skipped=%6", s_Pic.m_aEntries.Count(), created, existing, removed, mapOpen, skipped), LogLevel.NORMAL);
 		}
 
 		if (!s_bMapOpen)
@@ -338,7 +462,8 @@ class CLW_FriendlyMapClient
 		}
 	}
 
-	// The "me" arrow from the local controlled entity (no server data needed beyond the switch).
+	// The "me" marker from the local controlled entity (no server data needed beyond the switch): an infantry NATO symbol of the
+	// player's faction identity labelled "You" (#CLW-Map_Me). The military symbol cannot rotate, so no heading.
 	protected static void UpdateMe()
 	{
 		if (!s_bMapOpen)
@@ -366,42 +491,33 @@ class CLW_FriendlyMapClient
 
 		SCR_MapMarkerManagerComponent manager = SCR_MapMarkerManagerComponent.GetInstance();
 		if (!manager)
+		{
+			if (Once("me-nomanager"))
+				Print("CLW: friendly client cannot draw the 'me' marker, no marker manager instance", LogLevel.WARNING);
+
 			return;
+		}
 
 		vector origin = entity.GetOrigin();
-		vector angles = entity.GetYawPitchRoll();
-		int degrees = Math.Round(angles[0]);
 		int posX = Math.Round(origin[0]);
 		int posZ = Math.Round(origin[2]);
-		degrees = degrees % 360;
-		if (degrees < 0)
-			degrees += 360;
 
 		if (!s_MeMarker)
 		{
-			s_MeMarker = CLW_FriendlySymbols.CreateMe();
+			s_MeMarker = CLW_FriendlySymbols.CreateMilitary(s_Pic.m_iIdentity, CLW_ForceKind.INFANTRY, false, "#CLW-Map_Me", posX, posZ);
 			if (!s_MeMarker)
 			{
-				if (!s_bSymbolFailLogged)
-				{
-					s_bSymbolFailLogged = true;
-					Print("CLW: friendly client cannot create the 'me' marker (no PLACED_CUSTOM entry in the marker config)", LogLevel.WARNING);
-				}
+				if (Once("me-create"))
+					Print("CLW: friendly client cannot create the 'me' marker (PrepareMilitaryMarker returned null for identity " + s_Pic.m_iIdentity.ToString() + ")", LogLevel.WARNING);
 
 				return;
 			}
 
-			s_MeMarker.SetWorldPos(posX, posZ);
-			s_MeMarker.SetRotation(degrees);
 			manager.CLW_AddLocalMarker(s_MeMarker);
+			Print("CLW: friendly client 'me' marker created at " + posX.ToString() + "," + posZ.ToString(), LogLevel.NORMAL);
 		}
 
 		s_MeMarker.SetWorldPos(posX, posZ);
-		s_MeMarker.SetRotation(degrees);
-		SCR_MapMarkerWidgetComponent comp = s_MeMarker.GetMarkerComponent();
-		if (comp && s_MeMarker.GetRootWidget())
-			comp.SetRotation(degrees);
-
 		manager.SetStaticMarkerDisabled(s_MeMarker, false);
 	}
 

@@ -4,7 +4,8 @@ class CLW_FriendlySymbols
 {
 	protected static ref map<string, int> s_mIcons;
 	protected static ref map<string, bool> s_mMissingLogged;
-	protected static bool s_bNoConfigLogged;
+	protected static ref map<string, bool> s_mNoConfigLogged;
+	protected static ref map<string, bool> s_mKindLogged;
 
 	protected static int Icon(string name)
 	{
@@ -88,88 +89,39 @@ class CLW_FriendlySymbols
 		EMilitarySymbolDimension dimension;
 		int iconFlags;
 		Resolve(kind, isSquad, dimension, iconFlags);
+		int dimensionId = dimension;
+		int squadId = 0;
+		if (isSquad)
+			squadId = 1;
 
 		SCR_MapMarkerBase marker = manager.PrepareMilitaryMarker(identity, dimension, iconFlags);
 		if (!marker)
 		{
-			if (!s_bNoConfigLogged)
+			if (!s_mNoConfigLogged)
+				s_mNoConfigLogged = new map<string, bool>();
+
+			string failKey = identity.ToString() + "/" + kind;
+			if (!s_mNoConfigLogged.Contains(failKey))
 			{
-				s_bNoConfigLogged = true;
-				Print("CLW: friendly client PrepareMilitaryMarker returned null (identity " + identity.ToString() + " kind " + kind + "): marker config lacks it", LogLevel.WARNING);
+				s_mNoConfigLogged.Set(failKey, true);
+				Print("CLW: friendly client PrepareMilitaryMarker returned null (identity " + identity.ToString() + " kind " + kind + " dimension " + dimensionId.ToString() + " icons " + iconFlags.ToString() + "): marker config lacks it", LogLevel.WARNING);
 			}
 
 			return null;
 		}
 
+		if (!s_mKindLogged)
+			s_mKindLogged = new map<string, bool>();
+
+		string kindKey = kind + "/" + squadId.ToString();
+		if (!s_mKindLogged.Contains(kindKey))
+		{
+			s_mKindLogged.Set(kindKey, true);
+			Print("CLW: friendly client symbol kind=" + kind + " squad=" + squadId.ToString() + " identity=" + identity.ToString() + " dimension=" + dimensionId.ToString() + " icons=" + iconFlags.ToString() + " configId=" + marker.GetMarkerConfigID().ToString(), LogLevel.NORMAL);
+		}
+
 		marker.SetCustomText(label);
 		marker.SetWorldPos(worldX, worldZ);
 		return marker;
-	}
-
-	// The "me" arrow: PLACED_CUSTOM marker, icon and colour entry found by name in the marker config (never by index).
-	static SCR_MapMarkerBase CreateMe()
-	{
-		SCR_MapMarkerManagerComponent manager = SCR_MapMarkerManagerComponent.GetInstance();
-		if (!manager)
-			return null;
-
-		SCR_MapMarkerConfig config = manager.GetMarkerConfig();
-		if (!config)
-			return null;
-
-		SCR_MapMarkerEntryPlaced placed = SCR_MapMarkerEntryPlaced.Cast(config.GetMarkerEntryConfigByType(SCR_EMapMarkerType.PLACED_CUSTOM));
-		if (!placed)
-			return null;
-
-		int iconIndex = FindIcon(placed, "arrow-small");
-		if (iconIndex < 0)
-			iconIndex = FindIcon(placed, "dot-2");
-		if (iconIndex < 0)
-			iconIndex = 0;
-
-		int colorIndex = FindColor(placed, "white");
-		if (colorIndex < 0)
-			colorIndex = FindColor(placed, "orange");
-		if (colorIndex < 0)
-			colorIndex = 0;
-
-		SCR_MapMarkerBase marker = new SCR_MapMarkerBase();
-		marker.SetType(SCR_EMapMarkerType.PLACED_CUSTOM);
-		marker.SetIconEntry(iconIndex);
-		marker.SetColorEntry(colorIndex);
-		return marker;
-	}
-
-	protected static int FindIcon(SCR_MapMarkerEntryPlaced placed, string quadName)
-	{
-		array<ref SCR_MarkerIconEntry> icons = placed.GetIconEntries();
-		if (!icons)
-			return -1;
-
-		foreach (int i, SCR_MarkerIconEntry entry : icons)
-		{
-			ResourceName imageset, glow;
-			string quad;
-			entry.GetIconResource(imageset, glow, quad);
-			if (quad == quadName)
-				return i;
-		}
-
-		return -1;
-	}
-
-	protected static int FindColor(SCR_MapMarkerEntryPlaced placed, string colorName)
-	{
-		array<ref SCR_MarkerColorEntry> colors = placed.GetColorEntries();
-		if (!colors)
-			return -1;
-
-		foreach (int i, SCR_MarkerColorEntry entry : colors)
-		{
-			if (entry.GetName() == colorName)
-				return i;
-		}
-
-		return -1;
 	}
 }
