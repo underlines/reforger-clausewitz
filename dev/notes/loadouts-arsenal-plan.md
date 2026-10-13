@@ -1,110 +1,169 @@
-# Loadouts and arsenals: plan (draft 2026-10-12, not started)
+# Loadouts and arsenals: plan (draft 2026-10-12, rev. 2026-10-14 after owner review)
 
-Research: `research/loadout-editors-arsenals.md`; earlier general idea note: `research/mod-agnostic-asset-discovery.md` (reviewed below).
-Goal: vanilla, Bacon and WCS loadout editors work in Clausewitz without dependencies (JXP and the Bacon forks come along for free), every
-side's arsenal has its full item set (pack items for kin sides, never the enemy's), factions from packs get proper role loadouts, and later
-loadouts can be managed from the web dashboard.
+**The one plan for arsenals, spawn-screen loadouts, the player's custom loadout and AI squad loadouts.**
+Research: `research/loadout-editors-arsenals.md`, `research/arsenal-packs.md`, `research/entity-catalog-classification.md` (labels),
+`research/mod-agnostic-asset-discovery.md` (reviewed below).
 
-## Decision: one arsenal, no arsenal-type setting
-All editors hook the vanilla `SCR_ArsenalComponent` / `ArsenalBox_Base.et` / `SCR_PlayerArsenalLoadout`. So we spawn vanilla-derived
-arsenal boxes and make the item pool and loadout entries right; we never integrate a specific editor in code.
+Status 2026-10-14: A1 (arsenal at HQ/FOB) and A2 layers 1 + 3 + pack rules (`CLW_ArsenalPool`, `Configs/CLW/ArsenalPackRules.conf`) shipped
+in M3/M4 (see PROGRESS). Everything from R0 on is not started.
 
-On the owner's either/or: neither "pick the detected arsenal mod" nor "all items everywhere". The **kin pool** below: each side's arsenal
-shows its own faction catalog plus the catalogs of factions that are friendly to it (vanilla friendly lists, e.g. RHS_USAF <-> US), minus anything
-from the enemy side. That is the data-driven version of "RU weapons only for RU".
+## Owner requirements
+- Every side's arsenal has its full item set (pack items for kin sides, never the enemy's); vanilla, Bacon and WCS loadout editors work
+  without dependencies (2026-10-12).
+- 2026-10-14:
+  1. Spawn screen per faction: **7 server loadouts** (managed in the dashboard loadout editor) + the player's **one custom saved loadout**.
+  2. No load/save in the HQ menu (would be cheating). The custom loadout is saved and loaded **only at an arsenal** (any arsenal if possible).
+     The 7 server loadouts are NOT loadable at arsenals, only spawnable.
+  3. Dashboard loadout editor: sees every player's saved custom loadout (by faction), copies one into the library as a new server loadout.
+     Library per faction: unlimited, **max 7 active**.
+  4. Admin assigns server loadouts to squads; AI squads get proper roles/loadouts. Stay close to official Reforger concepts where it does not hurt.
+  5. Server loadouts are set up once, rarely changed: applied at war/session (re)start, no live changes. Dashboard gets a restart button.
+  6. Dashboard gets a proper admin login (persists across tabs, password changeable, default in README).
 
-**Custom arsenals:** anything that asks `SCR_EntityCatalogManagerComponent` for faction items (all editors found, most arsenal mods) gets the pool
-automatically, because the hook sits there. Arsenals with their own item lists (`m_OverwriteArsenalConfig` or their own configs) are out of scope:
-no integration code per mod.
+## Decisions
+- **One arsenal, no arsenal-type setting.** All editors hook the vanilla `SCR_ArsenalComponent` / `ArsenalBox_Base.et` /
+  `SCR_PlayerArsenalLoadout`. We spawn vanilla-derived arsenal boxes and make the item pool and loadout entries right; we never integrate a
+  specific editor in code. No custom arsenal UI either: items, prices and faction gate come from the pool hook, which the vanilla UI, WCS and
+  Bacon all use.
+- **Kin pool**, not "pick the detected arsenal mod" or "all items everywhere": each side's arsenal shows its own faction catalog plus the
+  catalogs of factions friendly to it (vanilla friendly lists, e.g. RHS_USAF <-> US), minus anything from the enemy side.
+- **Custom arsenals:** anything that asks `SCR_EntityCatalogManagerComponent` for faction items gets the pool automatically. Arsenals with
+  their own item lists (`m_OverwriteArsenalConfig` or own configs) are out of scope: no integration code per mod.
+- **Kits come from factions, not doctrine templates.** Building "rifleman: assault rifle, 7 mags" from loose items is rejected (magazine
+  wells, attachments, capacity, camo coherence). Factions ship coherent kits as CHARACTER catalog prefabs with `ROLE_*` labels; server
+  loadouts are real kits saved in game (vanilla loadout string).
+- **Official roles, our squad types.** Characters carry `ROLE_*` labels (`LEADER, RIFLEMAN, MACHINEGUNNER, ANTITANK, GRENADIER, SHARPSHOOTER,
+  MEDIC, RADIOOPERATOR, SCOUT, AMMOBEARER, SAPPER, GUARD`), packs too (RHS: ROLE_SCOUT 21, ROLE_SHARPSHOOTER 16). Official squad types barely
+  exist (`GROUPTYPE_*` almost unused, `SCR_EGroupType` only on ambient patrols), but group prefabs' member slots (`m_aUnitPrefabSlots`) are
+  role-labelled characters (`Group_US_Team_LAT` holds AT soldiers). Squad types are our `CLW_ForceKind`.
+- **Load at the arsenal is ours.** Vanilla only saves (`SCR_ArsenalManagerComponent.SetPlayerArsenalLoadout` -> the spawn screen's saved
+  loadout). Public servers get "load" from Bacon (5 slots/faction + 10 admin server loadouts) or WCS_LoadoutEditor (deploy-menu slots). We build
+  a small save/load and coexist with both.
+- **Client determinism.** Clients compute arsenal contents too (`SCR_ArsenalComponent.DelayedOnArsenalUpdatedClient` -> `GetAvailablePrefabs`
+  -> `GetFilteredArsenalItems`), and the loadout manager list exists on every client. Pool inputs and spawn-screen entries must be built from
+  data every machine has (friendly lists, rules file, replicated side factions). Hence fixed slot entries per side (7 server + 1 custom),
+  filled from replicated data, instead of entries added at runtime; that is also the technical reason the cap of 7 is good.
 
-## Review of `mod-agnostic-asset-discovery.md` (earlier research)
-Taken over:
-- **Faction entity catalogs as the primary source**, overrides that *augment* discovery, content separate from doctrine. This is already how
-  `CLW_ForceCatalog` works for groups/vehicles (discovery + classifier + `overrides.json`); items follow the same pattern.
-- **Layered discovery with a prefab-scan fallback** for content that is in no catalog (standalone weapon packs, e.g. the ARMA-RY series). Feasible
-  at runtime: `ResourceDatabase.SearchResources(SearchResourcesFilter{rootPath, fileExtensions, searchStr, tags, recursive})`, every addon ships a
-  `resourceDatabase.rdb`. [verify on a packed dedicated server]
-- **Filter list** for the scan (wrecks, test/prototype, `_base`/abstract prefabs, damaged and editor-only variants).
+Review of `mod-agnostic-asset-discovery.md`: taken over are faction catalogs as the primary source with augmenting overrides, layered
+discovery with a prefab-scan fallback (A2b), and its filter list. Rejected: one "HC Asset Registry" for everything (`CLW_ForceCatalog` stays
+the group/vehicle registry, items get `CLW_ArsenalPool`), doctrine templates (above), guessing an orphan prefab's faction from components or
+names (only rule: a catalogued prefab ancestor decides; else "unassigned"), item semantics by introspection (only to fill a missing
+`SCR_ArsenalItem` type/mode of an orphan).
 
-Rejected or changed:
-- **One "HC Asset Registry" for everything:** no rewrite. `CLW_ForceCatalog` stays the registry for groups/vehicles; items get a small separate
-  `CLW_ArsenalPool` that reuses its helpers and the overrides file. The LLM does not need item-level data (at most kit tags for missions, L5).
-- **Loadouts built from doctrine templates** ("rifleman: assault_rifle, 7 mags, armor required" resolved against loose items): rejected. The hard
-  part is compatibility (magazine wells, attachments, carrying capacity) and visual coherence (mixing camo from three packs). Factions already
-  ship coherent kits: their **CHARACTER catalog prefabs carry `ROLE_*` labels** (`ROLE_RIFLEMAN, ROLE_ANTITANK, ROLE_MEDIC, ROLE_MACHINEGUNNER,
-  ROLE_LEADER, ROLE_GRENADIER, ROLE_SHARPSHOOTER, ...`, verified on vanilla in `entity-catalog-classification.md`). A player role loadout is just
-  `SCR_FactionPlayerLoadout` pointing at such a prefab. See L3.
-- **Guessing the faction of an orphan prefab** from components or names: no reliable signal. Only one rule is data-driven: an orphan whose
-  **prefab parent** (or ancestor) is in a faction's catalog belongs to that faction (camo/variant children). Everything else is "unassigned":
-  available only in pool mode `SIDE`/`ALL` or through an override.
-- **Prefab introspection for semantics** (tracked + cannon = MBT): already done for vehicles by the classifier. For items it is only needed
-  to fill in the missing `SCR_ArsenalItem` type/mode of an orphan (weapon / magazine / clothing area from components).
+## A1 - Arsenal at every HQ and FOB (shipped)
+`CLW_Arsenal.et` (child of `ArsenalBox_Base.et`, keeps every editor's action, save type `FRIENDLY_AND_FACTION_ITEMS_ONLY`) as a base service
+composition; prefab per side is data, RHS prop sets put RHS boxes at RHS bases; FOB kit box. Kit cost against nearby containers.
 
-New constraint the earlier note misses: **clients compute arsenal contents too** (`SCR_ArsenalComponent.DelayedOnArsenalUpdatedClient` ->
-`GetAvailablePrefabs` -> `GetFilteredArsenalItems` runs on the client). The pool must give the same answer on every machine: inputs (pool mode,
-side factions, overrides) replicated, the hook on clients deterministic, and the orphan scan either run identically on clients or its result
-sent by the server. Same for the friendly/hostile flags `CLW_Sides` sets at war start: check they replicate.
+## A2 - Item pool at catalog-manager level (shipped: layers 1, 3 + pack rules)
+- Hook: `modded SCR_EntityCatalogManagerComponent` -> `GetFactionArsenalItems` and the ITEM `GetEntryWithPrefabFromFactionCatalog` (price and
+  check). Only active while a Clausewitz war runs. Log prefix `CLW: services arsenal pool`.
+- Shipped layers: own faction ITEM catalog, kin factions' ITEM catalogs, `ArsenalPackRules.conf` (catalog X items go to faction Z, path filters,
+  global block list). Rules never pull the enemy side.
+- Open, only if a test shows the need: layer 2 generic (non-faction) ITEM catalogs [verify whether vanilla merges them]; item overrides in
+  `overrides.json` (`items`: `match`, `faction`, `enabled`, `type`, `cost`); pool mode `OWN | FRIENDLY (default) | SIDE | ALL`.
 
-## L1 - Arsenal at every HQ (later FOB)
-- `Prefabs/Bases/CLW_Arsenal.et`: child of `ArsenalBox_Base.et` (keeps every editor's action), `SCR_FactionAffiliationComponent`, save type
-  `FRIENDLY_AND_FACTION_ITEMS_ONLY` (needed for kin items). Prefab per side is data (scenario/side slot attribute, default `CLW_Arsenal.et`),
-  so a pack's own arsenal prefab can replace it.
-- `CLW_Bases` spawns it next to the HQ spawn point (reuse `CLW_Placement`; the battle-size layout moves HQs at war start, so spawn after
-  `ApplyLayout`), `Rekey` sets its faction with the rest of the base. Log: `CLW: arsenal side N faction X items=N`.
-- Deploy menu: show the faction's `SCR_PlayerArsenalLoadout` (the saved kit) next to the role loadouts; auto spawn keeps skipping it.
-
-## L2 - Item pool (layered, at catalog-manager level)
-- Hook: `modded SCR_EntityCatalogManagerComponent` -> `GetFilteredArsenalItems(.., faction, ..)` and `GetFactionArsenalItems(.., faction)` return
-  the pool of the faction, de-duplicated by prefab; the first layer that has an item wins (keeps its cost/rank data). One choke point, so Bacon's
-  cache, vanilla save checks and every editor see the same items. Only active while a Clausewitz war runs.
-- Layers, in order:
-  1. own faction ITEM catalog;
-  2. non-faction (generic) ITEM catalogs of the catalog manager [verify whether vanilla already merges them];
-  3. kin factions' ITEM catalogs (`KinOf(f)`);
-  4. orphan scan (L2b, off by default): prefabs in no catalog, faction by catalogued ancestor, else unassigned;
-  5. overrides (`overrides.json` gets an `items` section: `match`, `faction`, `enabled`, `type`, `cost`; scenario `m_aItemOverrides`).
-- `KinOf(f)`: pool mode from the scenario/war config, `OWN` | `FRIENDLY` (default) | `SIDE` (all playable non-enemy factions) | `ALL`
-  (sandbox, includes unassigned orphans); plus per-faction-profile `m_aArsenalKin` / `m_aArsenalExclude`. Never a faction of the other side
-  except in `ALL`.
-- Startup log per side: count per layer, duplicates dropped, orphans unassigned.
-- [verify] supply cost and rank of kin items (see research Open); fallback: copy the item's `SCR_ArsenalItem` data when it is missing in the own catalog.
-
-### L2b - Orphan scan (separate step, only if L2 test shows real gaps)
+### A2b - Orphan scan (only if tests show real gaps)
 - `ResourceDatabase.SearchResources` over `Prefabs/Weapons`, `Prefabs/Characters/{Uniforms,HeadGear,Vests,Backpacks,...}`, `Prefabs/Items`,
-  `.et` only, filter list above, minus every prefab already in a catalog. Inspect candidates (`Resource.Load` + `BaseContainer`, no spawning)
-  for weapon / magazine / cloth / item components, synthesize `SCR_ArsenalItem` (needs a `modded SCR_ArsenalItem` setter).
-- Cost: tens of thousands of prefabs with RHS+WCS. Run once per server start in slices (call queue), cache in `$profile:Clausewitz/item-scan.json`
-  keyed by the loaded addon list + versions, send the result to clients rather than scanning there.
+  `.et` only, minus catalogued prefabs and the filter list (wrecks, test/prototype, `_base`, damaged, editor-only). Inspect without spawning,
+  synthesize `SCR_ArsenalItem` (needs a `modded SCR_ArsenalItem` setter). Faction = catalogued ancestor, else unassigned.
+- Tens of thousands of prefabs with RHS+WCS: once per server start in slices, cache `$profile:Clausewitz/item-scan.json` keyed by addon list +
+  versions, result sent to clients (no client scan). [verify `SearchResources` on a packed DS]
 
-## L3 - Loadouts for every playing faction
-- **Role loadouts:** for a side faction with no (or only a rifleman) `SCR_FactionPlayerLoadout`, create one per role from its CHARACTER catalog:
-  pick one prefab per `ROLE_*` label (prefer `SIZE_M`, skip `ROLE_GUARD`, crew/pilot traits, de-duplicate camo variants like the vehicle
-  classifier), name it from the prefab's UI info. Fixes the known issue "editor loadout manager has only a rifleman for pack factions"
-  (PROGRESS) and covers RHS_ION, which has none.
-- **Saved-kit slots:** for each side faction that has no `SCR_PlayerArsenalLoadout`, or fewer slots than the richest faction (the WCS case),
-  clone the template entries of a kin faction (or any faction) via `BaseContainer` copy, then set `m_sAffiliatedFaction` and the default prefab
-  (the rifleman above); unknown attributes like `m_sWCSSlotId` are kept. No compile-time reference to WCS/Bacon.
-- Both need a small `modded SCR_LoadoutManager` to append entries at runtime (`m_aPlayerLoadouts` is protected); the loadout manager exists on
-  clients too, so the additions must be made identically there (deterministic from replicated side factions) [verify the deploy menu reads them].
+## R0 - Investigate + spike (first, one DS session)
+1. **Why are squad members identical today?** Log, per spawned group, slot prefabs + their `ROLE_*` labels: our spawn path (player squad
+   recruits in `CLW_PlayerSquad`, cargo groups in `CLW_ForceSpawner`) duplicating one prefab, or pack groups with identical slots.
+2. **AI with an applied kit:** spawn a group on the DS, `ApplyLoadoutString` per member server-side right after spawn. Check: primary fires,
+   grenadier uses the GL, AT fires and reloads, magazines recognised, gear visible on a client, nothing dropped. Try before/after AI init.
+   If unreliable: AI use role prefabs only (R2), server loadouts stay player-only. Either way squads get proper roles.
+3. Vanilla saved kit: persisted across restarts or per session only? Arsenal action class used for "Save"; can we add actions to every
+   `ArsenalBox_Base.et` child (prefab override in our addon vs. a script hook on `SCR_ArsenalComponent`); how WCS/Bacon actions look next to ours.
+4. Side-resolved slot entries: does a loadout entry that resolves its faction at runtime satisfy the deploy menu, WCS and Bacon (Bacon logs an
+   ERROR without one `SCR_PlayerArsenalLoadout` per faction)? Does the preview show the applied kit or only the base prefab (cosmetic)?
+5. Restart path: does `CLW_WarRuntime.RematchRestart` (war restart in the running session) let clients see changed slot names/kits, or is a
+   session restart needed (find the API for a scenario/session restart from script)?
 
-## L4 - Test matrix (one Workbench session at the end, like M2)
-New test project `dev/testpacks/ClausewitzEditors` (junctions as in `testpacks/README.md`). Runs: vanilla / +Bacon / +WCS_LoadoutEditor+WCS_Arsenal
-/ +RHS+Bacon, US-vs-USSR and RHS_USAF-vs-RHS_AFRF. Check per run: editor action on the HQ arsenal, item list has kin items and no enemy
-items (on the server AND a client view), save + respawn with the saved kit from the deploy menu, role loadouts for RHS factions, supply cost
-not 0, logs clean. L2b gets its own run with one standalone weapon pack (an ARMA-RY pack).
+## R1 - Player custom loadout (one per player per faction)
+- Spawn screen: one `SCR_PlayerArsenalLoadout`-type entry per side in `CLW_LoadoutManager.et`, faction resolved from the side at runtime (R0.4).
+  Covers pack factions without their own entry (RHS_ION) without cloning entries per faction; WCS slot entries stay as they are.
+- Arsenal actions "Save my loadout" / "Load my loadout" on every arsenal: our HQ/FOB arsenals for sure; all `ArsenalBox_Base.et` children
+  (vanilla, RHS, WCS boxes) through the mechanism R0.3 picks.
+- Save = the vanilla saved kit (`SetPlayerArsenalLoadout`), plus our copy in `$profile:Clausewitz/loadouts.json` keyed by
+  `BackendApi.GetPlayerIdentityId` + faction, so it survives restarts and the dashboard sees it. Restored into the vanilla slot on connect.
+- Load at the arsenal: replace the living player's gear with the saved kit; costs supplies like taking the items (`ComputeSuppliesCost`), old
+  gear is removed (not dropped), only items of the side's current pool (others dropped -> warning to the player).
+- Coexistence: with WCS/Bacon loaded their own slots and actions stay; ours are extra. No code reference to either mod.
 
-## L5 - Vision: loadouts from the web dashboard
-- Common currency: the vanilla loadout string (`SCR_PlayerArsenalLoadout.ReadLoadoutString` JSON), plus metadata (name, faction, role, cost,
-  author identity). Stored by the sidecar (`dev/tools/loadouts/` or the server profile).
-- Step 1 (cheap): **publish from game**. "Send kit to HQ" action on the arsenal posts the current kit JSON to the sidecar; the dashboard lists,
-  renames, assigns role/faction and marks kits as server presets. The game pulls presets (existing REST channel) and exposes them as
-  `CLW_ServerLoadout : SCR_PlayerArsenalLoadout` entries in the deploy menu and as "Load preset" on the arsenal.
-- Step 2: per-player kits keyed by `BackendApi.GetPlayerIdentityId` (same key Bacon uses); dashboard login needed first on a public server.
-- Step 3 (expensive): full editing in the browser. Needs the item pool with slot compatibility exported by the game (like `/world`), validated
-  in game by `ApplyLoadoutString` + the arsenal's own item check before use.
-- Tie-ins: HQ/LLM can attach a recommended kit to a mission (AT kit for an anti-armour mission; kit tags come from the role labels of L3);
-  kit cost counts against faction supplies.
+## R2 - Role picker (official roles, no config needed)
+- Per faction and `ROLE_*`: one CHARACTER catalog prefab (prefer `SIZE_M`, skip `ROLE_GUARD` and crew/pilot traits, de-duplicate camo
+  variants like the vehicle classifier), named from its UI info. Kin factions fill missing roles.
+- Consumers: default content of the 7 spawn slots (R3) and AI squad members by role (R4). Fixes "editor loadout manager has only a rifleman
+  for pack factions" (PROGRESS known issue).
+
+## R3 - Server loadouts (library, 7 spawn slots)
+- **Library** (sidecar, per faction, unlimited): `{id, name, role (ROLE_*), faction, active, order, loadout (vanilla loadout string),
+  basePrefab, items [prefabs], addons [loaded at save], gameVersion, createdFrom {identityId}, status}`. Max 7 active per faction, `order` =
+  slot order on the spawn screen. Source: copy of a player's custom loadout (R1); later browser editing.
+- **Game side:** `CLW_LoadoutManager.et` gets 7 `CLW_ServerLoadout` slot entries per side, replacing today's 6 static US/USSR role loadouts.
+  Each slot resolves its faction from the side at runtime, shows name + base prefab (replicated) and applies the loadout string in
+  `OnLoadoutSpawned` on the server (like `SCR_PlayerArsenalLoadout`). Strings never go to clients.
+- **Content per slot at war start:** the active library entry for that faction/slot if valid; else the R2 role prefab for the default role
+  order `leader, rifleman, machinegunner, antitank, grenadier, medic, sharpshooter`; unused slots hidden. So the spawn screen is never empty.
+- The game reads `$profile:Clausewitz/loadouts.json`, which the sidecar writes; the game never needs the sidecar running.
+- Spawn cost (owner 2026-10-14): spawning with a server loadout costs supplies like an arsenal kit (vanilla loadout cost), switchable on the
+  setup screen (own toggle `serverKitCost` next to `kitCost`, default on). AI never pays per kit.
+
+## R4 - Squad roles and loadouts (AI)
+Zero-config default first, admin control on top:
+1. **Default (official):** each member keeps its group prefab's slot role (`ROLE_*` label of the slot character). Pack groups keep their
+   designed composition.
+2. **Squad-type compositions** for groups whose slots carry no role or are all identical (the current "all the same" case), and wherever the
+   admin overrides: per `CLW_ForceKind` (infantry, recon, mech, motorized, ...) an ordered role list, shipped defaults in
+   `Configs/CLW/SquadCompositions.conf`, e.g. infantry `leader, machinegunner, antitank, grenadier, rifleman, medic, rifleman...`, recon
+   `leader, sharpshooter, scout, radiooperator`. Longer than the group: truncated after the leader; shorter: the last role repeats.
+3. **Role -> kit:** a member with role R gets an active server loadout of its faction with role R (several -> random pick); none -> the R2
+   role prefab; neither -> the slot's own prefab. The admin can pin specific server loadouts to a squad type (ordered list, same slot
+   semantics), which wins over role matching.
+- Members spawn as the R2 role prefab (official character, correct AI setup), then the kit is applied if R0.2 proved it reliable.
+- Log once per group: `CLW: squad roles <unitId> <kind> roles=[...] kits=[...] fallback=N`.
+
+## R5 - Dashboard: admin login, loadout editor, restart
+- **Admin login:** one admin account. Password hashed (scrypt + salt) in `sidecar-config.json`; default password in the README, with a
+  "change password" banner while the default is set. Session = random token in an `HttpOnly; SameSite=Strict` cookie, stored server-side in a
+  file so it survives new tabs and sidecar restarts; 30 days, logout clears it; login rate-limited. All dashboard pages and every write
+  endpoint require it. The game's own channel (mod <-> sidecar) gets a shared token from the server config instead. HTTPS when exposed beyond
+  localhost (reverse proxy, documented in README).
+- **Loadouts tab:** per faction: players' custom loadouts (player name, items, addons, status) with "Copy to library"; library table (name,
+  role, active toggle with the 7-cap enforced, order, status, missing items/addons); squad-type compositions editor and per-type pinned kits.
+- **Apply = restart:** "Restart war" sends the restart through the existing channel -> `RematchRestart`, which re-reads `loadouts.json`; if
+  R0.5 shows the spawn screen needs a new session, the button does a session restart instead. Changing mod packs is never possible from here
+  (server restart with a new addon list); the dashboard only flags it.
+
+## R6 - Validation and warnings (mod pack / faction changes)
+- At war start, per library entry and custom loadout: faction exists, every item prefab loads (`Resource.Load(..).IsValid()`), items in the
+  faction's pool, loadout string parses (store `format`/`gameVersion`, never crash).
+- Status ok / degraded (missing items dropped, kept if the primary weapon survives) / invalid (slot falls back to R2, squads to role prefabs) /
+  inactive (faction not in this war).
+- In game: one system message per faction at war start ("2 server loadouts unavailable: mod pack changed, defaults used"); a player whose
+  custom loadout is degraded is told at the arsenal. Dashboard: badge on the tab + red rows with missing prefabs and addons (`addons` at save
+  vs loaded now). Log: `CLW: loadouts validate <faction> ok=N degraded=N invalid=N inactive=N`.
+
+## Test matrix (DS + one client, end of each sprint)
+Packs: vanilla / +Bacon / +WCS_LoadoutEditor+WCS_Arsenal / RHS + WCS gear + WCS Loadout Editor (`packs-e2e-full.txt`); US-vs-USSR and
+RHS_USAF-vs-RHS_AFRF. Per run: arsenal lists kin items and no enemy items (server AND client view), supply cost not 0, save + load custom
+loadout at an HQ arsenal and a third-party box, respawn with it, 7 slots on the spawn screen (defaults, then configured), squads with mixed
+roles and (if R0.2) server kits, restart button applies changes, logs clean. Once with RHS removed after configuring RHS kits: warnings in game
+and on the dashboard. A2b gets its own run with one standalone weapon pack (an ARMA-RY pack).
+
+## Risks / open
+- R0.2 decides whether AI get server kits or only role prefabs.
+- R0.3 adding actions to third-party arsenal boxes; fallback: only our HQ/FOB arsenals (and RHS prop-set boxes we spawn) have them.
+- WCS slot entries add spawn-screen rows we do not control (US/USSR/FIA only).
+
+## Later
+- Kit editing in the browser (needs the item pool with slot compatibility exported by the game; validated in game before use).
+- HQ/LLM recommends a server loadout for a mission by role; soldier tablet (VISION 12a) shows the player's own loadout.
 
 ## Order and size
-L1 + L2 (layers 1-3, 5) + L3 first (one sprint), L4 at the end of that sprint, L2b only if the test shows real gaps, L5 after M3.
-Implementation by subagents, code only, one e2e at the end.
+R0 (one DS session) -> R2 + R4 default (roles, no dashboard) -> R1 -> R3 + R5 + R6; A2 open items and A2b only when a test shows the need.
+R2/R4 alone already fixes "all members identical". Subagents code only on disjoint files (game scripts / sidecar / dashboard); the test
+matrix runs once per sprint.

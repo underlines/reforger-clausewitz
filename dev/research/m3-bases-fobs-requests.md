@@ -89,7 +89,7 @@ unpacked Workshop paks under `Documents\My Games\ArmaReforger\addons`, Workshop 
    "not enough supplies" [verify]; plan for `CLW_Arsenal.et` with buy multiplier 0 (or a supply container fed from `CLW_WarState`).
 6. **Save/restore of kits** (`CanSaveArsenal`): `m_eArsenalSaveType` of the box: `FACTION_ITEMS_ONLY` (ArsenalBox_Base default; items must be in the
    player's faction ITEM catalog), `FRIENDLY_AND_FACTION_ITEMS_ONLY` (also catalogs of `playerFaction.GetFriendlyFactions()`; whether the own faction is in that
-   list is [verify], without it the own items could be refused), `IN_ARSENAL_ITEMS_ONLY`, `NO_RESTRICTIONS`. A kin pool at manager level (plan L2) makes
+   list is [verify], without it the own items could be refused), `IN_ARSENAL_ITEMS_ONLY`, `NO_RESTRICTIONS`. A kin pool at manager level (plan A2) makes
    save checks via `GetFactionArsenalItems` consistent, but `CanSaveArsenal` reads `GetFactionEntityCatalogOfType` directly: **patch or use NO_RESTRICTIONS**.
 7. **Loadout editor / deploy menu**: a faction needs `SCR_PlayerArsenalLoadout` entries in the `SCR_LoadoutManager` (WCS: its own entries for US/USSR/FIA only;
    RHS has role loadouts but no WCS slot entries); extra mod slots (GRS patches/watches) are saved only if the editor serialises them [verify].

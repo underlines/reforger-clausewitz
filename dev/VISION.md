@@ -488,7 +488,7 @@ Because the game already talks to the sidecar over HTTP, the sidecar can serve a
     system (ATAK-like: blue-force tracking, own unit and neighbours, reported enemy markers with age, tasking, objectives, chat/SITREP
     feed, grid tool). No staff-level analytics, no raw model output, no exact strengths of other units beyond need-to-know.
   - **Few write paths for users:** e.g. acknowledge a mission, send a contact report (same `Contact` pipeline as section 8), request
-    support/resupply, maybe pick a saved loadout (loadout plan L5). Everything else stays admin-only.
+    support/resupply, maybe pick a saved loadout (`notes/loadouts-arsenal-plan.md`). Everything else stays admin-only.
   - **Needs:** accounts + sessions in the sidecar (or a separate service), SteamID verification (at least: the game confirms the link
     in-game, e.g. a `/link <code>` chat command), HTTPS when exposed beyond localhost, per-user rate limits, and a mobile-first UI.
 
@@ -515,10 +515,8 @@ Own game mode `CLW_GameMode` (see `notes/decision-game-mode.md`). Live status: `
   (> 150 within 150 m) and a blocked 24 x 24 m core; static obstacles cannot be cleared (not replicated, `object-norpl`). Next: score the distance to the nearest
   BUILDING (15-60 m), not to the place label, require a village (>= 8 buildings within 150 m) and a road <= 30 m, keep the ~40 x 40 m free flat ground for the
   compact base. A weighted preference, so open ground still wins where no village fits; never inside dense centres (vehicle jams, CQB at the HQ).
-- **Saved loadouts (3 slots per player).** Research first: vanilla Conflict "save loadout" (`SCR_ArsenalManagerComponent` / saved-loadout respawn) in our game
-  mode, and whether WCS Loadout Editor already offers presets. Fallback: HQ menu Save/Load slot 1-3; server serialises the character's equipment (clothes,
-  vest/backpack contents, weapons + attachments, magazines) to a per-identity JSON in the server profile; loading only at a base arsenal, only items of the
-  side's current arsenal pool, kit cost charged like the arsenal (no free gear past the economy).
+- **Loadouts:** planned in `notes/loadouts-arsenal-plan.md`: 7 server loadouts per faction on the spawn screen (dashboard editor, admin login), one custom
+  loadout per player saved/loaded only at arsenals (kit cost charged), AI squads by official `ROLE_*` roles + squad-type compositions.
 - **Objectives from places of interest.** Root cause today: with random start positions the objectives are a rotated/scaled pattern on the HQ line, then
   snapped to a town only if one is close, else "nudged" to a CLEAR spot, which pushes them out of villages into fields (round-3 run: 1 snapped, 3 nudged,
   1 kept). Next: pick objectives from a scored set of map features (settlements by size, crossroads, bridges/passes, high ground with view, military/industrial
