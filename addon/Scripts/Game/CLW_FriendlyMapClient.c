@@ -18,7 +18,7 @@ class CLW_FriendlyMapClient
 
 	protected static ref CLW_FriendlyPic s_Pic;
 	protected static ref map<string, ref CLW_FriendlyMarkerState> s_mMarkers;
-	protected static SCR_MapMarkerBase s_MeMarker;
+	protected static ref SCR_MapMarkerBase s_MeMarker;
 	protected static int s_iApplyLogs;
 	protected static ref map<string, bool> s_mOnce;
 	protected static bool s_bHooked;
@@ -449,6 +449,14 @@ class CLW_FriendlyMapClient
 		{
 			s_iApplyLogs++;
 			Print(string.Format("CLW: friendly client apply entries=%1 created=%2 existing=%3 removed=%4 mapOpen=%5 skipped=%6", s_Pic.m_aEntries.Count(), created, existing, removed, mapOpen, skipped), LogLevel.NORMAL);
+			string keyDump = "";
+			foreach (CLW_FriendlyEntry dumpEntry : s_Pic.m_aEntries)
+			{
+				if (dumpEntry)
+					keyDump += dumpEntry.m_sType + ":" + dumpEntry.m_sKey + "@" + dumpEntry.m_iX5.ToString() + "," + dumpEntry.m_iZ5.ToString() + " ";
+			}
+
+			Print("CLW: friendly client apply keys " + keyDump + "markers=" + markers.Count().ToString(), LogLevel.NORMAL);
 		}
 
 		if (!s_bMapOpen)
@@ -502,22 +510,26 @@ class CLW_FriendlyMapClient
 		int posX = Math.Round(origin[0]);
 		int posZ = Math.Round(origin[2]);
 
+		float yaw = entity.GetYawPitchRoll()[0];
+
 		if (!s_MeMarker)
 		{
-			s_MeMarker = CLW_FriendlySymbols.CreateMilitary(s_Pic.m_iIdentity, CLW_ForceKind.INFANTRY, false, "#CLW-Map_Me", posX, posZ);
+			s_MeMarker = CLW_FriendlyMeMarker.Create("#CLW-Map_Me", posX, posZ, yaw);
 			if (!s_MeMarker)
 			{
 				if (Once("me-create"))
-					Print("CLW: friendly client cannot create the 'me' marker (PrepareMilitaryMarker returned null for identity " + s_Pic.m_iIdentity.ToString() + ")", LogLevel.WARNING);
+					Print("CLW: friendly client cannot create the 'me' marker (custom marker icon or config missing)", LogLevel.WARNING);
 
 				return;
 			}
 
 			manager.CLW_AddLocalMarker(s_MeMarker);
-			Print("CLW: friendly client 'me' marker created at " + posX.ToString() + "," + posZ.ToString(), LogLevel.NORMAL);
+			Print("CLW: friendly client 'me' marker created at " + posX.ToString() + "," + posZ.ToString() + " yaw=" + Math.Round(yaw).ToString(), LogLevel.NORMAL);
 		}
 
 		s_MeMarker.SetWorldPos(posX, posZ);
+		CLW_FriendlyMeMarker.SetHeading(s_MeMarker, yaw);
+		CLW_FriendlyMeMarker.RaiseToTop(s_MeMarker);
 		manager.SetStaticMarkerDisabled(s_MeMarker, false);
 	}
 

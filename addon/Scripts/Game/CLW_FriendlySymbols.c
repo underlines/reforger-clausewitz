@@ -84,7 +84,10 @@ class CLW_FriendlySymbols
 	{
 		SCR_MapMarkerManagerComponent manager = SCR_MapMarkerManagerComponent.GetInstance();
 		if (!manager)
+		{
+			Print("CLW: friendly client CreateMilitary: no marker manager (label " + label + ")", LogLevel.WARNING);
 			return null;
+		}
 
 		EMilitarySymbolDimension dimension;
 		int iconFlags;
@@ -100,7 +103,13 @@ class CLW_FriendlySymbols
 			if (!s_mNoConfigLogged)
 				s_mNoConfigLogged = new map<string, bool>();
 
-			string failKey = identity.ToString() + "/" + kind;
+			string failKey = identity.ToString() + "/" + kind + "/" + label;
+			SCR_MapMarkerConfig cfgDbg = manager.GetMarkerConfig();
+			SCR_MapMarkerEntryMilitary milDbg;
+			if (cfgDbg)
+				milDbg = SCR_MapMarkerEntryMilitary.Cast(cfgDbg.GetMarkerEntryConfigByType(SCR_EMapMarkerType.PLACED_MILITARY));
+
+			Print("CLW: friendly client PrepareMilitaryMarker null: cfg=" + (cfgDbg != null).ToString() + " military=" + (milDbg != null).ToString() + " factionId=" + manager.GetFactionIDFromMilitarySymbol(identity).ToString() + " label=" + label, LogLevel.WARNING);
 			if (!s_mNoConfigLogged.Contains(failKey))
 			{
 				s_mNoConfigLogged.Set(failKey, true);
@@ -123,5 +132,113 @@ class CLW_FriendlySymbols
 		marker.SetCustomText(label);
 		marker.SetWorldPos(worldX, worldZ);
 		return marker;
+	}
+}
+
+// The "me" marker: a PLACED_CUSTOM marker (the map's own custom-marker set, not a military symbol) so it can point where the player looks.
+// The icon is found by its imageset quad name and the colour by its name in the marker config, never by a hard-coded index.
+class CLW_FriendlyMeMarker
+{
+	static const string ICON_QUAD = "objective-marker-2";	// "general" tab, 29th icon: points south at rotation 0
+	static const string COLOR_NAME = "orange";
+	static const int ROTATION_AT_NORTH = 180;				// the icon points south at 0 degrees
+
+	// Drawn above every other marker (widgets of one parent stack by z-order, the military symbols are larger).
+	static const int Z_ORDER = 10000;
+
+	static void RaiseToTop(SCR_MapMarkerBase marker)
+	{
+		Widget root = marker.GetRootWidget();
+		if (root && root.GetZOrder() != Z_ORDER)
+			root.SetZOrder(Z_ORDER);
+	}
+
+	// Not yet inserted. Null when the marker config lacks the custom-marker entry or the icon.
+	static SCR_MapMarkerBase Create(string label, int worldX, int worldZ, float yawDegrees)
+	{
+		SCR_MapMarkerManagerComponent manager = SCR_MapMarkerManagerComponent.GetInstance();
+		if (!manager)
+			return null;
+
+		SCR_MapMarkerConfig config = manager.GetMarkerConfig();
+		if (!config)
+			return null;
+
+		SCR_MapMarkerEntryPlaced placed = SCR_MapMarkerEntryPlaced.Cast(config.GetMarkerEntryConfigByType(SCR_EMapMarkerType.PLACED_CUSTOM));
+		if (!placed)
+		{
+			Print("CLW: friendly client 'me' marker: the marker config has no custom-marker entry", LogLevel.WARNING);
+			return null;
+		}
+
+		int iconId = -1;
+		array<ref SCR_MarkerIconEntry> icons = placed.GetIconEntries();
+		for (int i = 0; i < icons.Count(); i++)
+		{
+			ResourceName imageset, glow;
+			string quad;
+			placed.GetIconEntry(i, imageset, glow, quad);
+			if (quad == ICON_QUAD)
+			{
+				iconId = i;
+				break;
+			}
+		}
+
+		if (iconId < 0)
+		{
+			Print("CLW: friendly client 'me' marker: icon '" + ICON_QUAD + "' not in the marker config", LogLevel.WARNING);
+			return null;
+		}
+
+		int colorId = 0;
+		array<ref SCR_MarkerColorEntry> colors = placed.GetColorEntries();
+		for (int c = 0; c < colors.Count(); c++)
+		{
+			if (colors[c].GetName() == COLOR_NAME)
+			{
+				colorId = c;
+				break;
+			}
+		}
+
+		SCR_MapMarkerBase marker = new SCR_MapMarkerBase();
+		marker.SetType(SCR_EMapMarkerType.PLACED_CUSTOM);
+		marker.SetIconEntry(iconId);
+		marker.SetColorEntry(colorId);
+		marker.SetCustomText(label);
+		marker.SetWorldPos(worldX, worldZ);
+		marker.SetRotation(Rotation(yawDegrees));
+		return marker;
+	}
+
+	// Entity yaw (0 = north, clockwise) -> widget rotation of an icon that points south at 0.
+	static int Rotation(float yawDegrees)
+	{
+		int angle = Math.Round(yawDegrees) + ROTATION_AT_NORTH;
+		while (angle < 0)
+		{
+			angle += 360;
+		}
+
+		while (angle >= 360)
+		{
+			angle -= 360;
+		}
+
+		return angle;
+	}
+
+	// Turn a live marker (data + widget).
+	static void SetHeading(SCR_MapMarkerBase marker, float yawDegrees)
+	{
+		int angle = Rotation(yawDegrees);
+		if (marker.GetRotation() == angle)
+			return;
+
+		marker.SetRotation(angle);
+		SCR_MapMarkerWidgetComponent widget = marker.GetMarkerComponent();
+		if (widget)
+			widget.SetRotation(angle);
 	}
 }
