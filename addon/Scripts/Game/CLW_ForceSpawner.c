@@ -438,7 +438,29 @@ class CLW_ForceSpawner
 
 	// ---- spawning primitives ----
 
-	protected SCR_AIGroup SpawnGroup(ResourceName prefab, vector pos)
+	// Pack squad prefabs (TacticalFlava, WCS, ...) can carry another faction than the buying side (or none): the registry only
+	// adopts groups of the active factions, so such a squad would never become joinable. Move the group to the buying faction.
+	protected void AffiliateGroup(SCR_AIGroup group, string factionKey)
+	{
+		FactionManager factions = GetGame().GetFactionManager();
+		if (!factions || factionKey.IsEmpty())
+			return;
+
+		Faction target = factions.GetFactionByKey(factionKey);
+		if (!target)
+			return;
+
+		string oldKey = CLW_SquadRegistry.GetFactionKey(group);
+		if (oldKey == factionKey)
+			return;
+
+		if (group.SetFaction(target))
+			Print(string.Format("CLW: spawn group %1 faction %2 -> %3", group, oldKey, factionKey), LogLevel.NORMAL);
+		else
+			Print(string.Format("CLW: spawn group %1 SetFaction to %2 refused (stays %3)", group, factionKey, oldKey), LogLevel.WARNING);
+	}
+
+	protected SCR_AIGroup SpawnGroup(ResourceName prefab, vector pos, string factionKey)
 	{
 		Resource resource = Resource.Load(prefab);
 		if (!resource || !resource.IsValid())
@@ -459,6 +481,7 @@ class CLW_ForceSpawner
 		}
 
 		group.SetDeleteWhenEmpty(true);
+		AffiliateGroup(group, factionKey);
 		// The engine's spawn queue admits a group only while the active AI count is below a share of the global limit that
 		// depends on the group importance (LOW 50 %, NORMAL 70 %, HIGH 90 %, CRITICAL 100 %); a refused request is DROPPED and
 		// the group stays empty. HQ purchases must not lose against ambient AI, so they get the full limit.
@@ -518,7 +541,7 @@ class CLW_ForceSpawner
 	protected bool BeginInfantry(CLW_SpawnJob job)
 	{
 		CLW_ForceEntry entry = job.m_Entry;
-		SCR_AIGroup group = SpawnGroup(entry.m_GroupPrefab, job.m_vPos);
+		SCR_AIGroup group = SpawnGroup(entry.m_GroupPrefab, job.m_vPos, job.m_sFaction);
 		if (!group)
 		{
 			job.m_sFailure = "group spawn failed";
@@ -765,7 +788,7 @@ class CLW_ForceSpawner
 		string cargoVia;
 		CLW_Placement.FindGround(job.m_Vehicle.GetOrigin(), CLW_WarConfig.PLACE_CARGO_MIN_M, CLW_WarConfig.PLACE_CARGO_MAX_M, 0.5, 2, CLW_WarConfig.PLACE_CHAR_CLEAR_M, offset, cargoVia);
 		Print(string.Format("CLW: spawn place cargo at %1 yaw=0 via %2", offset, cargoVia), LogLevel.NORMAL);
-		SCR_AIGroup cargo = SpawnGroup(entry.m_CargoGroupPrefab, offset);
+		SCR_AIGroup cargo = SpawnGroup(entry.m_CargoGroupPrefab, offset, job.m_sFaction);
 		if (!cargo)
 		{
 			Print(string.Format("CLW: spawn %1 embarked group failed to spawn, vehicle goes alone", job.m_sUnitId), LogLevel.ERROR);
