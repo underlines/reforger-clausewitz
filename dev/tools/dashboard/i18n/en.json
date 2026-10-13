@@ -507,5 +507,22 @@
   "sitrep.sec.logistics": "Logistics",
   "time.dh": "{0}d {1}h",
   "time.hm": "{0}h {1}m",
-  "time.m": "{0}m"
+  "time.m": "{0}m",
+  "fb.title": "Backup model (used when the main model is rate-limited or fails)",
+  "fb.note": "On HTTP 429, 5xx, a timeout or a network error the call is retried once on the backup model. Errors such as 400/401 do not switch. Leave the model empty for no backup.",
+  "fb.model": "Backup model",
+  "fb.modelPh": "e.g. a paid model on the same provider",
+  "fb.advanced": "Advanced (provider, URL, key, timeout)",
+  "fb.inherit": "Empty = same as the main model.",
+  "fb.sameAsMain": "same as main",
+  "fb.keyNote": "Write-only. Empty = the main key, reused only while provider and URL stay the same.",
+  "fb.test": "Test backup model",
+  "fb.testOk": "Backup model OK ({0} ms)",
+  "fb.testFailed": "Backup model test failed: {0}",
+  "fb.badge": "backup",
+  "fb.tip": "The main model failed ({0}); the backup model answered.",
+  "fb.chip": "Backup used",
+  "fb.chipTip": "Calls answered by a backup model: strong {0}, weak {1}",
+  "fb.cooling": "Cooling down",
+  "fb.coolTip": "These models were rate-limited or failed recently and are skipped for a short while; the backup model is used meanwhile."
 }

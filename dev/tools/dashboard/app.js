@@ -246,6 +246,8 @@ function Strip({ st, toast, refresh }) {
     ${cf.enabled !== false && Object.keys(st.scheduler ?? {}).sort(facCmp).map((n) => html`<${WakeChip} key=${n} name=${n} s=${st.scheduler[n]} recvAt=${st.recvAt} toast=${toast} refresh=${refresh} paused=${!!st.paused} engine=${cf.engine} />`)}
     <${HqControls} st=${st} toast=${toast} refresh=${refresh} />
     ${(st.paused || (cf.engine && cf.engine !== "llm")) && html`<div class="chip hqnote">${t("strip.hqEngine")} <b>${cf.engine && cf.engine !== "llm" ? cf.engine : "llm"}</b>${st.paused ? " " + t("strip.pausedParen") : ""}, ${t("strip.noLlm")}</div>`}
+    ${(c.modelFallbacks?.strong || c.modelFallbacks?.weak) ? html`<div class="chip warn" title=${t("fb.chipTip", c.modelFallbacks.strong ?? 0, c.modelFallbacks.weak ?? 0)}>${t("fb.chip")} <b>${(c.modelFallbacks.strong ?? 0) + (c.modelFallbacks.weak ?? 0)}</b></div>` : ""}
+    ${Object.keys(st.modelCooldowns ?? {}).length > 0 && html`<div class="chip warn" title=${t("fb.coolTip")}>${t("fb.cooling")} <b>${Object.entries(st.modelCooldowns).map(([k, s]) => k.split("|").slice(1).join("|") + " " + s + "s").join(", ")}</b></div>`}
     <div class=${"chip" + (c.errors ? " bad" : "")}>${t("strip.errors")} <b>${c.errors ?? 0}</b></div>
     <div class="chip">${t("strip.tokens")} <b>${c.inputTokens ?? 0} / ${c.outputTokens ?? 0}</b></div>
     ${bud && bud.level !== "ok" && html`<div class=${"chip " + (bud.level === "warn" ? "warn" : "bad")} title=${t("strip.budgetTip")}><span class="dot"></span>${bud.level === "reached" ? t("strip.budgetReached") : t("strip.budgetPct", bud.pct.toFixed(0))}</div>`}
@@ -869,7 +871,8 @@ function Log({ st, faction }) {
     ${noLlm && html`<span class="badge warn">${t("strip.hqEngine")} ${st.config?.engine && st.config.engine !== "llm" ? st.config.engine : "llm"}${st.paused ? " " + t("strip.pausedParen") : ""}, ${t("strip.noLlm")}</span>`}</h2><div class="scroll">
     ${ex.map((x) => html`<details class="ex" key=${x.ts + x.faction}><summary>
       <span class="mono muted">${fmtClock(x.ts)}</span><b class=${facClass(x.faction)}>${x.faction}</b>
-      <span class="muted">${x.provider}${x.model ? " / " + x.model : ""}</span>
+      <span class="muted">${x.provider}${x.model ? " / " + x.model : ""}${x.fellBack && x.modelUsed && x.modelUsed !== x.model ? html` &rarr; ${x.modelUsed}` : ""}</span>
+      <${FbBadge} x=${x} />
       ${x.ok && String(x.reason ?? "").startsWith("skipped") ? html`<span class="badge info">${x.reason}</span>` : x.ok ? html`<span class=${"badge " + (x.orders.length ? "ok" : "warn")}>${x.orders.length ? t("log.ok") : t("log.okNoOrders")}</span>` : html`<span class="badge bad">${t("log.fallback", x.reason)}</span>`}
       ${x.dropped?.length ? html`<span class="badge warn">${t("log.dropped", x.dropped.length)}</span>` : ""}
       ${x.wake && html`<span class=${"badge " + (x.wake.reason === "trigger" ? "warn" : "info")} title=${x.wake.triggers?.join("\n") ?? ""}>${t("log.wake", x.wake.reason)}${x.wake.triggers?.length ? ": " + x.wake.triggers.slice(0, 2).join("; ") + (x.wake.triggers.length > 2 ? ` +${x.wake.triggers.length - 2}` : "") : ""}</span>`}
@@ -1054,7 +1057,8 @@ function Decision({ st, f }) {
       sc.lastWakeReason ?? "-", sc.lastWakeTriggers?.length ? " (" + sc.lastWakeTriggers.join("; ") + ")" : "", sc.lastLlmAgoSec === null || sc.lastLlmAgoSec === undefined ? t("time.never") : t("time.agoS", sc.lastLlmAgoSec), sc.gated ?? 0, sc.failed ? t("dec.failedSfx") : "")}</div>`}
     ${!x ? html`<div class="empty">${t("dec.noExchange")}</div>` : html`
       <div class="hdr">${x.ok ? html`<span class=${"badge " + (x.orders.length || x.buy?.length || x.missions?.length ? "ok" : "warn")}>${t("log.ok")}</span>` : html`<span class="badge bad">${t("log.fallback", x.reason)}</span>`}
-        <span class="muted">${x.provider}${x.model ? " / " + x.model : ""}, ${x.latencyMs} ms${x.usage ? `, ${x.usage.input}/${x.usage.output} tok` : ""}${num(x.usage?.cost) ? `, $${x.usage.cost.toFixed(4)}` : ""}</span>
+        <${FbBadge} x=${x} />
+        <span class="muted">${x.provider}${x.model ? " / " + x.model : ""}${x.fellBack && x.modelUsed && x.modelUsed !== x.model ? html` &rarr; ${x.modelUsed}` : ""}, ${x.latencyMs} ms${x.usage ? `, ${x.usage.input}/${x.usage.output} tok` : ""}${num(x.usage?.cost) ? `, $${x.usage.cost.toFixed(4)}` : ""}</span>
         ${x.wake && html`<span class="badge info" title=${x.wake.triggers?.join("\n") ?? ""}>${t("log.wake", x.wake.reason)}</span>`}
         ${x.nextCheck && html`<span class="muted">${t("dec.nextCheck", x.nextCheck.sec)}${x.nextCheck.reason ? ": " + x.nextCheck.reason : ""}</span>`}${x.keep ? html`<span class="badge info">${t("log.keep")}</span>` : ""}</div>
       <h3 class="cfgh">${t("dec.applied", x.orders.length)}</h3>
@@ -1164,10 +1168,10 @@ function HqChatView({ st, faction }) {
           <td><b>${h.msg.player}</b> <span class="muted">${h.msg.role}${h.msg.grid ? ", " + h.msg.grid : ""}</span></td><td class="wrap">${h.msg.text}</td>
           <td class="mono">${t("chat.steps", (h.steps ?? []).length, calls.length)}</td>
           <td class="mono wrap">${(h.actions ?? []).map((a) => a.action + "(" + (a.args ?? []).map((x) => x.name + "=" + x.value).join(", ") + ")").join("; ") || "-"}</td>
-          <td class="wrap">${dash(h.reply || h.error)}</td><td><span class=${"badge " + cls}>${label}</span></td>
+          <td class="wrap">${dash(h.reply || h.error)}</td><td><span class=${"badge " + cls}>${label}</span> <${FbBadge} x=${h} /></td>
           <td class="mono">${h.usage?.cost ? usd4(h.usage.cost) : "-"}</td><td class="mono">${h.latencyMs != null ? h.latencyMs + " ms" : "-"}</td></tr>`,
         open === key && html`<tr key=${key + "d"}><td colspan="10"><div class="cfgbody">
-          <div class="muted">${h.provider}${h.model ? " / " + h.model : ""}; ${t("chat.detail", (h.tools ?? []).length, h.usage?.input ?? 0, h.usage?.output ?? 0)}</div>
+          <div class="muted">${h.provider}${h.model ? " / " + h.model : ""}${h.fellBack && h.modelUsed && h.modelUsed !== h.model ? html` &rarr; ${h.modelUsed}` : ""}; ${t("chat.detail", (h.tools ?? []).length, h.usage?.input ?? 0, h.usage?.output ?? 0)}</div>
           ${(h.steps ?? []).map((s) => html`<div key=${s.n} class="wrap"><b>${t("chat.step", s.n)}</b> <span class="muted">${s.finishReason}</span>
             ${(s.toolCalls ?? []).map((c, j) => html`<div key=${j} class="mono wrap">&rarr; ${c.name}(${JSON.stringify(c.input)}) = ${JSON.stringify(c.output)}</div>`)}
             ${s.text && html`<div>${s.text}</div>`}</div>`)}
@@ -1260,6 +1264,33 @@ function MapCard({ toast }) {
       <small class="muted">${t("mc.note")}</small>
     </div></section>`;
 }
+// ---------- backup (fallback) model of an LLM slot ----------
+const fbForm = (x) => ({ model: x?.model ?? "", provider: x?.provider ?? "", baseUrl: x?.baseUrl ?? "", apiKey: "", timeoutSec: x?.timeoutSec ?? "" });
+// no model = no backup (null clears it); empty provider / baseUrl / timeout = inherit from the slot; an empty key keeps the stored one
+const fbBody = (v) => (!v || !v.model.trim() ? null : { model: v.model.trim(), provider: v.provider, baseUrl: v.baseUrl.trim(), timeoutSec: v.timeoutSec === "" ? null : Number(v.timeoutSec), ...(v.apiKey ? { apiKey: v.apiKey } : {}) });
+function BackupBox({ v, setV, meta, busy, onTest, res }) {
+  return html`<details class="fbbox" open=${!!v.model}><summary>${t("fb.title")}${v.model && html` <span class="badge info">${v.model}</span>`}</summary>
+    <div class="fbin">
+      <small class="muted">${t("fb.note")}</small>
+      <label class="field"><span>${t("fb.model")}</span><input type="text" value=${v.model} placeholder=${t("fb.modelPh")} onInput=${(e) => setV("model", e.target.value)} /></label>
+      <details class="fbadv"><summary>${t("fb.advanced")}</summary>
+        <small class="muted">${t("fb.inherit")}</small>
+        <label class="field"><span>${t("cfg.provider")}</span><select value=${v.provider} onChange=${(e) => setV("provider", e.target.value)}>
+          <option value="">${t("fb.sameAsMain")}</option>
+          <option value="anthropic">anthropic</option>
+          <option value="openai-compatible">${t("cfg.opt.openai")}</option>
+          <option value="openrouter">${t("cfg.opt.openrouter")}</option></select></label>
+        <label class="field"><span>${t("cfg.baseUrl")}</span><input type="text" value=${v.baseUrl} placeholder=${t("fb.sameAsMain")} onInput=${(e) => setV("baseUrl", e.target.value)} /></label>
+        <label class="field"><span>${t("cfg.apiKey")}</span><input type="password" autocomplete="new-password" value=${v.apiKey} placeholder=${meta.set ? t("cfg.keyStored", meta.last4) : t("fb.sameAsMain")} onInput=${(e) => setV("apiKey", e.target.value)} />
+          <small>${t("fb.keyNote")}</small></label>
+        <label class="field"><span>${t("cfg.timeout")}</span><input type="number" min="1" max="300" value=${v.timeoutSec} placeholder=${t("fb.sameAsMain")} onInput=${(e) => setV("timeoutSec", e.target.value)} /></label>
+      </details>
+      <div class="btns"><button class="btn ghost" type="button" disabled=${busy || !v.model.trim()} onClick=${onTest}><${Icon} n="plug" /> ${t("fb.test")}</button></div>
+      ${res && html`<pre>${res.pending ? t("cfg.testing") : J(res)}</pre>`}
+    </div></details>`;
+}
+// small "answered by the backup model" badge for exchange / chat log rows
+const FbBadge = ({ x }) => (x?.fellBack ? html`<span class="badge warn" title=${t("fb.tip", x.primaryError ?? "?")}>${t("fb.badge")}</span>` : "");
 function Config({ st, toast, refresh }) {
   const [f, setF] = useState(null);
   const [keyMeta, setKeyMeta] = useState({ set: false, last4: "" });
@@ -1267,14 +1298,18 @@ function Config({ st, toast, refresh }) {
   const [test, setTest] = useState(null);
   const [testTr, setTestTr] = useState(null);
   const [weakKeyMeta, setWeakKeyMeta] = useState({ set: false, last4: "" });
+  const [fbKeyMeta, setFbKeyMeta] = useState({ strong: { set: false, last4: "" }, weak: { set: false, last4: "" } });
+  const [fbTest, setFbTest] = useState({});
   const load = useCallback(async () => {
     try {
       const c = await (await fetch("/api/config", { cache: "no-store" })).json();
       setF({ provider: c.provider, model: c.model, baseUrl: c.baseUrl, apiKey: "", timeoutSec: c.timeoutSec, maxTokens: c.maxTokens, enabled: !!c.enabled, engine: c.engine ?? "llm", minIntervalSec: c.minIntervalSec ?? 0, skipUnchanged: c.skipUnchanged !== false, stopAtLimit: c.stopAtLimit !== false, wakeup: { ...c.wakeup }, triggers: { ...c.triggers }, memory: { ...c.memory },
-        weak: { provider: c.weak?.provider ?? "none", model: c.weak?.model ?? "", baseUrl: c.weak?.baseUrl ?? "", apiKey: "", timeoutSec: c.weak?.timeoutSec ?? 30 },
+        fallback: fbForm(c.fallback),
+        weak: { provider: c.weak?.provider ?? "none", model: c.weak?.model ?? "", baseUrl: c.weak?.baseUrl ?? "", apiKey: "", timeoutSec: c.weak?.timeoutSec ?? 30, fallback: fbForm(c.weak?.fallback) },
         i18n: { enabled: c.i18n?.enabled !== false, translateTimeoutSec: c.i18n?.translateTimeoutSec ?? 10 } });
       setKeyMeta({ set: c.apiKeySet, last4: c.apiKeyLast4 });
       setWeakKeyMeta({ set: !!c.weak?.apiKeySet, last4: c.weak?.apiKeyLast4 ?? "" });
+      setFbKeyMeta({ strong: { set: !!c.fallback?.apiKeySet, last4: c.fallback?.apiKeyLast4 ?? "" }, weak: { set: !!c.weak?.fallback?.apiKeySet, last4: c.weak?.fallback?.apiKeyLast4 ?? "" } });
     } catch (e) { toast(t("cfg.loadFail", e.message), "err"); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -1288,8 +1323,9 @@ function Config({ st, toast, refresh }) {
   const body = () => {
     const b = { provider: f.provider, model: f.model, baseUrl: f.baseUrl, timeoutSec: Number(f.timeoutSec), maxTokens: Number(f.maxTokens), enabled: f.enabled, engine: f.engine, minIntervalSec: Number(f.minIntervalSec), skipUnchanged: f.skipUnchanged, stopAtLimit: f.stopAtLimit, wakeup: numG("wakeup"), triggers: numG("triggers"), memory: numG("memory") };
     if (f.apiKey) b.apiKey = f.apiKey;
+    b.fallback = fbBody(f.fallback);
     if (f.weak.provider === "none") b.weak = null; // no weak slot: the strong LLM translates
-    else { b.weak = { provider: f.weak.provider, model: f.weak.model, baseUrl: f.weak.baseUrl, timeoutSec: Number(f.weak.timeoutSec) }; if (f.weak.apiKey) b.weak.apiKey = f.weak.apiKey; }
+    else { b.weak = { provider: f.weak.provider, model: f.weak.model, baseUrl: f.weak.baseUrl, timeoutSec: Number(f.weak.timeoutSec), fallback: fbBody(f.weak.fallback) }; if (f.weak.apiKey) b.weak.apiKey = f.weak.apiKey; }
     b.i18n = { enabled: f.i18n.enabled, translateTimeoutSec: Number(f.i18n.translateTimeoutSec) };
     return b;
   };
@@ -1309,6 +1345,15 @@ function Config({ st, toast, refresh }) {
       setTestTr(ok ? j : { ok: false, error: j.error ?? t("err.request") });
       toast(ok && j.ok ? t("cfg.trTestOk", j.latencyMs) : t("cfg.trTestFailed", j.error ?? t("err.request")), ok && j.ok ? "ok" : "err");
     } catch (err) { setTestTr({ ok: false, error: err.message }); toast(t("err.generic", err.message), "err"); }
+    setBusy(false);
+  };
+  const doTestFb = async (slot) => {
+    setBusy(true); setFbTest((o) => ({ ...o, [slot]: { pending: true } }));
+    try {
+      const { ok, j } = await postJson("/api/test", { ...body(), slot, which: "fallback" });
+      setFbTest((o) => ({ ...o, [slot]: ok ? j : { ok: false, error: j.error ?? t("err.request") } }));
+      toast(ok && j.ok ? t("fb.testOk", j.latencyMs) : t("fb.testFailed", j.error ?? t("err.request")), ok && j.ok ? "ok" : "err");
+    } catch (err) { setFbTest((o) => ({ ...o, [slot]: { ok: false, error: err.message } })); toast(t("err.generic", err.message), "err"); }
     setBusy(false);
   };
   const weakOn = f.weak.provider !== "none", setW = (k, v) => setG("weak", k, v), setI = (k, v) => setG("i18n", k, v);
@@ -1339,6 +1384,7 @@ function Config({ st, toast, refresh }) {
       <label class="field"><span>${t("cfg.baseUrl")}</span><input type="text" value=${f.baseUrl} placeholder=${f.provider === "openrouter" ? t("cfg.baseUrlPhOr") : t("cfg.baseUrlPhOai")} onInput=${(e) => set("baseUrl", e.target.value)} /></label>
       <label class="field"><span>${t("cfg.apiKey")}</span><input type="password" autocomplete="new-password" value=${f.apiKey} placeholder=${keyMeta.set ? t("cfg.keyStored", keyMeta.last4) : t("cfg.keyNotSet")} onInput=${(e) => set("apiKey", e.target.value)} />
         <small>${t("cfg.keyNote")}</small></label>
+      <${BackupBox} v=${f.fallback} setV=${(k, x) => setG("fallback", k, x)} meta=${fbKeyMeta.strong} busy=${busy} onTest=${() => doTestFb("strong")} res=${fbTest.strong} />
       <div class="pair">
         <label class="field"><span>${t("cfg.timeout")}</span><input type="number" min="1" max="300" value=${f.timeoutSec} onInput=${(e) => set("timeoutSec", e.target.value)} /></label>
         <label class="field"><span>${t("cfg.maxTokens")}</span><input type="number" min="16" max="32000" value=${f.maxTokens} onInput=${(e) => set("maxTokens", e.target.value)} /></label></div>
@@ -1358,7 +1404,8 @@ function Config({ st, toast, refresh }) {
       <label class="field"><span>${t("cfg.baseUrl")}</span><input type="text" value=${f.weak.baseUrl} placeholder=${f.weak.provider === "openrouter" ? t("cfg.baseUrlPhOr") : t("cfg.baseUrlPhOai")} onInput=${(e) => setW("baseUrl", e.target.value)} /></label>
       <label class="field"><span>${t("cfg.apiKey")}</span><input type="password" autocomplete="new-password" value=${f.weak.apiKey} placeholder=${weakKeyMeta.set ? t("cfg.keyStored", weakKeyMeta.last4) : t("cfg.keyNotSet")} onInput=${(e) => setW("apiKey", e.target.value)} />
         <small>${t("cfg.keyNote")}</small></label>
-      <label class="field"><span>${t("cfg.timeout")}</span><input type="number" min="1" max="300" value=${f.weak.timeoutSec} onInput=${(e) => setW("timeoutSec", e.target.value)} /></label>`}
+      <label class="field"><span>${t("cfg.timeout")}</span><input type="number" min="1" max="300" value=${f.weak.timeoutSec} onInput=${(e) => setW("timeoutSec", e.target.value)} /></label>
+      <${BackupBox} v=${f.weak.fallback} setV=${(k, x) => setF((o) => ({ ...o, weak: { ...o.weak, fallback: { ...o.weak.fallback, [k]: x } } }))} meta=${fbKeyMeta.weak} busy=${busy} onTest=${() => doTestFb("weak")} res=${fbTest.weak} />`}
       <h3 class="cfgh">${t("cfg.i18n")}</h3>
       <label class="switch"><input type="checkbox" checked=${f.i18n.enabled} onChange=${(e) => setI("enabled", e.target.checked)} /><span>${t("cfg.i18nEnabled")} <span class="muted">${t("cfg.i18nEnabledNote")}</span></span></label>
       <label class="field"><span>${t("cfg.trTimeout")}</span><input type="number" min="1" max="120" value=${f.i18n.translateTimeoutSec} onInput=${(e) => setI("translateTimeoutSec", e.target.value)} /></label>
