@@ -7,6 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { loginFetch } from "./test-login.mjs"; // dashboard API needs the admin session
 import { fileURLToPath } from "node:url";
 import { manifest, situation } from "./agent/fixtures/hq_fixture.mjs";
 import * as FB from "./agent/fallback.mjs";
@@ -90,7 +91,7 @@ const MAIN_KEY = "sk-mainsecret9999";
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "clw-fb-"));
 const cfgFile = path.join(tmp, "cfg.json");
 fs.writeFileSync(cfgFile, JSON.stringify({ provider: "openai-compatible", model: "primary-m", baseUrl: STUB, apiKey: MAIN_KEY, timeoutSec: 1, memory: { enabled: false }, sitrep: { enabled: false } })); // an OLD config (memory/sitrep off: no background journal calls to count): no fallback anywhere
-const proc = spawn(process.execPath, [path.join(DIR, "llm_sidecar.mjs")], { env: { ...process.env, CLW_PORT: String(PORT), CLW_LLM: "fake", CLW_CONFIG: cfgFile, CLW_RATE_COOLDOWN_MS: String(COOL_MS) }, stdio: ["ignore", "pipe", "pipe"] });
+const proc = spawn(process.execPath, [path.join(DIR, "llm_sidecar.mjs")], { env: { ...process.env, CLW_PORT: String(PORT), CLW_LLM: "fake", CLW_CONFIG: cfgFile, CLW_DATA_DIR: path.join(tmp, "data"), CLW_RATE_COOLDOWN_MS: String(COOL_MS) }, stdio: ["ignore", "pipe", "pipe"] });
 let log = "";
 proc.stdout.on("data", (d) => (log += d)); proc.stderr.on("data", (d) => (log += d));
 const post = async (p, body) => { const r = await fetch(BASE + p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); return { status: r.status, json: await r.json() }; };
@@ -120,6 +121,7 @@ const counters = async () => (await get("/api/state")).counters.modelFallbacks;
 
 try {
   ok(await up(), "sidecar started");
+  await loginFetch(BASE);
   await post("/manifest", manifest);
 
   console.log("no fallback configured: unchanged");

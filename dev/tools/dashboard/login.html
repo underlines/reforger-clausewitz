@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title data-i18n="login.title">Clausewitz HQ - Login</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main class="loginwrap">
+  <section class="panel loginbox">
+    <h2 data-i18n="login.heading">Clausewitz HQ</h2>
+    <form id="f" class="cfgbody" autocomplete="on">
+      <label class="field"><span data-i18n="login.password">Password</span><input id="pw" type="password" name="password" autocomplete="current-password" autofocus required></label>
+      <div id="err" class="banner bad" hidden></div>
+      <div class="btns"><button class="btn" type="submit" data-i18n="login.submit">Log in</button></div>
+    </form>
+  </section>
+</main>
+<script type="module" src="/login.js"></script>
+</body>
+</html>

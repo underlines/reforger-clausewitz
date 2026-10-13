@@ -2,7 +2,16 @@
 // (auto-escaped); no dangerouslySetInnerHTML anywhere.
 import { html, render, useState, useEffect, useRef, useMemo, useCallback } from "/vendor/standalone.module.js";
 import { JournalView, MemorySettings } from "/journal.js"; // HQ war journal view + memory settings (WP5, dashboard/journal.js)
+import { LoadoutsView, AccountCard } from "/loadouts.js"; // Loadouts tab + admin account card (dashboard/loadouts.js)
 import { t, tk, has, LANGS, getLang, setLang, onLang, fmtClock } from "/i18n.js"; // EN/DE dictionaries (dashboard/i18n/*.json); locals named t / tk below were renamed
+
+// every API call needs the login session: a 401 (expired / cleared cookie, restarted sidecar with a new password) goes back to the login page
+const rawFetch = window.fetch.bind(window);
+window.fetch = async (...args) => {
+  const r = await rawFetch(...args);
+  if (r.status === 401 && !String(args[0]).startsWith("/api/login")) location.href = "/login";
+  return r;
+};
 
 const WORLD = 4096, GRID = 512, STALE_MS = 30000; // WORLD = fallback extent until /api/world reports the real one
 const DEF_EXT = { x0: 0, z0: 0, x1: WORLD, z1: WORLD };
@@ -1215,7 +1224,7 @@ function ActionsView({ st }) {
 }
 
 // ---- tabs ----
-const TABS = [["overview", "tab.overview"], ["map", "tab.map"], ["forces", "tab.forces"], ["hq", "tab.hq"], ["journal", "tab.journal"], ["missions", "tab.missions"], ["requests", "tab.requests"], ["hqchat", "tab.hqchat"], ["actions", "tab.actions"], ["debug", "tab.debug"], ["usage", "tab.usage"]];
+const TABS = [["overview", "tab.overview"], ["map", "tab.map"], ["forces", "tab.forces"], ["hq", "tab.hq"], ["journal", "tab.journal"], ["missions", "tab.missions"], ["requests", "tab.requests"], ["hqchat", "tab.hqchat"], ["actions", "tab.actions"], ["loadouts", "tab.loadouts"], ["debug", "tab.debug"], ["usage", "tab.usage"]];
 const TAB_KEY = "clw.tab", INACT_KEY = "clw.showInactive";
 const tabOf = (s) => { const k = String(s ?? "").replace(/^#/, ""), t = k === "config" ? "usage" : k; return TABS.some(([id]) => id === t) ? t : null; };
 function loadTab() {
@@ -1436,6 +1445,7 @@ function Config({ st, toast, refresh }) {
         <button class="btn ghost" type="button" disabled=${busy} onClick=${doTest}><${Icon} n="plug" /> ${t("cfg.test")}</button></div>
       ${test && html`<pre>${test.pending ? t("cfg.testing") : J(test)}</pre>`}
     </form></section>
+    <${AccountCard} toast=${toast} cfg=${st.config} defaultPassword=${!!st.auth?.defaultPassword} refresh=${refresh} />
     <${MapCard} toast=${toast} />
     </div></main>`;
 }
@@ -1523,15 +1533,18 @@ function App() {
   const fac = faction === "all" || names.includes(faction) ? faction : "all"; // a selected faction that became inactive falls back to all
   const rows = useMemo(() => buildRows(st, fac), [st, fac]);
   const go = (id) => (e) => { e.preventDefault(); setTab(id); try { history.replaceState(null, "", "#" + id); } catch { location.hash = id; } };
+  const logout = async () => { try { await rawFetch("/api/logout", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }); } catch { /* offline */ } location.href = "/login"; };
   const common = { st, faction: fac, rows, sel, onSel: setSel, act, setAct };
   return html`<div>
     <header class="topbar">
       <div class="brand"><span class="logo"><${Icon} n="logo" /></span>Clausewitz HQ</div>
-      <nav>${TABS.map(([id, label]) => html`<a key=${id} href=${"#" + id} class=${tab === id ? "active" : ""} onClick=${go(id)}>${t(label)}</a>`)}</nav>
+      <nav>${TABS.map(([id, label]) => html`<a key=${id} href=${"#" + id} class=${tab === id ? "active" : ""} onClick=${go(id)}>${t(label)}${id === "loadouts" && st.loadouts?.bad > 0 ? html` <span class="badge bad" title=${t("lo.badBanner", st.loadouts.bad)}>${st.loadouts.bad}</span>` : ""}</a>`)}</nav>
       <${Strip} st=${st} toast=${toast} refresh=${refresh} />
+      <button class="btn ghost mini" type="button" onClick=${logout}>${t("auth.logout")}</button>
       <select class="langsel" value=${getLang()} onChange=${(e) => setLang(e.target.value)} title=${t("lang.title")} aria-label=${t("lang.title")}>${LANGS.map((l) => html`<option key=${l} value=${l}>${l.toUpperCase()}</option>`)}</select>
     </header>
-    ${tab !== "usage" && tab !== "debug" && tab !== "actions" && html`<div class="subwrap"><${FactionBar} names=${names} faction=${fac} setFaction=${setFaction} hidden=${st.hidden ?? []} showInactive=${showInactive} setShowInactive=${setShowInactive} /></div>`}
+    ${tab !== "usage" && tab !== "debug" && tab !== "actions" && tab !== "loadouts" && html`<div class="subwrap"><${FactionBar} names=${names} faction=${fac} setFaction=${setFaction} hidden=${st.hidden ?? []} showInactive=${showInactive} setShowInactive=${setShowInactive} /></div>`}
+    ${st.auth?.defaultPassword && html`<div class="subwrap"><div class="banner warn">${t("auth.defaultBanner")} <a href="#usage" onClick=${go("usage")}>${t("auth.defaultGo")}</a></div></div>`}
     ${tab === "overview" && html`<${Overview} ...${common} />`}
     ${tab === "map" && html`<${MapView} ...${common} layers=${layers} setLayers=${setLayers} world=${world} />`}
     ${tab === "forces" && html`<${ForcesView} ...${common} />`}
@@ -1541,6 +1554,7 @@ function App() {
     ${tab === "requests" && html`<${RequestsView} st=${st} faction=${fac} />`}
     ${tab === "hqchat" && html`<${HqChatView} st=${st} faction=${fac} />`}
     ${tab === "actions" && html`<${ActionsView} st=${st} />`}
+    ${tab === "loadouts" && html`<${LoadoutsView} toast=${toast} />`}
     ${tab === "debug" && html`<${DebugView} st=${st} />`}
     ${tab === "usage" && html`<${Config} st=${st} toast=${toast} refresh=${refresh} />`}
     <div class="toasts">${toasts.map((t) => html`<div class=${"toast " + t.kind} key=${t.id}>${t.text}</div>`)}</div>

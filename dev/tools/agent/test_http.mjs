@@ -4,11 +4,13 @@
 // Plays the game: POST /manifest, then POST /orders with the pending hq message (re-sent every second like the 10 s poll) until the reply
 // carries hqActions / hqReplies.
 import { manifest, situation, messages } from "./fixtures/hq_fixture.mjs";
+import { loginFetch } from "../test-login.mjs"; // dashboard API needs the admin session (default password)
 
 const base = process.argv[2] ?? "http://127.0.0.1:8799";
 const keys = process.argv.slice(3).length ? process.argv.slice(3) : ["vehicle"];
 const post = async (p, body) => (await fetch(base + p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
 
+await loginFetch(base);
 console.log("manifest", JSON.stringify(await post("/manifest", manifest)));
 for (const k of keys) {
   const msg = messages[k];
