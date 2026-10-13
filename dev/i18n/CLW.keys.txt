@@ -576,3 +576,23 @@ CLW-Act_FobOrdered ::: FOB ordered at site %1. ::: FOB am Standort %1 beauftragt
 CLW-Act_FobUpgrade ::: FOB %1: upgrade ordered. ::: FOB %1: Ausbau beauftragt.
 CLW-Act_Resupply ::: Resupply convoy to %1 started. ::: Nachschubkonvoi zu %1 gestartet.
 CLW-Act_Convoy ::: Convoy %1 -> %2 started. ::: Konvoi %1 -> %2 gestartet.
+CLW-ReqMission_NoBoard ::: HQ has no mission board running. ::: Das HQ hat keine Auftragstafel aktiv.
+CLW-ReqMission_LeaderOnly ::: Only your squad leader can take a mission: ask him to request one. ::: Nur dein Truppführer kann einen Auftrag annehmen: bitte ihn, einen anzufordern.
+CLW-ReqMission_NotReady ::: HQ has not registered your squad yet, try again in a few seconds. ::: Das HQ hat deinen Trupp noch nicht erfasst, versuche es in ein paar Sekunden erneut.
+CLW-ReqMission_Active ::: You already have a mission: finish or abandon it first. ::: Du hast bereits einen Auftrag: schließe ihn ab oder brich ihn ab.
+CLW-ReqMission_Pending ::: You already have mission offers waiting: open the task list (map / J menu). ::: Es warten schon Auftragsangebote auf dich: öffne die Aufgabenliste (Karte / J-Menü).
+CLW-ReqMission_None ::: HQ has no sensible objective for your squad right now, try again later. ::: Das HQ hat gerade kein sinnvolles Ziel für deinen Trupp, versuche es später erneut.
+CLW-ReqMission_Offered ::: %1 mission offer(s) for your squad: check the task list (map / J menu) in a few seconds. ::: %1 Auftragsangebot/-angebote für deinen Trupp: sieh in ein paar Sekunden in der Aufgabenliste nach (Karte / J-Menü).
+CLW-ReqStatus_None ::: No status available. ::: Keine Lage verfügbar.
+CLW-ReqStatus_StateHeld ::: ours ::: in unserer Hand
+CLW-ReqStatus_StateContested ::: contested ::: umkämpft
+CLW-ReqStatus_StateEnemy ::: enemy-held ::: in Feindeshand
+CLW-ReqStatus_StateNeutral ::: neutral ::: neutral
+CLW-ReqStatus_KindVehicle ::: vehicles ::: Fahrzeuge
+CLW-ReqStatus_KindInfantry ::: infantry ::: Infanterie
+CLW-ReqStatus_KindUnknown ::: unidentified forces ::: nicht identifizierte Kräfte
+CLW-ReqStatus_Force ::: Supplies: %1, own squads: %2. ::: Nachschub: %1, eigene Trupps: %2.
+CLW-ReqStatus_Objective ::: Objective %1 (%3 m): %2. ::: Ziel %1 (%3 m): %2.
+CLW-ReqStatus_NoObjective ::: No objective within %1 m of you. ::: Kein Ziel im Umkreis von %1 m um dich.
+CLW-ReqStatus_Contact ::: Last known enemy contact: %1 (%2), %3, grid %4, %5 m away, seen %6 s ago. ::: Letzter bekannter Feindkontakt: %1 (%2), %3, Planquadrat %4, %5 m entfernt, vor %6 s gesehen.
+CLW-ReqStatus_NoContact ::: No known enemy contact within %1 m. ::: Kein bekannter Feindkontakt im Umkreis von %1 m.

@@ -20,7 +20,7 @@ import { normLang, normSetLanguage, hqLanguageRules, parseStructuredReply } from
 import { isRetryable } from "./fallback.mjs";
 import { historyBlock } from "./hqHistory.mjs";
 
-export const DEFAULTS = { maxSteps: 4, timeoutSec: 40, maxActions: 3, coreToolsMax: 6, maxOutputTokens: 700 };
+export const DEFAULTS = { maxSteps: 4, timeoutSec: 40, maxActions: 3, coreToolsMax: 8, maxOutputTokens: 700 };
 const isNum = (n) => typeof n === "number" && Number.isFinite(n);
 const num = (v, d) => (isNum(v) ? v : d);
 
@@ -159,6 +159,7 @@ Player: ${message.player} (${message.role}, squad ${message.squad || "none"}, gr
 Rules:
 - If the player asks for something (a vehicle, a squad, ammo/resupply, reinforcements, a recon), call the matching tool ONCE with the parameters the player gave. The game's rules then grant or refuse it and tell the player the result, so never promise delivery.
 - Soldiers may only get resupply and vehicles; squad, reinforce and recon are for squad leaders. If the role cannot do it, say so and offer the alternative instead of calling.
+- If the player asks for a task, objective or something to do, call REQUEST_MISSION (squad leader only; a soldier is told to ask his leader). If the player asks for the situation or status (supplies, objectives, enemy nearby), call REQUEST_STATUS: the game shows the answer to the player, so only acknowledge.
 - Use the query_* tools only when the player asks about forces, bases or enemies. HQ knows only what units reported (fog of war).
 - Do not invent ids, types, grids or numbers. If something is unclear, ask one short question instead of guessing.
 - The radio reply is 1-2 short sentences. After calling a tool, only acknowledge (for example "Roger, requesting a truck for you.").

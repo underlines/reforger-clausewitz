@@ -584,7 +584,9 @@ class CLW_ActionsRequests
 		Add(registry, "REQUEST_RESUPPLY", "A player asks HQ for an ammo / resupply box at the player's position (near a friendly base) or at the HQ.", new CLW_Action_RequestResupply(), CLW_RequestConfig.RESUPPLY_COST);
 		Add(registry, "REQUEST_REINFORCE", "A player (squad leader) asks HQ to send the nearest free AI group to the player's position.", new CLW_Action_RequestReinforce(), 0);
 		Add(registry, "REQUEST_RECON", "A player (squad leader) asks HQ to send the nearest free AI group to look at a map grid, an objective or the player's position.", new CLW_Action_RequestRecon(), 0).AddParam("where", "string", false, "grid 'ddd-ddd' (100 m cells), objective id or 'here'");
-		Print("CLW: request entries registered (REQUEST_VEHICLE, REQUEST_SQUAD, REQUEST_RESUPPLY, REQUEST_REINFORCE, REQUEST_RECON)", LogLevel.NORMAL);
+		Add(registry, "REQUEST_MISSION", "A player asks HQ for a task / objective to do. HQ offers one to the player's squad through the mission board (open the task list to accept). Squad leader; cooldown and one open offer at a time.", new CLW_Action_RequestMission(), 0);
+		Add(registry, "REQUEST_STATUS", "A player asks HQ for the situation: supplies, own squads, objectives and the last known enemy contact near the player. Read only, no cost; the game shows the answer to the player.", new CLW_Action_RequestStatus(), 0);
+		Print("CLW: request entries registered (REQUEST_VEHICLE, REQUEST_SQUAD, REQUEST_RESUPPLY, REQUEST_REINFORCE, REQUEST_RECON, REQUEST_MISSION, REQUEST_STATUS)", LogLevel.NORMAL);
 	}
 
 	protected static CLW_ActionEntry Add(CLW_ActionRegistry registry, string name, string description, CLW_ActionExecutor executor, int cost)

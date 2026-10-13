@@ -183,6 +183,70 @@ class CLW_MissionBoard : CLW_MissionHook
 		m_mPending.Clear();
 	}
 
+	// ---- player request (REQUEST_MISSION) ----
+
+	// State of a squad's mission line for a player who asks for a task: none (no record yet) | other (the squad leader is someone
+	// else) | accepted | offered (offers published) | queued (offers waiting for the next publish) | free.
+	string RequestState(string factionKey, string squadId, int playerId)
+	{
+		string key = Key(factionKey, squadId);
+		CLW_MissionRec rec;
+		if (!m_mRecs.Find(key, rec) || !rec)
+			return "none";
+
+		if (rec.m_iPlayer != playerId)
+			return "other";
+
+		if (rec.m_Task)
+			return "accepted";
+
+		if (!rec.m_aOffers.IsEmpty())
+			return "offered";
+
+		if (m_mPending.Contains(key))
+			return "queued";
+
+		return "free";
+	}
+
+	// Number of offers the player still has open (published or waiting); the request cap counts it.
+	int PendingOffers(string factionKey, string squadId)
+	{
+		string key = Key(factionKey, squadId);
+		CLW_MissionRec rec;
+		int count;
+		if (m_mRecs.Find(key, rec) && rec)
+			count = rec.m_aOffers.Count();
+
+		CLW_PendingOffers pending;
+		if (m_mPending.Find(key, pending) && pending)
+			count += pending.m_aOffers.Count();
+
+		return count;
+	}
+
+	// Publish these offers (made by the rule commander for the asking player) at the next tick, skipping the pause timers.
+	bool QueueNow(string factionKey, string squadId, notnull array<ref CLW_MissionOffer> offers)
+	{
+		string key = Key(factionKey, squadId);
+		CLW_MissionRec rec;
+		if (offers.IsEmpty() || !m_mRecs.Find(key, rec) || !rec)
+			return false;
+
+		CLW_PendingOffers pending = new CLW_PendingOffers();
+		pending.m_fAt = CLW_Orders.Now();
+		foreach (CLW_MissionOffer offer : offers)
+		{
+			pending.m_aOffers.Insert(offer);
+		}
+
+		m_mPending.Set(key, pending);
+		rec.m_fNextOfferAt = 0;
+		Print(string.Format("CLW: mission offers queued on player request for %1/%2: %3", factionKey, squadId, offers.Count()), LogLevel.NORMAL);
+		RequestTick();
+		return true;
+	}
+
 	// ---- helpers ----
 
 	protected static string Key(string factionKey, string squadId)

@@ -14,6 +14,13 @@ class CLW_RequestConfig
 	static const float COOLDOWN_SQUAD_SEC = 240;
 	static const float COOLDOWN_RESUPPLY_SEC = 90;
 	static const float COOLDOWN_ORDER_SEC = 120;		// reinforce / recon
+	static const float COOLDOWN_MISSION_SEC = 120;		// REQUEST_MISSION: per player, counted from the last granted request
+	static const int MISSION_MAX_PENDING = 1;			// open mission offers (published or waiting) a player may have before he can ask again
+	static const float COOLDOWN_STATUS_SEC = 10;		// REQUEST_STATUS (read only, no cost)
+	static const float STATUS_OBJECTIVE_RANGE_M = 1500;	// objectives listed in the status: within this of the player
+	static const int STATUS_MAX_OBJECTIVES = 3;
+	static const float STATUS_CONTACT_RANGE_M = 2500;	// nearest known enemy contact within this of the player
+	static const float STATUS_CONTACT_MAX_AGE_SEC = 300;	// older contacts are not reported
 	static const float RESUPPLY_NEAR_M = 80;			// "near a friendly base": a service of the side or the base within this
 	static const int RESUPPLY_LIFETIME_MS = 600000;	// the box is removed after this
 	static const int MAX_ISSUED_VEHICLES = 4;			// requested empty vehicles alive per side
@@ -36,6 +43,9 @@ class CLW_RequestKind
 	static const string RESUPPLY = "resupply";
 	static const string REINFORCE = "reinforce";
 	static const string RECON = "recon";
+	// Not chat kinds (IsKnown stays false): only the registry actions REQUEST_MISSION / REQUEST_STATUS use them for the cooldown.
+	static const string MISSION = "mission";
+	static const string STATUS = "status";
 
 	static bool IsKnown(string kind)
 	{
@@ -81,6 +91,10 @@ class CLW_RequestKind
 			return CLW_RequestConfig.COOLDOWN_SQUAD_SEC;
 		if (kind == RESUPPLY)
 			return CLW_RequestConfig.COOLDOWN_RESUPPLY_SEC;
+		if (kind == MISSION)
+			return CLW_RequestConfig.COOLDOWN_MISSION_SEC;
+		if (kind == STATUS)
+			return CLW_RequestConfig.COOLDOWN_STATUS_SEC;
 
 		return CLW_RequestConfig.COOLDOWN_ORDER_SEC;
 	}
