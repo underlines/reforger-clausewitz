@@ -220,6 +220,32 @@ class CLW_Loc
 		return factionKey;
 	}
 
+	// Vanilla task text (SCR_Task replicates key + params, every client formats it in its own language). The params of a task
+	// text must be flat (plain text or numbers): the task UI does not render nested wires. Plain text (LLM prose) is set as it is.
+	static void SetTaskName(SCR_Task task, string text)
+	{
+		if (!task)
+			return;
+
+		CLW_LocMsg msg = CLW_LocMsg.Decode(text);
+		if (msg)
+			task.SetTaskName(msg.key, msg.params);
+		else
+			task.SetTaskName(text);
+	}
+
+	static void SetTaskDescription(SCR_Task task, string text)
+	{
+		if (!task)
+			return;
+
+		CLW_LocMsg msg = CLW_LocMsg.Decode(text);
+		if (msg)
+			task.SetTaskDescription(msg.key, msg.params);
+		else
+			task.SetTaskDescription(text);
+	}
+
 	// Number as a param (the stringtable never formats numbers).
 	static string N(int value)
 	{

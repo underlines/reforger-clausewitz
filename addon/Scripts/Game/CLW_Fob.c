@@ -1797,12 +1797,12 @@ class CLW_FobManager
 
 		if (fob.m_fEnemyHoldSec >= HOLD_LOST_SEC)
 		{
-			Lose(fob, string.Format("the enemy held the zone for %1 s", Math.Round(fob.m_fEnemyHoldSec)));
+			Lose(fob, string.Format("the enemy held the zone for %1 s", Math.Round(fob.m_fEnemyHoldSec)), CLW_Loc.W("#CLW-Fob_LostHeld", CLW_Loc.N(Math.Round(fob.m_fEnemyHoldSec))));
 			return;
 		}
 
 		if (fob.m_bHadPost && CLW_BuildExecutor.PostDestroyed(fob))
-			Lose(fob, "the command post was destroyed");
+			Lose(fob, "the command post was destroyed", CLW_Loc.W("#CLW-Fob_LostPost"));
 	}
 
 	// ---- end states ----
@@ -1827,7 +1827,7 @@ class CLW_FobManager
 	}
 
 	// An active FOB is gone.
-	protected static void Lose(CLW_Fob fob, string why)
+	protected static void Lose(CLW_Fob fob, string why, string whyWire)
 	{
 		if (!fob.IsActive())
 			return;
@@ -1843,7 +1843,7 @@ class CLW_FobManager
 			war.LoseTickets(fob.m_sSide, LOST_TICKETS, fob.m_sId + " lost");
 		}
 
-		CLW_Debug.Announce(string.Format("%1 FOB %2 near %3 LOST: %4", fob.m_sSide, fob.m_sId, fob.m_sName, why));
+		CLW_Debug.Announce(CLW_Loc.W("#CLW-Fob_Lost", CLW_Loc.FactionName(fob.m_sSide), fob.m_sId, fob.m_sName, whyWire));
 		Print(string.Format("CLW: fob %1 lost (%2): spawn point and services removed, -%3 tickets", fob.m_sId, why, LOST_TICKETS), LogLevel.NORMAL);
 		if (s_OnLost)
 			s_OnLost.Invoke(fob.m_sId, fob.m_sSide);

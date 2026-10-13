@@ -109,3 +109,68 @@ CLW-Rematch_Results ::: Results: %1 (%2). The next round starts in %3 s: back to
 CLW-Rematch_ResultsDraw ::: Results: draw (%1). The next round starts in %2 s: back to the setup menu, no reconnect needed. ::: Ergebnis: Unentschieden (%1). Die nächste Runde beginnt in %2 s: zurück zum Setup-Menü, ohne neu zu verbinden.
 CLW-Rematch_Countdown ::: The next round starts in %1 s. ::: Die nächste Runde beginnt in %1 s.
 CLW-Rematch_Round ::: Round %1: back to the setup phase. The setup owner opens the menu (/war setup) or the server preset starts the war. ::: Runde %1: zurück in der Setup-Phase. Der Setup-Besitzer öffnet das Menü (/war setup) oder die Server-Vorgabe startet den Krieg.
+CLW-Fob_Established ::: %1 established FOB %2 near %3 (grid %4). ::: %1 hat die FOB %2 bei %3 errichtet (Planquadrat %4).
+CLW-Fob_Upgraded ::: %1 upgraded FOB %2 (depot). ::: %1 hat die FOB %2 ausgebaut (Depot).
+CLW-Fob_Lost ::: %1 FOB %2 near %3 was lost: %4 ::: Die FOB %2 von %1 bei %3 ging verloren: %4
+CLW-Fob_LostHeld ::: the enemy held the zone for %1 s ::: der Feind hielt die Zone %1 s lang
+CLW-Fob_LostPost ::: the command post was destroyed ::: der Kommandoposten wurde zerstört
+CLW-Log_ConvoyLost ::: %1 supply convoy %2 was lost with %3 supplies. ::: Der Nachschubkonvoi %2 von %1 ging mit %3 Nachschub verloren.
+CLW-Squad_Title ::: Squad ::: Trupp
+CLW-Squad_Far ::: %1 is %2 %3 of you. ::: %1 ist %2 %3 von dir entfernt.
+CLW-Compass_N ::: north ::: nördlich
+CLW-Compass_NE ::: north-east ::: nordöstlich
+CLW-Compass_E ::: east ::: östlich
+CLW-Compass_SE ::: south-east ::: südöstlich
+CLW-Compass_S ::: south ::: südlich
+CLW-Compass_SW ::: south-west ::: südwestlich
+CLW-Compass_W ::: west ::: westlich
+CLW-Compass_NW ::: north-west ::: nordwestlich
+CLW-Msn_Kind_CAPTURE ::: Capture ::: Einnehmen
+CLW-Msn_Kind_DEFEND ::: Defend ::: Verteidigen
+CLW-Msn_Kind_RECON ::: Recon ::: Aufklären
+CLW-Msn_Kind_DESTROY ::: Destroy ::: Vernichten
+CLW-Msn_Task_CAPTURE ::: [HQ] Capture %1 ::: [HQ] %1 einnehmen
+CLW-Msn_Task_DEFEND ::: [HQ] Defend %1 ::: [HQ] %1 verteidigen
+CLW-Msn_Task_RECON ::: [HQ] Recon %1 ::: [HQ] %1 aufklären
+CLW-Msn_Task_DESTROY ::: [HQ] Destroy %1 ::: [HQ] %1 vernichten
+CLW-Msn_TaskNamed_CAPTURE ::: [HQ] Capture %1 - %2 ::: [HQ] %1 einnehmen - %2
+CLW-Msn_TaskNamed_DEFEND ::: [HQ] Defend %1 - %2 ::: [HQ] %1 verteidigen - %2
+CLW-Msn_TaskNamed_RECON ::: [HQ] Recon %1 - %2 ::: [HQ] %1 aufklären - %2
+CLW-Msn_TaskNamed_DESTROY ::: [HQ] Destroy %1 - %2 ::: [HQ] %1 vernichten - %2
+CLW-Msn_BriefDefault_CAPTURE ::: HQ: Capture %1. ::: HQ: %1 einnehmen.
+CLW-Msn_BriefDefault_DEFEND ::: HQ: Defend %1. ::: HQ: %1 verteidigen.
+CLW-Msn_BriefDefault_RECON ::: HQ: Recon %1. ::: HQ: %1 aufklären.
+CLW-Msn_BriefDefault_DESTROY ::: HQ: Destroy %1. ::: HQ: %1 vernichten.
+CLW-Msn_Brief_HoldThreat ::: HQ: hold %1. Our point %2 is threatened: %3 enemy contact(s), the nearest %4 m away. ::: HQ: %1 halten. Unser Punkt %2 ist bedroht: %3 Feindkontakt(e), der nächste %4 m entfernt.
+CLW-Msn_Brief_HoldThreatContested ::: HQ: hold %1. Our point %2 is threatened and contested: %3 enemy contact(s), the nearest %4 m away. ::: HQ: %1 halten. Unser Punkt %2 ist bedroht und umkämpft: %3 Feindkontakt(e), der nächste %4 m entfernt.
+CLW-Msn_Brief_HoldContested ::: HQ: hold %1. Our point %2 is contested. ::: HQ: %1 halten. Unser Punkt %2 ist umkämpft.
+CLW-Msn_Brief_HoldGarrison ::: HQ: hold %1. Garrison point %2, all objectives are held. ::: HQ: %1 halten. Punkt %2 besetzen, alle Ziele sind gehalten.
+CLW-Msn_Brief_Capture ::: HQ: capture %1. Take point %2 (value %3). ::: HQ: %1 einnehmen. Punkt %2 nehmen (Wert %3).
+CLW-Msn_Brief_Recon ::: HQ: scout %1 and report. We have no contact information at %2. ::: HQ: %1 aufklären und melden. Wir haben keine Kontaktinformationen zu %2.
+CLW-Msn_Brief_DestroyVehicle ::: HQ: an enemy vehicle was reported %1 m away. Destroy it. ::: HQ: Ein feindliches Fahrzeug wurde %1 m entfernt gemeldet. Vernichten.
+CLW-Msn_Brief_DestroyInfantry ::: HQ: enemy infantry was reported %1 m away. Destroy it. ::: HQ: Feindliche Infanterie wurde %1 m entfernt gemeldet. Vernichten.
+CLW-Msn_Brief_DestroyUnknown ::: HQ: an enemy was reported %1 m away. Destroy it. ::: HQ: Ein Feind wurde %1 m entfernt gemeldet. Vernichten.
+CLW-Msn_Label_Attack ::: Capture %1 ::: %1 einnehmen
+CLW-Msn_Label_Defend ::: Defend %1 ::: %1 verteidigen
+CLW-Msn_Label_Recon ::: Recon %1 ::: %1 aufklären
+CLW-Msn_Label_FallBack ::: Fall back to %1 ::: Rückzug nach %1
+CLW-Msn_Label_Move ::: Move to %1 ::: Vorrücken nach %1
+CLW-Msn_LostTitle ::: Mission lost ::: Auftrag verloren
+CLW-Msn_LostText ::: The task was removed. ::: Der Auftrag wurde entfernt.
+CLW-Msn_NewTitle ::: HQ: new missions ::: HQ: neue Aufträge
+CLW-Msn_NewText1 ::: New mission, open the task list (J): %1 %2 ::: Neuer Auftrag, öffne die Aufgabenliste (J): %1 %2
+CLW-Msn_NewText2 ::: 2 new missions, open the task list (J): %1 %2, %3 %4 ::: 2 neue Aufträge, öffne die Aufgabenliste (J): %1 %2, %3 %4
+CLW-Msn_NewText3 ::: 3 new missions, open the task list (J): %1 %2, %3 %4, %5 %6 ::: 3 neue Aufträge, öffne die Aufgabenliste (J): %1 %2, %3 %4, %5 %6
+CLW-Msn_AcceptedTitle ::: Mission accepted ::: Auftrag angenommen
+CLW-Msn_AbandonedTitle ::: Mission abandoned ::: Auftrag aufgegeben
+CLW-Msn_AbandonedText ::: HQ will replan. ::: Das HQ plant neu.
+CLW-Msn_FailedTitle ::: Mission failed ::: Auftrag gescheitert
+CLW-Msn_FailedText ::: %1: %2 ::: %1: %2
+CLW-Msn_CompleteTitle ::: Mission complete ::: Auftrag erfüllt
+CLW-Msn_CompleteText ::: %1 (+%2 supplies) ::: %1 (+%2 Nachschub)
+CLW-Msn_Why_Timeout ::: timed out after %1 min ::: Zeit nach %1 Min. abgelaufen
+CLW-Msn_Why_Gone ::: target no longer exists ::: das Ziel existiert nicht mehr
+CLW-Msn_Why_Objective ::: objective taken ::: Ziel genommen
+CLW-Msn_Why_Reached ::: target reached ::: Ziel erreicht
+CLW-Msn_Why_Held ::: held %1 min ::: %1 Min. gehalten
+CLW-Msn_Why_Clear ::: no contact left ::: kein Kontakt mehr

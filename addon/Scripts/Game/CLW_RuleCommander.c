@@ -8,7 +8,8 @@ class CLW_Task
 	int m_iDemand;				// units wanted
 	int m_iCovered;				// units already serving it
 	int m_iPriority;			// higher first
-	string m_sReason;
+	string m_sReason;			// English, for orders / log / LLM
+	string m_sBriefWire;		// player-facing brief of the mission offer (CLW_Loc wire, flat params)
 	bool m_bReconOnly;			// only recon-capable kinds
 	string m_sMissionKind;		// CAPTURE | DEFEND | RECON (for offers to human-led squads)
 }
@@ -539,7 +540,7 @@ class CLW_RuleCommander
 
 	// ---- tasks ----
 
-	protected CLW_Task NewTask(CLW_ECommand command, CLW_ControlPoint point, int demand, int priority, string reason, string missionKind)
+	protected CLW_Task NewTask(CLW_ECommand command, CLW_ControlPoint point, int demand, int priority, string reason, string missionKind, string briefWire)
 	{
 		CLW_Task task = new CLW_Task();
 		task.m_eCommand = command;
@@ -549,6 +550,7 @@ class CLW_RuleCommander
 		task.m_iDemand = demand;
 		task.m_iPriority = priority;
 		task.m_sReason = reason;
+		task.m_sBriefWire = briefWire;
 		task.m_sMissionKind = missionKind;
 		return task;
 	}
@@ -635,8 +637,15 @@ class CLW_RuleCommander
 				why += ", nearest " + Math.Round(nearest) + " m";
 			if (ownPoint.m_bContested)
 				why += ", contested";
+			string holdBrief;
+			if (near == 0)
+				holdBrief = CLW_Loc.W("#CLW-Msn_Brief_HoldContested", ownPoint.m_sName, ownPoint.m_sId);
+			else if (ownPoint.m_bContested)
+				holdBrief = CLW_Loc.W("#CLW-Msn_Brief_HoldThreatContested", ownPoint.m_sName, ownPoint.m_sId, CLW_Loc.N(near), CLW_Loc.N(Math.Round(nearest)));
+			else
+				holdBrief = CLW_Loc.W("#CLW-Msn_Brief_HoldThreat", ownPoint.m_sName, ownPoint.m_sId, CLW_Loc.N(near), CLW_Loc.N(Math.Round(nearest)));
 			threatened.Insert(ownPoint.m_sId);
-			InsertTask(tasks, NewTask(CLW_ECommand.DEFEND, ownPoint, MAX_DEFEND_UNITS, 1000 + ownPoint.m_iValue * 100, why, "DEFEND"));
+			InsertTask(tasks, NewTask(CLW_ECommand.DEFEND, ownPoint, MAX_DEFEND_UNITS, 1000 + ownPoint.m_iValue * 100, why, "DEFEND", holdBrief));
 		}
 
 		// 2. recon: the most valuable foreign point without contact information
@@ -653,7 +662,7 @@ class CLW_RuleCommander
 			if (known)
 				continue;
 
-			CLW_Task recon = NewTask(CLW_ECommand.RECON, candidate, 1, 600, "no contact information at " + candidate.m_sId, "RECON");
+			CLW_Task recon = NewTask(CLW_ECommand.RECON, candidate, 1, 600, "no contact information at " + candidate.m_sId, "RECON", CLW_Loc.W("#CLW-Msn_Brief_Recon", candidate.m_sName, candidate.m_sId));
 			recon.m_bReconOnly = true;
 			InsertTask(tasks, recon);
 			reconPlanned = true;
@@ -664,7 +673,7 @@ class CLW_RuleCommander
 		foreach (int rank, CLW_ControlPoint target : foreign)
 		{
 			string attackWhy = string.Format("take %1 %2 (value %3, owner %4)", target.m_sId, target.m_sName, target.m_iValue, target.m_sOwner);
-			InsertTask(tasks, NewTask(CLW_ECommand.ATTACK, target, MAX_ATTACK_UNITS, 500 - rank * 10, attackWhy, "CAPTURE"));
+			InsertTask(tasks, NewTask(CLW_ECommand.ATTACK, target, MAX_ATTACK_UNITS, 500 - rank * 10, attackWhy, "CAPTURE", CLW_Loc.W("#CLW-Msn_Brief_Capture", target.m_sName, target.m_sId, CLW_Loc.N(target.m_iValue))));
 		}
 
 		// 4. nothing to take: garrison own points, the ones nearest to the enemy first
@@ -693,7 +702,7 @@ class CLW_RuleCommander
 
 			foreach (int garrisonRank, CLW_ControlPoint hold : garrison)
 			{
-				InsertTask(tasks, NewTask(CLW_ECommand.DEFEND, hold, 1, 100 - garrisonRank * 10, "garrison " + hold.m_sId + " (all objectives held)", "DEFEND"));
+				InsertTask(tasks, NewTask(CLW_ECommand.DEFEND, hold, 1, 100 - garrisonRank * 10, "garrison " + hold.m_sId + " (all objectives held)", "DEFEND", CLW_Loc.W("#CLW-Msn_Brief_HoldGarrison", hold.m_sName, hold.m_sId)));
 			}
 		}
 	}
@@ -1001,17 +1010,17 @@ class CLW_RuleCommander
 
 			if (task.m_sMissionKind == "DEFEND" && !hasDefend && task.m_iPriority >= 1000)
 			{
-				offers.Insert(MakeOffer("DEFEND", task.m_sTarget, "HQ: hold " + PointName(task.m_sTarget) + ". " + task.m_sReason + "."));
+				offers.Insert(MakeOffer("DEFEND", task.m_sTarget, task.m_sBriefWire));
 				hasDefend = true;
 			}
 			else if (task.m_sMissionKind == "CAPTURE" && !hasCapture)
 			{
-				offers.Insert(MakeOffer("CAPTURE", task.m_sTarget, "HQ: capture " + PointName(task.m_sTarget) + ". " + task.m_sReason + "."));
+				offers.Insert(MakeOffer("CAPTURE", task.m_sTarget, task.m_sBriefWire));
 				hasCapture = true;
 			}
 			else if (task.m_sMissionKind == "RECON" && !hasRecon)
 			{
-				offers.Insert(MakeOffer("RECON", task.m_sTarget, "HQ: scout " + PointName(task.m_sTarget) + " and report. " + task.m_sReason + "."));
+				offers.Insert(MakeOffer("RECON", task.m_sTarget, task.m_sBriefWire));
 				hasRecon = true;
 			}
 		}
@@ -1037,7 +1046,12 @@ class CLW_RuleCommander
 				destroy.m_sKind = "DESTROY";
 				destroy.m_bHasPos = true;
 				destroy.m_vPos = nearest.m_vPos;
-				destroy.m_sBrief = string.Format("HQ: enemy %1 reported %2 m away. Destroy it.", nearest.m_sKind, Math.Round(nearestDist));
+				string destroyKey = "#CLW-Msn_Brief_DestroyUnknown";
+				if (nearest.m_sKind == CLW_Contact.KIND_VEHICLE)
+					destroyKey = "#CLW-Msn_Brief_DestroyVehicle";
+				else if (nearest.m_sKind == CLW_Contact.KIND_INFANTRY)
+					destroyKey = "#CLW-Msn_Brief_DestroyInfantry";
+				destroy.m_sBrief = CLW_Loc.W(destroyKey, CLW_Loc.N(Math.Round(nearestDist)));
 				destroy.m_sSource = "rules";
 				offers.Insert(destroy);
 			}
@@ -1104,11 +1118,25 @@ class CLW_RuleCommander
 			string label = MissionLabel(best.m_eCommand);
 			string reason = best.m_sReason;
 			m_Orders.Record(id, best.m_eCommand, best.m_sTarget, vector.Zero, reason);
-			ShowMissionTask(id, group, label + " " + best.m_sName, best.m_vPos, reason);
+			ShowMissionTask(id, group, MissionLabelWire(best.m_eCommand, best.m_sName), best.m_vPos, best.m_sBriefWire);
 			string msg = string.Format("MISSION %1 (%2): %3 %4 / %5 (%6)", id, m_sFaction, label, best.m_sTarget, best.m_sName, reason);
 			CLW_Debug.Say(msg);
 			Print("CLW: RuleCommander " + msg, LogLevel.NORMAL);
 		}
+	}
+
+	// Legacy mission task title as a wire (flat params): "Capture Timber Hub".
+	protected string MissionLabelWire(CLW_ECommand command, string pointName)
+	{
+		switch (command)
+		{
+			case CLW_ECommand.ATTACK: return CLW_Loc.W("#CLW-Msn_Label_Attack", pointName);
+			case CLW_ECommand.DEFEND: return CLW_Loc.W("#CLW-Msn_Label_Defend", pointName);
+			case CLW_ECommand.RECON: return CLW_Loc.W("#CLW-Msn_Label_Recon", pointName);
+			case CLW_ECommand.FALL_BACK: return CLW_Loc.W("#CLW-Msn_Label_FallBack", pointName);
+		}
+
+		return CLW_Loc.W("#CLW-Msn_Label_Move", pointName);
 	}
 
 	protected string MissionLabel(CLW_ECommand command)
@@ -1147,13 +1175,13 @@ class CLW_RuleCommander
 		}
 
 		target[1] = GetGame().GetWorld().GetSurfaceY(target[0], target[2]);
-		string desc = string.Format("%1 (%2 / %3)", reason, Math.Round(target[0]), Math.Round(target[2]));
+		string desc = reason;	// label / reason: plain text or CLW_Loc wires (flat params)
 		if (m_MissionTask && m_sMissionSquad == squadId)
 		{
 			// same squad: keep the task (and its assignment), just change what it says and where it is
 			taskSystem.MoveTask(m_MissionTask, target);
-			m_MissionTask.SetTaskName(label);
-			m_MissionTask.SetTaskDescription(desc);
+			CLW_Loc.SetTaskName(m_MissionTask, label);
+			CLW_Loc.SetTaskDescription(m_MissionTask, desc);
 			return;
 		}
 
@@ -1161,12 +1189,15 @@ class CLW_RuleCommander
 
 		s_iMissionCounter++;
 		string taskId = "CLW_Mission_" + m_sFaction + "_" + s_iMissionCounter;
-		SCR_Task task = taskSystem.CreateTask(TASK_PREFAB, taskId, label, desc, target);
+		SCR_Task task = taskSystem.CreateTask(TASK_PREFAB, taskId, "", "", target);
 		if (!task)
 		{
 			Print("CLW: RuleCommander: CreateTask failed for " + taskId, LogLevel.WARNING);
 			return;
 		}
+
+		CLW_Loc.SetTaskName(task, label);
+		CLW_Loc.SetTaskDescription(task, desc);
 
 		// Address the task to the leading PLAYER, not the group: giving the squad a real GroupID (AssignGroupID) silences the commander voice and move marker.
 		IEntity leader = CLW_SquadInfo.HumanLeaderEntity(group);
