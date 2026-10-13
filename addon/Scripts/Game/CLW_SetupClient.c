@@ -29,7 +29,7 @@ class CLW_SetupClient
 		if (!created)
 		{
 			Print("CLW: setup menu could not be created (preset / layout problem), use /war start", LogLevel.ERROR);
-			CLW_Debug.Show("setup menu failed to open, use /war start [mode] [key=value ...]");
+			CLW_Debug.Show("#CLW-Setup_Failed");
 			return;
 		}
 
@@ -39,7 +39,7 @@ class CLW_SetupClient
 	// Another player is the setup owner.
 	static void Wait(string ownerName)
 	{
-		string text = "Waiting for " + ownerName + " to set up the war";
+		string text = CLW_Loc.F("#CLW-Setup_Waiting", ownerName);
 		Print("CLW: " + text, LogLevel.NORMAL);
 		CLW_Debug.Show(text);
 		SCR_HintManagerComponent.ShowCustomHint(text, "Clausewitz", 10);
@@ -48,7 +48,7 @@ class CLW_SetupClient
 	// Server verdict on a submit or a chat command.
 	static void Result(bool ok, string text)
 	{
-		Print(string.Format("CLW: setup result ok=%1 '%2'", ok, text), LogLevel.NORMAL);
+		Print(string.Format("CLW: setup result ok=%1 '%2'", ok, CLW_Loc.Resolve(text)), LogLevel.NORMAL);
 		if (s_Dialog && s_Dialog.IsOpen())
 		{
 			s_Dialog.OnServerResult(ok, text);
@@ -56,19 +56,20 @@ class CLW_SetupClient
 		}
 
 		if (!ok)
-			CLW_Debug.Show("setup: " + text);
+			CLW_Debug.Show(CLW_Loc.W("#CLW-Setup_ErrorLine", text));
 	}
 
 	// The war started (by anyone, any way): close the menu and show the announcement.
 	static void Closed(string text)
 	{
-		Print("CLW: setup closed: " + text, LogLevel.NORMAL);
+		string shown = CLW_Loc.Resolve(text);	// the server sends a CLW_Loc wire
+		Print("CLW: setup closed: " + shown, LogLevel.NORMAL);
 		if (s_Dialog && s_Dialog.IsOpen())
 			s_Dialog.Close();
 		s_Dialog = null;
 
-		CLW_Debug.Show(text);
-		SCR_HintManagerComponent.ShowCustomHint(text, "Clausewitz", 12);
+		CLW_Debug.Show(shown);
+		SCR_HintManagerComponent.ShowCustomHint(shown, "Clausewitz", 12);
 	}
 
 	// ---- chat fallback: /war setup | /war start [mode] [key=value ...] ----

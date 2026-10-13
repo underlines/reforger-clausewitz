@@ -109,10 +109,10 @@ class CLW_Rematch
 
 		Print(string.Format("CLW: rematch: war over, results for %1 s", s_iDelaySec), LogLevel.NORMAL);
 		Print("CLW: rematch: no EndGameMode, so no vanilla end screen: the results are the HUD (winner label), the WAR OVER announcement and this log", LogLevel.NORMAL);
-		string winner = winnerKey;
-		if (winner.IsEmpty())
-			winner = "draw";
-		CLW_Debug.Announce(string.Format("Results: %1 (%2). The next round starts in %3 s: back to the setup menu, no reconnect needed.", winner, why, s_iDelaySec));
+		if (winnerKey.IsEmpty())
+			CLW_Debug.Announce(CLW_Loc.W("#CLW-Rematch_ResultsDraw", why, CLW_Loc.N(s_iDelaySec)));
+		else
+			CLW_Debug.Announce(CLW_Loc.W("#CLW-Rematch_Results", CLW_Loc.FactionName(winnerKey), why, CLW_Loc.N(s_iDelaySec)));
 		s_bPending = true;
 		GetGame().GetCallqueue().Remove(Run);
 		GetGame().GetCallqueue().Remove(Countdown);
@@ -126,7 +126,7 @@ class CLW_Rematch
 	protected static void Countdown()
 	{
 		if (s_bPending)
-			CLW_Debug.Announce(string.Format("The next round starts in %1 s.", COUNTDOWN_SEC));
+			CLW_Debug.Announce(CLW_Loc.W("#CLW-Rematch_Countdown", CLW_Loc.N(COUNTDOWN_SEC)));
 	}
 
 	// ---- the reset sequence ----
@@ -231,7 +231,7 @@ class CLW_Rematch
 			Print(string.Format("CLW: rematch: back to setup (round %1), phase %2, setup menu driver restarted", s_iRound, newWar.GetPhaseName()), LogLevel.NORMAL);
 		}
 
-		CLW_Debug.Announce(string.Format("Round %1: back to the setup phase. The setup owner opens the menu (/war setup) or the server preset starts the war.", s_iRound));
+		CLW_Debug.Announce(CLW_Loc.W("#CLW-Rematch_Round", CLW_Loc.N(s_iRound)));
 
 		// 5. players
 		SyncSides();

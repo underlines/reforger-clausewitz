@@ -169,13 +169,13 @@ class CLW_SetupDialog : SCR_ConfigurableDialogUi
 
 		RichTextWidget battleHeader = RichTextWidget.Cast(root.FindAnyWidget("BattleHeader"));
 		if (battleHeader)
-			battleHeader.SetText("BATTLE");
+			battleHeader.SetText(CLW_Loc.Fmt("#CLW-Setup_Battle"));
 		RichTextWidget modeHeader = RichTextWidget.Cast(root.FindAnyWidget("ModeHeader"));
 		if (modeHeader)
-			modeHeader.SetText("WAR MODE");
+			modeHeader.SetText(CLW_Loc.Fmt("#CLW-Setup_WarMode"));
 
-		SetTitle("Clausewitz - War setup");
-		SetMessage("Choose the two sides and the war mode, then press Start war.");
+		SetTitle(CLW_Loc.Fmt("#CLW-Setup_Title"));
+		SetMessage(CLW_Loc.Fmt("#CLW-Setup_Intro"));
 		m_OnButtonPressed.Insert(OnTagPressed);
 
 		BuildAll();
@@ -205,10 +205,10 @@ class CLW_SetupDialog : SCR_ConfigurableDialogUi
 			return;
 		}
 
-		m_ModeSpin.SetLabel("War mode");
+		m_ModeSpin.SetLabel(CLW_Loc.Fmt("#CLW-Setup_ModeLabel"));
 		foreach (CLW_SetupMode mode : m_Data.m_aModes)
 		{
-			m_ModeSpin.AddItem(mode.m_sName);
+			m_ModeSpin.AddItem(CLW_Loc.Resolve(mode.m_sName));
 		}
 
 		int index = FindModeIndex(m_Data.m_sDefaultMode);
@@ -236,7 +236,7 @@ class CLW_SetupDialog : SCR_ConfigurableDialogUi
 		m_CurrentMode = m_Data.m_aModes[index];
 		Print("CLW: setup menu mode selected: " + m_CurrentMode.m_sId, LogLevel.NORMAL);
 		if (m_wModeDesc)
-			m_wModeDesc.SetText(m_CurrentMode.m_sDescription);
+			m_wModeDesc.SetText(CLW_Loc.Resolve(m_CurrentMode.m_sDescription));
 
 		ClearChildren(m_wModeParams);
 		foreach (CLW_SetupParam param : m_CurrentMode.m_aParams)
@@ -285,7 +285,7 @@ class CLW_SetupDialog : SCR_ConfigurableDialogUi
 				check = SCR_CheckboxComponent.Cast(checkWidget.FindHandler(SCR_CheckboxComponent));
 			if (check)
 			{
-				check.SetLabel(param.m_sLabel);
+				check.SetLabel(CLW_Loc.Resolve(param.m_sLabel));
 				check.SetChecked(param.m_fValue >= 0.5, false, false);
 				check.m_OnChanged.Insert(OnCheckChanged);
 				param.m_Comp = check;
@@ -299,10 +299,10 @@ class CLW_SetupDialog : SCR_ConfigurableDialogUi
 				spin = SCR_SpinBoxComponent.Cast(spinWidget2.FindHandler(SCR_SpinBoxComponent));
 			if (spin)
 			{
-				spin.SetLabel(param.m_sLabel);
+				spin.SetLabel(CLW_Loc.Resolve(param.m_sLabel));
 				foreach (string choice : param.m_aChoices)
 				{
-					spin.AddItem(WidgetManager.Translate(choice));	// faction names are localisation keys (#AR-Faction_US)
+					spin.AddItem(CLW_Loc.Choice(param.m_sId, choice));	// faction names are localisation keys (#AR-Faction_US)
 				}
 				spin.SetCurrentItem(Math.Round(param.m_fValue), false, false, false);
 				spin.m_OnChanged.Insert(OnSpinChanged);
@@ -317,7 +317,7 @@ class CLW_SetupDialog : SCR_ConfigurableDialogUi
 				slider = SCR_SliderComponent.Cast(sliderWidget.FindHandler(SCR_SliderComponent));
 			if (slider)
 			{
-				slider.SetLabel(param.m_sLabel);
+				slider.SetLabel(CLW_Loc.Resolve(param.m_sLabel));
 				slider.SetFormatText("%1");
 				slider.SetMax(param.m_fMax);		// max first: the widget's default range is 0..1
 				slider.SetMin(param.m_fMin);
@@ -333,7 +333,7 @@ class CLW_SetupDialog : SCR_ConfigurableDialogUi
 			Print("CLW: setup menu could not create a control for '" + param.m_sId + "'", LogLevel.WARNING);
 
 		if (!param.m_sDescription.IsEmpty())
-			AddText(parent, param.m_sDescription, Color.FromSRGBA(160, 160, 160, 255));
+			AddText(parent, CLW_Loc.Resolve(param.m_sDescription), Color.FromSRGBA(160, 160, 160, 255));
 	}
 
 	protected string FormatNumber(CLW_SetupParam param, float value)
@@ -424,7 +424,7 @@ class CLW_SetupDialog : SCR_ConfigurableDialogUi
 		}
 
 		BuildAll();
-		SetStatus("Defaults restored.", false);
+		SetStatus(CLW_Loc.Fmt("#CLW-Setup_DefaultsRestored"), false);
 	}
 
 	// Start war: send to the server and stay open until the server answers (error text) or announces the start (Close).
@@ -435,7 +435,7 @@ class CLW_SetupDialog : SCR_ConfigurableDialogUi
 
 		if (!m_CurrentMode)
 		{
-			SetStatus("No war mode available.", true);
+			SetStatus(CLW_Loc.Fmt("#CLW-Setup_NoMode"), true);
 			return;
 		}
 
@@ -445,19 +445,19 @@ class CLW_SetupDialog : SCR_ConfigurableDialogUi
 		if (!error.IsEmpty())
 		{
 			Print("CLW: setup menu local check failed: " + error, LogLevel.NORMAL);
-			SetStatus(error, true);
+			SetStatus(CLW_Loc.Resolve(error), true);
 			return;
 		}
 
 		SCR_PlayerController controller = SCR_PlayerController.Cast(GetGame().GetPlayerController());
 		if (!controller)
 		{
-			SetStatus("No player controller yet.", true);
+			SetStatus(CLW_Loc.Fmt("#CLW-Setup_NoController"), true);
 			return;
 		}
 
 		m_bSubmitting = true;
-		SetStatus("Sending to the server...", false);
+		SetStatus(CLW_Loc.Fmt("#CLW-Setup_Sending"), false);
 		controller.CLW_SubmitSetup(battleJson, m_CurrentMode.m_sId, modeJson);
 	}
 
@@ -489,7 +489,7 @@ class CLW_SetupDialog : SCR_ConfigurableDialogUi
 		}
 
 		if (!a.IsEmpty() && a == b)
-			return "The two sides must be different factions.";
+			return CLW_Loc.W("#CLW-Setup_SidesDiffer");
 
 		return "";
 	}
@@ -563,8 +563,8 @@ class CLW_SetupDialog : SCR_ConfigurableDialogUi
 	{
 		m_bSubmitting = false;
 		if (ok)
-			SetStatus("Starting the war...", false);
+			SetStatus(CLW_Loc.Fmt("#CLW-Setup_Starting"), false);
 		else
-			SetStatus("Rejected: " + text, true);
+			SetStatus(CLW_Loc.F("#CLW-Setup_Rejected", text), true);
 	}
 }

@@ -22,41 +22,41 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 			sizes.Insert("large");
 		}
 
-		m_aParams.Insert(CLW_ModeParam.CreateNumber("timeLimitMin", "Time limit (min)", "The war ends after this time; more tickets wins.", CLW_ModeParam.TYPE_INT, 5, 180, 5, config.m_iTimeLimitMin));
-		m_aParams.Insert(CLW_ModeParam.CreateNumber("startTickets", "Start tickets", "War will of each side; at 0 the side loses.", CLW_ModeParam.TYPE_INT, 100, 2000, 50, config.m_iStartTickets));
-		m_aParams.Insert(CLW_ModeParam.CreateNumber("startSupplies", "Start supplies", "Purchasing power of each side at the start.", CLW_ModeParam.TYPE_INT, 0, 2000, 50, config.m_iStartSupplies));
-		m_aParams.Insert(CLW_ModeParam.CreateNumber("incomeMultiplier", "Income multiplier", "Scales the supplies income.", CLW_ModeParam.TYPE_FLOAT, 0.25, 3, 0.25, config.m_fIncomeMultiplier));
-		m_aParams.Insert(CLW_ModeParam.CreateChoice("battleSize", "Battle size", "Caps for live AI and vehicles per side; bigger battles also get more income.", sizes, config.m_sBattleSize));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("timeLimitMin", "#CLW-Param_timeLimitMin", "#CLW-Param_timeLimitMin_Desc", CLW_ModeParam.TYPE_INT, 5, 180, 5, config.m_iTimeLimitMin));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("startTickets", "#CLW-Param_startTickets", "#CLW-Param_startTickets_Desc", CLW_ModeParam.TYPE_INT, 100, 2000, 50, config.m_iStartTickets));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("startSupplies", "#CLW-Param_startSupplies", "#CLW-Param_startSupplies_Desc", CLW_ModeParam.TYPE_INT, 0, 2000, 50, config.m_iStartSupplies));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("incomeMultiplier", "#CLW-Param_incomeMultiplier", "#CLW-Param_incomeMultiplier_Desc", CLW_ModeParam.TYPE_FLOAT, 0.25, 3, 0.25, config.m_fIncomeMultiplier));
+		m_aParams.Insert(CLW_ModeParam.CreateChoice("battleSize", "#CLW-Param_battleSize", "#CLW-Param_battleSize_Desc", sizes, config.m_sBattleSize));
 		array<string> startModes = {"fixed", "random"};
 		string startDefault = config.m_sStartPositions;
 		if (startDefault.IsEmpty())
 			startDefault = "fixed";
-		m_aParams.Insert(CLW_ModeParam.CreateChoice("startPositions", "Start positions", "fixed: the scenario's HQs. random: both HQs and the front at random places (checked for ground, water, room and roads), within the battle size distance.", startModes, startDefault));
+		m_aParams.Insert(CLW_ModeParam.CreateChoice("startPositions", "#CLW-Param_startPositions", "#CLW-Param_startPositions_Desc", startModes, startDefault));
 		array<string> ownerModes = {"scenario", "none", "1", "2", "3"};
-		m_aParams.Insert(CLW_ModeParam.CreateChoice("startObjectives", "Start objectives", "scenario: the scenario's setting. none: every objective starts neutral. 1 / 2 / 3: each side starts with that many objectives nearest its HQ (one objective always stays neutral).", ownerModes, "scenario"));
-		m_aParams.Insert(CLW_ModeParam.CreateNumber("randomSeed", "Random seed", "Random start positions: the same seed gives the same layout. 0 = a new one each war (logged).", CLW_ModeParam.TYPE_INT, 0, 9999999, 1, config.m_iRandomSeed));
-		m_aParams.Insert(CLW_ModeParam.CreateBool("ticketBleed", "Ticket bleed", "The side holding fewer points loses tickets over time.", config.m_bTicketBleed));
-		m_aParams.Insert(CLW_ModeParam.CreateNumber("holdAllWinMin", "Hold-all win (min)", "Holding every point this long wins. 0 = off.", CLW_ModeParam.TYPE_INT, 0, 15, 1, config.m_iHoldAllWinMin));
+		m_aParams.Insert(CLW_ModeParam.CreateChoice("startObjectives", "#CLW-Param_startObjectives", "#CLW-Param_startObjectives_Desc", ownerModes, "scenario"));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("randomSeed", "#CLW-Param_randomSeed", "#CLW-Param_randomSeed_Desc", CLW_ModeParam.TYPE_INT, 0, 9999999, 1, config.m_iRandomSeed));
+		m_aParams.Insert(CLW_ModeParam.CreateBool("ticketBleed", "#CLW-Param_ticketBleed", "#CLW-Param_ticketBleed_Desc", config.m_bTicketBleed));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("holdAllWinMin", "#CLW-Param_holdAllWinMin", "#CLW-Param_holdAllWinMin_Desc", CLW_ModeParam.TYPE_INT, 0, 15, 1, config.m_iHoldAllWinMin));
 		// capability switches (CLW_Capabilities.Has): declared in GetCapabilities, "cap_<name>" turns one off in the setup menu
 		// FOBs (M3 phase F, CLW_FobManager): the intent ESTABLISH_FOB drops out of the manifest when fobMax is 0
 		array<string> fobBuildModes = {"instant", "timed"};
 		string fobBuildDefault = config.m_sFobBuild;
 		if (fobBuildDefault.IsEmpty())
 			fobBuildDefault = "timed";
-		m_aParams.Insert(CLW_ModeParam.CreateNumber("fobMax", "Max FOBs per side", "Forward bases a side may hold at once. 0 = no FOBs.", CLW_ModeParam.TYPE_INT, 0, 4, 1, config.m_iFobMax));
-		m_aParams.Insert(CLW_ModeParam.CreateChoice("fobBuild", "FOB build", "instant: the FOB stands as soon as the builder arrives. timed: it is built over the build time while the builder is on site.", fobBuildModes, fobBuildDefault));
-		m_aParams.Insert(CLW_ModeParam.CreateNumber("fobCost", "FOB cost (supplies)", "Paid when the FOB is ordered; refunded when it fails before it stands.", CLW_ModeParam.TYPE_INT, 0, 1000, 25, config.m_iFobCost));
-		m_aParams.Insert(CLW_ModeParam.CreateNumber("fobBuildSec", "FOB build time (s)", "Timed build: seconds of the builder on site until the FOB stands.", CLW_ModeParam.TYPE_INT, 10, 600, 10, config.m_iFobBuildSec));
-		m_aParams.Insert(CLW_ModeParam.CreateNumber("fobEarliestMin", "FOB earliest (min)", "No FOB before this many minutes of war time, and only once the side knows the front (an enemy contact, a contested or lost objective). 0 = no gate.", CLW_ModeParam.TYPE_INT, 0, 60, 1, 6));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("fobMax", "#CLW-Param_fobMax", "#CLW-Param_fobMax_Desc", CLW_ModeParam.TYPE_INT, 0, 4, 1, config.m_iFobMax));
+		m_aParams.Insert(CLW_ModeParam.CreateChoice("fobBuild", "#CLW-Param_fobBuild", "#CLW-Param_fobBuild_Desc", fobBuildModes, fobBuildDefault));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("fobCost", "#CLW-Param_fobCost", "#CLW-Param_fobCost_Desc", CLW_ModeParam.TYPE_INT, 0, 1000, 25, config.m_iFobCost));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("fobBuildSec", "#CLW-Param_fobBuildSec", "#CLW-Param_fobBuildSec_Desc", CLW_ModeParam.TYPE_INT, 10, 600, 10, config.m_iFobBuildSec));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("fobEarliestMin", "#CLW-Param_fobEarliestMin", "#CLW-Param_fobEarliestMin_Desc", CLW_ModeParam.TYPE_INT, 0, 60, 1, 6));
 		// spawn on assignment (owner playtest 2026-10-12): few idle AI at the bases, see CLW_BaseWatch
-		m_aParams.Insert(CLW_ModeParam.CreateNumber("garrisonSquads", "HQ garrison (squads)", "Infantry squads per side that defend their HQ for the whole war (never counted as idle, not given other orders).", CLW_ModeParam.TYPE_INT, 0, 4, 1, 1));
-		m_aParams.Insert(CLW_ModeParam.CreateNumber("idleDespawnMin", "Idle despawn (min)", "A squad idling at its base without an order this long is removed and its purchase cost refunded. 0 = off.", CLW_ModeParam.TYPE_INT, 0, 60, 1, 6));
-		m_aParams.Insert(CLW_ModeParam.CreateNumber("convoyMax", "Max convoys per side", "Supply convoys a side may have on the road at once (logistics only).", CLW_ModeParam.TYPE_INT, 1, 4, 1, 2));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("garrisonSquads", "#CLW-Param_garrisonSquads", "#CLW-Param_garrisonSquads_Desc", CLW_ModeParam.TYPE_INT, 0, 4, 1, 1));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("idleDespawnMin", "#CLW-Param_idleDespawnMin", "#CLW-Param_idleDespawnMin_Desc", CLW_ModeParam.TYPE_INT, 0, 60, 1, 6));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("convoyMax", "#CLW-Param_convoyMax", "#CLW-Param_convoyMax_Desc", CLW_ModeParam.TYPE_INT, 1, 4, 1, 2));
 		// economy guard (M4 round 3 WP6): CLW_EconomyGuard.HqReserve() / ConvoyMinLoad() are the getters other code uses
-		m_aParams.Insert(CLW_ModeParam.CreateNumber("hqReserve", "HQ reserve (supplies)", "AI purchases (rule commander, LLM) and convoys never take the HQ stock below this. Player requests still may. 0 = no floor.", CLW_ModeParam.TYPE_INT, 0, 1000, 25, 100));
-		m_aParams.Insert(CLW_ModeParam.CreateNumber("convoyMinLoad", "Convoy minimum load", "A convoy only leaves with at least this many supplies (HQ stock minus the reserve).", CLW_ModeParam.TYPE_INT, 10, 400, 10, 60));
-		m_aParams.Insert(CLW_ModeParam.CreateBool("cap_logistics", "Logistics", "Per-base supplies and convoys. Off: one supply pool per side.", true));
-		m_aParams.Insert(CLW_ModeParam.CreateBool("cap_kitCost", "Kit cost", "Arsenal items cost supplies. Off: kits are free.", true));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("hqReserve", "#CLW-Param_hqReserve", "#CLW-Param_hqReserve_Desc", CLW_ModeParam.TYPE_INT, 0, 1000, 25, 100));
+		m_aParams.Insert(CLW_ModeParam.CreateNumber("convoyMinLoad", "#CLW-Param_convoyMinLoad", "#CLW-Param_convoyMinLoad_Desc", CLW_ModeParam.TYPE_INT, 10, 400, 10, 60));
+		m_aParams.Insert(CLW_ModeParam.CreateBool("cap_logistics", "#CLW-Param_cap_logistics", "#CLW-Param_cap_logistics_Desc", true));
+		m_aParams.Insert(CLW_ModeParam.CreateBool("cap_kitCost", "#CLW-Param_cap_kitCost", "#CLW-Param_cap_kitCost_Desc", true));
 	}
 
 	override string GetId()
@@ -66,12 +66,12 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 
 	override string GetName()
 	{
-		return "Short conflict";
+		return "#CLW-Mode_Short_Name";
 	}
 
 	override string GetDescription()
 	{
-		return "Tickets drain with losses and from holding fewer points; win by tickets, by holding all points, or by tickets at the time limit.";
+		return "#CLW-Mode_Short_Desc";
 	}
 
 	override void GetCapabilities(notnull array<string> caps)
@@ -194,7 +194,7 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 			{
 				winnerFaction = war.GetEnemyKey(key);
 				reason = EGameOverTypes.ENDREASON_SCORELIMIT;
-				war.SetEndReasonText(key + " out of tickets");
+				war.SetEndReasonText(CLW_Loc.W("#CLW-War_EndOutOfTickets", CLW_Loc.FactionName(key)));
 				return true;
 			}
 		}
@@ -204,7 +204,7 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 		{
 			winnerFaction = m_sHoldFaction;
 			reason = EGameOverTypes.ENDREASON_SCORELIMIT;
-			war.SetEndReasonText(m_sHoldFaction + " held all points for " + Math.Round(m_fHoldAll) + " s");
+			war.SetEndReasonText(CLW_Loc.W("#CLW-War_EndHeldAll", CLW_Loc.FactionName(m_sHoldFaction), CLW_Loc.N(Math.Round(m_fHoldAll))));
 			return true;
 		}
 
@@ -217,7 +217,7 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 			{
 				winnerFaction = "";
 				reason = EGameOverTypes.ENDREASON_DRAW;
-				war.SetEndReasonText("time limit, equal tickets");
+				war.SetEndReasonText(CLW_Loc.W("#CLW-War_EndTimeEqual"));
 			}
 			else
 			{
@@ -226,7 +226,7 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 				else
 					winnerFaction = keys[1];
 				reason = EGameOverTypes.ENDREASON_TIMELIMIT;
-				war.SetEndReasonText("time limit, more tickets");
+				war.SetEndReasonText(CLW_Loc.W("#CLW-War_EndTimeMore"));
 			}
 			return true;
 		}
@@ -299,7 +299,7 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 		if (holder != m_sHoldFaction)
 		{
 			if (!holder.IsEmpty() && Param("holdAllWinMin").GetInt() > 0)
-				CLW_Debug.Announce(holder + " holds every point: wins in " + Param("holdAllWinMin").GetInt() + " min if kept");
+				CLW_Debug.Announce(CLW_Loc.W("#CLW-War_HoldAll", CLW_Loc.FactionName(holder), CLW_Loc.N(Param("holdAllWinMin").GetInt())));
 			else if (!m_sHoldFaction.IsEmpty())
 				Print("CLW: war hold-all by " + m_sHoldFaction + " broken", LogLevel.NORMAL);
 			m_sHoldFaction = holder;

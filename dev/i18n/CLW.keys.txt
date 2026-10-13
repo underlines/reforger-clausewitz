@@ -1,0 +1,111 @@
+CLW-Param_timeLimitMin ::: Time limit (min) ::: Zeitlimit (Min.)
+CLW-Param_timeLimitMin_Desc ::: The war ends after this time; more tickets wins. ::: Der Krieg endet nach dieser Zeit; wer mehr Tickets hat, gewinnt.
+CLW-Param_startTickets ::: Start tickets ::: Starttickets
+CLW-Param_startTickets_Desc ::: War will of each side; at 0 the side loses. ::: Kriegswille jeder Seite; bei 0 verliert die Seite.
+CLW-Param_startSupplies ::: Start supplies ::: Startnachschub
+CLW-Param_startSupplies_Desc ::: Purchasing power of each side at the start. ::: Kaufkraft jeder Seite zu Beginn.
+CLW-Param_incomeMultiplier ::: Income multiplier ::: Einkommensfaktor
+CLW-Param_incomeMultiplier_Desc ::: Scales the supplies income. ::: Skaliert das Nachschubeinkommen.
+CLW-Param_battleSize ::: Battle size ::: Schlachtgröße
+CLW-Param_battleSize_Desc ::: Caps for live AI and vehicles per side; bigger battles also get more income. ::: Obergrenzen für lebende KI und Fahrzeuge je Seite; größere Schlachten bringen auch mehr Einkommen.
+CLW-Param_startPositions ::: Start positions ::: Startpositionen
+CLW-Param_startPositions_Desc ::: fixed: the scenario's HQs. random: both HQs and the front at random places (checked for ground, water, room and roads), within the battle size distance. ::: fixed: die HQs des Szenarios. random: beide HQs und die Front an zufälligen Orten (geprüft auf Boden, Wasser, Platz und Straßen), innerhalb der Entfernung der Schlachtgröße.
+CLW-Param_startObjectives ::: Start objectives ::: Startziele
+CLW-Param_startObjectives_Desc ::: scenario: the scenario's setting. none: every objective starts neutral. 1 / 2 / 3: each side starts with that many objectives nearest its HQ (one objective always stays neutral). ::: scenario: die Einstellung des Szenarios. none: jedes Ziel startet neutral. 1 / 2 / 3: jede Seite startet mit so vielen Zielen nahe ihrem HQ (ein Ziel bleibt immer neutral).
+CLW-Param_randomSeed ::: Random seed ::: Zufallswert
+CLW-Param_randomSeed_Desc ::: Random start positions: the same seed gives the same layout. 0 = a new one each war (logged). ::: Zufällige Startpositionen: derselbe Wert ergibt dieselbe Aufstellung. 0 = jeder Krieg neu (wird protokolliert).
+CLW-Param_ticketBleed ::: Ticket bleed ::: Ticketverlust
+CLW-Param_ticketBleed_Desc ::: The side holding fewer points loses tickets over time. ::: Die Seite mit weniger gehaltenen Punkten verliert mit der Zeit Tickets.
+CLW-Param_holdAllWinMin ::: Hold-all win (min) ::: Alles-halten-Sieg (Min.)
+CLW-Param_holdAllWinMin_Desc ::: Holding every point this long wins. 0 = off. ::: Wer alle Punkte so lange hält, gewinnt. 0 = aus.
+CLW-Param_fobMax ::: Max FOBs per side ::: Max. FOBs je Seite
+CLW-Param_fobMax_Desc ::: Forward bases a side may hold at once. 0 = no FOBs. ::: Vorgeschobene Basen, die eine Seite gleichzeitig halten darf. 0 = keine FOBs.
+CLW-Param_fobBuild ::: FOB build ::: FOB-Bau
+CLW-Param_fobBuild_Desc ::: instant: the FOB stands as soon as the builder arrives. timed: it is built over the build time while the builder is on site. ::: instant: die FOB steht, sobald der Bauer eintrifft. timed: sie wird über die Bauzeit errichtet, solange der Bauer vor Ort ist.
+CLW-Param_fobCost ::: FOB cost (supplies) ::: FOB-Kosten (Nachschub)
+CLW-Param_fobCost_Desc ::: Paid when the FOB is ordered; refunded when it fails before it stands. ::: Wird beim Befehl bezahlt und erstattet, wenn die FOB vor der Fertigstellung scheitert.
+CLW-Param_fobBuildSec ::: FOB build time (s) ::: FOB-Bauzeit (s)
+CLW-Param_fobBuildSec_Desc ::: Timed build: seconds of the builder on site until the FOB stands. ::: Zeitgesteuerter Bau: Sekunden des Bauers vor Ort, bis die FOB steht.
+CLW-Param_fobEarliestMin ::: FOB earliest (min) ::: FOB frühestens (Min.)
+CLW-Param_fobEarliestMin_Desc ::: No FOB before this many minutes of war time, and only once the side knows the front (an enemy contact, a contested or lost objective). 0 = no gate. ::: Keine FOB vor dieser Kriegszeit in Minuten, und erst wenn die Seite die Front kennt (ein Feindkontakt, ein umkämpftes oder verlorenes Ziel). 0 = keine Sperre.
+CLW-Param_garrisonSquads ::: HQ garrison (squads) ::: HQ-Garnison (Trupps)
+CLW-Param_garrisonSquads_Desc ::: Infantry squads per side that defend their HQ for the whole war (never counted as idle, not given other orders). ::: Infanterietrupps je Seite, die ihr HQ den ganzen Krieg verteidigen (zählen nie als untätig und erhalten keine anderen Befehle).
+CLW-Param_idleDespawnMin ::: Idle despawn (min) ::: Untätig entfernen (Min.)
+CLW-Param_idleDespawnMin_Desc ::: A squad idling at its base without an order this long is removed and its purchase cost refunded. 0 = off. ::: Ein Trupp, der so lange ohne Befehl an seiner Basis steht, wird entfernt und sein Kaufpreis erstattet. 0 = aus.
+CLW-Param_convoyMax ::: Max convoys per side ::: Max. Konvois je Seite
+CLW-Param_convoyMax_Desc ::: Supply convoys a side may have on the road at once (logistics only). ::: Nachschubkonvois, die eine Seite gleichzeitig auf der Straße haben darf (nur Logistik).
+CLW-Param_hqReserve ::: HQ reserve (supplies) ::: HQ-Reserve (Nachschub)
+CLW-Param_hqReserve_Desc ::: AI purchases (rule commander, LLM) and convoys never take the HQ stock below this. Player requests still may. 0 = no floor. ::: KI-Käufe (Regelkommandeur, LLM) und Konvois lassen den HQ-Vorrat nie unter diesen Wert sinken. Spieleranfragen dürfen. 0 = keine Untergrenze.
+CLW-Param_convoyMinLoad ::: Convoy minimum load ::: Konvoi-Mindestladung
+CLW-Param_convoyMinLoad_Desc ::: A convoy only leaves with at least this many supplies (HQ stock minus the reserve). ::: Ein Konvoi fährt nur mit mindestens so viel Nachschub los (HQ-Vorrat abzüglich der Reserve).
+CLW-Param_cap_logistics ::: Logistics ::: Logistik
+CLW-Param_cap_logistics_Desc ::: Per-base supplies and convoys. Off: one supply pool per side. ::: Nachschub je Basis und Konvois. Aus: ein gemeinsamer Nachschubvorrat je Seite.
+CLW-Param_cap_kitCost ::: Kit cost ::: Ausrüstungskosten
+CLW-Param_cap_kitCost_Desc ::: Arsenal items cost supplies. Off: kits are free. ::: Arsenal-Gegenstände kosten Nachschub. Aus: Ausrüstung ist kostenlos.
+CLW-Choice_battleSize_small ::: small ::: klein
+CLW-Choice_battleSize_medium ::: medium ::: mittel
+CLW-Choice_battleSize_large ::: large ::: groß
+CLW-Choice_startPositions_fixed ::: fixed ::: fest
+CLW-Choice_startPositions_random ::: random ::: zufällig
+CLW-Choice_startObjectives_scenario ::: scenario ::: Szenario
+CLW-Choice_startObjectives_none ::: none ::: keine
+CLW-Choice_fobBuild_instant ::: instant ::: sofort
+CLW-Choice_fobBuild_timed ::: timed ::: zeitgesteuert
+CLW-Mode_Short_Name ::: Short conflict ::: Kurzer Konflikt
+CLW-Mode_Short_Desc ::: Tickets drain with losses and from holding fewer points; win by tickets, by holding all points, or by tickets at the time limit. ::: Tickets sinken durch Verluste und durch weniger gehaltene Punkte; Sieg über Tickets, über das Halten aller Punkte oder über die Tickets bei Zeitablauf.
+CLW-Param_factionA ::: Side A ::: Seite A
+CLW-Param_factionA_Desc ::: First faction. Available: %1 ::: Erste Fraktion. Verfügbar: %1
+CLW-Param_factionB ::: Side B ::: Seite B
+CLW-Param_factionB_Desc ::: Second faction, must differ from side A. ::: Zweite Fraktion, muss sich von Seite A unterscheiden.
+CLW-Common_Close ::: Close ::: Schließen
+CLW-Setup_Title ::: Clausewitz - War setup ::: Clausewitz - Kriegs-Setup
+CLW-Setup_Intro ::: Choose the two sides and the war mode, then press Start war. ::: Wähle die beiden Seiten und den Kriegsmodus und drücke dann auf Krieg starten.
+CLW-Setup_StartWar ::: Start war ::: Krieg starten
+CLW-Setup_Defaults ::: Defaults ::: Standard
+CLW-Setup_Battle ::: BATTLE ::: SCHLACHT
+CLW-Setup_WarMode ::: WAR MODE ::: KRIEGSMODUS
+CLW-Setup_ModeLabel ::: War mode ::: Kriegsmodus
+CLW-Setup_DefaultsRestored ::: Defaults restored. ::: Standardwerte wiederhergestellt.
+CLW-Setup_NoMode ::: No war mode available. ::: Kein Kriegsmodus verfügbar.
+CLW-Setup_NoController ::: No player controller yet. ::: Noch kein Spielercontroller.
+CLW-Setup_Sending ::: Sending to the server... ::: Wird an den Server gesendet ...
+CLW-Setup_Starting ::: Starting the war... ::: Der Krieg wird gestartet ...
+CLW-Setup_Rejected ::: Rejected: %1 ::: Abgelehnt: %1
+CLW-Setup_SidesDiffer ::: The two sides must be different factions. ::: Die beiden Seiten müssen unterschiedliche Fraktionen sein.
+CLW-Setup_Failed ::: Setup menu failed to open, use /war start [mode] [key=value ...] ::: Das Setup-Menü konnte nicht geöffnet werden, nutze /war start [Modus] [Schlüssel=Wert ...]
+CLW-Setup_Waiting ::: Waiting for %1 to set up the war ::: Warte darauf, dass %1 den Krieg einrichtet
+CLW-Setup_ErrorLine ::: Setup: %1 ::: Setup: %1
+CLW-Setup_Unavailable ::: Setup is not available. ::: Das Setup ist nicht verfügbar.
+CLW-Setup_AlreadyStarted ::: The war has already started. ::: Der Krieg hat bereits begonnen.
+CLW-Setup_OwnerOnlyOpen ::: Only the setup owner may open the setup menu. ::: Nur der Setup-Besitzer darf das Setup-Menü öffnen.
+CLW-Setup_OwnerOnlyStart ::: Only the setup owner may start the war. ::: Nur der Setup-Besitzer darf den Krieg starten.
+CLW-Setup_StartFailed ::: The war could not be started (see the server log). ::: Der Krieg konnte nicht gestartet werden (siehe Serverprotokoll).
+CLW-Setup_UnknownMode ::: Unknown war mode '%1'. ::: Unbekannter Kriegsmodus '%1'.
+CLW-Setup_UnknownBattleParam ::: Unknown battle parameter %1. ::: Unbekannter Schlachtparameter %1.
+CLW-Setup_UnknownFaction ::: Unknown faction '%1'. ::: Unbekannte Fraktion '%1'.
+CLW-Setup_Usage ::: Usage: /war setup | /war start [mode] [key=value ...] ::: Verwendung: /war setup | /war start [Modus] [Schlüssel=Wert ...]
+CLW-Setup_StartAccepted ::: War start accepted. ::: Kriegsstart angenommen.
+CLW-Setup_StartRejected ::: War start rejected: %1 ::: Kriegsstart abgelehnt: %1
+CLW-Setup_NeedFactions ::: Both sides need a faction. ::: Beide Seiten brauchen eine Fraktion.
+CLW-Setup_NoFactionManager ::: No faction manager. ::: Kein Fraktionsmanager.
+CLW-Setup_FactionIgnored ::: Faction '%1' is not selectable (ignore list). ::: Die Fraktion '%1' ist nicht wählbar (Ignorierliste).
+CLW-Setup_FactionMissing ::: Faction '%1' does not exist or is not a SCR_Faction. ::: Die Fraktion '%1' existiert nicht oder ist keine SCR_Faction.
+CLW-War_Started ::: War started ::: Der Krieg hat begonnen
+CLW-War_StartedMode ::: War started: %1 (%2) %3 | %4 ::: Der Krieg hat begonnen: %1 (%2) %3 | %4
+CLW-War_PresetRefused ::: The server setup preset was refused, use the setup menu (/war setup). ::: Die Setup-Vorgabe des Servers wurde abgelehnt, nutze das Setup-Menü (/war setup).
+CLW-War_OverWinner ::: WAR OVER: %1 wins (%2) ::: KRIEG BEENDET: %1 gewinnt (%2)
+CLW-War_OverDraw ::: WAR OVER: draw (%1) ::: KRIEG BEENDET: Unentschieden (%1)
+CLW-War_EndOutOfTickets ::: %1 is out of tickets ::: %1 hat keine Tickets mehr
+CLW-War_EndHeldAll ::: %1 held all points for %2 s ::: %1 hielt alle Punkte %2 s lang
+CLW-War_EndTimeEqual ::: time limit, equal tickets ::: Zeitlimit, gleich viele Tickets
+CLW-War_EndTimeMore ::: time limit, more tickets ::: Zeitlimit, mehr Tickets
+CLW-War_HoldAll ::: %1 holds every point and wins in %2 min if it keeps them. ::: %1 hält alle Punkte und gewinnt in %2 Min., wenn es sie hält.
+CLW-Hud_Setup ::: Setup... ::: Setup ...
+CLW-Hud_WarOver ::: War over ::: Krieg beendet
+CLW-Hud_Draw ::: Draw ::: Unentschieden
+CLW-Hud_Wins ::: %1 wins ::: %1 gewinnt
+CLW-Hud_Supplies ::: Supplies ::: Nachschub
+CLW-Rematch_Results ::: Results: %1 (%2). The next round starts in %3 s: back to the setup menu, no reconnect needed. ::: Ergebnis: %1 (%2). Die nächste Runde beginnt in %3 s: zurück zum Setup-Menü, ohne neu zu verbinden.
+CLW-Rematch_ResultsDraw ::: Results: draw (%1). The next round starts in %2 s: back to the setup menu, no reconnect needed. ::: Ergebnis: Unentschieden (%1). Die nächste Runde beginnt in %2 s: zurück zum Setup-Menü, ohne neu zu verbinden.
+CLW-Rematch_Countdown ::: The next round starts in %1 s. ::: Die nächste Runde beginnt in %1 s.
+CLW-Rematch_Round ::: Round %1: back to the setup phase. The setup owner opens the menu (/war setup) or the server preset starts the war. ::: Runde %1: zurück in der Setup-Phase. Der Setup-Besitzer öffnet das Menü (/war setup) oder die Server-Vorgabe startet den Krieg.
