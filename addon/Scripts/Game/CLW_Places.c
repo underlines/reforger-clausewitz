@@ -461,6 +461,37 @@ class CLW_Places
 		return CLW_Loc.W("#CLW-Sit_SizeUnknown");
 	}
 
+	// Size level of a contact for the map marker keys "#CLW-Marker_V<vehicles>_I<infantry>" (0 = none).
+	static int InfantryLevel(int infantry)
+	{
+		if (infantry <= 0)
+			return 0;
+		if (infantry <= 2)
+			return 1;
+		if (infantry <= 5)
+			return 2;
+		if (infantry <= 12)
+			return 3;
+		if (infantry <= 40)
+			return 4;
+
+		return 5;
+	}
+
+	static int VehicleLevel(int vehicles)
+	{
+		if (vehicles <= 0)
+			return 0;
+		if (vehicles <= 1)
+			return 1;
+		if (vehicles <= 3)
+			return 2;
+		if (vehicles <= 8)
+			return 3;
+
+		return 4;
+	}
+
 	// Map marker labels (short).
 	static string InfantryShort(int infantry)
 	{

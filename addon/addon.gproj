@@ -7,8 +7,25 @@ GameProject {
  }
  Configurations {
   GameProjectConfig PC {
+   WidgetManagerSettings WidgetManagerSettings "{7D3A91C45E400010}" {
+    StringTables {
+     StringTableDefinition "{7D3A91C45E400011}" {
+      StringTableSource "{7D3A91C45E400001}Language/CLW.st"
+      Languages {
+       LanguageDefinition "{7D3A91C45E400012}" {
+        Code "en_us"
+        StringTableRuntime "{7D3A91C45E400002}Language/CLW.en_us.conf"
+       }
+       LanguageDefinition "{7D3A91C45E400013}" {
+        Code "de_de"
+        StringTableRuntime "{7D3A91C45E400003}Language/CLW.de_de.conf"
+       }
+      }
+     }
+    }
+   }
   }
-  GameProjectConfig HEADLESS {
+  GameProjectConfig HEADLESS : PC {
   }
  }
 }
