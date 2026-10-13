@@ -347,23 +347,23 @@ class CLW_ScenarioConfig
 	string CheckSides(string keyA, string keyB)
 	{
 		if (keyA.IsEmpty() || keyB.IsEmpty())
-			return "both sides need a faction";
+			return CLW_Loc.W("#CLW-Setup_NeedFactions");
 
 		if (keyA == keyB)
-			return "the two sides must be different factions";
+			return CLW_Loc.W("#CLW-Setup_SidesDiffer");
 
 		FactionManager manager = GetGame().GetFactionManager();
 		if (!manager)
-			return "no faction manager";
+			return CLW_Loc.W("#CLW-Setup_NoFactionManager");
 
 		array<string> keys = {keyA, keyB};
 		foreach (string key : keys)
 		{
 			if (IsIgnoredFaction(key))
-				return "faction '" + key + "' is not selectable (ignore list)";
+				return CLW_Loc.W("#CLW-Setup_FactionIgnored", key);
 
 			if (!SCR_Faction.Cast(manager.GetFactionByKey(key)))
-				return "faction '" + key + "' does not exist or is not a SCR_Faction";
+				return CLW_Loc.W("#CLW-Setup_FactionMissing", key);
 		}
 
 		return "";
@@ -377,7 +377,7 @@ class CLW_ScenarioConfig
 		string error = CheckSides(keyA, keyB);
 		if (!error.IsEmpty())
 		{
-			Print("CLW: scenario ApplySides refused: " + error, LogLevel.ERROR);
+			Print("CLW: scenario ApplySides refused: " + CLW_Loc.Resolve(error), LogLevel.ERROR);
 			return false;
 		}
 

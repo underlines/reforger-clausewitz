@@ -23,7 +23,7 @@ class CLW_OpenDepotAction : ScriptedUserAction
 
 	override bool GetActionNameScript(out string outName)
 	{
-		outName = "Request vehicle";
+		outName = CLW_Loc.Fmt("#CLW-Depot_RequestVehicle");
 		return true;
 	}
 
@@ -72,16 +72,25 @@ class CLW_DepotLookup
 	// Server: the requester is near the depot. False with a refusal text otherwise.
 	static bool PlayerNear(int playerId, CLW_ServiceInstance depot, out string refusal)
 	{
+		string refusalWire;
+		return PlayerNearEx(playerId, depot, refusal, refusalWire);
+	}
+
+	// Same, plus the refusal as a CLW_Loc wire for the player.
+	static bool PlayerNearEx(int playerId, CLW_ServiceInstance depot, out string refusal, out string refusalWire)
+	{
 		vector playerPos;
 		if (!CLW_RequestService.PlayerPos(playerId, playerPos))
 		{
 			refusal = "you are not deployed";
+			refusalWire = CLW_Loc.W("#CLW-Req_NotDeployed");
 			return false;
 		}
 
 		if (vector.Distance(playerPos, depot.m_Entity.GetOrigin()) > USE_M)
 		{
 			refusal = "you are too far from the vehicle depot";
+			refusalWire = CLW_Loc.W("#CLW-Req_DepotTooFar");
 			return false;
 		}
 

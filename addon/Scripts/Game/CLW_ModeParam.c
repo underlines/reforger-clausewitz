@@ -170,7 +170,7 @@ class CLW_ModeParam
 		else if (m_eType == TYPE_CHOICE)
 			typeName = "choice";
 
-		string json = "{\"id\":\"" + Escape(m_sId) + "\",\"label\":\"" + Escape(m_sLabel) + "\",\"description\":\"" + Escape(m_sDescription) + "\",\"type\":\"" + typeName + "\"";
+		string json = "{\"id\":\"" + Escape(m_sId) + "\",\"label\":\"" + Escape(CLW_Loc.Resolve(m_sLabel)) + "\",\"description\":\"" + Escape(CLW_Loc.Resolve(m_sDescription)) + "\",\"type\":\"" + typeName + "\"";
 		json += ",\"min\":" + m_fMin.ToString() + ",\"max\":" + m_fMax.ToString() + ",\"step\":" + m_fStep.ToString();
 		if (m_eType == TYPE_BOOL)
 			json += ",\"value\":" + BoolText(GetBool());

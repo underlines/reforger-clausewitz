@@ -42,6 +42,15 @@ class CLW_RequestKind
 		return kind == VEHICLE || kind == SQUAD || kind == RESUPPLY || kind == REINFORCE || kind == RECON;
 	}
 
+	// The kind as a message param: the key of its label ("#CLW-Req_Kind_squad"); an unknown word typed by the player stays as it is.
+	static string LabelKey(string kind)
+	{
+		if (IsKnown(kind))
+			return "#CLW-Req_Kind_" + kind;
+
+		return kind;
+	}
+
 	static string ActionOf(string kind)
 	{
 		if (kind == VEHICLE)
@@ -585,13 +594,13 @@ class CLW_RequestService
 	}
 
 	// Fix A: a terminal only serves requesters of its own side. The side was bound when the terminal was spawned. True = ok, baseId set.
-	protected static bool CheckTerminal(int playerId, vector terminalPos, string faction, out string baseId, out string refusal)
+	protected static bool CheckTerminal(int playerId, vector terminalPos, string faction, out string baseId, out string refusal, out string refusalWire)
 	{
 		// WP11: the position may be a vehicle depot of the requester's side (the depot menu); the requester must stand near it
 		CLW_ServiceInstance depot = CLW_DepotLookup.FindAt(faction, terminalPos);
 		if (depot)
 		{
-			if (!CLW_DepotLookup.PlayerNear(playerId, depot, refusal))
+			if (!CLW_DepotLookup.PlayerNearEx(playerId, depot, refusal, refusalWire))
 			{
 				Print(string.Format("CLW: depot request player=%1 refused at %2 %3: %4", playerId, depot.m_sSide, depot.m_sBase, refusal), LogLevel.NORMAL);
 				return false;
@@ -605,6 +614,7 @@ class CLW_RequestService
 		if (!terminal)
 		{
 			refusal = "that request terminal is not in service";
+			refusalWire = CLW_Loc.W("#CLW-Req_TerminalOut");
 			Print(string.Format("CLW: request terminal at %1 unknown or removed: refused", terminalPos), LogLevel.NORMAL);
 			return false;
 		}
@@ -612,6 +622,7 @@ class CLW_RequestService
 		if (terminal.m_sSide != faction)
 		{
 			refusal = "this terminal belongs to " + terminal.m_sSide + ", you are " + faction;
+			refusalWire = CLW_Loc.W("#CLW-Req_TerminalWrongSide", CLW_Loc.FactionName(terminal.m_sSide), CLW_Loc.FactionName(faction));
 			Print(string.Format("CLW: request terminal %1 %2 refused a %3 requester", terminal.m_sSide, terminal.m_sBase, faction), LogLevel.NORMAL);
 			return false;
 		}
@@ -627,6 +638,7 @@ class CLW_RequestService
 		string role = RoleOf(playerId);
 		bool granted;
 		string reply;
+		string replyWire;	// the same for the requester as a CLW_Loc wire (formatted on his client)
 		string terminalBase;	// base the request terminal belongs to ("" = chat request = HQ)
 		CLW_WarState war = CLW_GameMode.GetWarState();
 		if (kind == "help" || kind == "list" || kind == "?")
@@ -638,16 +650,19 @@ class CLW_RequestService
 		if (!CLW_RequestKind.IsKnown(kind))
 		{
 			reply = "unknown request '" + kind + "'. Use /request vehicle|squad|resupply|reinforce|recon";
+			replyWire = CLW_Loc.W("#CLW-Req_Unknown", kind);
 		}
 		else if (!war || !war.IsRunning())
 		{
 			reply = "the war has not started yet";
+			replyWire = CLW_Loc.W("#CLW-Req_NotStarted");
 		}
 		else if (faction.IsEmpty())
 		{
 			reply = "you are not on a side";
+			replyWire = CLW_Loc.W("#CLW-Req_NoSide");
 		}
-		else if (terminalPos != vector.Zero && !CheckTerminal(playerId, terminalPos, faction, terminalBase, reply))
+		else if (terminalPos != vector.Zero && !CheckTerminal(playerId, terminalPos, faction, terminalBase, reply, replyWire))
 		{
 			// fix A: reply holds the refusal (unknown terminal, or it belongs to the other side)
 		}
@@ -673,7 +688,11 @@ class CLW_RequestService
 			string result;
 			granted = CLW_ActionRegistry.Get().Run(call, result);
 			reply = result;
+			replyWire = call.m_sResultWire;
 		}
+
+		if (replyWire.IsEmpty())
+			replyWire = reply;	// no wire from the executor: the English text is shown as it is
 
 		CLW_RequestRecord record = new CLW_RequestRecord();
 		s_iSeq++;
@@ -696,9 +715,13 @@ class CLW_RequestService
 			verdict = "GRANTED";
 
 		Print(string.Format("CLW: request #%1 player=%2(%3) faction=%4 role=%5 kind=%6 arg='%7' -> %8: %9", record.m_iId, playerId, record.m_sName, faction, role, kind, arg, verdict, reply), LogLevel.NORMAL);
-		string answer = "HQ: request " + kind + " refused - " + reply;
+		string answer = "HQ: request " + kind + " refused - " + reply;	// English: the return value (callers, log)
+		string answerWire = CLW_Loc.W("#CLW-Req_Refused", CLW_RequestKind.LabelKey(kind), replyWire);
 		if (granted)
+		{
 			answer = "HQ: " + reply;
+			answerWire = CLW_Loc.W("#CLW-Req_Granted", replyWire);
+		}
 
 		// M4 WP4: vehicle delivery feedback. The executor tracked the new vehicle (TrackVehicle) just before it returned.
 		if (granted && kind == CLW_RequestKind.VEHICLE && !s_aIssuedVehicles.IsEmpty())
@@ -707,11 +730,12 @@ class CLW_RequestService
 			if (delivered)
 			{
 				answer = "HQ: vehicle delivered, grid " + CLW_Places.Grid(delivered.GetOrigin()) + ". " + reply;
+				answerWire = CLW_Loc.W("#CLW-Req_VehicleDelivered", CLW_Places.Grid(delivered.GetOrigin()), replyWire);
 				CLW_VehicleDelivery.Track(playerId, faction, delivered);
 			}
 		}
 
-		Answer(playerId, answer, true);
+		Answer(playerId, answerWire, true);
 		return answer;
 	}
 
@@ -724,38 +748,40 @@ class CLW_RequestService
 		CLW_WarState war = CLW_GameMode.GetWarState();
 		if (faction.IsEmpty() || !war || !war.IsRunning())
 		{
-			Answer(playerId, "HQ: requests are available once the war is running and you are on a side.", true);
+			Answer(playerId, CLW_Loc.W("#CLW-Req_MenuUnavailable"), true);
 			return;
 		}
 
 		Print(string.Format("CLW: request menu shown to player=%1 faction=%2 role=%3", playerId, faction, role), LogLevel.NORMAL);
-		Answer(playerId, "HQ requests (you are a " + role + ", supplies " + war.GetSupplies(faction) + "):", false);
+		Answer(playerId, CLW_Loc.W("#CLW-Req_MenuHeader", "#CLW-Req_Role_" + role, CLW_Loc.N(war.GetSupplies(faction))), false);
 		string line;
 		CLW_ForceEntry vehicle = PickVehicle(faction, "");
-		line = "/request vehicle [type] - empty vehicle at the depot (near you when you are far from a base)";
 		if (vehicle)
-			line += ", default " + vehicle.GetVehicleName() + " cost " + VehicleCost(vehicle);
+			line = CLW_Loc.W("#CLW-Req_MenuVehicleDefault", vehicle.GetVehicleName(), CLW_Loc.N(VehicleCost(vehicle)));
+		else
+			line = CLW_Loc.W("#CLW-Req_MenuVehicle");
 		Answer(playerId, line, false);
 
 		CLW_ForceEntry team = PickInfantry(faction, "");
-		line = "/request squad [type] - AI team joins your squad (squad leaders)";
 		if (team)
-			line += ", default " + team.m_sName + " cost " + team.m_iCost;
+			line = CLW_Loc.W("#CLW-Req_MenuSquadDefault", team.m_sName, CLW_Loc.N(team.m_iCost));
+		else
+			line = CLW_Loc.W("#CLW-Req_MenuSquad");
 		Answer(playerId, line, false);
-		Answer(playerId, "/request resupply - ammo box at your position near a base, else at HQ, cost " + CLW_RequestConfig.RESUPPLY_COST, false);
-		Answer(playerId, "/request reinforce - HQ sends the nearest free group to you (squad leaders, free)", false);
-		Answer(playerId, "/request recon <grid|here|objective> - HQ sends a group to look (squad leaders, free)", false);
-		Answer(playerId, "/report <count> <inf|veh|armor> <dist m> <dir> - report enemy contact to HQ", false);
+		Answer(playerId, CLW_Loc.W("#CLW-Req_MenuResupply", CLW_Loc.N(CLW_RequestConfig.RESUPPLY_COST)), false);
+		Answer(playerId, CLW_Loc.W("#CLW-Req_MenuReinforce"), false);
+		Answer(playerId, CLW_Loc.W("#CLW-Req_MenuRecon"), false);
+		Answer(playerId, CLW_Loc.W("#CLW-Req_MenuReport"), false);
 		array<string> types = {};
 		ListTypes(faction, types);
 		if (!types.IsEmpty())
 		{
-			line = "types:";
+			string typeList;
 			foreach (string text : types)
 			{
-				line += " " + text;
+				typeList += " " + text;
 			}
-			Answer(playerId, line, false);
+			Answer(playerId, CLW_Loc.W("#CLW-Req_MenuTypes", typeList), false);
 		}
 	}
 
@@ -782,7 +808,7 @@ class CLW_RequestService
 
 	// ---- answers ----
 
-	// Chat line (and a hint when asked) to the requester.
+	// Chat line (and a hint when asked) to the requester. text: plain or a CLW_Loc wire (formatted on the client).
 	static void Answer(int playerId, string text, bool hint)
 	{
 		if (playerId <= 0)
@@ -808,16 +834,16 @@ class CLW_RequestService
 		if (!squad)
 		{
 			Print(string.Format("CLW: request squad %1 (%2) is ready but player %3 has no squad any more: it stays with HQ", unitId, typeName, playerId), LogLevel.WARNING);
-			Answer(playerId, "HQ: " + typeName + " arrived at the base, but you have no squad to join; HQ keeps it.", true);
+			Answer(playerId, CLW_Loc.W("#CLW-Req_TeamNoSquad", typeName), true);
 			return;
 		}
 
 		int moved = CLW_PlayerSquad.AdoptAI(squad, group, playerId);
 		Print(string.Format("CLW: request squad %1 (%2) READY: %3 AI joined the squad of player %4", unitId, typeName, moved, playerId), LogLevel.NORMAL);
 		if (moved > 0)
-			Answer(playerId, "HQ: " + typeName + " (" + moved + " men) has joined your squad.", true);
+			Answer(playerId, CLW_Loc.W("#CLW-Req_TeamJoined", typeName, CLW_Loc.N(moved)), true);
 		else
-			Answer(playerId, "HQ: " + typeName + " arrived but nobody could join your squad.", true);
+			Answer(playerId, CLW_Loc.W("#CLW-Req_TeamNobody", typeName), true);
 	}
 
 	// ---- costs for the terminal action labels ----

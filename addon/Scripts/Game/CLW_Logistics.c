@@ -1118,7 +1118,7 @@ class CLW_Convoys
 			if (war)
 				war.PushEvent(convoy.m_sSide, string.Format("convoy %1 to %2 LOST near %3 with %4 supplies: %5", convoy.m_sId, convoy.m_sTo, CLW_Places.Grid(convoy.m_vLastPos), lostCargo, why));
 
-			CLW_Debug.Announce(string.Format("%1 supply convoy %2 lost with %3 supplies", convoy.m_sSide, convoy.m_sId, lostCargo));
+			CLW_Debug.Announce(CLW_Loc.W("#CLW-Log_ConvoyLost", CLW_Loc.FactionName(convoy.m_sSide), convoy.m_sId, CLW_Loc.N(lostCargo)));
 			convoy.m_iCargo = 0;
 		}
 		else if (war)

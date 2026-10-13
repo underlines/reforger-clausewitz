@@ -53,7 +53,7 @@ class CLW_SetupServer
 	static string Submit(int playerId, string battleJson, string modeId, string modeJson)
 	{
 		if (!s_Instance)
-			return "setup is not available";
+			return CLW_Loc.W("#CLW-Setup_Unavailable");
 
 		return s_Instance.DoSubmit(playerId, battleJson, modeId, modeJson);
 	}
@@ -62,7 +62,7 @@ class CLW_SetupServer
 	static string ChatCommand(int playerId, string args)
 	{
 		if (!s_Instance)
-			return "setup is not available";
+			return CLW_Loc.W("#CLW-Setup_Unavailable");
 
 		return s_Instance.DoChat(playerId, args);
 	}
@@ -165,12 +165,12 @@ class CLW_SetupServer
 	protected void Announce()
 	{
 		m_bAnnounced = true;
-		string text = "War started";
+		string text = CLW_Loc.W("#CLW-War_Started");
 		CLW_WarMode mode = m_War.GetMode();
 		if (mode)
-			text = "War started: " + mode.GetName() + " (" + mode.GetId() + ") " + mode.ValuesText() + " | " + m_sBattleText;
+			text = CLW_Loc.W("#CLW-War_StartedMode", mode.GetName(), mode.GetId(), mode.ValuesText(), m_sBattleText);
 
-		Print("CLW: setup announce: " + text, LogLevel.NORMAL);
+		Print("CLW: setup announce: " + CLW_Loc.Resolve(text), LogLevel.NORMAL);
 		PlayerManager players = GetGame().GetPlayerManager();
 		if (!players)
 			return;
@@ -263,13 +263,13 @@ class CLW_SetupServer
 
 		if (s_Instance.m_War.GetPhase() != CLW_EWarPhase.SETUP)
 		{
-			SendResult(playerId, false, "the war has already started");
+			SendResult(playerId, false, CLW_Loc.W("#CLW-Setup_AlreadyStarted"));
 			return;
 		}
 
 		if (!s_Instance.IsAllowed(playerId))
 		{
-			SendResult(playerId, false, "only the setup owner may open the setup menu");
+			SendResult(playerId, false, CLW_Loc.W("#CLW-Setup_OwnerOnlyOpen"));
 			return;
 		}
 
@@ -300,7 +300,7 @@ class CLW_SetupServer
 		string error = Check(playerId, battleJson, modeId, modeJson);
 		if (!error.IsEmpty())
 		{
-			Print("CLW: setup REJECTED: " + error, LogLevel.WARNING);
+			Print("CLW: setup REJECTED: " + CLW_Loc.Resolve(error), LogLevel.WARNING);
 			return error;
 		}
 
@@ -314,7 +314,7 @@ class CLW_SetupServer
 		if (!m_War.StartWar(modeId, modeJson, playerId, keyA, keyB))
 		{
 			Print("CLW: setup REJECTED: StartWar refused", LogLevel.WARNING);
-			return "the war could not be started (see the server log)";
+			return CLW_Loc.W("#CLW-Setup_StartFailed");
 		}
 
 		m_sBattleText = m_Scenario.GetFactionKey(0) + " vs " + m_Scenario.GetFactionKey(1);
@@ -327,10 +327,10 @@ class CLW_SetupServer
 	protected string Check(int playerId, string battleJson, string modeId, string modeJson)
 	{
 		if (m_War.GetPhase() != CLW_EWarPhase.SETUP)
-			return "the war has already started";
+			return CLW_Loc.W("#CLW-Setup_AlreadyStarted");
 
 		if (!IsAllowed(playerId))
-			return "only the setup owner may start the war";
+			return CLW_Loc.W("#CLW-Setup_OwnerOnlyStart");
 
 		string keyA;
 		string keyB;
@@ -343,7 +343,7 @@ class CLW_SetupServer
 
 		CLW_WarMode mode = FindMode(modeId);
 		if (!mode)
-			return "unknown war mode '" + modeId + "'";
+			return CLW_Loc.W("#CLW-Setup_UnknownMode", modeId);
 
 		if (!mode.ApplyParamsJson(modeJson, error))		// no-op on failure; StartWar applies the same values again
 			return error;
@@ -370,7 +370,7 @@ class CLW_SetupServer
 					keyB = value;
 				else
 				{
-					error = "unknown battle parameter " + key;
+					error = CLW_Loc.W("#CLW-Setup_UnknownBattleParam", key);
 					return false;
 				}
 			}
@@ -381,19 +381,19 @@ class CLW_SetupServer
 		CollectFactions(keys, names);
 		if (!keys.Contains(keyA))
 		{
-			error = "unknown faction '" + keyA + "'";
+			error = CLW_Loc.W("#CLW-Setup_UnknownFaction", keyA);
 			return false;
 		}
 
 		if (!keys.Contains(keyB))
 		{
-			error = "unknown faction '" + keyB + "'";
+			error = CLW_Loc.W("#CLW-Setup_UnknownFaction", keyB);
 			return false;
 		}
 
 		if (keyA == keyB)
 		{
-			error = "the two sides must be different factions";
+			error = CLW_Loc.W("#CLW-Setup_SidesDiffer");
 			return false;
 		}
 
@@ -423,7 +423,7 @@ class CLW_SetupServer
 		array<string> tokens = {};
 		args.Split(" ", tokens, true);
 		if (tokens.IsEmpty())
-			return "usage: /war setup | /war start [mode] [key=value ...]";
+			return CLW_Loc.W("#CLW-Setup_Usage");
 
 		string sub = tokens[0];
 		sub.ToLower();
@@ -434,7 +434,7 @@ class CLW_SetupServer
 		}
 
 		if (sub != "start")
-			return "usage: /war setup | /war start [mode] [key=value ...]";
+			return CLW_Loc.W("#CLW-Setup_Usage");
 
 		string modeId;
 		string battleJson;
@@ -474,9 +474,9 @@ class CLW_SetupServer
 		Print("CLW: setup chat start from player " + playerId + ": " + args, LogLevel.NORMAL);
 		string error = DoSubmit(playerId, battleJson, modeId, modeJson);
 		if (error.IsEmpty())
-			return "war start accepted";
+			return CLW_Loc.W("#CLW-Setup_StartAccepted");
 
-		return "war start rejected: " + error;
+		return CLW_Loc.W("#CLW-Setup_StartRejected", error);
 	}
 
 	// ---- factions ----
@@ -528,7 +528,7 @@ class CLW_SetupServer
 		{
 			if (i > 0)
 				list += ", ";
-			list += key + " = " + names[i];
+			list += key;	// the faction names are in the selector itself (translated there)
 		}
 
 		// defaults: the server preset's sides when they exist here (CLW_SetupPreset.c), else the scenario sides
@@ -540,8 +540,8 @@ class CLW_SetupServer
 		if (preset && keys.Contains(preset.m_sFactionB))
 			defaultB = preset.m_sFactionB;
 
-		outParams.Insert(CLW_ModeParam.CreateChoice(PARAM_FACTION_A, "Side A", "First faction. Available: " + list, keys, defaultA));
-		outParams.Insert(CLW_ModeParam.CreateChoice(PARAM_FACTION_B, "Side B", "Second faction, must differ from side A.", keys, defaultB));
+		outParams.Insert(CLW_ModeParam.CreateChoice(PARAM_FACTION_A, "#CLW-Param_factionA", CLW_Loc.W("#CLW-Param_factionA_Desc", list), keys, defaultA));
+		outParams.Insert(CLW_ModeParam.CreateChoice(PARAM_FACTION_B, "#CLW-Param_factionB", "#CLW-Param_factionB_Desc", keys, defaultB));
 	}
 
 	// ---- payloads ----
@@ -564,7 +564,7 @@ class CLW_SetupServer
 	protected static string Clean(string text)
 	{
 		text.Replace("\t", " ");
-		text.Replace("\n", " ");
+		text.Replace("\n", " ");	// a CLW_Loc wire has no raw tabs or line breaks (escaped), so wires pass through unchanged
 		text.Replace("\r", " ");
 		return text;
 	}

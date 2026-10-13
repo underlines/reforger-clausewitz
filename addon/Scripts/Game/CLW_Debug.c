@@ -2,6 +2,8 @@
 // web dashboard (CLW_RemoteCommander), and shows it in the players' chat ONLY when the server owner switched it on
 // ($profile:Clausewitz/overrides.json  {"debugChat":true}, default off, see dev/notes/overrides.md).
 // Announce() / Show() are real player-facing UX (setup menu messages, /war replies, war start/over, popup fallback): never gated.
+// Announce(msg) and Show(msg) take plain text OR a CLW_Loc wire (key + params, see CLW_Loc.c): the wire travels through CLW_RpcShow and
+// is rendered on the client in the player language (CLW_Loc.Resolve).
 // Chat delivery is an owner RPC on SCR_PlayerController, see CLW_DebugPlayerController.c.
 
 // Shape of the optional flag in overrides.json (other keys of the file are ignored; absent = false).
@@ -60,7 +62,7 @@ class CLW_Debug
 	// Player-facing server announcement: log + chat line for every player, always.
 	static void Announce(string msg)
 	{
-		Print("CLW: " + msg, LogLevel.NORMAL);
+		Print("CLW: " + CLW_Loc.Resolve(msg), LogLevel.NORMAL);
 		if (!Replication.IsServer())
 			return;
 
@@ -139,6 +141,6 @@ class CLW_Debug
 	{
 		SCR_ChatPanelManager chat = SCR_ChatPanelManager.GetInstance();
 		if (chat)
-			chat.ShowHelpMessage("CLW: " + msg);
+			chat.ShowHelpMessage("CLW: " + CLW_Loc.Resolve(msg));
 	}
 }

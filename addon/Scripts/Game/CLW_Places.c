@@ -398,6 +398,100 @@ class CLW_Places
 		return "an unidentified element";
 	}
 
+	// ---- the same words as keys (player-facing text: the client formats them, see CLW_Loc.c) ----
+
+	static string MagnitudeKey(int score)
+	{
+		if (score <= 4)
+			return "#CLW-Sit_Mag_1";
+		if (score <= 12)
+			return "#CLW-Sit_Mag_2";
+		if (score <= 30)
+			return "#CLW-Sit_Mag_3";
+
+		return "#CLW-Sit_Mag_4";
+	}
+
+	// Compass direction as an adjective key: northern, north-eastern, ...
+	static string CompassAdjectiveKey(int index)
+	{
+		return "#CLW-Sit_CompassAdj_" + index.ToString();
+	}
+
+	static string InfantryWire(int infantry)
+	{
+		if (infantry <= 2)
+			return CLW_Loc.W("#CLW-Sit_Inf_1");
+		if (infantry <= 5)
+			return CLW_Loc.W("#CLW-Sit_Inf_2");
+		if (infantry <= 12)
+			return CLW_Loc.W("#CLW-Sit_Inf_3");
+		if (infantry <= 40)
+			return CLW_Loc.W("#CLW-Sit_Inf_4");
+
+		return CLW_Loc.W("#CLW-Sit_Inf_5");
+	}
+
+	static string VehicleWire(int vehicles)
+	{
+		if (vehicles <= 1)
+			return CLW_Loc.W("#CLW-Sit_Veh_1");
+		if (vehicles <= 3)
+			return CLW_Loc.W("#CLW-Sit_Veh_2");
+		if (vehicles <= 8)
+			return CLW_Loc.W("#CLW-Sit_Veh_3");
+
+		return CLW_Loc.W("#CLW-Sit_Veh_4");
+	}
+
+	// SizeText as a wire.
+	static string SizeWire(int vehicles, int infantry, int count)
+	{
+		if (vehicles > 0 && infantry >= 6)
+			return CLW_Loc.W("#CLW-Sit_SizeWithVehicles", InfantryWire(infantry));
+		if (vehicles > 0 && infantry > 0)
+			return CLW_Loc.W("#CLW-Sit_SizeWithDismounts", VehicleWire(vehicles));
+		if (vehicles > 0)
+			return VehicleWire(vehicles);
+		if (infantry > 0)
+			return InfantryWire(infantry);
+		if (count > 0)
+			return InfantryWire(count);
+
+		return CLW_Loc.W("#CLW-Sit_SizeUnknown");
+	}
+
+	// Size level of a contact for the map marker keys "#CLW-Marker_V<vehicles>_I<infantry>" (0 = none).
+	static int InfantryLevel(int infantry)
+	{
+		if (infantry <= 0)
+			return 0;
+		if (infantry <= 2)
+			return 1;
+		if (infantry <= 5)
+			return 2;
+		if (infantry <= 12)
+			return 3;
+		if (infantry <= 40)
+			return 4;
+
+		return 5;
+	}
+
+	static int VehicleLevel(int vehicles)
+	{
+		if (vehicles <= 0)
+			return 0;
+		if (vehicles <= 1)
+			return 1;
+		if (vehicles <= 3)
+			return 2;
+		if (vehicles <= 8)
+			return 3;
+
+		return 4;
+	}
+
 	// Map marker labels (short).
 	static string InfantryShort(int infantry)
 	{

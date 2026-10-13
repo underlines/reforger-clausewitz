@@ -2,7 +2,8 @@
 // The listen-server host never uses the RPC: CLW_MissionBoard.SendPopup calls CLW_MsnShowLocal directly.
 modded class SCR_PlayerController
 {
-	// Server side: show a popup (title, second line, sound event name or "") to this controller's owner.
+	// Server side: show a popup (title, second line, sound event name or "") to this controller's owner. title / text: plain or a
+	// CLW_Loc wire.
 	void CLW_MsnSend(string title, string text, string sound)
 	{
 		Rpc(CLW_MsnRpcAsk_Show, title, text, sound);
@@ -20,11 +21,12 @@ modded class SCR_PlayerController
 		SCR_PopUpNotification popup = SCR_PopUpNotification.GetInstance();
 		if (!popup)
 		{
-			CLW_Debug.Show(title + ": " + text);	// no popup system: chat line instead
+			CLW_Debug.Show(CLW_Loc.Resolve(title) + ": " + CLW_Loc.Resolve(text));	// no popup system: chat line instead
 			return;
 		}
 
+		// title / text are plain text or CLW_Loc wires (key + params from the server), formatted here in the player language
 		// PopupMsg(text, duration, text2, prio, param1..4, text2param1..4, sound)  [verify] sound is a SCR_SoundEvent name
-		popup.PopupMsg(title, 8, text, -1, "", "", "", "", "", "", "", "", sound);
+		popup.PopupMsg(CLW_Loc.Resolve(title), 8, CLW_Loc.Resolve(text), -1, "", "", "", "", "", "", "", "", sound);
 	}
 }

@@ -54,7 +54,7 @@ class CLW_WarState
 		CLW_WarModeRegistry.CreateAll(scenario, m_aModes);
 		foreach (CLW_WarMode mode : m_aModes)
 		{
-			Print(string.Format("CLW: war mode available id=%1 name='%2' defaults=%3", mode.GetId(), mode.GetName(), mode.ValuesText()), LogLevel.NORMAL);
+			Print(string.Format("CLW: war mode available id=%1 name='%2' defaults=%3", mode.GetId(), CLW_Loc.Resolve(mode.GetName()), mode.ValuesText()), LogLevel.NORMAL);
 		}
 
 		if (m_Points)
@@ -185,7 +185,7 @@ class CLW_WarState
 			string sidesError = m_Scenario.CheckSides(factionA, factionB);
 			if (!sidesError.IsEmpty())
 			{
-				Print("CLW: war StartWar refused: " + sidesError, LogLevel.WARNING);
+				Print("CLW: war StartWar refused: " + CLW_Loc.Resolve(sidesError), LogLevel.WARNING);
 				return false;
 			}
 
@@ -206,7 +206,7 @@ class CLW_WarState
 		mode.OnWarStart(this);
 		LogEngineLimitHint();
 		GetGame().GetCallqueue().CallLater(Tick, CLW_WarConfig.WAR_TICK_MS, true);
-		CLW_Debug.Say(string.Format("WAR STARTED mode=%1 (%2) by player %3 values=%4", mode.GetId(), mode.GetName(), byPlayerId, m_sStartedParams));
+		CLW_Debug.Say(string.Format("WAR STARTED mode=%1 (%2) by player %3 values=%4", mode.GetId(), CLW_Loc.Resolve(mode.GetName()), byPlayerId, m_sStartedParams));
 		LogSummary();
 		if (m_OnWarStarted)
 			m_OnWarStarted.Invoke();
@@ -293,7 +293,7 @@ class CLW_WarState
 
 		// never fall back to defaults silently: the owner asked for these settings; the setup menu stays open
 		Print("CLW: ERROR setup preset REFUSED (see the line above), waiting for the setup menu", LogLevel.ERROR);
-		CLW_Debug.Announce("server setup preset was refused, use the setup menu (/war setup)");
+		CLW_Debug.Announce(CLW_Loc.W("#CLW-War_PresetRefused"));
 	}
 
 	// The preset's values become the menu defaults (mode params) so a human sees and can adjust them before the auto start.
@@ -441,7 +441,7 @@ class CLW_WarState
 		return m_Points && m_Points.HoldsAll(factionKey);
 	}
 
-	// Modes call this from CheckEnd to explain the result in the log.
+	// Modes call this from CheckEnd to explain the result (a CLW_Loc wire: it is part of the WAR OVER / results announcement).
 	void SetEndReasonText(string text)
 	{
 		m_sEndReason = text;
@@ -812,7 +812,11 @@ class CLW_WarState
 		NotifyStatus();
 		GetGame().GetCallqueue().Remove(Tick);
 		CLW_Services.OnWarEnded();
-		CLW_Debug.Announce(string.Format("WAR OVER: winner=%1 (%2)", winnerKey, why));
+		Print(string.Format("CLW: WAR OVER: winner=%1 (%2)", winnerKey, CLW_Loc.Resolve(why)), LogLevel.NORMAL);
+		if (winnerKey.IsEmpty())
+			CLW_Debug.Announce(CLW_Loc.W("#CLW-War_OverDraw", why));
+		else
+			CLW_Debug.Announce(CLW_Loc.W("#CLW-War_OverWinner", CLW_Loc.FactionName(winnerKey), why));
 		LogSummary();
 
 		int winnerIndex = -1;

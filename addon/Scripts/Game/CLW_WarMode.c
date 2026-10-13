@@ -145,7 +145,7 @@ class CLW_WarMode
 	// {"id":"short","name":"..","description":"..","params":[{...}]}
 	string ToJson()
 	{
-		string json = "{\"id\":\"" + CLW_ModeParam.Escape(GetId()) + "\",\"name\":\"" + CLW_ModeParam.Escape(GetName()) + "\",\"description\":\"" + CLW_ModeParam.Escape(GetDescription()) + "\",\"params\":[";
+		string json = "{\"id\":\"" + CLW_ModeParam.Escape(GetId()) + "\",\"name\":\"" + CLW_ModeParam.Escape(CLW_Loc.Resolve(GetName())) + "\",\"description\":\"" + CLW_ModeParam.Escape(CLW_Loc.Resolve(GetDescription())) + "\",\"params\":[";
 		foreach (int i, CLW_ModeParam param : m_aParams)
 		{
 			if (i > 0)

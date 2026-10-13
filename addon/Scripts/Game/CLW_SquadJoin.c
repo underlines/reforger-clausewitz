@@ -162,9 +162,9 @@ class CLW_SquadJoin
 		if (distance <= CLW_WarConfig.SQUAD_FAR_HINT_M)
 			return;
 
-		string text = string.Format("%1 is %2 %3 of you", CLW_SquadGroups.DisplayName(group), DistanceText(distance), CompassText(delta));
-		Print("CLW: squad join: player " + playerId + " joined a far squad: " + text, LogLevel.NORMAL);
-		CLW_MissionBoard.SendPopup(playerId, "Squad", text, "");
+		string text = CLW_Loc.W("#CLW-Squad_Far", CLW_SquadGroups.DisplayName(group), DistanceText(distance), CompassText(delta));
+		Print("CLW: squad join: player " + playerId + " joined a far squad: " + CLW_Loc.Resolve(text), LogLevel.NORMAL);
+		CLW_MissionBoard.SendPopup(playerId, CLW_Loc.W("#CLW-Squad_Title"), text, "");
 	}
 
 	static string DistanceText(float meters)
@@ -182,7 +182,7 @@ class CLW_SquadJoin
 		if (angle < 0)
 			angle += 360;
 
-		array<string> names = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
+		array<string> names = {"#CLW-Compass_N", "#CLW-Compass_NE", "#CLW-Compass_E", "#CLW-Compass_SE", "#CLW-Compass_S", "#CLW-Compass_SW", "#CLW-Compass_W", "#CLW-Compass_NW"};
 		int index = Math.Round(angle / 45);	// Math.Round returns float: no % on floats in Enforce
 		index = index % 8;
 		return names[index];

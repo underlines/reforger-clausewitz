@@ -34,7 +34,7 @@ class CLW_Sides
 		string error = scenario.CheckSides(keyA, keyB);
 		if (!error.IsEmpty())
 		{
-			Print("CLW: sides refused: " + error, LogLevel.ERROR);
+			Print("CLW: sides refused: " + CLW_Loc.Resolve(error), LogLevel.ERROR);
 			return false;
 		}
 

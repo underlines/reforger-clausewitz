@@ -26,7 +26,7 @@ GenericEntity {
       "default"
      }
      UIInfo UIInfo "{3E90B5C17A4D2F86}" {
-      Name "Open HQ menu"
+      Name "#CLW-Terminal_OpenHq"
      }
     }
     CLW_RequestSquadAction "{0103BCCA017D7615}" {
@@ -34,7 +34,7 @@ GenericEntity {
       "default"
      }
      UIInfo UIInfo "{44B0DE51754D4703}" {
-      Name "Request squad"
+      Name "#CLW-Terminal_RequestSquad"
      }
     }
     CLW_RequestVehicleAction "{CBD13CCF8C92020C}" {
@@ -42,7 +42,7 @@ GenericEntity {
       "default"
      }
      UIInfo UIInfo "{2E751ECEB08A2AAA}" {
-      Name "Request vehicle"
+      Name "#CLW-Depot_RequestVehicle"
      }
     }
     CLW_RequestResupplyAction "{D06A38E328B15B55}" {
@@ -50,7 +50,7 @@ GenericEntity {
       "default"
      }
      UIInfo UIInfo "{544F083192D55F75}" {
-      Name "Request resupply"
+      Name "#CLW-Terminal_RequestResupply"
      }
     }
    }

@@ -5,10 +5,15 @@
 // Everything (names, places, sizes) comes from the scenario, the control points, the map and the registry.
 //
 // Sections: headline = BLUF, situation, enemy (shown as "Intel"), mission (one SMEAC statement), execution, logistics.
+//
+// i18n (design: dev/notes/i18n-design.md): the server never writes finished prose. Every sentence is a CLW_Loc wire (stringtable key
+// "#CLW-Sit_..." + params, see CLW_Loc.c); a section body is one wire per line and a paragraph is several wires joined with
+// "#CLW-Sit_Join". The client formats them in the player language (CLW_SitrepClient); the sidecar JSON / dashboard text is rendered
+// on the server (CLW_Sitrep.ToJson, English). Place names, objective names and ids are plain params; faction words never appear.
 class CLW_SitrepArea
 {
 	string m_sKey;
-	string m_sShort;			// "Timber Hub (C)" / "Newfield" / "grid 262-288"
+	string m_sShort;			// "Timber Hub (C)" / "Newfield" / the wire "grid 262-288"
 	CLW_ControlPoint m_Point;	// objective of the area, null for a place / grid area
 	int m_iVehicles;
 	int m_iInfantry;
@@ -21,7 +26,7 @@ class CLW_SitrepArea
 class CLW_SitrepEffort
 {
 	CLW_ECommand m_eCommand;
-	string m_sTarget;			// noun phrase: "Timber Hub (C)", "our HQ", "the area around Newfield"
+	string m_sTarget;			// noun phrase as a wire / plain name: "Timber Hub (C)", "our HQ", "the area around Newfield"
 	int m_iCount;				// units
 }
 
@@ -34,6 +39,25 @@ class CLW_SitrepBuilder
 	static const float PLACE_NEAR_M = 3000;
 	static const float CONTACT_STALE_SEC = 90;		// older contacts are marked "dated"
 
+	// ---- wire helpers ----
+
+	protected static string Msg(string key, string a = "", string b = "", string c = "", string d = "", string e = "", string f = "")
+	{
+		return CLW_Loc.W(key, a, b, c, d, e, f);
+	}
+
+	// Two sentences of one paragraph.
+	protected static string Join(string first, string second)
+	{
+		if (first.IsEmpty())
+			return second;
+
+		if (second.IsEmpty())
+			return first;
+
+		return CLW_Loc.W("#CLW-Sit_Join", first, second);
+	}
+
 	// Builds the SITREP for one faction. Never returns null.
 	static CLW_Sitrep Build(string factionKey, CLW_ContactBook book, CLW_SquadRegistry registry, CLW_Orders orders)
 	{
@@ -45,7 +69,7 @@ class CLW_SitrepBuilder
 		CLW_ControlPoints points = CLW_GameMode.GetControlPoints();
 		if (!war)
 		{
-			sitrep.SetHeadline("BLUF: no war picture available yet.");
+			sitrep.SetHeadline(Msg("#CLW-Sit_Bluf_NoPicture"));
 			return sitrep;
 		}
 
@@ -139,44 +163,58 @@ class CLW_SitrepBuilder
 		CollectEfforts(ids, orders, points, factionKey, efforts, idle);
 
 		// ---- headline: BLUF ----
-		string head = "BLUF: " + MomentumWords(momentum) + ".";
-		if (total > 0)
-			head += " We hold " + ObjectivesWords(held.Count(), total) + ";";
-		if (!efforts.IsEmpty())
-			head += " main effort: " + MissionVerb(efforts[0].m_eCommand) + " " + efforts[0].m_sTarget + ".";
+		string head;
+		if (total > 0 && !efforts.IsEmpty())
+			head = Msg("#CLW-Sit_Bluf_HeldEffort", MomentumWords(momentum), ObjectivesWords(held.Count(), total), MissionInfinitive(efforts[0].m_eCommand, efforts[0].m_sTarget));
+		else if (total > 0)
+			head = Msg("#CLW-Sit_Bluf_HeldIdle", MomentumWords(momentum), ObjectivesWords(held.Count(), total));
+		else if (!efforts.IsEmpty())
+			head = Msg("#CLW-Sit_Bluf_Effort", MomentumWords(momentum), MissionInfinitive(efforts[0].m_eCommand, efforts[0].m_sTarget));
 		else
-			head += " forces are consolidating.";
+			head = Msg("#CLW-Sit_Bluf_Idle", MomentumWords(momentum));
 		sitrep.SetHeadline(head);
 
 		// ---- S: situation ----
-		string situation = "";
+		string objectives = "";
 		if (total > 0)
 		{
 			if (held.Count() == total)
-				situation = "We hold every objective.";
+				objectives = Msg("#CLW-Sit_S_AllHeld");
 			else
 			{
 				if (held.IsEmpty())
-					situation = "We hold no objectives.";
+					objectives = Msg("#CLW-Sit_S_HeldNone");
 				else
-					situation = "We hold " + ListWords(held) + ".";
+					objectives = Msg("#CLW-Sit_S_Held", ListWords(held));
 				if (!lost.IsEmpty())
-					situation += " The enemy holds " + ListWords(lost) + ".";
+					objectives = Join(objectives, Msg("#CLW-Sit_S_EnemyHolds", ListWords(lost)));
 				if (!neutral.IsEmpty())
-					situation += " " + Cap(ListWords(neutral)) + " remain" + PluralS(neutral.Count()) + " open.";
+				{
+					if (neutral.Count() == 1)
+						objectives = Join(objectives, Msg("#CLW-Sit_S_OpenOne", ListWords(neutral)));
+					else
+						objectives = Join(objectives, Msg("#CLW-Sit_S_OpenMany", ListWords(neutral)));
+				}
 			}
 			if (!contested.IsEmpty())
-				situation += " " + Cap(ListWords(contested)) + " " + IsAre(contested.Count()) + " contested.";
+			{
+				if (contested.Count() == 1)
+					objectives = Join(objectives, Msg("#CLW-Sit_S_ContestedOne", ListWords(contested)));
+				else
+					objectives = Join(objectives, Msg("#CLW-Sit_S_ContestedMany", ListWords(contested)));
+			}
 		}
+
+		string timeline = "";
 		if (tickets >= 0)
-			situation += "\n" + TicketWords(ticketState);
+			timeline = TicketWords(ticketState);
 		int timeLeft = war.GetTimeLeftSec();
 		if (timeLeft >= 0)
-			situation += " " + TimeLeftWords(timeLeft);
+			timeline = Join(timeline, TimeLeftWords(timeLeft));
 		CLW_ForceSpawner spawner = CLW_GameMode.GetForceSpawner();
 		if (spawner)
-			situation += " " + ForceStateWords(spawner.GetLiveAI(factionKey), war.GetAiCap(factionKey));
-		sitrep.SetBody(0, situation);
+			timeline = Join(timeline, ForceStateWords(spawner.GetLiveAI(factionKey), war.GetAiCap(factionKey)));
+		sitrep.SetBody(0, AppendLine(objectives, timeline));
 
 		// ---- E: intel ----
 		sitrep.SetBody(1, BuildIntel(contacts, now, points, factionKey));
@@ -197,21 +235,21 @@ class CLW_SitrepBuilder
 			string winner = war.GetWinner();
 			if (winner.IsEmpty())
 			{
-				sitrep.SetHeadline("BLUF: hostilities have ended in a draw.");
-				sitrep.SetBody(0, "The war is over: draw.");
+				sitrep.SetHeadline(Msg("#CLW-Sit_Bluf_EndedDraw"));
+				sitrep.SetBody(0, Msg("#CLW-Sit_S_OverDraw"));
 			}
 			else
 			{
-				sitrep.SetHeadline("BLUF: hostilities have ended.");
-				sitrep.SetBody(0, "The war is over. Victory goes to " + winner + ".");
+				sitrep.SetHeadline(Msg("#CLW-Sit_Bluf_Ended"));
+				sitrep.SetBody(0, Msg("#CLW-Sit_S_OverWinner", CLW_Loc.FactionName(winner)));
 			}
 			return;
 		}
 
-		sitrep.SetHeadline("BLUF: forces are assembling, no contact yet.");
-		sitrep.SetBody(0, "The war has not started yet. HQ staff is assembling; the first full SITREP follows when forces deploy.");
-		sitrep.SetBody(2, "Our forces seize and hold the objectives to preserve our tickets.");
-		sitrep.SetBody(3, "Pick a squad in the deploy menu; squad leaders receive HQ tasking once the war runs.");
+		sitrep.SetHeadline(Msg("#CLW-Sit_Bluf_Assembling"));
+		sitrep.SetBody(0, Msg("#CLW-Sit_S_NotStarted"));
+		sitrep.SetBody(2, Msg("#CLW-Sit_M_NotStarted"));
+		sitrep.SetBody(3, Msg("#CLW-Sit_X_NotStarted"));
 	}
 
 	// ---------------------------------------------------------------- intel
@@ -220,7 +258,7 @@ class CLW_SitrepBuilder
 	protected static string BuildIntel(notnull array<CLW_Contact> contacts, float now, CLW_ControlPoints points, string factionKey)
 	{
 		if (contacts.IsEmpty())
-			return "No enemy contact reported.";
+			return Msg("#CLW-Sit_E_None");
 
 		array<ref CLW_SitrepArea> areas = {};
 		foreach (CLW_Contact contact : contacts)
@@ -275,20 +313,16 @@ class CLW_SitrepBuilder
 
 			vector pos = area2.m_vSum / area2.m_iContacts;
 			int strength = CLW_Places.Score(area2.m_iVehicles, area2.m_iInfantry, area2.m_iCount);
-			string noun = "infantry activity";
+			string noun = "#CLW-Sit_E_NounInf";
 			if (area2.m_iVehicles > 0)
-				noun = "movement";
-			string line = CLW_Places.Magnitude(strength) + " enemy " + noun + " " + Where(pos, points, factionKey);
-			line += ", grid " + CLW_Places.Grid(pos) + ": " + CLW_Places.SizeText(area2.m_iVehicles, area2.m_iInfantry, area2.m_iCount);
-			line += ", " + AgeWords(Math.Round(Math.Max(0, now - area2.m_fSeen))) + ".";
-			if (shown > 0)
-				text += "\n";
-			text += line;
+				noun = "#CLW-Sit_E_NounMove";
+			string line = Msg("#CLW-Sit_E_Line", CLW_Places.MagnitudeKey(strength), noun, Where(pos, points, factionKey), CLW_Places.Grid(pos), CLW_Places.SizeWire(area2.m_iVehicles, area2.m_iInfantry, area2.m_iCount), AgeWords(Math.Round(Math.Max(0, now - area2.m_fSeen))));
+			text = AppendLine(text, line);
 			shown++;
 		}
 
 		if (sorted.Count() >= 2)
-			text += "\n" + Assessment(sorted[0], sorted[1], factionKey);
+			text = AppendLine(text, Assessment(sorted[0], sorted[1], factionKey));
 
 		return text;
 	}
@@ -296,22 +330,22 @@ class CLW_SitrepBuilder
 	// One line on the likely enemy main effort (strongest area) and the secondary one.
 	protected static string Assessment(CLW_SitrepArea top, CLW_SitrepArea second, string factionKey)
 	{
-		string aim = "centred on " + top.m_sShort;
+		string aim = Msg("#CLW-Sit_E_AimCentred", top.m_sShort);
 		if (top.m_Point)
 		{
 			if (top.m_Point.m_sOwner == factionKey)
-				aim = "aimed at " + top.m_sShort + ", which we hold";
+				aim = Msg("#CLW-Sit_E_AimHeld", top.m_sShort);
 			else if (top.m_Point.m_sOwner.IsEmpty())
-				aim = "to take " + top.m_sShort;
+				aim = Msg("#CLW-Sit_E_AimTake", top.m_sShort);
 			else
-				aim = "to reinforce " + top.m_sShort;
+				aim = Msg("#CLW-Sit_E_AimReinforce", top.m_sShort);
 		}
 
-		string preposition = "near";
+		string secondary = Msg("#CLW-Sit_E_SecNear", second.m_sShort);
 		if (second.m_Point)
-			preposition = "at";
+			secondary = Msg("#CLW-Sit_E_SecAt", second.m_sShort);
 
-		return "Assessment: enemy main effort likely " + aim + "; secondary activity " + preposition + " " + second.m_sShort + ".";
+		return Msg("#CLW-Sit_E_Assessment", aim, secondary);
 	}
 
 	protected static CLW_SitrepArea FindArea(notnull array<ref CLW_SitrepArea> areas, string key)
@@ -351,7 +385,7 @@ class CLW_SitrepBuilder
 
 		string grid = CLW_Places.Grid(pos);
 		key = "g" + grid;
-		shortName = "grid " + grid;
+		shortName = Msg("#CLW-Sit_Noun_Grid", grid);
 	}
 
 	// ---------------------------------------------------------------- mission / execution
@@ -421,14 +455,14 @@ class CLW_SitrepBuilder
 	protected static string BuildMission(notnull array<ref CLW_SitrepEffort> efforts, int ticketState)
 	{
 		if (efforts.IsEmpty())
-			return "Our forces consolidate and screen, then take and hold the objectives to preserve our tickets.";
+			return Msg("#CLW-Sit_M_Consolidate");
 
 		CLW_SitrepEffort lead = efforts[0];
-		string text = "Our forces " + MissionVerb(lead.m_eCommand) + " " + lead.m_sTarget;
+		string purpose = MissionPurpose(lead.m_eCommand, ticketState);
 		if (efforts.Count() > 1 && efforts[1].m_eCommand != CLW_ECommand.FALL_BACK)
-			text += " and " + MissionVerb(efforts[1].m_eCommand) + " " + efforts[1].m_sTarget;
+			return Msg("#CLW-Sit_M_Two", MissionClause(lead.m_eCommand, lead.m_sTarget), MissionClause(efforts[1].m_eCommand, efforts[1].m_sTarget), purpose);
 
-		return text + " " + MissionPurpose(lead.m_eCommand, ticketState) + ".";
+		return Msg("#CLW-Sit_M_One", MissionClause(lead.m_eCommand, lead.m_sTarget), purpose);
 	}
 
 	protected static string MissionPurpose(CLW_ECommand command, int ticketState)
@@ -437,20 +471,20 @@ class CLW_SitrepBuilder
 		{
 			case CLW_ECommand.DEFEND:
 				if (ticketState > 0)
-					return "to protect our lead";
-				return "to deny the enemy the ground";
+					return "#CLW-Sit_Why_ProtectLead";
+				return "#CLW-Sit_Why_DenyGround";
 			case CLW_ECommand.RECON:
-				return "to locate the enemy main body";
+				return "#CLW-Sit_Why_FindMainBody";
 			case CLW_ECommand.FALL_BACK:
-				return "to regroup and preserve combat power";
+				return "#CLW-Sit_Why_Regroup";
 		}
 
 		if (ticketState < 0)
-			return "to turn the ticket count";
+			return "#CLW-Sit_Why_TurnTickets";
 		if (ticketState > 0)
-			return "to keep the pressure on and hold our lead";
+			return "#CLW-Sit_Why_KeepPressure";
 
-		return "to bleed enemy tickets";
+		return "#CLW-Sit_Why_BleedTickets";
 	}
 
 	// Main effort / supporting effort / withdrawing / reserve, counted in words; never unit ids.
@@ -463,7 +497,7 @@ class CLW_SitrepBuilder
 		for (int i = 0; i < efforts.Count(); i++)
 		{
 			CLW_SitrepEffort effort = efforts[i];
-			string clause = Elements(effort.m_iCount) + " " + EffortVerb(effort.m_eCommand, effort.m_iCount) + " " + effort.m_sTarget;
+			string clause = EffortClause(effort.m_eCommand, effort.m_iCount, effort.m_sTarget);
 			if (effort.m_eCommand == CLW_ECommand.FALL_BACK)
 			{
 				withdrawing = clause;
@@ -472,7 +506,7 @@ class CLW_SitrepBuilder
 
 			if (i == 0)
 			{
-				text = "Main effort: " + clause + ".";
+				text = Msg("#CLW-Sit_X_Main", clause);
 				continue;
 			}
 
@@ -482,64 +516,64 @@ class CLW_SitrepBuilder
 			if (supporting.IsEmpty())
 				supporting = clause;
 			else
-				supporting += "; " + clause;
+				supporting = Msg("#CLW-Sit_X_Semicolon", supporting, clause);
 			supportShown++;
 		}
 
 		if (!supporting.IsEmpty())
-			text = AppendLine(text, "Supporting: " + supporting + ".");
+			text = AppendLine(text, Msg("#CLW-Sit_X_Supporting", supporting));
 		if (!withdrawing.IsEmpty())
-			text = AppendLine(text, "Withdrawing: " + withdrawing + ".");
+			text = AppendLine(text, Msg("#CLW-Sit_X_Withdrawing", withdrawing));
 		if (idle > 0)
-			text = AppendLine(text, "Reserve: " + Elements(idle) + " held back.");
+			text = AppendLine(text, Msg("#CLW-Sit_X_Reserve", Elements(idle)));
 		if (humanSquads > 0)
-			text = AppendLine(text, "Squad leaders: check your HQ tasking in the task list (J).");
+			text = AppendLine(text, Msg("#CLW-Sit_X_Leaders"));
 		if (text.IsEmpty())
-			text = "No elements tasked yet.";
+			text = Msg("#CLW-Sit_X_None");
 
 		return text;
 	}
 
-	protected static string EffortVerb(CLW_ECommand command, int count)
+	// "three elements assault Timber Hub (C)": one key per command and for one / several elements.
+	protected static string EffortClause(CLW_ECommand command, int count, string target)
 	{
-		bool one = count == 1;
+		string name = "Move";
 		switch (command)
 		{
-			case CLW_ECommand.ATTACK:
-				if (one)
-					return "assaults";
-				return "assault";
-			case CLW_ECommand.DEFEND:
-				if (one)
-					return "defends";
-				return "defend";
-			case CLW_ECommand.RECON:
-				if (one)
-					return "reconnoitres";
-				return "reconnoitre";
-			case CLW_ECommand.FALL_BACK:
-				if (one)
-					return "falls back to";
-				return "fall back to";
+			case CLW_ECommand.ATTACK: name = "Attack"; break;
+			case CLW_ECommand.DEFEND: name = "Defend"; break;
+			case CLW_ECommand.RECON: name = "Recon"; break;
+			case CLW_ECommand.FALL_BACK: name = "FallBack"; break;
 		}
 
-		if (one)
-			return "moves to";
+		if (count == 1)
+			return Msg("#CLW-Sit_Ef_" + name + "_One", target);
 
-		return "move to";
+		return Msg("#CLW-Sit_Ef_" + name + "_Many", CLW_Loc.N(count), target);
 	}
 
-	protected static string MissionVerb(CLW_ECommand command)
+	// "seize Timber Hub (C)" as the clause of "Our forces ... ." (finite verb) and as an infinitive for the BLUF line.
+	protected static string MissionClause(CLW_ECommand command, string target)
+	{
+		return Msg("#CLW-Sit_Cl_" + CommandName(command), target);
+	}
+
+	protected static string MissionInfinitive(CLW_ECommand command, string target)
+	{
+		return Msg("#CLW-Sit_Inf_" + CommandName(command), target);
+	}
+
+	protected static string CommandName(CLW_ECommand command)
 	{
 		switch (command)
 		{
-			case CLW_ECommand.ATTACK: return "seize";
-			case CLW_ECommand.DEFEND: return "hold";
-			case CLW_ECommand.RECON: return "reconnoitre";
-			case CLW_ECommand.FALL_BACK: return "withdraw to";
+			case CLW_ECommand.ATTACK: return "Attack";
+			case CLW_ECommand.DEFEND: return "Defend";
+			case CLW_ECommand.RECON: return "Recon";
+			case CLW_ECommand.FALL_BACK: return "FallBack";
 		}
 
-		return "occupy";
+		return "Move";
 	}
 
 	// ---------------------------------------------------------------- logistics
@@ -550,73 +584,77 @@ class CLW_SitrepBuilder
 		int incomeSec = Math.Max(1, war.GetIncomeIntervalSec());
 		int perMinute = Math.Round(war.GetIncome(factionKey) * 60.0 / incomeSec);
 
-		string supplyState = "adequate";
+		string supplyState = "#CLW-Sit_SupState_Adequate";
 		if (supplies <= 0)
-			supplyState = "exhausted";
+			supplyState = "#CLW-Sit_SupState_Exhausted";
 		else if (perMinute > 0 && supplies < perMinute)
-			supplyState = "tight";
+			supplyState = "#CLW-Sit_SupState_Tight";
 		else if (perMinute <= 0 && supplies < 100)
-			supplyState = "tight";
+			supplyState = "#CLW-Sit_SupState_Tight";
 		else if (perMinute > 0 && supplies > perMinute * 4)
-			supplyState = "plentiful";
+			supplyState = "#CLW-Sit_SupState_Plentiful";
 
-		string text = "Supplies are " + supplyState;
+		string text;
 		if (perMinute <= 0)
-			text += " with no resupply income.";
+			text = Msg("#CLW-Sit_L_IncomeNone", supplyState);
 		else if (perMinute < 20)
-			text += " with a modest income.";
+			text = Msg("#CLW-Sit_L_IncomeModest", supplyState);
 		else if (perMinute < 60)
-			text += " with a steady income.";
+			text = Msg("#CLW-Sit_L_IncomeSteady", supplyState);
 		else
-			text += " with a strong income.";
+			text = Msg("#CLW-Sit_L_IncomeStrong", supplyState);
 
 		if (spawner)
 		{
 			int liveVehicles = spawner.GetLiveVehicles(factionKey);
 			int vehicleCap = war.GetVehicleCap(factionKey);
-			text += " " + VehicleWords(liveVehicles, vehicleCap);
+			text = Join(text, VehicleWords(liveVehicles, vehicleCap));
 		}
 
 		string worn = "";
 		if (wornDown > 0)
-			worn = Elements(wornDown) + " worn down";
+			worn = ElementsState(wornDown, "#CLW-Sit_L_WornOne", "#CLW-Sit_L_WornMany");
 		if (ineffective > 0)
-		{
-			if (!worn.IsEmpty())
-				worn += ", ";
-			worn += Elements(ineffective) + " combat-ineffective";
-		}
+			worn = Join(worn, ElementsState(ineffective, "#CLW-Sit_L_IneffOne", "#CLW-Sit_L_IneffMany"));
 
 		if (worn.IsEmpty())
-			text += " All elements remain combat-effective.";
+			text = Join(text, Msg("#CLW-Sit_L_AllEffective"));
 		else
-			text += " " + Cap(worn) + ".";
+			text = Join(text, worn);
 
-		text += " " + ReinforceWords(factionKey, supplies, war, spawner);
+		text = Join(text, ReinforceWords(factionKey, supplies, war, spawner));
 		return text;
+	}
+
+	protected static string ElementsState(int n, string keyOne, string keyMany)
+	{
+		if (n == 1)
+			return Msg(keyOne);
+
+		return Msg(keyMany, CLW_Loc.N(n));
 	}
 
 	protected static string VehicleWords(int live, int cap)
 	{
 		if (live <= 0)
-			return "No vehicles are in service.";
+			return Msg("#CLW-Sit_L_VehNone");
 
 		if (cap <= 0)
-			return "Vehicles are in service.";
+			return Msg("#CLW-Sit_L_VehSome");
 
 		float ratio = live * 1.0 / cap;
 		if (ratio < 0.35)
-			return "Few vehicles are in service.";
+			return Msg("#CLW-Sit_L_VehFew");
 		if (ratio < 0.75)
-			return "About half our vehicles are in service.";
+			return Msg("#CLW-Sit_L_VehHalf");
 
-		return "Most of our vehicles are in service.";
+		return Msg("#CLW-Sit_L_VehMost");
 	}
 
 	protected static string ReinforceWords(string factionKey, int supplies, CLW_WarState war, CLW_ForceSpawner spawner)
 	{
 		if (spawner && war.GetAiCap(factionKey) > 0 && spawner.GetLiveAI(factionKey) >= war.GetAiCap(factionKey))
-			return "We are at force cap, no reinforcements needed.";
+			return Msg("#CLW-Sit_L_AtCap");
 
 		int cheapest = -1;
 		CLW_ForceCatalog catalog = CLW_GameMode.GetForceCatalog();
@@ -635,12 +673,12 @@ class CLW_SitrepBuilder
 		}
 
 		if (cheapest >= 0 && supplies >= cheapest)
-			return "Reinforcements can be bought.";
+			return Msg("#CLW-Sit_L_CanBuy");
 
-		return "We cannot afford reinforcements for now.";
+		return Msg("#CLW-Sit_L_CannotBuy");
 	}
 
-	// ---------------------------------------------------------------- words
+	// ---------------------------------------------------------------- words (keys / wires)
 
 	// -2 badly behind .. +2 well ahead; 0 when tickets are not in play.
 	protected static int TicketState(int tickets, int enemyTickets)
@@ -665,43 +703,43 @@ class CLW_SitrepBuilder
 	{
 		switch (state)
 		{
-			case 2: return "We are well ahead on tickets.";
-			case 1: return "We hold a narrow lead on tickets.";
-			case 0: return "Tickets are roughly even.";
-			case -1: return "We are behind on tickets.";
+			case 2: return Msg("#CLW-Sit_Tix_WellAhead");
+			case 1: return Msg("#CLW-Sit_Tix_Lead");
+			case 0: return Msg("#CLW-Sit_Tix_Even");
+			case -1: return Msg("#CLW-Sit_Tix_Behind");
 		}
 
-		return "We are badly behind on tickets.";
+		return Msg("#CLW-Sit_Tix_BadlyBehind");
 	}
 
 	protected static string MomentumWords(int momentum)
 	{
 		if (momentum >= 2)
-			return "Initiative is ours";
+			return "#CLW-Sit_Mom_Initiative";
 		if (momentum == 1)
-			return "We hold a slight advantage";
+			return "#CLW-Sit_Mom_Advantage";
 		if (momentum == 0)
-			return "The fight is evenly balanced";
+			return "#CLW-Sit_Mom_Balanced";
 		if (momentum == -1)
-			return "We are under pressure";
+			return "#CLW-Sit_Mom_Pressure";
 
-		return "We are losing ground";
+		return "#CLW-Sit_Mom_Losing";
 	}
 
 	protected static string ObjectivesWords(int held, int total)
 	{
 		if (held >= total)
-			return "every objective";
+			return "#CLW-Sit_Obj_All";
 		if (held <= 0)
-			return "no objectives";
+			return "#CLW-Sit_Obj_None";
 
 		float share = held * 1.0 / total;
 		if (share >= 0.6)
-			return "most objectives";
+			return "#CLW-Sit_Obj_Most";
 		if (share >= 0.4)
-			return "about half the objectives";
+			return "#CLW-Sit_Obj_Half";
 
-		return "a few objectives";
+		return "#CLW-Sit_Obj_Few";
 	}
 
 	protected static string ForceStateWords(int live, int cap)
@@ -711,100 +749,59 @@ class CLW_SitrepBuilder
 
 		float ratio = live * 1.0 / cap;
 		if (ratio >= 0.85)
-			return "Our forces are at full strength.";
+			return Msg("#CLW-Sit_Force_Full");
 		if (ratio >= 0.6)
-			return "Our forces are in good shape.";
+			return Msg("#CLW-Sit_Force_Good");
 		if (ratio >= 0.35)
-			return "Our forces are at reduced strength.";
+			return Msg("#CLW-Sit_Force_Reduced");
 
-		return "Our forces are badly depleted.";
+		return Msg("#CLW-Sit_Force_Depleted");
 	}
 
-	// Rounded time left in words.
+	// Rounded time left.
 	protected static string TimeLeftWords(int seconds)
 	{
 		int minutes = Math.Round(seconds / 60.0);
 		if (seconds < 60)
-			return "Less than a minute remains.";
+			return Msg("#CLW-Sit_Time_LessMinute");
 		if (minutes <= 1)
-			return "About a minute remains.";
+			return Msg("#CLW-Sit_Time_Minute");
 		if (minutes >= 70)
-			return "Over an hour remains.";
+			return Msg("#CLW-Sit_Time_OverHour");
 		if (minutes >= 58)
-			return "About an hour remains.";
+			return Msg("#CLW-Sit_Time_Hour");
 		if (minutes > 12)
 			minutes = ((minutes + 2) / 5) * 5;
 
-		return "About " + NumberWord(minutes) + " minutes remain.";
+		return Msg("#CLW-Sit_Time_Minutes", CLW_Loc.N(minutes));
 	}
 
 	protected static string AgeWords(int ageSec)
 	{
 		if (ageSec < 20)
-			return "just now";
+			return "#CLW-Sit_Age_Now";
 		if (ageSec < 75)
-			return "within the last minute";
+			return "#CLW-Sit_Age_Minute";
 		if (ageSec < CONTACT_STALE_SEC + 30)
-			return "in the last few minutes";
+			return "#CLW-Sit_Age_Few";
 
-		return "earlier (dated)";
+		return "#CLW-Sit_Age_Dated";
 	}
 
-	static string NumberWord(int n)
-	{
-		array<string> small = {"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"};
-		if (n < 0)
-			return "no";
-		if (n < 20)
-			return small[n];
-		if (n >= 100)
-			return "many";
-
-		array<string> tens = {"", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"};
-		int ten = n / 10;
-		int unit = n - ten * 10;
-		if (unit == 0)
-			return tens[ten];
-
-		return tens[ten] + "-" + small[unit];
-	}
-
+	// "one element" / "three elements" (wire).
 	protected static string Elements(int n)
 	{
 		if (n == 1)
-			return "one element";
+			return Msg("#CLW-Sit_ElemOne");
 
-		return NumberWord(n) + " elements";
-	}
-
-	protected static string PluralS(int n)
-	{
-		if (n == 1)
-			return "s";
-
-		return "";
-	}
-
-	protected static string IsAre(int n)
-	{
-		if (n == 1)
-			return "is";
-
-		return "are";
-	}
-
-	protected static string Cap(string text)
-	{
-		if (text.IsEmpty())
-			return text;
-
-		string first = text.Substring(0, 1);
-		first.ToUpper();
-		return first + text.Substring(1, text.Length() - 1);
+		return Msg("#CLW-Sit_ElemMany", CLW_Loc.N(n));
 	}
 
 	protected static string AppendLine(string text, string line)
 	{
+		if (line.IsEmpty())
+			return text;
+
 		if (text.IsEmpty())
 			return line;
 
@@ -814,24 +811,17 @@ class CLW_SitrepBuilder
 	// "Timber Hub (C) and Ridge Junction (B)"; more than three: the first three and "N more".
 	protected static string ListWords(notnull array<CLW_ControlPoint> list)
 	{
-		string text = "";
 		int n = list.Count();
-		int shown = Math.Min(n, 3);
-		for (int i = 0; i < shown; i++)
-		{
-			string item = Label(list[i]);
-			if (i == 0)
-				text = item;
-			else if (i == shown - 1 && n == shown)
-				text += " and " + item;
-			else
-				text += ", " + item;
-		}
+		if (n == 1)
+			return Label(list[0]);
 
-		if (n > shown)
-			text += " and " + NumberWord(n - shown) + " more";
+		if (n == 2)
+			return Msg("#CLW-Sit_List2", Label(list[0]), Label(list[1]));
 
-		return text;
+		if (n == 3)
+			return Msg("#CLW-Sit_List3", Label(list[0]), Label(list[1]), Label(list[2]));
+
+		return Msg("#CLW-Sit_ListMore", Label(list[0]), Label(list[1]), Label(list[2]), CLW_Loc.N(n - 3));
 	}
 
 	protected static string Label(CLW_ControlPoint point)
@@ -841,7 +831,7 @@ class CLW_SitrepBuilder
 
 	// ---------------------------------------------------------------- places
 
-	// Target of an order as a noun phrase.
+	// Target of an order as a noun phrase (plain name or wire).
 	protected static string TargetNoun(CLW_UnitOrder order, CLW_ControlPoints points, string factionKey)
 	{
 		if (!order.m_sTarget.IsEmpty() && points)
@@ -858,7 +848,7 @@ class CLW_SitrepBuilder
 	protected static string PlaceNoun(vector pos, CLW_ControlPoints points, string factionKey)
 	{
 		if (NearOwnHq(pos, factionKey))
-			return "our HQ";
+			return Msg("#CLW-Sit_Noun_Hq");
 
 		float objDist;
 		CLW_ControlPoint point = CLW_Places.NearestObjective(pos, points, objDist);
@@ -867,33 +857,33 @@ class CLW_SitrepBuilder
 			if (objDist <= Math.Max(point.m_fRadius, 120) * 1.2)
 				return Label(point);
 			if (objDist <= APPROACH_M)
-				return "the " + CLW_Places.CompassAdjective(CLW_Places.CompassIndex(point.m_vPos, pos)) + " approach to " + Label(point);
+				return Msg("#CLW-Sit_Noun_Approach", CLW_Places.CompassAdjectiveKey(CLW_Places.CompassIndex(point.m_vPos, pos)), Label(point));
 		}
 
 		float placeDist;
 		vector placePos;
 		string place = CLW_Places.Nearest(pos, PLACE_NEAR_M, placeDist, placePos);
 		if (!place.IsEmpty())
-			return "the area around " + place;
+			return Msg("#CLW-Sit_Noun_Area", place);
 
-		return "grid " + CLW_Places.Grid(pos);
+		return Msg("#CLW-Sit_Noun_Grid", CLW_Places.Grid(pos));
 	}
 
-	// Location with its preposition: "at Timber Hub (C)", "on the northern approach to Ridge Junction (B)", "near Newfield",
+	// Location with its preposition (a wire): "at Timber Hub (C)", "on the northern approach to Ridge Junction (B)", "near Newfield",
 	// "close to our HQ", "in open country". Never coordinates.
 	static string Where(vector pos, CLW_ControlPoints points, string factionKey)
 	{
 		if (NearOwnHq(pos, factionKey))
-			return "close to our HQ";
+			return Msg("#CLW-Sit_Where_Hq");
 
 		float objDist;
 		CLW_ControlPoint point = CLW_Places.NearestObjective(pos, points, objDist);
 		if (point)
 		{
 			if (objDist <= Math.Max(point.m_fRadius, 120) * 1.2)
-				return "at " + Label(point);
+				return Msg("#CLW-Sit_Where_At", Label(point));
 			if (objDist <= APPROACH_M)
-				return "on the " + CLW_Places.CompassAdjective(CLW_Places.CompassIndex(point.m_vPos, pos)) + " approach to " + Label(point);
+				return Msg("#CLW-Sit_Where_Approach", CLW_Places.CompassAdjectiveKey(CLW_Places.CompassIndex(point.m_vPos, pos)), Label(point));
 		}
 
 		float placeDist;
@@ -902,12 +892,12 @@ class CLW_SitrepBuilder
 		if (!place.IsEmpty())
 		{
 			if (placeDist < 200)
-				return "at " + place;
+				return Msg("#CLW-Sit_Where_At", place);
 
-			return "near " + place;
+			return Msg("#CLW-Sit_Where_Near", place);
 		}
 
-		return "in open country";
+		return Msg("#CLW-Sit_Where_Open");
 	}
 
 	protected static bool NearOwnHq(vector pos, string factionKey)

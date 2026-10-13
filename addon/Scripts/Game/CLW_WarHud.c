@@ -50,14 +50,14 @@ class CLW_WarHud
 		string clock = "";
 		if (phase == 0)
 		{
-			status = "Setup...";
+			status = CLW_Loc.Fmt("#CLW-Hud_Setup");
 		}
 		else if (phase == 2)
 		{
-			status = "War over";
-			clock = "Draw";
+			status = CLW_Loc.Fmt("#CLW-Hud_WarOver");
+			clock = CLW_Loc.Fmt("#CLW-Hud_Draw");
 			if (!winner.IsEmpty())
-				clock = FactionName(winner) + " wins";
+				clock = CLW_Loc.F("#CLW-Hud_Wins", FactionName(winner));
 		}
 		else if (timeLeft >= 0)
 		{
@@ -70,7 +70,7 @@ class CLW_WarHud
 		string supplyValue = "";
 		if (showSupplies)
 		{
-			supplyLabel = "Supplies";
+			supplyLabel = CLW_Loc.Fmt("#CLW-Hud_Supplies");
 			supplyValue = supplies.ToString();
 		}
 		SetText("Supply_Label", supplyLabel, normal);

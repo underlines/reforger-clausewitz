@@ -109,7 +109,7 @@ class CLW_BuildExecutor
 		CLW_FobManager.SetState(fob, CLW_EFobState.ACTIVE, string.Format("established: spawn point=%1, %2 pieces (tier 1 %3), command post=%4", fob.m_SpawnPoint != null, placed, tier1, fob.m_bHadPost));
 		if (placed == 0)
 			CLW_StructureMarkers.AddFobLocation(fob.m_sSide, fob.m_sId, fob.m_vPos);	// own-side location marker only when nothing else marks the FOB (the kit pieces have markers); removed with the FOB (CLW_Services.RemoveBase)
-		CLW_Debug.Announce(string.Format("%1 established FOB %2 near %3 (grid %4)", fob.m_sSide, fob.m_sId, fob.m_sName, CLW_Places.Grid(fob.m_vPos)));
+		CLW_Debug.Announce(CLW_Loc.W("#CLW-Fob_Established", CLW_Loc.FactionName(fob.m_sSide), fob.m_sId, fob.m_sName, CLW_Places.Grid(fob.m_vPos)));
 		CLW_FobManager.NotifyBuilt(fob);
 	}
 
@@ -135,7 +135,7 @@ class CLW_BuildExecutor
 
 		fob.m_iTier = 2;
 		Print(string.Format("CLW: fob %1 upgraded to tier 2: %2 more services (vehicle depot)", fob.m_sId, placed), LogLevel.NORMAL);
-		CLW_Debug.Announce(string.Format("%1 upgraded FOB %2 (depot)", fob.m_sSide, fob.m_sId));
+		CLW_Debug.Announce(CLW_Loc.W("#CLW-Fob_Upgraded", CLW_Loc.FactionName(fob.m_sSide), fob.m_sId));
 	}
 
 	// The command post of the FOB is gone (deleted) or its main building is destroyed. [verify] the first damageable entity of the

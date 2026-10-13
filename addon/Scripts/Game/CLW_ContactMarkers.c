@@ -58,22 +58,17 @@ class CLW_ContactMarkers
 		}
 	}
 
-	// Short label with size words instead of raw counts. Vehicles first, dismounts after.
+	// Short label with size words instead of raw counts, as ONE stringtable key per combination (a map marker text is replicated
+	// to every client and translated there; it cannot carry params): "#CLW-Marker_V<vehicle level>_I<infantry level>", e.g.
+	// "veh section + fire team". Vehicles first, dismounts after. The English words of the levels: CLW_Places.VehicleShort / InfantryShort.
 	protected string MarkerText(CLW_Contact contact)
 	{
-		string text = "";
-		if (contact.m_iVehicles > 0)
-			text = CLW_Places.VehicleShort(contact.m_iVehicles);
-		if (contact.m_iInfantry > 0)
-		{
-			if (!text.IsEmpty())
-				text += " + ";
-			text += CLW_Places.InfantryShort(contact.m_iInfantry);
-		}
-		if (text.IsEmpty())
-			text = CLW_Places.InfantryShort(contact.m_iCount);
+		int vehicleLevel = CLW_Places.VehicleLevel(contact.m_iVehicles);
+		int infantryLevel = CLW_Places.InfantryLevel(contact.m_iInfantry);
+		if (vehicleLevel == 0 && infantryLevel == 0)
+			infantryLevel = CLW_Places.InfantryLevel(contact.m_iCount);
 
-		return text;
+		return "#CLW-Marker_V" + vehicleLevel.ToString() + "_I" + infantryLevel.ToString();
 	}
 
 	// Remove the markers of expired contact ids.

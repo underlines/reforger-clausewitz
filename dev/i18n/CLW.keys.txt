@@ -1,0 +1,437 @@
+CLW-Param_timeLimitMin ::: Time limit (min) ::: Zeitlimit (Min.)
+CLW-Param_timeLimitMin_Desc ::: The war ends after this time; more tickets wins. ::: Der Krieg endet nach dieser Zeit; wer mehr Tickets hat, gewinnt.
+CLW-Param_startTickets ::: Start tickets ::: Starttickets
+CLW-Param_startTickets_Desc ::: War will of each side; at 0 the side loses. ::: Kriegswille jeder Seite; bei 0 verliert die Seite.
+CLW-Param_startSupplies ::: Start supplies ::: Startnachschub
+CLW-Param_startSupplies_Desc ::: Purchasing power of each side at the start. ::: Kaufkraft jeder Seite zu Beginn.
+CLW-Param_incomeMultiplier ::: Income multiplier ::: Einkommensfaktor
+CLW-Param_incomeMultiplier_Desc ::: Scales the supplies income. ::: Skaliert das Nachschubeinkommen.
+CLW-Param_battleSize ::: Battle size ::: Schlachtgröße
+CLW-Param_battleSize_Desc ::: Caps for live AI and vehicles per side; bigger battles also get more income. ::: Obergrenzen für lebende KI und Fahrzeuge je Seite; größere Schlachten bringen auch mehr Einkommen.
+CLW-Param_startPositions ::: Start positions ::: Startpositionen
+CLW-Param_startPositions_Desc ::: fixed: the scenario's HQs. random: both HQs and the front at random places (checked for ground, water, room and roads), within the battle size distance. ::: fixed: die HQs des Szenarios. random: beide HQs und die Front an zufälligen Orten (geprüft auf Boden, Wasser, Platz und Straßen), innerhalb der Entfernung der Schlachtgröße.
+CLW-Param_startObjectives ::: Start objectives ::: Startziele
+CLW-Param_startObjectives_Desc ::: scenario: the scenario's setting. none: every objective starts neutral. 1 / 2 / 3: each side starts with that many objectives nearest its HQ (one objective always stays neutral). ::: scenario: die Einstellung des Szenarios. none: jedes Ziel startet neutral. 1 / 2 / 3: jede Seite startet mit so vielen Zielen nahe ihrem HQ (ein Ziel bleibt immer neutral).
+CLW-Param_randomSeed ::: Random seed ::: Zufallswert
+CLW-Param_randomSeed_Desc ::: Random start positions: the same seed gives the same layout. 0 = a new one each war (logged). ::: Zufällige Startpositionen: derselbe Wert ergibt dieselbe Aufstellung. 0 = jeder Krieg neu (wird protokolliert).
+CLW-Param_ticketBleed ::: Ticket bleed ::: Ticketverlust
+CLW-Param_ticketBleed_Desc ::: The side holding fewer points loses tickets over time. ::: Die Seite mit weniger gehaltenen Punkten verliert mit der Zeit Tickets.
+CLW-Param_holdAllWinMin ::: Hold-all win (min) ::: Alles-halten-Sieg (Min.)
+CLW-Param_holdAllWinMin_Desc ::: Holding every point this long wins. 0 = off. ::: Wer alle Punkte so lange hält, gewinnt. 0 = aus.
+CLW-Param_fobMax ::: Max FOBs per side ::: Max. FOBs je Seite
+CLW-Param_fobMax_Desc ::: Forward bases a side may hold at once. 0 = no FOBs. ::: Vorgeschobene Basen, die eine Seite gleichzeitig halten darf. 0 = keine FOBs.
+CLW-Param_fobBuild ::: FOB build ::: FOB-Bau
+CLW-Param_fobBuild_Desc ::: instant: the FOB stands as soon as the builder arrives. timed: it is built over the build time while the builder is on site. ::: instant: die FOB steht, sobald der Bauer eintrifft. timed: sie wird über die Bauzeit errichtet, solange der Bauer vor Ort ist.
+CLW-Param_fobCost ::: FOB cost (supplies) ::: FOB-Kosten (Nachschub)
+CLW-Param_fobCost_Desc ::: Paid when the FOB is ordered; refunded when it fails before it stands. ::: Wird beim Befehl bezahlt und erstattet, wenn die FOB vor der Fertigstellung scheitert.
+CLW-Param_fobBuildSec ::: FOB build time (s) ::: FOB-Bauzeit (s)
+CLW-Param_fobBuildSec_Desc ::: Timed build: seconds of the builder on site until the FOB stands. ::: Zeitgesteuerter Bau: Sekunden des Bauers vor Ort, bis die FOB steht.
+CLW-Param_fobEarliestMin ::: FOB earliest (min) ::: FOB frühestens (Min.)
+CLW-Param_fobEarliestMin_Desc ::: No FOB before this many minutes of war time, and only once the side knows the front (an enemy contact, a contested or lost objective). 0 = no gate. ::: Keine FOB vor dieser Kriegszeit in Minuten, und erst wenn die Seite die Front kennt (ein Feindkontakt, ein umkämpftes oder verlorenes Ziel). 0 = keine Sperre.
+CLW-Param_garrisonSquads ::: HQ garrison (squads) ::: HQ-Garnison (Trupps)
+CLW-Param_garrisonSquads_Desc ::: Infantry squads per side that defend their HQ for the whole war (never counted as idle, not given other orders). ::: Infanterietrupps je Seite, die ihr HQ den ganzen Krieg verteidigen (zählen nie als untätig und erhalten keine anderen Befehle).
+CLW-Param_idleDespawnMin ::: Idle despawn (min) ::: Untätig entfernen (Min.)
+CLW-Param_idleDespawnMin_Desc ::: A squad idling at its base without an order this long is removed and its purchase cost refunded. 0 = off. ::: Ein Trupp, der so lange ohne Befehl an seiner Basis steht, wird entfernt und sein Kaufpreis erstattet. 0 = aus.
+CLW-Param_convoyMax ::: Max convoys per side ::: Max. Konvois je Seite
+CLW-Param_convoyMax_Desc ::: Supply convoys a side may have on the road at once (logistics only). ::: Nachschubkonvois, die eine Seite gleichzeitig auf der Straße haben darf (nur Logistik).
+CLW-Param_hqReserve ::: HQ reserve (supplies) ::: HQ-Reserve (Nachschub)
+CLW-Param_hqReserve_Desc ::: AI purchases (rule commander, LLM) and convoys never take the HQ stock below this. Player requests still may. 0 = no floor. ::: KI-Käufe (Regelkommandeur, LLM) und Konvois lassen den HQ-Vorrat nie unter diesen Wert sinken. Spieleranfragen dürfen. 0 = keine Untergrenze.
+CLW-Param_convoyMinLoad ::: Convoy minimum load ::: Konvoi-Mindestladung
+CLW-Param_convoyMinLoad_Desc ::: A convoy only leaves with at least this many supplies (HQ stock minus the reserve). ::: Ein Konvoi fährt nur mit mindestens so viel Nachschub los (HQ-Vorrat abzüglich der Reserve).
+CLW-Param_cap_logistics ::: Logistics ::: Logistik
+CLW-Param_cap_logistics_Desc ::: Per-base supplies and convoys. Off: one supply pool per side. ::: Nachschub je Basis und Konvois. Aus: ein gemeinsamer Nachschubvorrat je Seite.
+CLW-Param_cap_kitCost ::: Kit cost ::: Ausrüstungskosten
+CLW-Param_cap_kitCost_Desc ::: Arsenal items cost supplies. Off: kits are free. ::: Arsenal-Gegenstände kosten Nachschub. Aus: Ausrüstung ist kostenlos.
+CLW-Choice_battleSize_small ::: small ::: klein
+CLW-Choice_battleSize_medium ::: medium ::: mittel
+CLW-Choice_battleSize_large ::: large ::: groß
+CLW-Choice_startPositions_fixed ::: fixed ::: fest
+CLW-Choice_startPositions_random ::: random ::: zufällig
+CLW-Choice_startObjectives_scenario ::: scenario ::: Szenario
+CLW-Choice_startObjectives_none ::: none ::: keine
+CLW-Choice_fobBuild_instant ::: instant ::: sofort
+CLW-Choice_fobBuild_timed ::: timed ::: zeitgesteuert
+CLW-Mode_Short_Name ::: Short conflict ::: Kurzer Konflikt
+CLW-Mode_Short_Desc ::: Tickets drain with losses and from holding fewer points; win by tickets, by holding all points, or by tickets at the time limit. ::: Tickets sinken durch Verluste und durch weniger gehaltene Punkte; Sieg über Tickets, über das Halten aller Punkte oder über die Tickets bei Zeitablauf.
+CLW-Param_factionA ::: Side A ::: Seite A
+CLW-Param_factionA_Desc ::: First faction. Available: %1 ::: Erste Fraktion. Verfügbar: %1
+CLW-Param_factionB ::: Side B ::: Seite B
+CLW-Param_factionB_Desc ::: Second faction, must differ from side A. ::: Zweite Fraktion, muss sich von Seite A unterscheiden.
+CLW-Common_Close ::: Close ::: Schließen
+CLW-Setup_Title ::: Clausewitz - War setup ::: Clausewitz - Kriegs-Setup
+CLW-Setup_Intro ::: Choose the two sides and the war mode, then press Start war. ::: Wähle die beiden Seiten und den Kriegsmodus und drücke dann auf Krieg starten.
+CLW-Setup_StartWar ::: Start war ::: Krieg starten
+CLW-Setup_Defaults ::: Defaults ::: Standard
+CLW-Setup_Battle ::: BATTLE ::: SCHLACHT
+CLW-Setup_WarMode ::: WAR MODE ::: KRIEGSMODUS
+CLW-Setup_ModeLabel ::: War mode ::: Kriegsmodus
+CLW-Setup_DefaultsRestored ::: Defaults restored. ::: Standardwerte wiederhergestellt.
+CLW-Setup_NoMode ::: No war mode available. ::: Kein Kriegsmodus verfügbar.
+CLW-Setup_NoController ::: No player controller yet. ::: Noch kein Spielercontroller.
+CLW-Setup_Sending ::: Sending to the server... ::: Wird an den Server gesendet ...
+CLW-Setup_Starting ::: Starting the war... ::: Der Krieg wird gestartet ...
+CLW-Setup_Rejected ::: Rejected: %1 ::: Abgelehnt: %1
+CLW-Setup_SidesDiffer ::: The two sides must be different factions. ::: Die beiden Seiten müssen unterschiedliche Fraktionen sein.
+CLW-Setup_Failed ::: Setup menu failed to open, use /war start [mode] [key=value ...] ::: Das Setup-Menü konnte nicht geöffnet werden, nutze /war start [Modus] [Schlüssel=Wert ...]
+CLW-Setup_Waiting ::: Waiting for %1 to set up the war ::: Warte darauf, dass %1 den Krieg einrichtet
+CLW-Setup_ErrorLine ::: Setup: %1 ::: Setup: %1
+CLW-Setup_Unavailable ::: Setup is not available. ::: Das Setup ist nicht verfügbar.
+CLW-Setup_AlreadyStarted ::: The war has already started. ::: Der Krieg hat bereits begonnen.
+CLW-Setup_OwnerOnlyOpen ::: Only the setup owner may open the setup menu. ::: Nur der Setup-Besitzer darf das Setup-Menü öffnen.
+CLW-Setup_OwnerOnlyStart ::: Only the setup owner may start the war. ::: Nur der Setup-Besitzer darf den Krieg starten.
+CLW-Setup_StartFailed ::: The war could not be started (see the server log). ::: Der Krieg konnte nicht gestartet werden (siehe Serverprotokoll).
+CLW-Setup_UnknownMode ::: Unknown war mode '%1'. ::: Unbekannter Kriegsmodus '%1'.
+CLW-Setup_UnknownBattleParam ::: Unknown battle parameter %1. ::: Unbekannter Schlachtparameter %1.
+CLW-Setup_UnknownFaction ::: Unknown faction '%1'. ::: Unbekannte Fraktion '%1'.
+CLW-Setup_Usage ::: Usage: /war setup | /war start [mode] [key=value ...] ::: Verwendung: /war setup | /war start [Modus] [Schlüssel=Wert ...]
+CLW-Setup_StartAccepted ::: War start accepted. ::: Kriegsstart angenommen.
+CLW-Setup_StartRejected ::: War start rejected: %1 ::: Kriegsstart abgelehnt: %1
+CLW-Setup_NeedFactions ::: Both sides need a faction. ::: Beide Seiten brauchen eine Fraktion.
+CLW-Setup_NoFactionManager ::: No faction manager. ::: Kein Fraktionsmanager.
+CLW-Setup_FactionIgnored ::: Faction '%1' is not selectable (ignore list). ::: Die Fraktion '%1' ist nicht wählbar (Ignorierliste).
+CLW-Setup_FactionMissing ::: Faction '%1' does not exist or is not a SCR_Faction. ::: Die Fraktion '%1' existiert nicht oder ist keine SCR_Faction.
+CLW-War_Started ::: War started ::: Der Krieg hat begonnen
+CLW-War_StartedMode ::: War started: %1 (%2) %3 | %4 ::: Der Krieg hat begonnen: %1 (%2) %3 | %4
+CLW-War_PresetRefused ::: The server setup preset was refused, use the setup menu (/war setup). ::: Die Setup-Vorgabe des Servers wurde abgelehnt, nutze das Setup-Menü (/war setup).
+CLW-War_OverWinner ::: WAR OVER: %1 wins (%2) ::: KRIEG BEENDET: %1 gewinnt (%2)
+CLW-War_OverDraw ::: WAR OVER: draw (%1) ::: KRIEG BEENDET: Unentschieden (%1)
+CLW-War_EndOutOfTickets ::: %1 is out of tickets ::: %1 hat keine Tickets mehr
+CLW-War_EndHeldAll ::: %1 held all points for %2 s ::: %1 hielt alle Punkte %2 s lang
+CLW-War_EndTimeEqual ::: time limit, equal tickets ::: Zeitlimit, gleich viele Tickets
+CLW-War_EndTimeMore ::: time limit, more tickets ::: Zeitlimit, mehr Tickets
+CLW-War_HoldAll ::: %1 holds every point and wins in %2 min if it keeps them. ::: %1 hält alle Punkte und gewinnt in %2 Min., wenn es sie hält.
+CLW-Hud_Setup ::: Setup... ::: Setup ...
+CLW-Hud_WarOver ::: War over ::: Krieg beendet
+CLW-Hud_Draw ::: Draw ::: Unentschieden
+CLW-Hud_Wins ::: %1 wins ::: %1 gewinnt
+CLW-Hud_Supplies ::: Supplies ::: Nachschub
+CLW-Rematch_Results ::: Results: %1 (%2). The next round starts in %3 s: back to the setup menu, no reconnect needed. ::: Ergebnis: %1 (%2). Die nächste Runde beginnt in %3 s: zurück zum Setup-Menü, ohne neu zu verbinden.
+CLW-Rematch_ResultsDraw ::: Results: draw (%1). The next round starts in %2 s: back to the setup menu, no reconnect needed. ::: Ergebnis: Unentschieden (%1). Die nächste Runde beginnt in %2 s: zurück zum Setup-Menü, ohne neu zu verbinden.
+CLW-Rematch_Countdown ::: The next round starts in %1 s. ::: Die nächste Runde beginnt in %1 s.
+CLW-Rematch_Round ::: Round %1: back to the setup phase. The setup owner opens the menu (/war setup) or the server preset starts the war. ::: Runde %1: zurück in der Setup-Phase. Der Setup-Besitzer öffnet das Menü (/war setup) oder die Server-Vorgabe startet den Krieg.
+CLW-Fob_Established ::: %1 established FOB %2 near %3 (grid %4). ::: %1 hat die FOB %2 bei %3 errichtet (Planquadrat %4).
+CLW-Fob_Upgraded ::: %1 upgraded FOB %2 (depot). ::: %1 hat die FOB %2 ausgebaut (Depot).
+CLW-Fob_Lost ::: %1 FOB %2 near %3 was lost: %4 ::: Die FOB %2 von %1 bei %3 ging verloren: %4
+CLW-Fob_LostHeld ::: the enemy held the zone for %1 s ::: der Feind hielt die Zone %1 s lang
+CLW-Fob_LostPost ::: the command post was destroyed ::: der Kommandoposten wurde zerstört
+CLW-Log_ConvoyLost ::: %1 supply convoy %2 was lost with %3 supplies. ::: Der Nachschubkonvoi %2 von %1 ging mit %3 Nachschub verloren.
+CLW-Squad_Title ::: Squad ::: Trupp
+CLW-Squad_Far ::: %1 is %2 %3 of you. ::: %1 ist %2 %3 von dir entfernt.
+CLW-Compass_N ::: north ::: nördlich
+CLW-Compass_NE ::: north-east ::: nordöstlich
+CLW-Compass_E ::: east ::: östlich
+CLW-Compass_SE ::: south-east ::: südöstlich
+CLW-Compass_S ::: south ::: südlich
+CLW-Compass_SW ::: south-west ::: südwestlich
+CLW-Compass_W ::: west ::: westlich
+CLW-Compass_NW ::: north-west ::: nordwestlich
+CLW-Msn_Kind_CAPTURE ::: Capture ::: Einnehmen
+CLW-Msn_Kind_DEFEND ::: Defend ::: Verteidigen
+CLW-Msn_Kind_RECON ::: Recon ::: Aufklären
+CLW-Msn_Kind_DESTROY ::: Destroy ::: Vernichten
+CLW-Msn_Task_CAPTURE ::: [HQ] Capture %1 ::: [HQ] %1 einnehmen
+CLW-Msn_Task_DEFEND ::: [HQ] Defend %1 ::: [HQ] %1 verteidigen
+CLW-Msn_Task_RECON ::: [HQ] Recon %1 ::: [HQ] %1 aufklären
+CLW-Msn_Task_DESTROY ::: [HQ] Destroy %1 ::: [HQ] %1 vernichten
+CLW-Msn_TaskNamed_CAPTURE ::: [HQ] Capture %1 - %2 ::: [HQ] %1 einnehmen - %2
+CLW-Msn_TaskNamed_DEFEND ::: [HQ] Defend %1 - %2 ::: [HQ] %1 verteidigen - %2
+CLW-Msn_TaskNamed_RECON ::: [HQ] Recon %1 - %2 ::: [HQ] %1 aufklären - %2
+CLW-Msn_TaskNamed_DESTROY ::: [HQ] Destroy %1 - %2 ::: [HQ] %1 vernichten - %2
+CLW-Msn_BriefDefault_CAPTURE ::: HQ: Capture %1. ::: HQ: %1 einnehmen.
+CLW-Msn_BriefDefault_DEFEND ::: HQ: Defend %1. ::: HQ: %1 verteidigen.
+CLW-Msn_BriefDefault_RECON ::: HQ: Recon %1. ::: HQ: %1 aufklären.
+CLW-Msn_BriefDefault_DESTROY ::: HQ: Destroy %1. ::: HQ: %1 vernichten.
+CLW-Msn_Brief_HoldThreat ::: HQ: hold %1. Our point %2 is threatened: %3 enemy contact(s), the nearest %4 m away. ::: HQ: %1 halten. Unser Punkt %2 ist bedroht: %3 Feindkontakt(e), der nächste %4 m entfernt.
+CLW-Msn_Brief_HoldThreatContested ::: HQ: hold %1. Our point %2 is threatened and contested: %3 enemy contact(s), the nearest %4 m away. ::: HQ: %1 halten. Unser Punkt %2 ist bedroht und umkämpft: %3 Feindkontakt(e), der nächste %4 m entfernt.
+CLW-Msn_Brief_HoldContested ::: HQ: hold %1. Our point %2 is contested. ::: HQ: %1 halten. Unser Punkt %2 ist umkämpft.
+CLW-Msn_Brief_HoldGarrison ::: HQ: hold %1. Garrison point %2, all objectives are held. ::: HQ: %1 halten. Punkt %2 besetzen, alle Ziele sind gehalten.
+CLW-Msn_Brief_Capture ::: HQ: capture %1. Take point %2 (value %3). ::: HQ: %1 einnehmen. Punkt %2 nehmen (Wert %3).
+CLW-Msn_Brief_Recon ::: HQ: scout %1 and report. We have no contact information at %2. ::: HQ: %1 aufklären und melden. Wir haben keine Kontaktinformationen zu %2.
+CLW-Msn_Brief_DestroyVehicle ::: HQ: an enemy vehicle was reported %1 m away. Destroy it. ::: HQ: Ein feindliches Fahrzeug wurde %1 m entfernt gemeldet. Vernichten.
+CLW-Msn_Brief_DestroyInfantry ::: HQ: enemy infantry was reported %1 m away. Destroy it. ::: HQ: Feindliche Infanterie wurde %1 m entfernt gemeldet. Vernichten.
+CLW-Msn_Brief_DestroyUnknown ::: HQ: an enemy was reported %1 m away. Destroy it. ::: HQ: Ein Feind wurde %1 m entfernt gemeldet. Vernichten.
+CLW-Msn_Label_Attack ::: Capture %1 ::: %1 einnehmen
+CLW-Msn_Label_Defend ::: Defend %1 ::: %1 verteidigen
+CLW-Msn_Label_Recon ::: Recon %1 ::: %1 aufklären
+CLW-Msn_Label_FallBack ::: Fall back to %1 ::: Rückzug nach %1
+CLW-Msn_Label_Move ::: Move to %1 ::: Vorrücken nach %1
+CLW-Msn_LostTitle ::: Mission lost ::: Auftrag verloren
+CLW-Msn_LostText ::: The task was removed. ::: Der Auftrag wurde entfernt.
+CLW-Msn_NewTitle ::: HQ: new missions ::: HQ: neue Aufträge
+CLW-Msn_NewText1 ::: New mission, open the task list (J): %1 %2 ::: Neuer Auftrag, öffne die Aufgabenliste (J): %1 %2
+CLW-Msn_NewText2 ::: 2 new missions, open the task list (J): %1 %2, %3 %4 ::: 2 neue Aufträge, öffne die Aufgabenliste (J): %1 %2, %3 %4
+CLW-Msn_NewText3 ::: 3 new missions, open the task list (J): %1 %2, %3 %4, %5 %6 ::: 3 neue Aufträge, öffne die Aufgabenliste (J): %1 %2, %3 %4, %5 %6
+CLW-Msn_AcceptedTitle ::: Mission accepted ::: Auftrag angenommen
+CLW-Msn_AbandonedTitle ::: Mission abandoned ::: Auftrag aufgegeben
+CLW-Msn_AbandonedText ::: HQ will replan. ::: Das HQ plant neu.
+CLW-Msn_FailedTitle ::: Mission failed ::: Auftrag gescheitert
+CLW-Msn_FailedText ::: %1: %2 ::: %1: %2
+CLW-Msn_CompleteTitle ::: Mission complete ::: Auftrag erfüllt
+CLW-Msn_CompleteText ::: %1 (+%2 supplies) ::: %1 (+%2 Nachschub)
+CLW-Msn_Why_Timeout ::: timed out after %1 min ::: Zeit nach %1 Min. abgelaufen
+CLW-Msn_Why_Gone ::: target no longer exists ::: das Ziel existiert nicht mehr
+CLW-Msn_Why_Objective ::: objective taken ::: Ziel genommen
+CLW-Msn_Why_Reached ::: target reached ::: Ziel erreicht
+CLW-Msn_Why_Held ::: held %1 min ::: %1 Min. gehalten
+CLW-Msn_Why_Clear ::: no contact left ::: kein Kontakt mehr
+CLW-Depot_RequestVehicle ::: Request vehicle ::: Fahrzeug anfordern
+CLW-Terminal_OpenHq ::: Open HQ menu ::: HQ-Menü öffnen
+CLW-Terminal_RequestSquad ::: Request squad ::: Trupp anfordern
+CLW-Terminal_RequestResupply ::: Request resupply ::: Nachschub anfordern
+CLW-Req_Kind_vehicle ::: vehicle ::: Fahrzeug
+CLW-Req_Kind_squad ::: squad ::: Trupp
+CLW-Req_Kind_resupply ::: resupply ::: Nachschub
+CLW-Req_Kind_reinforce ::: reinforcement ::: Verstärkung
+CLW-Req_Kind_recon ::: recon ::: Aufklärung
+CLW-Req_Role_leader ::: squad leader ::: Truppführer
+CLW-Req_Role_soldier ::: soldier ::: Soldat
+CLW-Req_Action ::: Request %1 ::: %1 anfordern
+CLW-Req_ActionCost ::: Request %1 (%2 supplies) ::: %1 anfordern (%2 Nachschub)
+CLW-Req_Granted ::: HQ: %1 ::: HQ: %1
+CLW-Req_Refused ::: HQ: request %1 refused - %2 ::: HQ: Anforderung %1 abgelehnt - %2
+CLW-Req_VehicleDelivered ::: HQ: vehicle delivered, grid %1. %2 ::: HQ: Fahrzeug geliefert, Planquadrat %1. %2
+CLW-Req_Unknown ::: Unknown request '%1'. Use /request vehicle|squad|resupply|reinforce|recon ::: Unbekannte Anforderung '%1'. Nutze /request vehicle|squad|resupply|reinforce|recon
+CLW-Req_NotStarted ::: The war has not started yet. ::: Der Krieg hat noch nicht begonnen.
+CLW-Req_NoSide ::: You are not on a side. ::: Du gehörst keiner Seite an.
+CLW-Req_TerminalOut ::: That request terminal is not in service. ::: Dieses Anforderungsterminal ist außer Betrieb.
+CLW-Req_TerminalWrongSide ::: This terminal belongs to %1, you are %2. ::: Dieses Terminal gehört %1, du bist %2.
+CLW-Req_DepotTooFar ::: You are too far from the vehicle depot. ::: Du bist zu weit vom Fahrzeugdepot entfernt.
+CLW-Req_NoWar ::: The war is not running. ::: Der Krieg läuft nicht.
+CLW-Req_NoPlayer ::: No requesting player. ::: Kein anfordernder Spieler.
+CLW-Req_NotDeployed ::: You are not deployed. ::: Du bist nicht eingesetzt.
+CLW-Req_WrongSide ::: You are not on that side. ::: Du gehörst nicht zu dieser Seite.
+CLW-Req_LeaderOnly ::: Only squad leaders may request a %1 (you are a soldier; soldiers may request resupply and a vehicle). ::: Nur Truppführer dürfen %1 anfordern (du bist Soldat; Soldaten dürfen Nachschub und ein Fahrzeug anfordern).
+CLW-Req_Cooldown ::: Cooldown, try again in %1 s. ::: Abklingzeit, versuche es in %1 s erneut.
+CLW-Req_NoSuchVehicle ::: No such vehicle in the faction's catalog. ::: Dieses Fahrzeug gibt es im Katalog der Fraktion nicht.
+CLW-Req_NoVehicle ::: No vehicle can be issued. ::: Es kann kein Fahrzeug ausgegeben werden.
+CLW-Req_TooManyVehicles ::: Too many requested vehicles in the field (%1), use or lose one first. ::: Zu viele angeforderte Fahrzeuge im Feld (%1), nutze oder verliere zuerst eines.
+CLW-Req_VehicleCap ::: Vehicle cap reached (%1 + 1 > %2). ::: Fahrzeuglimit erreicht (%1 + 1 > %2).
+CLW-Req_NoSupplies ::: Not enough supplies (%1 costs %2, the base has %3). ::: Nicht genug Nachschub (%1 kostet %2, die Basis hat %3).
+CLW-Req_NoSpot ::: No free parking spot at %1. ::: Kein freier Stellplatz bei %1.
+CLW-Req_VehicleNotSpawned ::: The vehicle could not be spawned. ::: Das Fahrzeug konnte nicht erzeugt werden.
+CLW-Req_VehicleIssued ::: %1 issued at %2, grid %3 (cost %4). It is empty: bring your own crew. ::: %1 bereitgestellt bei %2, Planquadrat %3 (Kosten %4). Es ist leer: bring deine eigene Besatzung mit.
+CLW-Req_Where_Roadside ::: the roadside near you ::: dem Straßenrand in deiner Nähe
+CLW-Req_Where_OpenGround ::: the open ground near you ::: offenem Gelände in deiner Nähe
+CLW-Req_Where_Depot ::: the depot ::: dem Depot
+CLW-Req_Where_Hq ::: the HQ ::: dem HQ
+CLW-Req_Where_Base ::: base %1 ::: Basis %1
+CLW-Req_Where_YourPos ::: your position ::: deiner Position
+CLW-Req_Where_HqBase ::: the HQ base ::: der HQ-Basis
+CLW-Req_Where_YourPosOrder ::: your position ::: deine Position
+CLW-Req_Where_Grid ::: grid %1 ::: Planquadrat %1
+CLW-Req_NoSquad ::: You are not in a squad. ::: Du bist in keinem Trupp.
+CLW-Req_NoSuchTeam ::: No such infantry team in the faction's catalog. ::: Dieses Infanterieteam gibt es im Katalog der Fraktion nicht.
+CLW-Req_NoTeam ::: No team can be issued. ::: Es kann kein Team ausgegeben werden.
+CLW-Req_BuyFailed ::: %1 ::: %1
+CLW-Req_SquadApproved ::: %1 approved (cost %2). It is forming at the base and will join your squad when complete. ::: %1 genehmigt (Kosten %2). Es wird an der Basis aufgestellt und schließt sich deinem Trupp an, sobald es fertig ist.
+CLW-Req_NoBoxData ::: The faction has no resupply box in its data. ::: Die Fraktion hat keine Nachschubkiste in ihren Daten.
+CLW-Req_NoBox ::: No box can be delivered. ::: Es kann keine Kiste geliefert werden.
+CLW-Req_NoFriendlyBase ::: No friendly base to deliver from. ::: Keine eigene Basis, von der geliefert werden kann.
+CLW-Req_NoSuppliesResupply ::: Not enough supplies (resupply costs %1, the base has %2). ::: Nicht genug Nachschub (Nachschub kostet %1, die Basis hat %2).
+CLW-Req_BoxNotSpawned ::: The box could not be spawned. ::: Die Kiste konnte nicht erzeugt werden.
+CLW-Req_BoxDelivered ::: Resupply box delivered at %1, grid %2 (cost %3, removed after %4 min). ::: Nachschubkiste geliefert bei %1, Planquadrat %2 (Kosten %3, wird nach %4 Min. entfernt).
+CLW-Req_NoCommander ::: HQ has no commander. ::: Das HQ hat keinen Kommandeur.
+CLW-Req_TargetUnclear ::: Target not understood: use here, an objective id or a map grid like 123-456. ::: Ziel nicht verstanden: nutze here, eine Ziel-ID oder ein Kartenquadrat wie 123-456.
+CLW-Req_TargetNotUnderstood ::: Target not understood. ::: Ziel nicht verstanden.
+CLW-Req_NoGroup ::: No free group is available right now (all are on missions or too weak). ::: Derzeit ist keine freie Gruppe verfügbar (alle sind im Einsatz oder zu schwach).
+CLW-Req_CouldNotOrder ::: HQ could not order %1: %2 ::: Das HQ konnte %1 nicht beauftragen: %2
+CLW-Req_OrderMove ::: %1 is moving to %2, %3 m away. ::: %1 rückt nach %2 vor, %3 m entfernt.
+CLW-Req_OrderReinforce ::: %1 is reinforcing you, moving to %2, %3 m away. ::: %1 verstärkt dich und rückt nach %2 vor, %3 m entfernt.
+CLW-Req_OrderRecon ::: %1 is sent to recon, moving to %2, %3 m away. ::: %1 wird zur Aufklärung geschickt und rückt nach %2 vor, %3 m entfernt.
+CLW-Req_ReconNeedsTarget ::: Recon needs a target: /request recon <grid|here|objective> ::: Aufklärung braucht ein Ziel: /request recon <Quadrat|here|Ziel>
+CLW-Req_MenuUnavailable ::: HQ: requests are available once the war is running and you are on a side. ::: HQ: Anforderungen sind verfügbar, sobald der Krieg läuft und du einer Seite angehörst.
+CLW-Req_MenuHeader ::: HQ requests (you are a %1, supplies %2): ::: HQ-Anforderungen (du bist %1, Nachschub %2):
+CLW-Req_MenuVehicle ::: /request vehicle [type] - empty vehicle at the depot (near you when you are far from a base) ::: /request vehicle [Typ] - leeres Fahrzeug am Depot (in deiner Nähe, wenn du weit von einer Basis entfernt bist)
+CLW-Req_MenuVehicleDefault ::: /request vehicle [type] - empty vehicle at the depot (near you when you are far from a base), default %1 cost %2 ::: /request vehicle [Typ] - leeres Fahrzeug am Depot (in deiner Nähe, wenn du weit von einer Basis entfernt bist), Standard %1 Kosten %2
+CLW-Req_MenuSquad ::: /request squad [type] - AI team joins your squad (squad leaders) ::: /request squad [Typ] - KI-Team schließt sich deinem Trupp an (Truppführer)
+CLW-Req_MenuSquadDefault ::: /request squad [type] - AI team joins your squad (squad leaders), default %1 cost %2 ::: /request squad [Typ] - KI-Team schließt sich deinem Trupp an (Truppführer), Standard %1 Kosten %2
+CLW-Req_MenuResupply ::: /request resupply - ammo box at your position near a base, else at HQ, cost %1 ::: /request resupply - Munitionskiste an deiner Position nahe einer Basis, sonst am HQ, Kosten %1
+CLW-Req_MenuReinforce ::: /request reinforce - HQ sends the nearest free group to you (squad leaders, free) ::: /request reinforce - das HQ schickt die nächste freie Gruppe zu dir (Truppführer, kostenlos)
+CLW-Req_MenuRecon ::: /request recon <grid|here|objective> - HQ sends a group to look (squad leaders, free) ::: /request recon <Quadrat|here|Ziel> - das HQ schickt eine Gruppe zum Erkunden (Truppführer, kostenlos)
+CLW-Req_MenuReport ::: /report <count> <inf|veh|armor> <dist m> <dir> - report enemy contact to HQ ::: /report <Anzahl> <inf|veh|armor> <Entfernung m> <Richtung> - Feindkontakt an das HQ melden
+CLW-Req_MenuTypes ::: types:%1 ::: Typen:%1
+CLW-Req_TeamNoSquad ::: HQ: %1 arrived at the base, but you have no squad to join; HQ keeps it. ::: HQ: %1 ist an der Basis eingetroffen, aber du hast keinen Trupp, dem es beitreten kann; das HQ behält es.
+CLW-Req_TeamJoined ::: HQ: %1 (%2 men) has joined your squad. ::: HQ: %1 (%2 Mann) hat sich deinem Trupp angeschlossen.
+CLW-Req_TeamNobody ::: HQ: %1 arrived but nobody could join your squad. ::: HQ: %1 ist eingetroffen, aber niemand konnte sich deinem Trupp anschließen.
+CLW-Rep_NoWar ::: Report not possible: the war has not started. ::: Meldung nicht möglich: der Krieg hat nicht begonnen.
+CLW-Rep_Off ::: Contact reports are off in this war mode. ::: Kontaktmeldungen sind in diesem Kriegsmodus aus.
+CLW-Rep_NotDeployed ::: You must be deployed on a side to report. ::: Du musst für eine Meldung auf einer Seite eingesetzt sein.
+CLW-Rep_Usage ::: Usage: /report <count> <inf|veh|armor> <distance m> <direction N|NE|E|SE|S|SW|W|NW or degrees> ::: Verwendung: /report <Anzahl> <inf|veh|armor> <Entfernung m> <Richtung N|NE|E|SE|S|SW|W|NW oder Grad>
+CLW-Rep_CountNumber ::: The count must be a number. ::: Die Anzahl muss eine Zahl sein.
+CLW-Rep_Type ::: The type must be inf, veh or armor. ::: Der Typ muss inf, veh oder armor sein.
+CLW-Rep_DistanceUnclear ::: Distance not understood (meters, e.g. 300 or 1.2km). ::: Entfernung nicht verstanden (Meter, z. B. 300 oder 1.2km).
+CLW-Rep_DistanceRange ::: The distance must be %1 to %2 m. ::: Die Entfernung muss %1 bis %2 m betragen.
+CLW-Rep_DirectionUnclear ::: Direction not understood (N NE E SE S SW W NW or degrees 0-360). ::: Richtung nicht verstanden (N NE E SE S SW W NW oder Grad 0-360).
+CLW-Rep_Wait ::: Wait a few seconds between reports. ::: Warte einige Sekunden zwischen Meldungen.
+CLW-Rep_NoEnemy ::: No known enemy. ::: Kein bekannter Feind.
+CLW-Rep_NoBook ::: HQ has no contact book. ::: Das HQ hat kein Kontaktbuch.
+CLW-Rep_Logged ::: Contact logged: %1 %2, grid %3 (%4 m %5). Thanks. ::: Kontakt gemeldet: %1 %2, Planquadrat %3 (%4 m %5). Danke.
+CLW-Rep_Kind_infantry ::: infantry ::: Infanterie
+CLW-Rep_Kind_vehicle ::: vehicles ::: Fahrzeuge
+CLW-Journal_Awaiting ::: Awaiting the first HQ situation report. It appears here and as a hint (H) when your HQ has compiled it. ::: Der erste Lagebericht des HQ steht noch aus. Er erscheint hier und als Hinweis (H), sobald dein HQ ihn erstellt hat.
+CLW-Journal_NoContact ::: No enemy contact reported yet. ::: Noch kein Feindkontakt gemeldet.
+CLW-Journal_Mission ::: Take and hold the objectives, preserve tickets. ::: Nimm und halte die Ziele, schone die Tickets.
+CLW-Journal_Execution ::: Your squad leader receives HQ missions in the task list (J). ::: Dein Truppführer erhält HQ-Aufträge in der Aufgabenliste (J).
+CLW-Journal_Logistics ::: Logistics ::: Logistik
+CLW-Sit_HintTitle ::: SITREP T+%1 ::: LAGE T+%1
+CLW-Sit_HintTitleHq ::: SITREP T+%1 (HQ) ::: LAGE T+%1 (HQ)
+CLW-Sit_HintEnemy ::: Enemy: %1 ::: Feind: %1
+CLW-Sit_HintFooter ::: Full report: map > journal. H = show again. ::: Voller Bericht: Karte > Journal. H = erneut anzeigen.
+CLW-Sit_NoneYet ::: No SITREP received yet, HQ staff is still working on it. ::: Noch keine Lage empfangen, der HQ-Stab arbeitet noch daran.
+CLW-Sit_Join ::: %1 %2 ::: %1 %2
+CLW-Sit_Bluf_NoPicture ::: BLUF: no war picture available yet. ::: Kernaussage: Noch kein Lagebild verfügbar.
+CLW-Sit_Bluf_HeldEffort ::: BLUF: %1. We hold %2; main effort: %3. ::: Kernaussage: %1. Wir halten %2; Schwerpunkt: %3.
+CLW-Sit_Bluf_HeldIdle ::: BLUF: %1. We hold %2; forces are consolidating. ::: Kernaussage: %1. Wir halten %2; die Kräfte sammeln sich.
+CLW-Sit_Bluf_Effort ::: BLUF: %1. Main effort: %2. ::: Kernaussage: %1. Schwerpunkt: %2.
+CLW-Sit_Bluf_Idle ::: BLUF: %1. Forces are consolidating. ::: Kernaussage: %1. Die Kräfte sammeln sich.
+CLW-Sit_Bluf_EndedDraw ::: BLUF: hostilities have ended in a draw. ::: Kernaussage: Die Kampfhandlungen endeten unentschieden.
+CLW-Sit_Bluf_Ended ::: BLUF: hostilities have ended. ::: Kernaussage: Die Kampfhandlungen sind beendet.
+CLW-Sit_Bluf_Assembling ::: BLUF: forces are assembling, no contact yet. ::: Kernaussage: Die Kräfte sammeln sich, noch kein Kontakt.
+CLW-Sit_S_OverDraw ::: The war is over: draw. ::: Der Krieg ist vorbei: Unentschieden.
+CLW-Sit_S_OverWinner ::: The war is over. Victory goes to %1. ::: Der Krieg ist vorbei. Der Sieg geht an %1.
+CLW-Sit_S_NotStarted ::: The war has not started yet. HQ staff is assembling; the first full SITREP follows when forces deploy. ::: Der Krieg hat noch nicht begonnen. Der HQ-Stab sammelt sich; die erste vollständige Lage folgt, wenn die Kräfte eingesetzt werden.
+CLW-Sit_M_NotStarted ::: Our forces seize and hold the objectives to preserve our tickets. ::: Unsere Kräfte nehmen und halten die Ziele, um unsere Tickets zu schonen.
+CLW-Sit_X_NotStarted ::: Pick a squad in the deploy menu; squad leaders receive HQ tasking once the war runs. ::: Wähle im Einsatzmenü einen Trupp; Truppführer erhalten HQ-Aufträge, sobald der Krieg läuft.
+CLW-Sit_S_AllHeld ::: We hold every objective. ::: Wir halten alle Ziele.
+CLW-Sit_S_HeldNone ::: We hold no objectives. ::: Wir halten keine Ziele.
+CLW-Sit_S_Held ::: We hold %1. ::: Wir halten %1.
+CLW-Sit_S_EnemyHolds ::: The enemy holds %1. ::: Der Feind hält %1.
+CLW-Sit_S_OpenOne ::: %1 remains open. ::: %1 bleibt offen.
+CLW-Sit_S_OpenMany ::: %1 remain open. ::: %1 bleiben offen.
+CLW-Sit_S_ContestedOne ::: %1 is contested. ::: %1 ist umkämpft.
+CLW-Sit_S_ContestedMany ::: %1 are contested. ::: %1 sind umkämpft.
+CLW-Sit_List2 ::: %1 and %2 ::: %1 und %2
+CLW-Sit_List3 ::: %1, %2 and %3 ::: %1, %2 und %3
+CLW-Sit_ListMore ::: %1, %2, %3 and %4 more ::: %1, %2, %3 und %4 weitere
+CLW-Sit_Tix_WellAhead ::: We are well ahead on tickets. ::: Bei den Tickets liegen wir weit vorn.
+CLW-Sit_Tix_Lead ::: We hold a narrow lead on tickets. ::: Bei den Tickets haben wir einen knappen Vorsprung.
+CLW-Sit_Tix_Even ::: Tickets are roughly even. ::: Die Tickets stehen etwa gleich.
+CLW-Sit_Tix_Behind ::: We are behind on tickets. ::: Bei den Tickets liegen wir zurück.
+CLW-Sit_Tix_BadlyBehind ::: We are badly behind on tickets. ::: Bei den Tickets liegen wir weit zurück.
+CLW-Sit_Time_LessMinute ::: Less than a minute remains. ::: Es bleibt weniger als eine Minute.
+CLW-Sit_Time_Minute ::: About a minute remains. ::: Es bleibt etwa eine Minute.
+CLW-Sit_Time_OverHour ::: Over an hour remains. ::: Es bleibt über eine Stunde.
+CLW-Sit_Time_Hour ::: About an hour remains. ::: Es bleibt etwa eine Stunde.
+CLW-Sit_Time_Minutes ::: About %1 minutes remain. ::: Es bleiben etwa %1 Minuten.
+CLW-Sit_Force_Full ::: Our forces are at full strength. ::: Unsere Kräfte sind voll einsatzbereit.
+CLW-Sit_Force_Good ::: Our forces are in good shape. ::: Unsere Kräfte sind in gutem Zustand.
+CLW-Sit_Force_Reduced ::: Our forces are at reduced strength. ::: Unsere Kräfte sind geschwächt.
+CLW-Sit_Force_Depleted ::: Our forces are badly depleted. ::: Unsere Kräfte sind stark dezimiert.
+CLW-Sit_Mom_Initiative ::: Initiative is ours ::: Die Initiative liegt bei uns
+CLW-Sit_Mom_Advantage ::: We hold a slight advantage ::: Wir haben einen leichten Vorteil
+CLW-Sit_Mom_Balanced ::: The fight is evenly balanced ::: Der Kampf ist ausgeglichen
+CLW-Sit_Mom_Pressure ::: We are under pressure ::: Wir stehen unter Druck
+CLW-Sit_Mom_Losing ::: We are losing ground ::: Wir verlieren Boden
+CLW-Sit_Obj_All ::: every objective ::: alle Ziele
+CLW-Sit_Obj_None ::: no objectives ::: keine Ziele
+CLW-Sit_Obj_Most ::: most objectives ::: die meisten Ziele
+CLW-Sit_Obj_Half ::: about half the objectives ::: etwa die Hälfte der Ziele
+CLW-Sit_Obj_Few ::: a few objectives ::: ein paar Ziele
+CLW-Sit_E_None ::: No enemy contact reported. ::: Kein Feindkontakt gemeldet.
+CLW-Sit_E_NounInf ::: infantry activity ::: Infanterieaktivität
+CLW-Sit_E_NounMove ::: movement ::: Bewegung
+CLW-Sit_E_Line ::: %1 enemy %2 %3, grid %4: %5, %6. ::: %1 feindliche %2 %3, Planquadrat %4: %5, %6.
+CLW-Sit_Mag_1 ::: Light ::: Leichte
+CLW-Sit_Mag_2 ::: Moderate ::: Mäßige
+CLW-Sit_Mag_3 ::: Significant ::: Erhebliche
+CLW-Sit_Mag_4 ::: Large ::: Große
+CLW-Sit_Age_Now ::: just now ::: gerade eben
+CLW-Sit_Age_Minute ::: within the last minute ::: innerhalb der letzten Minute
+CLW-Sit_Age_Few ::: in the last few minutes ::: in den letzten Minuten
+CLW-Sit_Age_Dated ::: earlier (dated) ::: früher (veraltet)
+CLW-Sit_Inf_1 ::: a few infantry ::: ein paar Infanteristen
+CLW-Sit_Inf_2 ::: an infantry fire team ::: ein Infanterie-Feuertrupp
+CLW-Sit_Inf_3 ::: a squad-sized infantry element ::: ein Infanterieelement in Truppstärke
+CLW-Sit_Inf_4 ::: a platoon-sized infantry element ::: ein Infanterieelement in Zugstärke
+CLW-Sit_Inf_5 ::: a company-sized infantry force ::: eine Infanteriekraft in Kompaniestärke
+CLW-Sit_Veh_1 ::: a single vehicle ::: ein einzelnes Fahrzeug
+CLW-Sit_Veh_2 ::: a section of vehicles ::: eine Fahrzeuggruppe
+CLW-Sit_Veh_3 ::: a vehicle platoon ::: ein Fahrzeugzug
+CLW-Sit_Veh_4 ::: a large mechanized force ::: eine große mechanisierte Kraft
+CLW-Sit_SizeWithVehicles ::: %1 with vehicle support ::: %1 mit Fahrzeugunterstützung
+CLW-Sit_SizeWithDismounts ::: %1 with dismounts ::: %1 mit abgesessenen Kräften
+CLW-Sit_SizeUnknown ::: an unidentified element ::: ein nicht identifiziertes Element
+CLW-Sit_CompassAdj_0 ::: northern ::: nördlich
+CLW-Sit_CompassAdj_1 ::: north-eastern ::: nordöstlich
+CLW-Sit_CompassAdj_2 ::: eastern ::: östlich
+CLW-Sit_CompassAdj_3 ::: south-eastern ::: südöstlich
+CLW-Sit_CompassAdj_4 ::: southern ::: südlich
+CLW-Sit_CompassAdj_5 ::: south-western ::: südwestlich
+CLW-Sit_CompassAdj_6 ::: western ::: westlich
+CLW-Sit_CompassAdj_7 ::: north-western ::: nordwestlich
+CLW-Sit_E_AimCentred ::: centred on %1 ::: auf %1 konzentriert
+CLW-Sit_E_AimHeld ::: aimed at %1, which we hold ::: gegen %1 gerichtet, das wir halten
+CLW-Sit_E_AimTake ::: to take %1 ::: um %1 zu nehmen
+CLW-Sit_E_AimReinforce ::: to reinforce %1 ::: um %1 zu verstärken
+CLW-Sit_E_SecNear ::: near %1 ::: nahe %1
+CLW-Sit_E_SecAt ::: at %1 ::: bei %1
+CLW-Sit_E_Assessment ::: Assessment: enemy main effort likely %1; secondary activity %2. ::: Einschätzung: Der Schwerpunkt des Feindes liegt voraussichtlich %1; Nebenaktivität %2.
+CLW-Sit_Noun_Grid ::: grid %1 ::: Planquadrat %1
+CLW-Sit_Noun_Hq ::: our HQ ::: unser HQ
+CLW-Sit_Noun_Approach ::: the %1 approach to %2 ::: der %1e Zugang zu %2
+CLW-Sit_Noun_Area ::: the area around %1 ::: das Gebiet um %1
+CLW-Sit_Where_Hq ::: close to our HQ ::: nahe unserem HQ
+CLW-Sit_Where_At ::: at %1 ::: bei %1
+CLW-Sit_Where_Near ::: near %1 ::: nahe %1
+CLW-Sit_Where_Approach ::: on the %1 approach to %2 ::: am %1en Zugang zu %2
+CLW-Sit_Where_Open ::: in open country ::: im offenen Gelände
+CLW-Sit_M_Consolidate ::: Our forces consolidate and screen, then take and hold the objectives to preserve our tickets. ::: Unsere Kräfte sammeln und sichern, nehmen und halten dann die Ziele, um unsere Tickets zu schonen.
+CLW-Sit_M_One ::: Our forces %1 %2. ::: Unsere Kräfte %1, %2.
+CLW-Sit_M_Two ::: Our forces %1 and %2 %3. ::: Unsere Kräfte %1 und %2, %3.
+CLW-Sit_Cl_Attack ::: seize %1 ::: nehmen %1 ein
+CLW-Sit_Cl_Defend ::: hold %1 ::: halten %1
+CLW-Sit_Cl_Recon ::: reconnoitre %1 ::: klären %1 auf
+CLW-Sit_Cl_FallBack ::: withdraw to %1 ::: ziehen sich auf %1 zurück
+CLW-Sit_Cl_Move ::: occupy %1 ::: besetzen %1
+CLW-Sit_Inf_Attack ::: seize %1 ::: %1 einnehmen
+CLW-Sit_Inf_Defend ::: hold %1 ::: %1 halten
+CLW-Sit_Inf_Recon ::: reconnoitre %1 ::: %1 aufklären
+CLW-Sit_Inf_FallBack ::: withdraw to %1 ::: Rückzug auf %1
+CLW-Sit_Inf_Move ::: occupy %1 ::: %1 besetzen
+CLW-Sit_Why_ProtectLead ::: to protect our lead ::: um unseren Vorsprung zu schützen
+CLW-Sit_Why_DenyGround ::: to deny the enemy the ground ::: um dem Feind das Gelände zu verwehren
+CLW-Sit_Why_FindMainBody ::: to locate the enemy main body ::: um die feindliche Hauptmacht aufzuspüren
+CLW-Sit_Why_Regroup ::: to regroup and preserve combat power ::: um sich neu zu gruppieren und Kampfkraft zu erhalten
+CLW-Sit_Why_TurnTickets ::: to turn the ticket count ::: um den Ticketstand zu drehen
+CLW-Sit_Why_KeepPressure ::: to keep the pressure on and hold our lead ::: um den Druck aufrechtzuerhalten und unseren Vorsprung zu halten
+CLW-Sit_Why_BleedTickets ::: to bleed enemy tickets ::: um die Tickets des Feindes zu senken
+CLW-Sit_X_Main ::: Main effort: %1. ::: Schwerpunkt: %1.
+CLW-Sit_X_Supporting ::: Supporting: %1. ::: Unterstützung: %1.
+CLW-Sit_X_Withdrawing ::: Withdrawing: %1. ::: Rückzug: %1.
+CLW-Sit_X_Reserve ::: Reserve: %1 held back. ::: Reserve: %1 zurückgehalten.
+CLW-Sit_X_Leaders ::: Squad leaders: check your HQ tasking in the task list (J). ::: Truppführer: Prüft eure HQ-Aufträge in der Aufgabenliste (J).
+CLW-Sit_X_None ::: No elements tasked yet. ::: Noch keine Elemente beauftragt.
+CLW-Sit_X_Semicolon ::: %1; %2 ::: %1; %2
+CLW-Sit_ElemOne ::: one element ::: ein Element
+CLW-Sit_ElemMany ::: %1 elements ::: %1 Elemente
+CLW-Sit_Ef_Attack_One ::: one element assaults %1 ::: ein Element greift %1 an
+CLW-Sit_Ef_Attack_Many ::: %1 elements assault %2 ::: %1 Elemente greifen %2 an
+CLW-Sit_Ef_Defend_One ::: one element defends %1 ::: ein Element verteidigt %1
+CLW-Sit_Ef_Defend_Many ::: %1 elements defend %2 ::: %1 Elemente verteidigen %2
+CLW-Sit_Ef_Recon_One ::: one element reconnoitres %1 ::: ein Element klärt %1 auf
+CLW-Sit_Ef_Recon_Many ::: %1 elements reconnoitre %2 ::: %1 Elemente klären %2 auf
+CLW-Sit_Ef_FallBack_One ::: one element falls back to %1 ::: ein Element zieht sich auf %1 zurück
+CLW-Sit_Ef_FallBack_Many ::: %1 elements fall back to %2 ::: %1 Elemente ziehen sich auf %2 zurück
+CLW-Sit_Ef_Move_One ::: one element moves to %1 ::: ein Element rückt nach %1 vor
+CLW-Sit_Ef_Move_Many ::: %1 elements move to %2 ::: %1 Elemente rücken nach %2 vor
+CLW-Sit_SupState_Adequate ::: adequate ::: ausreichend
+CLW-Sit_SupState_Exhausted ::: exhausted ::: erschöpft
+CLW-Sit_SupState_Tight ::: tight ::: knapp
+CLW-Sit_SupState_Plentiful ::: plentiful ::: reichlich
+CLW-Sit_L_IncomeNone ::: Supplies are %1 with no resupply income. ::: Der Nachschub ist %1, bei keinem Nachschubeinkommen.
+CLW-Sit_L_IncomeModest ::: Supplies are %1 with a modest income. ::: Der Nachschub ist %1, bei bescheidenem Einkommen.
+CLW-Sit_L_IncomeSteady ::: Supplies are %1 with a steady income. ::: Der Nachschub ist %1, bei stetigem Einkommen.
+CLW-Sit_L_IncomeStrong ::: Supplies are %1 with a strong income. ::: Der Nachschub ist %1, bei starkem Einkommen.
+CLW-Sit_L_VehNone ::: No vehicles are in service. ::: Es sind keine Fahrzeuge im Dienst.
+CLW-Sit_L_VehSome ::: Vehicles are in service. ::: Fahrzeuge sind im Dienst.
+CLW-Sit_L_VehFew ::: Few vehicles are in service. ::: Nur wenige Fahrzeuge sind im Dienst.
+CLW-Sit_L_VehHalf ::: About half our vehicles are in service. ::: Etwa die Hälfte unserer Fahrzeuge ist im Dienst.
+CLW-Sit_L_VehMost ::: Most of our vehicles are in service. ::: Die meisten unserer Fahrzeuge sind im Dienst.
+CLW-Sit_L_WornOne ::: One element is worn down. ::: Ein Element ist abgekämpft.
+CLW-Sit_L_WornMany ::: %1 elements are worn down. ::: %1 Elemente sind abgekämpft.
+CLW-Sit_L_IneffOne ::: One element is combat-ineffective. ::: Ein Element ist nicht mehr kampffähig.
+CLW-Sit_L_IneffMany ::: %1 elements are combat-ineffective. ::: %1 Elemente sind nicht mehr kampffähig.
+CLW-Sit_L_AllEffective ::: All elements remain combat-effective. ::: Alle Elemente bleiben kampffähig.
+CLW-Sit_L_AtCap ::: We are at force cap, no reinforcements needed. ::: Wir sind an der Kräftegrenze, keine Verstärkung nötig.
+CLW-Sit_L_CanBuy ::: Reinforcements can be bought. ::: Verstärkung kann gekauft werden.
+CLW-Sit_L_CannotBuy ::: We cannot afford reinforcements for now. ::: Verstärkung können wir uns vorerst nicht leisten.

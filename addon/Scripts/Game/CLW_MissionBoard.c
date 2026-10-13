@@ -209,16 +209,11 @@ class CLW_MissionBoard : CLW_MissionHook
 		return "{\"state\":\"" + state + "\",\"kind\":\"" + offer.m_sKind + "\",\"target\":" + target + "}";
 	}
 
+	// Mission kind as a param: the key of its label ("#CLW-Msn_Kind_CAPTURE"); an unknown kind stays as it is.
 	protected string KindLabel(string kind)
 	{
-		if (kind == "CAPTURE")
-			return "Capture";
-		if (kind == "DEFEND")
-			return "Defend";
-		if (kind == "RECON")
-			return "Recon";
-		if (kind == "DESTROY")
-			return "Destroy";
+		if (kind == "CAPTURE" || kind == "DEFEND" || kind == "RECON" || kind == "DESTROY")
+			return "#CLW-Msn_Kind_" + kind;
 
 		return kind;
 	}
@@ -236,26 +231,27 @@ class CLW_MissionBoard : CLW_MissionHook
 		return point.m_sName;
 	}
 
-	// Task title: "[HQ] Capture C - Timber Hub" (position offers: "[HQ] Recon 2600/2750").
+	// Task title as a CLW_Loc wire: "[HQ] Capture C - Timber Hub" (position offers: "[HQ] Recon 2600/2750"). One key per kind and
+	// flat params only (the task text is formatted by the vanilla task UI, which cannot render nested wires).
 	protected string TaskName(CLW_MissionOffer offer)
 	{
-		string text = "[HQ] " + KindLabel(offer.m_sKind) + " " + TargetText(offer);
 		if (!offer.m_bHasPos)
 		{
 			string name = PointName(offer.m_sTarget);
 			if (!name.IsEmpty())
-				text += " - " + name;
+				return CLW_Loc.W("#CLW-Msn_TaskNamed_" + offer.m_sKind, TargetText(offer), name);
 		}
 
-		return text;
+		return CLW_Loc.W("#CLW-Msn_Task_" + offer.m_sKind, TargetText(offer));
 	}
 
+	// Task description: the brief of the offer (a wire from the rules, or prose from the LLM), else a default line per kind.
 	protected string Brief(CLW_MissionOffer offer)
 	{
 		if (!offer.m_sBrief.IsEmpty())
 			return offer.m_sBrief;
 
-		return "HQ: " + KindLabel(offer.m_sKind) + " " + TargetText(offer) + ".";
+		return CLW_Loc.W("#CLW-Msn_BriefDefault_" + offer.m_sKind, TargetText(offer));
 	}
 
 	// Target position of an offer (surface Y). False for an unknown objective id.
@@ -462,7 +458,7 @@ class CLW_MissionBoard : CLW_MissionHook
 		{
 			rec.m_Offer = null;
 			rec.m_fNextOfferAt = now + PAUSE_AFTER_END_SEC;
-			Notify(rec, "Mission lost", "The task was removed.", "", string.Format("%1 task disappeared, replanning", rec.m_sSquad));
+			Notify(rec, CLW_Loc.W("#CLW-Msn_LostTitle"), CLW_Loc.W("#CLW-Msn_LostText"), "", string.Format("%1 task disappeared, replanning", rec.m_sSquad));
 		}
 
 		PruneOffers(rec, now);
@@ -575,7 +571,7 @@ class CLW_MissionBoard : CLW_MissionHook
 			rec.m_aOffers.Insert(offer);
 			rec.m_aTasks.Insert(task);
 			m_mTaskToRec.Set(task.GetTaskID(), rec.m_sKey);
-			Print(string.Format("CLW: mission offered to player %1 (%2/%3): %4 %5 [%6] '%7'", rec.m_iPlayer, rec.m_sFaction, rec.m_sSquad, offer.m_sKind, TargetText(offer), offer.m_sSource, offer.m_sBrief), LogLevel.NORMAL);
+			Print(string.Format("CLW: mission offered to player %1 (%2/%3): %4 %5 [%6] '%7'", rec.m_iPlayer, rec.m_sFaction, rec.m_sSquad, offer.m_sKind, TargetText(offer), offer.m_sSource, CLW_Loc.Resolve(offer.m_sBrief)), LogLevel.NORMAL);
 		}
 
 		int count = rec.m_aOffers.Count();
@@ -591,27 +587,41 @@ class CLW_MissionBoard : CLW_MissionHook
 		}
 
 		rec.m_fOfferedAt = now;
-		string kinds;
+		string kinds;	// English, for the log / event only
+		array<string> pairs = {};	// kind key + target of each offer, for the popup (at most MAX_OFFERS = 3)
 		foreach (CLW_MissionOffer published : rec.m_aOffers)
 		{
 			if (!kinds.IsEmpty())
 				kinds += ", ";
-			kinds += KindLabel(published.m_sKind) + " " + TargetText(published);
+			kinds += published.m_sKind + " " + TargetText(published);
+			pairs.Insert(KindLabel(published.m_sKind));
+			pairs.Insert(TargetText(published));
 		}
 
-		Notify(rec, "HQ: new missions", string.Format("%1 new mission(s), open the task list (J): %2", count, kinds), SoundTaskCreated(), string.Format("%1 offered %2: %3", rec.m_sSquad, count, kinds));
+		string newText;
+		if (count == 1)
+			newText = CLW_Loc.W("#CLW-Msn_NewText1", pairs[0], pairs[1]);
+		else if (count == 2)
+			newText = CLW_Loc.W("#CLW-Msn_NewText2", pairs[0], pairs[1], pairs[2], pairs[3]);
+		else
+			newText = CLW_Loc.W("#CLW-Msn_NewText3", pairs[0], pairs[1], pairs[2], pairs[3], pairs[4], pairs[5]);
+
+		Notify(rec, CLW_Loc.W("#CLW-Msn_NewTitle"), newText, SoundTaskCreated(), string.Format("%1 offered %2: %3", rec.m_sSquad, count, kinds));
 	}
 
 	protected SCR_Task CreateOfferTask(SCR_TaskSystem taskSystem, CLW_MissionRec rec, CLW_MissionOffer offer, vector pos)
 	{
 		s_iCounter++;
 		string taskId = "CLW_Msn_" + rec.m_sFaction + "_" + s_iCounter;
-		SCR_Task task = taskSystem.CreateTask(TASK_PREFAB, taskId, TaskName(offer), Brief(offer), pos);
+		SCR_Task task = taskSystem.CreateTask(TASK_PREFAB, taskId, "", "", pos);
 		if (!task)
 		{
 			Print("CLW: mission CreateTask failed for " + taskId, LogLevel.WARNING);
 			return null;
 		}
+
+		CLW_Loc.SetTaskName(task, TaskName(offer));	// key + params: every client formats the title in its own language
+		CLW_Loc.SetTaskDescription(task, Brief(offer));
 
 		// visible and assignable to the leading PLAYER only; not assigned (the player accepts it himself)
 		taskSystem.SetTaskOwnership(task, SCR_ETaskOwnership.EXECUTOR);
@@ -668,7 +678,7 @@ class CLW_MissionBoard : CLW_MissionHook
 				taskSystem.ShowProgressForTask(task, true);
 		}
 
-		Notify(rec, "Mission accepted", TaskName(offer), SoundTaskAccept(), string.Format("%1 accepted %2 %3", rec.m_sSquad, offer.m_sKind, TargetText(offer)));
+		Notify(rec, CLW_Loc.W("#CLW-Msn_AcceptedTitle"), TaskName(offer), SoundTaskAccept(), string.Format("%1 accepted %2 %3", rec.m_sSquad, offer.m_sKind, TargetText(offer)));
 	}
 
 	protected void HandleAssigneeRemoved(SCR_Task task, SCR_TaskExecutor executor)
@@ -691,7 +701,7 @@ class CLW_MissionBoard : CLW_MissionHook
 		string what;
 		if (offer)
 			what = offer.m_sKind + " " + TargetText(offer);
-		Notify(rec, "Mission abandoned", "HQ will replan.", SoundTaskCancelled(), string.Format("%1 abandoned %2, new offers in %3 s", rec.m_sSquad, what, PAUSE_AFTER_END_SEC));
+		Notify(rec, CLW_Loc.W("#CLW-Msn_AbandonedTitle"), CLW_Loc.W("#CLW-Msn_AbandonedText"), SoundTaskCancelled(), string.Format("%1 abandoned %2, new offers in %3 s", rec.m_sSquad, what, PAUSE_AFTER_END_SEC));
 	}
 
 	protected void FlushDoomed(CLW_MissionRec rec)
@@ -718,14 +728,14 @@ class CLW_MissionBoard : CLW_MissionHook
 
 		if (now - rec.m_fAcceptedAt > TIMEOUT_SEC)
 		{
-			Finish(rec, false, "timed out after " + Math.Round(TIMEOUT_SEC / 60) + " min", now);
+			Finish(rec, false, "timed out after " + Math.Round(TIMEOUT_SEC / 60) + " min", CLW_Loc.W("#CLW-Msn_Why_Timeout", CLW_Loc.N(Math.Round(TIMEOUT_SEC / 60))), now);
 			return;
 		}
 
 		vector target;
 		if (!OfferPos(offer, target))
 		{
-			Finish(rec, false, "target no longer exists", now);
+			Finish(rec, false, "target no longer exists", CLW_Loc.W("#CLW-Msn_Why_Gone"), now);
 			return;
 		}
 
@@ -754,12 +764,12 @@ class CLW_MissionBoard : CLW_MissionHook
 			else
 				done = hasLeader && vector.DistanceXZ(leaderPos, target) <= RECON_RADIUS_M;
 			if (done)
-				Finish(rec, true, "objective taken", now);
+				Finish(rec, true, "objective taken", CLW_Loc.W("#CLW-Msn_Why_Objective"), now);
 		}
 		else if (offer.m_sKind == "RECON")
 		{
 			if (hasLeader && vector.DistanceXZ(leaderPos, target) <= RECON_RADIUS_M)
-				Finish(rec, true, "target reached", now);
+				Finish(rec, true, "target reached", CLW_Loc.W("#CLW-Msn_Why_Reached"), now);
 		}
 		else if (offer.m_sKind == "DEFEND")
 		{
@@ -790,7 +800,7 @@ class CLW_MissionBoard : CLW_MissionHook
 
 			UpdateProgress(rec, Math.Min(99, rec.m_fHoldSec / DEFEND_HOLD_SEC * 100));
 			if (rec.m_fHoldSec >= DEFEND_HOLD_SEC)
-				Finish(rec, true, "held " + Math.Round(DEFEND_HOLD_SEC / 60) + " min", now);
+				Finish(rec, true, "held " + Math.Round(DEFEND_HOLD_SEC / 60) + " min", CLW_Loc.W("#CLW-Msn_Why_Held", CLW_Loc.N(Math.Round(DEFEND_HOLD_SEC / 60))), now);
 		}
 		else if (offer.m_sKind == "DESTROY")
 		{
@@ -803,7 +813,7 @@ class CLW_MissionBoard : CLW_MissionHook
 				if (rec.m_fClearSince < 0)
 					rec.m_fClearSince = now;
 				if (now - rec.m_fClearSince >= DESTROY_CLEAR_SEC)
-					Finish(rec, true, "no contact left", now);
+					Finish(rec, true, "no contact left", CLW_Loc.W("#CLW-Msn_Why_Clear"), now);
 			}
 			else
 			{
@@ -841,8 +851,8 @@ class CLW_MissionBoard : CLW_MissionHook
 			taskSystem.SetTaskProgress(rec.m_Task, whole);
 	}
 
-	// Completed (reward) or failed. why = short reason for the log / popup.
-	protected void Finish(CLW_MissionRec rec, bool success, string why, float now)
+	// Completed (reward) or failed. why = short English reason for the log / event, whyWire = the same for the popup (CLW_Loc wire).
+	protected void Finish(CLW_MissionRec rec, bool success, string why, string whyWire, float now)
 	{
 		CLW_MissionOffer offer = rec.m_Offer;
 		SCR_Task task = rec.m_Task;
@@ -872,7 +882,7 @@ class CLW_MissionBoard : CLW_MissionHook
 		string what = offer.m_sKind + " " + TargetText(offer);
 		if (!success)
 		{
-			Notify(rec, "Mission failed", TaskName(offer) + ": " + why, SoundTaskFailed(), string.Format("%1 failed %2 (%3)", rec.m_sSquad, what, why));
+			Notify(rec, CLW_Loc.W("#CLW-Msn_FailedTitle"), CLW_Loc.W("#CLW-Msn_FailedText", TaskName(offer), whyWire), SoundTaskFailed(), string.Format("%1 failed %2 (%3)", rec.m_sSquad, what, why));
 			return;
 		}
 
@@ -891,7 +901,7 @@ class CLW_MissionBoard : CLW_MissionHook
 		if (war)
 			war.AddSupplies(rec.m_sFaction, reward);
 
-		Notify(rec, "Mission complete", string.Format("%1 (+%2 supplies)", TaskName(offer), reward), SoundTaskSucceed(), string.Format("%1 completed %2 (%3), reward +%4 supplies", rec.m_sSquad, what, why, reward));
+		Notify(rec, CLW_Loc.W("#CLW-Msn_CompleteTitle"), CLW_Loc.W("#CLW-Msn_CompleteText", TaskName(offer), CLW_Loc.N(reward)), SoundTaskSucceed(), string.Format("%1 completed %2 (%3), reward +%4 supplies", rec.m_sSquad, what, why, reward));
 	}
 
 	// ---- cleanup ----

@@ -66,22 +66,22 @@ class CLW_SitrepClient
 		{
 			Print("CLW: sitrep client: no SITREP yet", LogLevel.NORMAL);
 			if (force)
-				CLW_Debug.Show("no SITREP received yet, HQ staff is still working on it");
+				CLW_Debug.Show("#CLW-Sit_NoneYet");
 			return;
 		}
 
-		string title = "SITREP T+" + CLW_Sitrep.FormatClock(s_Last.m_fWarTime);
+		string title = CLW_Loc.F("#CLW-Sit_HintTitle", CLW_Sitrep.FormatClock(s_Last.m_fWarTime));
 		if (s_Last.m_sSource == CLW_Sitrep.SOURCE_LLM)
-			title += " (HQ)";
+			title = CLW_Loc.F("#CLW-Sit_HintTitleHq", CLW_Sitrep.FormatClock(s_Last.m_fWarTime));
 		string text = "";
-		text += Short(s_Last.GetBody(2), 320);
-		string enemy = Short(s_Last.GetBody(1), 240);
+		text += Short(Render(s_Last.GetBody(2)), 320);
+		string enemy = Short(Render(s_Last.GetBody(1)), 240);
 		if (!enemy.IsEmpty())
-			text += "\nEnemy: " + enemy;
-		string situation = Short(s_Last.GetBody(0), 220);
+			text += "\n" + CLW_Loc.F("#CLW-Sit_HintEnemy", enemy);
+		string situation = Short(Render(s_Last.GetBody(0)), 220);
 		if (!situation.IsEmpty())
 			text += "\n" + situation;
-		text += "\nFull report: map > journal. H = show again.";
+		text += "\n" + CLW_Loc.Fmt("#CLW-Sit_HintFooter");
 		text = CLW_Sitrep.DisplaySafe(text);
 		if (text.Length() > HINT_MAX_CHARS)
 			text = text.Substring(0, HINT_MAX_CHARS - 3) + "...";
@@ -97,6 +97,14 @@ class CLW_SitrepClient
 		s_bHintPending = false;
 		s_fLastHintAt = Now();
 		s_sHintedMission = s_Last.GetBody(2);
+	}
+
+	// A body from the wire (line breaks as <br/>) in the player language: CLW_Loc wires are formatted, LLM prose stays as it is.
+	protected static string Render(string body)
+	{
+		string text = body;
+		text.Replace("<br/>", "\n");
+		return CLW_Loc.Resolve(text);
 	}
 
 	// First line of a body, line breaks flattened, limited.
@@ -129,13 +137,13 @@ class CLW_SitrepClient
 		array<string> noParams = {};
 		for (int i = 0; i < CLW_SitrepTemplate.SECTION_COUNT; i++)
 		{
-			string body = sitrep.GetBody(i);
+			string body = Render(sitrep.GetBody(i));
 			if (body.IsEmpty())
 				body = "-";
 
 			body.Replace("\n", "<br/>");
 			if (i == 0 && !sitrep.m_sHeadline.IsEmpty())
-				body = sitrep.m_sHeadline + "<br/>" + body;
+				body = Render(sitrep.m_sHeadline) + "<br/>" + body;
 
 			briefing.RewriteEntryMain(factionKey, i, CLW_Sitrep.DisplaySafe(body), noParams);
 		}
