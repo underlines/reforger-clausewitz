@@ -47,28 +47,31 @@ class CLW_Reports
 			return "";
 
 		string reply;
-		bool ok = Make(playerId, args, reply);
+		string replyWire;	// the same for the player, as a CLW_Loc wire
+		bool ok = Make(playerId, args, reply, replyWire);
 		string verdict = "REFUSED";
 		if (ok)
 			verdict = "ACCEPTED";
 
 		Print(string.Format("CLW: report player=%1(%2) args='%3' -> %4: %5", playerId, CLW_RequestService.PlayerName(playerId), args, verdict, reply), LogLevel.NORMAL);
-		CLW_RequestService.Answer(playerId, "HQ: " + reply, true);
+		CLW_RequestService.Answer(playerId, CLW_Loc.W("#CLW-Req_Granted", replyWire), true);
 		return reply;
 	}
 
-	protected static bool Make(int playerId, string args, out string reply)
+	protected static bool Make(int playerId, string args, out string reply, out string replyWire)
 	{
 		CLW_WarState war = CLW_GameMode.GetWarState();
 		if (!war || !war.IsRunning())
 		{
 			reply = "report not possible: the war has not started";
+			replyWire = CLW_Loc.W("#CLW-Rep_NoWar");
 			return false;
 		}
 
 		if (!CLW_Capabilities.Has("reports"))
 		{
 			reply = "contact reports are off in this war mode";
+			replyWire = CLW_Loc.W("#CLW-Rep_Off");
 			return false;
 		}
 
@@ -77,6 +80,7 @@ class CLW_Reports
 		if (faction.IsEmpty() || !CLW_RequestService.PlayerPos(playerId, origin))
 		{
 			reply = "you must be deployed on a side to report";
+			replyWire = CLW_Loc.W("#CLW-Rep_NotDeployed");
 			return false;
 		}
 
@@ -85,12 +89,14 @@ class CLW_Reports
 		if (tokens.Count() < 4)
 		{
 			reply = "usage: /report <count> <inf|veh|armor> <distance m> <direction N|NE|E|SE|S|SW|W|NW or degrees>";
+			replyWire = CLW_Loc.W("#CLW-Rep_Usage");
 			return false;
 		}
 
 		if (!CLW_ModeParam.IsNumber(tokens[0]))
 		{
 			reply = "count must be a number";
+			replyWire = CLW_Loc.W("#CLW-Rep_CountNumber");
 			return false;
 		}
 
@@ -106,6 +112,7 @@ class CLW_Reports
 		if (kind == CLW_Contact.KIND_UNKNOWN)
 		{
 			reply = "type must be inf, veh or armor";
+			replyWire = CLW_Loc.W("#CLW-Rep_Type");
 			return false;
 		}
 
@@ -113,12 +120,14 @@ class CLW_Reports
 		if (!ParseDistance(tokens[2], distance))
 		{
 			reply = "distance not understood (meters, e.g. 300 or 1.2km)";
+			replyWire = CLW_Loc.W("#CLW-Rep_DistanceUnclear");
 			return false;
 		}
 
 		if (distance < CLW_RequestConfig.REPORT_MIN_DIST_M || distance > CLW_RequestConfig.REPORT_MAX_DIST_M)
 		{
 			reply = string.Format("distance must be %1 to %2 m", CLW_RequestConfig.REPORT_MIN_DIST_M, CLW_RequestConfig.REPORT_MAX_DIST_M);
+			replyWire = CLW_Loc.W("#CLW-Rep_DistanceRange", CLW_Loc.N(CLW_RequestConfig.REPORT_MIN_DIST_M), CLW_Loc.N(CLW_RequestConfig.REPORT_MAX_DIST_M));
 			return false;
 		}
 
@@ -127,6 +136,7 @@ class CLW_Reports
 		if (!ParseBearing(dirToken, bearing))
 		{
 			reply = "direction not understood (N NE E SE S SW W NW or degrees 0-360)";
+			replyWire = CLW_Loc.W("#CLW-Rep_DirectionUnclear");
 			return false;
 		}
 
@@ -135,6 +145,7 @@ class CLW_Reports
 		if (s_mLastReport.Find(playerId, last) && now - last < CLW_RequestConfig.REPORT_COOLDOWN_SEC)
 		{
 			reply = "wait a few seconds between reports";
+			replyWire = CLW_Loc.W("#CLW-Rep_Wait");
 			return false;
 		}
 
@@ -142,6 +153,7 @@ class CLW_Reports
 		if (enemy.IsEmpty())
 		{
 			reply = "no known enemy";
+			replyWire = CLW_Loc.W("#CLW-Rep_NoEnemy");
 			return false;
 		}
 
@@ -149,6 +161,7 @@ class CLW_Reports
 		if (!book)
 		{
 			reply = "HQ has no contact book";
+			replyWire = CLW_Loc.W("#CLW-Rep_NoBook");
 			return false;
 		}
 
@@ -162,6 +175,7 @@ class CLW_Reports
 		s_mLastReport.Set(playerId, now);
 		war.PushEvent(faction, "player " + CLW_RequestService.PlayerName(playerId) + " reports " + count + " " + kind + " at grid " + CLW_Places.Grid(pos));
 		reply = string.Format("contact logged: %1 %2, grid %3 (%4 m %5). Thanks.", count, kind, CLW_Places.Grid(pos), Math.Round(distance), dirToken);
+		replyWire = CLW_Loc.W("#CLW-Rep_Logged", CLW_Loc.N(count), "#CLW-Rep_Kind_" + kind, CLW_Places.Grid(pos), CLW_Loc.N(Math.Round(distance)), dirToken);
 		return true;
 	}
 

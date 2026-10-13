@@ -18,7 +18,7 @@ GenericEntity : "{5753634EAFFBA2F6}Prefabs/Props/Military/Compositions/US/Vehicl
       "clwdepot"
      }
      UIInfo UIInfo "{7A2D4E90C1B3F611}" {
-      Name "Request vehicle"
+      Name "#CLW-Depot_RequestVehicle"
      }
      VisibilityRange 10
     }

@@ -2,7 +2,8 @@
 // REQUEST_REINFORCE, REQUEST_RECON. Authority "player", capability "requests". Registered from script (CLW_ActionsRequests.Register,
 // called by CLW_GameMode right after the registry reset). The executors hold the grant rules (role, cooldown, ledger, caps, engine
 // headroom); CLW_RequestService does parsing, history and the answer. Executors are shared per entry: no per-call state in members.
-// Execute returns true = granted, result = the sentence the requester reads ("... issued ...") or the refusal reason.
+// Execute returns true = granted, result = the sentence the requester reads ("... issued ...") or the refusal reason (English: log,
+// history, dashboard). The requester himself reads call.m_sResultWire, the same sentence as a CLW_Loc key + params, formatted on his client.
 
 // Common checks: war running, living requester on the call's faction, role, cooldown.
 class CLW_Action_RequestBase : CLW_ActionExecutor
@@ -12,48 +13,38 @@ class CLW_Action_RequestBase : CLW_ActionExecutor
 		return "";
 	}
 
+	// Refusal / failure: English text for the log and history, wire for the requester. Always returns false.
+	protected bool Refuse(CLW_ActionCall call, out string text, string english, string wire)
+	{
+		text = english;
+		call.m_sResultWire = wire;
+		return false;
+	}
+
 	override bool Validate(CLW_ActionCall call, out string error)
 	{
 		CLW_WarState war = CLW_GameMode.GetWarState();
 		if (!war || !war.IsRunning())
-		{
-			error = "the war is not running";
-			return false;
-		}
+			return Refuse(call, error, "the war is not running", CLW_Loc.W("#CLW-Req_NoWar"));
 
 		int playerId = call.m_iPlayerId;
 		if (playerId <= 0)
-		{
-			error = "no requesting player";
-			return false;
-		}
+			return Refuse(call, error, "no requesting player", CLW_Loc.W("#CLW-Req_NoPlayer"));
 
 		vector pos;
 		if (!CLW_RequestService.PlayerPos(playerId, pos))
-		{
-			error = "you are not deployed";
-			return false;
-		}
+			return Refuse(call, error, "you are not deployed", CLW_Loc.W("#CLW-Req_NotDeployed"));
 
 		if (CLW_RequestService.FactionKeyOf(playerId) != call.m_sFaction)
-		{
-			error = "you are not on that side";
-			return false;
-		}
+			return Refuse(call, error, "you are not on that side", CLW_Loc.W("#CLW-Req_WrongSide"));
 
 		string kind = KindName();
 		if (CLW_RequestKind.NeedsLeader(kind) && !CLW_RequestService.IsSquadLeader(playerId))
-		{
-			error = "only squad leaders may request a " + kind + " (you are a soldier; soldiers may request resupply and a vehicle)";
-			return false;
-		}
+			return Refuse(call, error, "only squad leaders may request a " + kind + " (you are a soldier; soldiers may request resupply and a vehicle)", CLW_Loc.W("#CLW-Req_LeaderOnly", CLW_RequestKind.LabelKey(kind)));
 
 		float left = CLW_RequestService.CooldownLeft(playerId, kind);
 		if (left > 0)
-		{
-			error = "cooldown, try again in " + Math.Round(left) + " s";
-			return false;
-		}
+			return Refuse(call, error, "cooldown, try again in " + Math.Round(left) + " s", CLW_Loc.W("#CLW-Req_Cooldown", CLW_Loc.N(Math.Round(left))));
 
 		return true;
 	}
@@ -68,6 +59,21 @@ class CLW_Action_RequestBase : CLW_ActionExecutor
 // ---- REQUEST_VEHICLE type? ----
 class CLW_Action_RequestVehicle : CLW_Action_RequestBase
 {
+	// Where the vehicle was parked (CLW_RequestService.FindVehicleSpot gives English words) as a param: a key, or the base id of a FOB.
+	protected string WhereKey(string where)
+	{
+		if (where == "roadside near you")
+			return "#CLW-Req_Where_Roadside";
+		if (where == "open ground near you")
+			return "#CLW-Req_Where_OpenGround";
+		if (where == "depot")
+			return "#CLW-Req_Where_Depot";
+		if (where == "HQ")
+			return "#CLW-Req_Where_Hq";
+
+		return CLW_Loc.W("#CLW-Req_Where_Base", where);
+	}
+
 	protected override string KindName()
 	{
 		return CLW_RequestKind.VEHICLE;
@@ -84,10 +90,7 @@ class CLW_Action_RequestVehicle : CLW_Action_RequestBase
 			return false;
 
 		if (!CLW_RequestService.PickVehicle(call.m_sFaction, call.GetString("type")))
-		{
-			error = "no such vehicle in the faction's catalog";
-			return false;
-		}
+			return Refuse(call, error, "no such vehicle in the faction's catalog", CLW_Loc.W("#CLW-Req_NoSuchVehicle"));
 
 		return true;
 	}
@@ -99,31 +102,22 @@ class CLW_Action_RequestVehicle : CLW_Action_RequestBase
 		string faction = call.m_sFaction;
 		CLW_ForceEntry entry = CLW_RequestService.PickVehicle(faction, call.GetString("type"));
 		if (!war || !spawner || !entry)
-		{
-			result = "no vehicle can be issued";
-			return false;
-		}
+			return Refuse(call, result, "no vehicle can be issued", CLW_Loc.W("#CLW-Req_NoVehicle"));
 
 		int issued = CLW_RequestService.CountIssuedVehicles(faction);
 		if (issued >= CLW_RequestConfig.MAX_ISSUED_VEHICLES)
-		{
-			result = "too many requested vehicles in the field (" + issued + "), use or lose one first";
-			return false;
-		}
+			return Refuse(call, result, "too many requested vehicles in the field (" + issued + "), use or lose one first", CLW_Loc.W("#CLW-Req_TooManyVehicles", CLW_Loc.N(issued)));
 
 		int cap = war.GetVehicleCap(faction);
 		int live = spawner.GetLiveVehicles(faction) + issued;
 		if (cap > 0 && live + 1 > cap)
-		{
-			result = string.Format("vehicle cap reached (%1 + 1 > %2)", live, cap);
-			return false;
-		}
+			return Refuse(call, result, string.Format("vehicle cap reached (%1 + 1 > %2)", live, cap), CLW_Loc.W("#CLW-Req_VehicleCap", CLW_Loc.N(live), CLW_Loc.N(cap)));
 
 		int cost = CLW_RequestService.VehicleCost(entry);
 		if (!CLW_SupplyStore.TrySpend(faction, call.GetString("base"), cost))
 		{
-			result = string.Format("not enough supplies (%1 costs %2, the base has %3)", entry.GetVehicleName(), cost, CLW_SupplyStore.Get(faction, call.GetString("base")));
-			return false;
+			int have = CLW_SupplyStore.Get(faction, call.GetString("base"));
+			return Refuse(call, result, string.Format("not enough supplies (%1 costs %2, the base has %3)", entry.GetVehicleName(), cost, have), CLW_Loc.W("#CLW-Req_NoSupplies", entry.GetVehicleName(), CLW_Loc.N(cost), CLW_Loc.N(have)));
 		}
 
 		vector spot;
@@ -135,16 +129,14 @@ class CLW_Action_RequestVehicle : CLW_Action_RequestBase
 		if (!CLW_RequestService.FindVehicleSpot(faction, spot, yaw, via, where, call.GetString("base"), requesterPos, entry.m_VehiclePrefab))
 		{
 			CLW_SupplyStore.Refund(faction, call.GetString("base"), cost);
-			result = "no free parking spot at the " + where;
-			return false;
+			return Refuse(call, result, "no free parking spot at the " + where, CLW_Loc.W("#CLW-Req_NoSpot", WhereKey(where)));
 		}
 
 		IEntity vehicle = CLW_RequestService.SpawnVehicle(entry.m_VehiclePrefab, spot, yaw, faction);
 		if (!vehicle)
 		{
 			CLW_SupplyStore.Refund(faction, call.GetString("base"), cost);
-			result = "the vehicle could not be spawned";
-			return false;
+			return Refuse(call, result, "the vehicle could not be spawned", CLW_Loc.W("#CLW-Req_VehicleNotSpawned"));
 		}
 
 		war.RegisterVehicle(vehicle, faction);
@@ -161,6 +153,7 @@ class CLW_Action_RequestVehicle : CLW_Action_RequestBase
 		Granted(call);
 		war.PushEvent(faction, "player " + CLW_RequestService.PlayerName(call.m_iPlayerId) + " requested a " + entry.GetVehicleName());
 		result = string.Format("%1 issued at the %2, grid %3 (cost %4). It is empty: bring your own crew.", entry.GetVehicleName(), where, CLW_Places.Grid(spot), cost);
+		call.m_sResultWire = CLW_Loc.W("#CLW-Req_VehicleIssued", entry.GetVehicleName(), WhereKey(where), CLW_Places.Grid(spot), CLW_Loc.N(cost));
 		Print(string.Format("CLW: request vehicle %1 spawned %2 at %3 via=%4 where=%5 cost=%6", faction, entry.m_sType, spot, via, where, cost), LogLevel.NORMAL);
 		return true;
 	}
@@ -185,16 +178,10 @@ class CLW_Action_RequestSquad : CLW_Action_RequestBase
 			return false;
 
 		if (!CLW_RequestService.GroupOf(call.m_iPlayerId))
-		{
-			error = "you are not in a squad";
-			return false;
-		}
+			return Refuse(call, error, "you are not in a squad", CLW_Loc.W("#CLW-Req_NoSquad"));
 
 		if (!CLW_RequestService.PickInfantry(call.m_sFaction, call.GetString("type")))
-		{
-			error = "no such infantry team in the faction's catalog";
-			return false;
-		}
+			return Refuse(call, error, "no such infantry team in the faction's catalog", CLW_Loc.W("#CLW-Req_NoSuchTeam"));
 
 		return true;
 	}
@@ -204,10 +191,7 @@ class CLW_Action_RequestSquad : CLW_Action_RequestBase
 		CLW_ForceSpawner spawner = CLW_GameMode.GetForceSpawner();
 		CLW_ForceEntry entry = CLW_RequestService.PickInfantry(call.m_sFaction, call.GetString("type"));
 		if (!spawner || !entry)
-		{
-			result = "no team can be issued";
-			return false;
-		}
+			return Refuse(call, result, "no team can be issued", CLW_Loc.W("#CLW-Req_NoTeam"));
 
 		// the spawner checks supplies, the AI cap and the engine AI headroom and charges the ledger (refunded if the spawn fails)
 		// the team forms beside the vehicle depot: of the terminal's base, else the depot nearest to the requester (none = HQ spawn zone)
@@ -230,13 +214,11 @@ class CLW_Action_RequestSquad : CLW_Action_RequestBase
 
 		string error;
 		if (!spawner.BuyFor(call.m_sFaction, entry.m_sType, "player request " + CLW_RequestService.PlayerName(call.m_iPlayerId), call.m_iPlayerId, error, depotAnchor))
-		{
-			result = error;
-			return false;
-		}
+			return Refuse(call, result, error, CLW_Loc.W("#CLW-Req_BuyFailed", error));
 
 		Granted(call);
 		result = string.Format("%1 approved (cost %2). It is forming at the base and will join your squad when complete.", entry.m_sName, entry.m_iCost);
+		call.m_sResultWire = CLW_Loc.W("#CLW-Req_SquadApproved", entry.m_sName, CLW_Loc.N(entry.m_iCost));
 		return true;
 	}
 }
@@ -281,10 +263,7 @@ class CLW_Action_RequestResupply : CLW_Action_RequestBase
 
 		string source;
 		if (BoxPrefab(call.m_sFaction, source).IsEmpty())
-		{
-			error = "the faction has no resupply box in its data";
-			return false;
-		}
+			return Refuse(call, error, "the faction has no resupply box in its data", CLW_Loc.W("#CLW-Req_NoBoxData"));
 
 		return true;
 	}
@@ -298,10 +277,7 @@ class CLW_Action_RequestResupply : CLW_Action_RequestBase
 		ResourceName prefab = BoxPrefab(faction, source);
 		vector playerPos;
 		if (!war || prefab.IsEmpty() || !CLW_RequestService.PlayerPos(call.m_iPlayerId, playerPos))
-		{
-			result = "no box can be delivered";
-			return false;
-		}
+			return Refuse(call, result, "no box can be delivered", CLW_Loc.W("#CLW-Req_NoBox"));
 
 		vector anchor;
 		if (bases)
@@ -321,23 +297,22 @@ class CLW_Action_RequestResupply : CLW_Action_RequestBase
 
 		vector center = playerPos;
 		string where = "at your position";
+		string whereKey = "#CLW-Req_Where_YourPos";
 		if (!near)
 		{
 			if (anchor == vector.Zero)
-			{
-				result = "no friendly base to deliver from";
-				return false;
-			}
+				return Refuse(call, result, "no friendly base to deliver from", CLW_Loc.W("#CLW-Req_NoFriendlyBase"));
 
 			center = anchor;
 			where = "at the HQ base";
+			whereKey = "#CLW-Req_Where_HqBase";
 		}
 
 		int cost = CLW_RequestConfig.RESUPPLY_COST;
 		if (!CLW_SupplyStore.TrySpend(faction, call.GetString("base"), cost))
 		{
-			result = string.Format("not enough supplies (resupply costs %1, the base has %2)", cost, CLW_SupplyStore.Get(faction, call.GetString("base")));
-			return false;
+			int haveBox = CLW_SupplyStore.Get(faction, call.GetString("base"));
+			return Refuse(call, result, string.Format("not enough supplies (resupply costs %1, the base has %2)", cost, haveBox), CLW_Loc.W("#CLW-Req_NoSuppliesResupply", CLW_Loc.N(cost), CLW_Loc.N(haveBox)));
 		}
 
 		vector spot;
@@ -359,8 +334,7 @@ class CLW_Action_RequestResupply : CLW_Action_RequestBase
 		if (!box)
 		{
 			CLW_SupplyStore.Refund(faction, call.GetString("base"), cost);
-			result = "the box could not be spawned";
-			return false;
+			return Refuse(call, result, "the box could not be spawned", CLW_Loc.W("#CLW-Req_BoxNotSpawned"));
 		}
 
 		array<IEntity> tree = {};
@@ -369,6 +343,7 @@ class CLW_Action_RequestResupply : CLW_Action_RequestBase
 		CLW_RequestService.TrackBox(call.m_iPlayerId, box);
 		Granted(call);
 		result = string.Format("resupply box delivered %1, grid %2 (cost %3, removed after %4 min).", where, CLW_Places.Grid(spot), cost, Math.Round(CLW_RequestConfig.RESUPPLY_LIFETIME_MS / 60000.0));
+		call.m_sResultWire = CLW_Loc.W("#CLW-Req_BoxDelivered", whereKey, CLW_Places.Grid(spot), CLW_Loc.N(cost), CLW_Loc.N(Math.Round(CLW_RequestConfig.RESUPPLY_LIFETIME_MS / 60000.0)));
 		Print(string.Format("CLW: request resupply %1 box %2 at %3 via=%4 near=%5 cost=%6", faction, prefab.GetPath(), spot, via, near, cost), LogLevel.NORMAL);
 		return true;
 	}
@@ -383,7 +358,7 @@ class CLW_Action_RequestOrder : CLW_Action_RequestBase
 	}
 
 	// Target of the request: "" / "here" = the requester, an objective id, or a map grid "123-456" (100 m cells, as the map shows).
-	protected bool ResolveWhere(CLW_ActionCall call, string where, out vector pos, out string label)
+	protected bool ResolveWhere(CLW_ActionCall call, string where, out vector pos, out string label, out string labelWire)
 	{
 		string text = where;
 		text = text.Trim();
@@ -396,6 +371,7 @@ class CLW_Action_RequestOrder : CLW_Action_RequestBase
 		{
 			pos = playerPos;
 			label = "your position";
+			labelWire = "#CLW-Req_Where_YourPosOrder";
 			return true;
 		}
 
@@ -407,6 +383,7 @@ class CLW_Action_RequestOrder : CLW_Action_RequestBase
 		{
 			pos = point.m_vPos;
 			label = point.m_sName;
+			labelWire = point.m_sName;
 			return true;
 		}
 
@@ -428,6 +405,7 @@ class CLW_Action_RequestOrder : CLW_Action_RequestBase
 		pos = Vector(gx * 100 + 50, 0, gz * 100 + 50);
 		pos[1] = GetGame().GetWorld().GetSurfaceY(pos[0], pos[2]);
 		label = "grid " + CLW_Places.Grid(pos);
+		labelWire = CLW_Loc.W("#CLW-Req_Where_Grid", CLW_Places.Grid(pos));
 		return true;
 	}
 
@@ -437,18 +415,13 @@ class CLW_Action_RequestOrder : CLW_Action_RequestBase
 			return false;
 
 		if (!call.m_Rules)
-		{
-			error = "HQ has no commander";
-			return false;
-		}
+			return Refuse(call, error, "HQ has no commander", CLW_Loc.W("#CLW-Req_NoCommander"));
 
 		vector pos;
 		string label;
-		if (!ResolveWhere(call, call.GetString("where"), pos, label))
-		{
-			error = "target not understood: use here, an objective id or a map grid like 123-456";
-			return false;
-		}
+		string labelWire;
+		if (!ResolveWhere(call, call.GetString("where"), pos, label, labelWire))
+			return Refuse(call, error, "target not understood: use here, an objective id or a map grid like 123-456", CLW_Loc.W("#CLW-Req_TargetUnclear"));
 
 		return true;
 	}
@@ -502,27 +475,19 @@ class CLW_Action_RequestOrder : CLW_Action_RequestBase
 	{
 		vector pos;
 		string label;
-		if (!ResolveWhere(call, call.GetString("where"), pos, label))
-		{
-			result = "target not understood";
-			return false;
-		}
+		string labelWire;
+		if (!ResolveWhere(call, call.GetString("where"), pos, label, labelWire))
+			return Refuse(call, result, "target not understood", CLW_Loc.W("#CLW-Req_TargetNotUnderstood"));
 
 		float distance;
 		string squad = FindGroup(call, pos, distance);
 		if (squad.IsEmpty())
-		{
-			result = "no free group is available right now (all are on missions or too weak)";
-			return false;
-		}
+			return Refuse(call, result, "no free group is available right now (all are on missions or too weak)", CLW_Loc.W("#CLW-Req_NoGroup"));
 
 		string why;
 		string reason = "player request " + CLW_RequestService.PlayerName(call.m_iPlayerId) + " (" + KindName() + ")";
 		if (!call.m_Rules.ApplyOrder(squad, OrderCommand(), "", pos, reason, why))
-		{
-			result = "HQ could not order " + squad + ": " + why;
-			return false;
-		}
+			return Refuse(call, result, "HQ could not order " + squad + ": " + why, CLW_Loc.W("#CLW-Req_CouldNotOrder", squad, why));
 
 		Granted(call);
 		CLW_WarState war = CLW_GameMode.GetWarState();
@@ -530,6 +495,7 @@ class CLW_Action_RequestOrder : CLW_Action_RequestBase
 			war.PushEvent(call.m_sFaction, squad + " sent to " + label + " at the request of " + CLW_RequestService.PlayerName(call.m_iPlayerId));
 
 		result = string.Format("%1 is %2 to %3, %4 m away.", squad, Verb(), label, Math.Round(distance));
+		call.m_sResultWire = CLW_Loc.W(VerbKey(), squad, labelWire, CLW_Loc.N(Math.Round(distance)));
 		Print(string.Format("CLW: request %1 %2 -> %3 %4 at %5 (%6 m)", call.m_sFaction, KindName(), squad, OrderCommand(), pos, Math.Round(distance)), LogLevel.NORMAL);
 		return true;
 	}
@@ -537,6 +503,12 @@ class CLW_Action_RequestOrder : CLW_Action_RequestBase
 	protected string Verb()
 	{
 		return "moving";
+	}
+
+	// Key of the answer sentence: "%1 is moving to %2, %3 m away." (squad id, target, distance).
+	protected string VerbKey()
+	{
+		return "#CLW-Req_OrderMove";
 	}
 }
 
@@ -555,6 +527,11 @@ class CLW_Action_RequestReinforce : CLW_Action_RequestOrder
 	protected override string Verb()
 	{
 		return "reinforcing you, moving";
+	}
+
+	protected override string VerbKey()
+	{
+		return "#CLW-Req_OrderReinforce";
 	}
 
 	// reinforce always means "to me"
@@ -582,13 +559,15 @@ class CLW_Action_RequestRecon : CLW_Action_RequestOrder
 		return "sent to recon, moving";
 	}
 
+	protected override string VerbKey()
+	{
+		return "#CLW-Req_OrderRecon";
+	}
+
 	override bool Validate(CLW_ActionCall call, out string error)
 	{
 		if (!call.HasArg("where"))
-		{
-			error = "recon needs a target: /request recon <grid|here|objective>";
-			return false;
-		}
+			return Refuse(call, error, "recon needs a target: /request recon <grid|here|objective>", CLW_Loc.W("#CLW-Req_ReconNeedsTarget"));
 
 		return super.Validate(call, error);
 	}

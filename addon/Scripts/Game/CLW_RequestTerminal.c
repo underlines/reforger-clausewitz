@@ -78,7 +78,7 @@ class CLW_RequestMenuAction : CLW_RequestActionBase
 
 	override bool GetActionNameScript(out string outName)
 	{
-		outName = "Open HQ menu";
+		outName = CLW_Loc.Fmt("#CLW-Terminal_OpenHq");
 		return true;
 	}
 

@@ -160,9 +160,10 @@ class CLW_RequestClient
 	// Chat line, plus a hint for the answers.
 	static void Show(string text, bool hint)
 	{
-		CLW_Debug.Show(text);
+		string shown = CLW_Loc.Resolve(text);	// the server sends a CLW_Loc wire
+		CLW_Debug.Show(shown);
 		if (hint)
-			SCR_HintManagerComponent.ShowCustomHint(text, "HQ", 15);
+			SCR_HintManagerComponent.ShowCustomHint(shown, "HQ", 15);
 	}
 
 	// "vehicle=60;squad=120;resupply=20;" from the server (the force catalog only exists there).
@@ -181,14 +182,13 @@ class CLW_RequestClient
 		}
 	}
 
-	// Action label with the cost: "Request squad (120)".
+	// Action label with the cost: "Request squad (120 supplies)".
 	static string ActionLabel(string kind)
 	{
-		string label = "Request " + kind;
 		string cost;
 		if (s_mCosts.Find(kind, cost))
-			label += " (" + cost + " supplies)";
+			return CLW_Loc.F("#CLW-Req_ActionCost", CLW_RequestKind.LabelKey(kind), cost);
 
-		return label;
+		return CLW_Loc.F("#CLW-Req_Action", CLW_RequestKind.LabelKey(kind));
 	}
 }

@@ -176,6 +176,7 @@ class CLW_ActionCall
 	CLW_RuleCommander m_Rules;		// weak: the faction's rule commander (squad checks, orders), set by the HQ callers
 	ref Managed m_Payload;			// structured extra input an executor understands (e.g. the mission offers of a squad)
 	int m_iApplied;					// set by executors: how many items were done (buys, offers)
+	string m_sResultWire;			// player-facing version of the result / refusal as a CLW_Loc wire ("" = only the English text); player request executors set it
 	int m_iDepth;					// macro nesting
 
 	protected ref map<string, string> m_mArgs = new map<string, string>();

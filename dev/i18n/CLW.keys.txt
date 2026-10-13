@@ -174,3 +174,97 @@ CLW-Msn_Why_Objective ::: objective taken ::: Ziel genommen
 CLW-Msn_Why_Reached ::: target reached ::: Ziel erreicht
 CLW-Msn_Why_Held ::: held %1 min ::: %1 Min. gehalten
 CLW-Msn_Why_Clear ::: no contact left ::: kein Kontakt mehr
+CLW-Depot_RequestVehicle ::: Request vehicle ::: Fahrzeug anfordern
+CLW-Terminal_OpenHq ::: Open HQ menu ::: HQ-Menü öffnen
+CLW-Terminal_RequestSquad ::: Request squad ::: Trupp anfordern
+CLW-Terminal_RequestResupply ::: Request resupply ::: Nachschub anfordern
+CLW-Req_Kind_vehicle ::: vehicle ::: Fahrzeug
+CLW-Req_Kind_squad ::: squad ::: Trupp
+CLW-Req_Kind_resupply ::: resupply ::: Nachschub
+CLW-Req_Kind_reinforce ::: reinforcement ::: Verstärkung
+CLW-Req_Kind_recon ::: recon ::: Aufklärung
+CLW-Req_Role_leader ::: squad leader ::: Truppführer
+CLW-Req_Role_soldier ::: soldier ::: Soldat
+CLW-Req_Action ::: Request %1 ::: %1 anfordern
+CLW-Req_ActionCost ::: Request %1 (%2 supplies) ::: %1 anfordern (%2 Nachschub)
+CLW-Req_Granted ::: HQ: %1 ::: HQ: %1
+CLW-Req_Refused ::: HQ: request %1 refused - %2 ::: HQ: Anforderung %1 abgelehnt - %2
+CLW-Req_VehicleDelivered ::: HQ: vehicle delivered, grid %1. %2 ::: HQ: Fahrzeug geliefert, Planquadrat %1. %2
+CLW-Req_Unknown ::: Unknown request '%1'. Use /request vehicle|squad|resupply|reinforce|recon ::: Unbekannte Anforderung '%1'. Nutze /request vehicle|squad|resupply|reinforce|recon
+CLW-Req_NotStarted ::: The war has not started yet. ::: Der Krieg hat noch nicht begonnen.
+CLW-Req_NoSide ::: You are not on a side. ::: Du gehörst keiner Seite an.
+CLW-Req_TerminalOut ::: That request terminal is not in service. ::: Dieses Anforderungsterminal ist außer Betrieb.
+CLW-Req_TerminalWrongSide ::: This terminal belongs to %1, you are %2. ::: Dieses Terminal gehört %1, du bist %2.
+CLW-Req_DepotTooFar ::: You are too far from the vehicle depot. ::: Du bist zu weit vom Fahrzeugdepot entfernt.
+CLW-Req_NoWar ::: The war is not running. ::: Der Krieg läuft nicht.
+CLW-Req_NoPlayer ::: No requesting player. ::: Kein anfordernder Spieler.
+CLW-Req_NotDeployed ::: You are not deployed. ::: Du bist nicht eingesetzt.
+CLW-Req_WrongSide ::: You are not on that side. ::: Du gehörst nicht zu dieser Seite.
+CLW-Req_LeaderOnly ::: Only squad leaders may request a %1 (you are a soldier; soldiers may request resupply and a vehicle). ::: Nur Truppführer dürfen %1 anfordern (du bist Soldat; Soldaten dürfen Nachschub und ein Fahrzeug anfordern).
+CLW-Req_Cooldown ::: Cooldown, try again in %1 s. ::: Abklingzeit, versuche es in %1 s erneut.
+CLW-Req_NoSuchVehicle ::: No such vehicle in the faction's catalog. ::: Dieses Fahrzeug gibt es im Katalog der Fraktion nicht.
+CLW-Req_NoVehicle ::: No vehicle can be issued. ::: Es kann kein Fahrzeug ausgegeben werden.
+CLW-Req_TooManyVehicles ::: Too many requested vehicles in the field (%1), use or lose one first. ::: Zu viele angeforderte Fahrzeuge im Feld (%1), nutze oder verliere zuerst eines.
+CLW-Req_VehicleCap ::: Vehicle cap reached (%1 + 1 > %2). ::: Fahrzeuglimit erreicht (%1 + 1 > %2).
+CLW-Req_NoSupplies ::: Not enough supplies (%1 costs %2, the base has %3). ::: Nicht genug Nachschub (%1 kostet %2, die Basis hat %3).
+CLW-Req_NoSpot ::: No free parking spot at %1. ::: Kein freier Stellplatz bei %1.
+CLW-Req_VehicleNotSpawned ::: The vehicle could not be spawned. ::: Das Fahrzeug konnte nicht erzeugt werden.
+CLW-Req_VehicleIssued ::: %1 issued at %2, grid %3 (cost %4). It is empty: bring your own crew. ::: %1 bereitgestellt bei %2, Planquadrat %3 (Kosten %4). Es ist leer: bring deine eigene Besatzung mit.
+CLW-Req_Where_Roadside ::: the roadside near you ::: dem Straßenrand in deiner Nähe
+CLW-Req_Where_OpenGround ::: the open ground near you ::: offenem Gelände in deiner Nähe
+CLW-Req_Where_Depot ::: the depot ::: dem Depot
+CLW-Req_Where_Hq ::: the HQ ::: dem HQ
+CLW-Req_Where_Base ::: base %1 ::: Basis %1
+CLW-Req_Where_YourPos ::: your position ::: deiner Position
+CLW-Req_Where_HqBase ::: the HQ base ::: der HQ-Basis
+CLW-Req_Where_YourPosOrder ::: your position ::: deine Position
+CLW-Req_Where_Grid ::: grid %1 ::: Planquadrat %1
+CLW-Req_NoSquad ::: You are not in a squad. ::: Du bist in keinem Trupp.
+CLW-Req_NoSuchTeam ::: No such infantry team in the faction's catalog. ::: Dieses Infanterieteam gibt es im Katalog der Fraktion nicht.
+CLW-Req_NoTeam ::: No team can be issued. ::: Es kann kein Team ausgegeben werden.
+CLW-Req_BuyFailed ::: %1 ::: %1
+CLW-Req_SquadApproved ::: %1 approved (cost %2). It is forming at the base and will join your squad when complete. ::: %1 genehmigt (Kosten %2). Es wird an der Basis aufgestellt und schließt sich deinem Trupp an, sobald es fertig ist.
+CLW-Req_NoBoxData ::: The faction has no resupply box in its data. ::: Die Fraktion hat keine Nachschubkiste in ihren Daten.
+CLW-Req_NoBox ::: No box can be delivered. ::: Es kann keine Kiste geliefert werden.
+CLW-Req_NoFriendlyBase ::: No friendly base to deliver from. ::: Keine eigene Basis, von der geliefert werden kann.
+CLW-Req_NoSuppliesResupply ::: Not enough supplies (resupply costs %1, the base has %2). ::: Nicht genug Nachschub (Nachschub kostet %1, die Basis hat %2).
+CLW-Req_BoxNotSpawned ::: The box could not be spawned. ::: Die Kiste konnte nicht erzeugt werden.
+CLW-Req_BoxDelivered ::: Resupply box delivered at %1, grid %2 (cost %3, removed after %4 min). ::: Nachschubkiste geliefert bei %1, Planquadrat %2 (Kosten %3, wird nach %4 Min. entfernt).
+CLW-Req_NoCommander ::: HQ has no commander. ::: Das HQ hat keinen Kommandeur.
+CLW-Req_TargetUnclear ::: Target not understood: use here, an objective id or a map grid like 123-456. ::: Ziel nicht verstanden: nutze here, eine Ziel-ID oder ein Kartenquadrat wie 123-456.
+CLW-Req_TargetNotUnderstood ::: Target not understood. ::: Ziel nicht verstanden.
+CLW-Req_NoGroup ::: No free group is available right now (all are on missions or too weak). ::: Derzeit ist keine freie Gruppe verfügbar (alle sind im Einsatz oder zu schwach).
+CLW-Req_CouldNotOrder ::: HQ could not order %1: %2 ::: Das HQ konnte %1 nicht beauftragen: %2
+CLW-Req_OrderMove ::: %1 is moving to %2, %3 m away. ::: %1 rückt nach %2 vor, %3 m entfernt.
+CLW-Req_OrderReinforce ::: %1 is reinforcing you, moving to %2, %3 m away. ::: %1 verstärkt dich und rückt nach %2 vor, %3 m entfernt.
+CLW-Req_OrderRecon ::: %1 is sent to recon, moving to %2, %3 m away. ::: %1 wird zur Aufklärung geschickt und rückt nach %2 vor, %3 m entfernt.
+CLW-Req_ReconNeedsTarget ::: Recon needs a target: /request recon <grid|here|objective> ::: Aufklärung braucht ein Ziel: /request recon <Quadrat|here|Ziel>
+CLW-Req_MenuUnavailable ::: HQ: requests are available once the war is running and you are on a side. ::: HQ: Anforderungen sind verfügbar, sobald der Krieg läuft und du einer Seite angehörst.
+CLW-Req_MenuHeader ::: HQ requests (you are a %1, supplies %2): ::: HQ-Anforderungen (du bist %1, Nachschub %2):
+CLW-Req_MenuVehicle ::: /request vehicle [type] - empty vehicle at the depot (near you when you are far from a base) ::: /request vehicle [Typ] - leeres Fahrzeug am Depot (in deiner Nähe, wenn du weit von einer Basis entfernt bist)
+CLW-Req_MenuVehicleDefault ::: /request vehicle [type] - empty vehicle at the depot (near you when you are far from a base), default %1 cost %2 ::: /request vehicle [Typ] - leeres Fahrzeug am Depot (in deiner Nähe, wenn du weit von einer Basis entfernt bist), Standard %1 Kosten %2
+CLW-Req_MenuSquad ::: /request squad [type] - AI team joins your squad (squad leaders) ::: /request squad [Typ] - KI-Team schließt sich deinem Trupp an (Truppführer)
+CLW-Req_MenuSquadDefault ::: /request squad [type] - AI team joins your squad (squad leaders), default %1 cost %2 ::: /request squad [Typ] - KI-Team schließt sich deinem Trupp an (Truppführer), Standard %1 Kosten %2
+CLW-Req_MenuResupply ::: /request resupply - ammo box at your position near a base, else at HQ, cost %1 ::: /request resupply - Munitionskiste an deiner Position nahe einer Basis, sonst am HQ, Kosten %1
+CLW-Req_MenuReinforce ::: /request reinforce - HQ sends the nearest free group to you (squad leaders, free) ::: /request reinforce - das HQ schickt die nächste freie Gruppe zu dir (Truppführer, kostenlos)
+CLW-Req_MenuRecon ::: /request recon <grid|here|objective> - HQ sends a group to look (squad leaders, free) ::: /request recon <Quadrat|here|Ziel> - das HQ schickt eine Gruppe zum Erkunden (Truppführer, kostenlos)
+CLW-Req_MenuReport ::: /report <count> <inf|veh|armor> <dist m> <dir> - report enemy contact to HQ ::: /report <Anzahl> <inf|veh|armor> <Entfernung m> <Richtung> - Feindkontakt an das HQ melden
+CLW-Req_MenuTypes ::: types:%1 ::: Typen:%1
+CLW-Req_TeamNoSquad ::: HQ: %1 arrived at the base, but you have no squad to join; HQ keeps it. ::: HQ: %1 ist an der Basis eingetroffen, aber du hast keinen Trupp, dem es beitreten kann; das HQ behält es.
+CLW-Req_TeamJoined ::: HQ: %1 (%2 men) has joined your squad. ::: HQ: %1 (%2 Mann) hat sich deinem Trupp angeschlossen.
+CLW-Req_TeamNobody ::: HQ: %1 arrived but nobody could join your squad. ::: HQ: %1 ist eingetroffen, aber niemand konnte sich deinem Trupp anschließen.
+CLW-Rep_NoWar ::: Report not possible: the war has not started. ::: Meldung nicht möglich: der Krieg hat nicht begonnen.
+CLW-Rep_Off ::: Contact reports are off in this war mode. ::: Kontaktmeldungen sind in diesem Kriegsmodus aus.
+CLW-Rep_NotDeployed ::: You must be deployed on a side to report. ::: Du musst für eine Meldung auf einer Seite eingesetzt sein.
+CLW-Rep_Usage ::: Usage: /report <count> <inf|veh|armor> <distance m> <direction N|NE|E|SE|S|SW|W|NW or degrees> ::: Verwendung: /report <Anzahl> <inf|veh|armor> <Entfernung m> <Richtung N|NE|E|SE|S|SW|W|NW oder Grad>
+CLW-Rep_CountNumber ::: The count must be a number. ::: Die Anzahl muss eine Zahl sein.
+CLW-Rep_Type ::: The type must be inf, veh or armor. ::: Der Typ muss inf, veh oder armor sein.
+CLW-Rep_DistanceUnclear ::: Distance not understood (meters, e.g. 300 or 1.2km). ::: Entfernung nicht verstanden (Meter, z. B. 300 oder 1.2km).
+CLW-Rep_DistanceRange ::: The distance must be %1 to %2 m. ::: Die Entfernung muss %1 bis %2 m betragen.
+CLW-Rep_DirectionUnclear ::: Direction not understood (N NE E SE S SW W NW or degrees 0-360). ::: Richtung nicht verstanden (N NE E SE S SW W NW oder Grad 0-360).
+CLW-Rep_Wait ::: Wait a few seconds between reports. ::: Warte einige Sekunden zwischen Meldungen.
+CLW-Rep_NoEnemy ::: No known enemy. ::: Kein bekannter Feind.
+CLW-Rep_NoBook ::: HQ has no contact book. ::: Das HQ hat kein Kontaktbuch.
+CLW-Rep_Logged ::: Contact logged: %1 %2, grid %3 (%4 m %5). Thanks. ::: Kontakt gemeldet: %1 %2, Planquadrat %3 (%4 m %5). Danke.
+CLW-Rep_Kind_infantry ::: infantry ::: Infanterie
+CLW-Rep_Kind_vehicle ::: vehicles ::: Fahrzeuge
