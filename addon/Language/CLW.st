@@ -1592,6 +1592,86 @@ StringTable {
    Target_en_us "You are not on that side."
    Target_de_de "Du gehörst nicht zu dieser Seite."
   }
+  CustomStringTableItem CLW-ReqMission_Active {
+   Target_en_us "You already have a mission: finish or abandon it first."
+   Target_de_de "Du hast bereits einen Auftrag: schließe ihn ab oder brich ihn ab."
+  }
+  CustomStringTableItem CLW-ReqMission_LeaderOnly {
+   Target_en_us "Only your squad leader can take a mission: ask him to request one."
+   Target_de_de "Nur dein Truppführer kann einen Auftrag annehmen: bitte ihn, einen anzufordern."
+  }
+  CustomStringTableItem CLW-ReqMission_NoBoard {
+   Target_en_us "HQ has no mission board running."
+   Target_de_de "Das HQ hat keine Auftragstafel aktiv."
+  }
+  CustomStringTableItem CLW-ReqMission_None {
+   Target_en_us "HQ has no sensible objective for your squad right now, try again later."
+   Target_de_de "Das HQ hat gerade kein sinnvolles Ziel für deinen Trupp, versuche es später erneut."
+  }
+  CustomStringTableItem CLW-ReqMission_NotReady {
+   Target_en_us "HQ has not registered your squad yet, try again in a few seconds."
+   Target_de_de "Das HQ hat deinen Trupp noch nicht erfasst, versuche es in ein paar Sekunden erneut."
+  }
+  CustomStringTableItem CLW-ReqMission_Offered {
+   Target_en_us "%1 mission offer(s) for your squad: check the task list (map / J menu) in a few seconds."
+   Target_de_de "%1 Auftragsangebot/-angebote für deinen Trupp: sieh in ein paar Sekunden in der Aufgabenliste nach (Karte / J-Menü)."
+  }
+  CustomStringTableItem CLW-ReqMission_Pending {
+   Target_en_us "You already have mission offers waiting: open the task list (map / J menu)."
+   Target_de_de "Es warten schon Auftragsangebote auf dich: öffne die Aufgabenliste (Karte / J-Menü)."
+  }
+  CustomStringTableItem CLW-ReqStatus_Contact {
+   Target_en_us "Last known enemy contact: %1 (%2), %3, grid %4, %5 m away, seen %6 s ago."
+   Target_de_de "Letzter bekannter Feindkontakt: %1 (%2), %3, Planquadrat %4, %5 m entfernt, vor %6 s gesehen."
+  }
+  CustomStringTableItem CLW-ReqStatus_Force {
+   Target_en_us "Supplies: %1, own squads: %2."
+   Target_de_de "Nachschub: %1, eigene Trupps: %2."
+  }
+  CustomStringTableItem CLW-ReqStatus_KindInfantry {
+   Target_en_us "infantry"
+   Target_de_de "Infanterie"
+  }
+  CustomStringTableItem CLW-ReqStatus_KindUnknown {
+   Target_en_us "unidentified forces"
+   Target_de_de "nicht identifizierte Kräfte"
+  }
+  CustomStringTableItem CLW-ReqStatus_KindVehicle {
+   Target_en_us "vehicles"
+   Target_de_de "Fahrzeuge"
+  }
+  CustomStringTableItem CLW-ReqStatus_NoContact {
+   Target_en_us "No known enemy contact within %1 m."
+   Target_de_de "Kein bekannter Feindkontakt im Umkreis von %1 m."
+  }
+  CustomStringTableItem CLW-ReqStatus_None {
+   Target_en_us "No status available."
+   Target_de_de "Keine Lage verfügbar."
+  }
+  CustomStringTableItem CLW-ReqStatus_NoObjective {
+   Target_en_us "No objective within %1 m of you."
+   Target_de_de "Kein Ziel im Umkreis von %1 m um dich."
+  }
+  CustomStringTableItem CLW-ReqStatus_Objective {
+   Target_en_us "Objective %1 (%3 m): %2."
+   Target_de_de "Ziel %1 (%3 m): %2."
+  }
+  CustomStringTableItem CLW-ReqStatus_StateContested {
+   Target_en_us "contested"
+   Target_de_de "umkämpft"
+  }
+  CustomStringTableItem CLW-ReqStatus_StateEnemy {
+   Target_en_us "enemy-held"
+   Target_de_de "in Feindeshand"
+  }
+  CustomStringTableItem CLW-ReqStatus_StateHeld {
+   Target_en_us "ours"
+   Target_de_de "in unserer Hand"
+  }
+  CustomStringTableItem CLW-ReqStatus_StateNeutral {
+   Target_en_us "neutral"
+   Target_de_de "neutral"
+  }
   CustomStringTableItem CLW-Setup_AlreadyStarted {
    Target_en_us "The war has already started."
    Target_de_de "Der Krieg hat bereits begonnen."
