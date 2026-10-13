@@ -1,8 +1,9 @@
 // Role picker (loadouts-arsenal-plan R2): per faction and ROLE_* label ONE official CHARACTER catalog prefab, so the 7 spawn slots (R3) and the
 // AI squad members (R4, CLW_SquadRoles) can be "a rifleman / medic / AT soldier of this faction" without any configuration. Kin factions (friendly
 // lists, CLW_ArsenalPool.GetKin) fill the roles the faction itself does not have (pack factions that only ship a few characters).
-// Pick rules per role: skip ROLE_GUARD and vehicle / helicopter crew characters; prefer a character that carries only that one role, then SIZE_M,
-// then the shorter prefab file name (the plain variant before its camo / Conflict copies), then catalog order. Only catalog data goes in, so the
+// Pick rules: skip ROLE_GUARD and vehicle / helicopter crew characters; the leader first, then the specific roles, the rifleman last; per role prefer
+// own faction over kin, a prefab not used for another role, the leader's unit folder, fewer roles on the character, SIZE_M, the shorter file name
+// (the plain variant before camo / Conflict copies), then catalog order. Only catalog data goes in, so the
 // answer is the same on the server and on every client. Results are cached per faction (an empty result is not cached: catalogs may fill late).
 // No faction keys, unit names or prefab GUIDs in code. Log: "CLW: squad roles picker <faction> <ROLE>=<prefab> ..." (once per faction and machine).
 
@@ -11,6 +12,17 @@ class CLW_FactionRoles
 {
 	ref array<string> m_aRoles = {};						// roles that have a prefab, in the default slot order
 	ref map<string, ResourceName> m_mPrefab = new map<string, ResourceName>();
+}
+
+// One usable character of a catalog (picker input).
+class CLW_RoleCandidate
+{
+	ResourceName m_Prefab;
+	ref array<string> m_aRoles = {};
+	int m_iRank;		// 0 = the faction itself, 1.. = kin factions in friendly-list order
+	int m_iOrder;		// catalog order (deterministic ties)
+	bool m_bSizeM;
+	string m_sDir;		// unit folder of the prefab
 }
 
 class CLW_RolePicker
@@ -155,16 +167,20 @@ class CLW_RolePicker
 			return null;
 
 		CLW_FactionRoles data = new CLW_FactionRoles();
-		map<string, int> scores = new map<string, int>();
-		Scan(faction, data, scores, false);
+		array<ref CLW_RoleCandidate> candidates = {};
+		Collect(faction, 0, candidates);
 
-		// kin factions fill the roles the faction does not have
+		// kin factions fill the roles the faction does not have (rank 1+: they never beat an own candidate)
 		array<SCR_Faction> kin = {};
 		CLW_ArsenalPool.GetKin(faction, kin);
+		int rank = 1;
 		foreach (SCR_Faction kinFaction : kin)
 		{
-			Scan(kinFaction, data, scores, true);
+			Collect(kinFaction, rank, candidates);
+			rank++;
 		}
+
+		Assign(candidates, data);
 
 		array<string> all = {};
 		AllRoles(all);
@@ -187,21 +203,8 @@ class CLW_RolePicker
 		return data;
 	}
 
-	// Score of a candidate: single-role character first (+2), SIZE_M (+1).
-	protected static int ScoreOf(notnull array<EEditableEntityLabel> labels, int roleCount)
-	{
-		int score;
-		if (roleCount == 1)
-			score += 2;
-
-		if (labels.Contains(EEditableEntityLabel.SIZE_M))
-			score += 1;
-
-		return score;
-	}
-
-	// Walk the CHARACTER catalog of one faction. fillOnly = a kin faction: it only provides roles the result does not have yet.
-	protected static void Scan(notnull SCR_Faction faction, notnull CLW_FactionRoles data, notnull map<string, int> scores, bool fillOnly)
+	// Every usable character of one faction's CHARACTER catalog (no guards, no vehicle / helicopter crew), with its roles.
+	protected static void Collect(notnull SCR_Faction faction, int rank, notnull array<ref CLW_RoleCandidate> candidates)
 	{
 		SCR_EntityCatalog catalog = faction.GetFactionEntityCatalogOfType(EEntityCatalogType.CHARACTER, false);
 		if (!catalog)
@@ -211,9 +214,6 @@ class CLW_RolePicker
 		catalog.GetEntityList(list);
 		array<string> all = {};
 		AllRoles(all);
-
-		// candidates of this faction only: a faction's own pick never loses to a kin faction's, whatever the scores
-		map<string, int> local = new map<string, int>();
 		foreach (SCR_EntityCatalogEntry entry : list)
 		{
 			if (!entry || !entry.IsEnabled())
@@ -231,42 +231,120 @@ class CLW_RolePicker
 			if (labels.Contains(EEditableEntityLabel.TRAIT_VEHICLE_CREW) || labels.Contains(EEditableEntityLabel.TRAIT_HELI_CREW))
 				continue;
 
-			array<string> roles = {};
+			CLW_RoleCandidate candidate = new CLW_RoleCandidate();
 			foreach (string role : all)
 			{
 				if (labels.Contains(LabelOf(role)))
-					roles.Insert(role);
+					candidate.m_aRoles.Insert(role);
 			}
 
-			int score = ScoreOf(labels, roles.Count());
-			foreach (string candidateRole : roles)
-			{
-				if (fillOnly && data.m_mPrefab.Contains(candidateRole) && !local.Contains(candidateRole))
-					continue;	// the faction itself (or an earlier kin faction) already has this role
+			if (candidate.m_aRoles.IsEmpty())
+				continue;
 
-				ResourceName current;
-				int currentScore = -1;
-				bool has = data.m_mPrefab.Find(candidateRole, current);
-				if (has)
-					scores.Find(candidateRole, currentScore);
-
-				if (!has || IsBetter(score, prefab, currentScore, current))
-				{
-					data.m_mPrefab.Set(candidateRole, prefab);
-					scores.Set(candidateRole, score);
-					local.Set(candidateRole, 1);
-				}
-			}
+			candidate.m_Prefab = prefab;
+			candidate.m_iRank = rank;
+			candidate.m_iOrder = candidates.Count();
+			candidate.m_bSizeM = labels.Contains(EEditableEntityLabel.SIZE_M);
+			candidate.m_sDir = DirOf(prefab);
+			candidates.Insert(candidate);
 		}
 	}
 
-	protected static bool IsBetter(int score, ResourceName prefab, int currentScore, ResourceName current)
+	// Assignment order: the leader first (it sets the unit folder the others should come from), then the specific roles, the generic rifleman last
+	// (many specialists also carry ROLE_RIFLEMAN). One prefab per role while another candidate exists (no "Grenadier" twice on the spawn screen).
+	protected static void Assign(notnull array<ref CLW_RoleCandidate> candidates, notnull CLW_FactionRoles data)
 	{
-		if (score != currentScore)
-			return score > currentScore;
+		array<string> all = {};
+		AllRoles(all);
+		array<string> order = {};
+		order.Insert("ROLE_LEADER");
+		foreach (string role : all)
+		{
+			if (role != "ROLE_LEADER" && role != "ROLE_RIFLEMAN")
+				order.Insert(role);
+		}
+		order.Insert("ROLE_RIFLEMAN");
+
+		map<string, bool> used = new map<string, bool>();
+		string family;
+		foreach (string wanted : order)
+		{
+			CLW_RoleCandidate best;
+			int bestScore;
+			foreach (CLW_RoleCandidate candidate : candidates)
+			{
+				if (!candidate.m_aRoles.Contains(wanted))
+					continue;
+
+				int score = ScoreOf(candidate, family, used.Contains(candidate.m_Prefab));
+				if (!best || IsBetter(score, candidate, bestScore, best))
+				{
+					best = candidate;
+					bestScore = score;
+				}
+			}
+
+			if (!best)
+				continue;
+
+			data.m_mPrefab.Set(wanted, best.m_Prefab);
+			used.Set(best.m_Prefab, true);
+			if (wanted == "ROLE_LEADER")
+				family = best.m_sDir;
+		}
+	}
+
+	// Own faction before any kin faction (rank), then not used for another role, same unit folder as the leader, fewer roles on the character,
+	// SIZE_M.
+	protected static int ScoreOf(notnull CLW_RoleCandidate candidate, string family, bool used)
+	{
+		int score = -1000 * candidate.m_iRank;
+		if (!used)
+			score += 100;
+
+		if (!family.IsEmpty() && candidate.m_sDir == family)
+			score += 10;
+
+		int roles = candidate.m_aRoles.Count();
+		if (roles < 4)
+			score += 2 * (4 - roles);
+
+		if (candidate.m_bSizeM)
+			score += 1;
+
+		return score;
+	}
+
+	protected static bool IsBetter(int score, notnull CLW_RoleCandidate candidate, int bestScore, notnull CLW_RoleCandidate best)
+	{
+		if (score != bestScore)
+			return score > bestScore;
 
 		// plain variant before camo / Conflict copies: shorter file name wins; a full tie keeps the earlier catalog entry (deterministic)
-		return ShortName(prefab).Length() < ShortName(current).Length();
+		int length = ShortName(candidate.m_Prefab).Length();
+		int bestLength = ShortName(best.m_Prefab).Length();
+		if (length != bestLength)
+			return length < bestLength;
+
+		return candidate.m_iOrder < best.m_iOrder;
+	}
+
+	// "{GUID}Prefabs/Characters/Factions/US/Character_US_Rifleman.et" -> "{GUID}Prefabs/Characters/Factions/US" without the GUID: the unit folder.
+	static string DirOf(string prefab)
+	{
+		string text = prefab;
+		int close = text.IndexOf("}");
+		int slash = -1;
+		for (int i = 0; i < text.Length(); i++)
+		{
+			if (text.Get(i) == "/")
+				slash = i;
+		}
+
+		if (slash <= close + 1)
+			return "";
+
+		return text.Substring(close + 1, slash - close - 1);
 	}
 
 	// "{GUID}Prefabs/Characters/Factions/US/Character_US_Rifleman.et" -> "Character_US_Rifleman.et"
