@@ -605,3 +605,11 @@ CLW-Param_mapSquads_Desc ::: One symbol per friendly group at its leader. ::: Ei
 CLW-Param_mapVehicles ::: Show friendly vehicles ::: Befreundete Fahrzeuge anzeigen
 CLW-Param_mapVehicles_Desc ::: Crewed or claimed friendly vehicles, symbol by type. ::: Besetzte oder zugeteilte befreundete Fahrzeuge, Symbol nach Typ.
 CLW-Map_Me ::: You ::: Du
+CLW-Loadout_Load ::: Load my loadout ::: Mein Loadout laden
+CLW-Loadout_NoneSaved ::: No saved loadout for your faction ::: Kein gespeichertes Loadout für deine Fraktion
+CLW-Loadout_WrongArsenal ::: This arsenal does not serve your faction ::: Dieses Arsenal gehört nicht zu deiner Fraktion
+CLW-Loadout_Invalid ::: Your saved loadout is no longer usable (mod pack changed). Save a new one. ::: Dein gespeichertes Loadout ist nicht mehr nutzbar (Modpaket geändert). Speichere ein neues.
+CLW-Loadout_NoSupplies ::: Not enough supplies: loadout costs %1, arsenal has %2. ::: Nicht genug Vorräte: Loadout kostet %1, Arsenal hat %2.
+CLW-Loadout_Failed ::: Loadout could not be applied. ::: Loadout konnte nicht angewendet werden.
+CLW-Loadout_Loaded ::: Loadout loaded (%1 supplies). ::: Loadout geladen (%1 Vorräte).
+CLW-Loadout_LoadedPartial ::: Loadout loaded, %1 items unavailable (%2 supplies). ::: Loadout geladen, %1 Gegenstände nicht verfügbar (%2 Vorräte).
