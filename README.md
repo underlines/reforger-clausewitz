@@ -4,7 +4,7 @@ Two AI headquarters wage a whole war against each other: they buy and command in
 
 The commanders run on a built-in rule engine out of the box. Optionally, an **LLM** (any OpenAI-compatible API, e.g. OpenRouter) can take over each HQ through a small Node.js **sidecar** server. It also gives you a web dashboard with a live map of the war.
 
-- **Workshop:** search for "Clausewitz" in the in-game Workshop (Arma Reforger Workshop, author `underlines`)
+- **Workshop:** [Clausewitz - AI High Command](https://reforger.armaplatform.com/workshop/C1A05E7B3D9F4A28) (in game: Workshop, search "Clausewitz")
 - **Source and sidecar:** this repository
 - **License:** MIT (see `LICENSE`)
 
