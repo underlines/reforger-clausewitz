@@ -234,7 +234,7 @@ modded class SCR_ArsenalManagerComponent
 
 	// A player passed the audit (connect): tell the client which kits it has, once the records are loadable and the controller is ready.
 	// Chains super (loadout-editor mods override this too).
-	override void OnPlayerAuditSuccess(int playerId)
+	override protected void OnPlayerAuditSuccess(int playerId)
 	{
 		super.OnPlayerAuditSuccess(playerId);
 		if (GetGameMode() && GetGameMode().IsMaster())
