@@ -87,8 +87,14 @@ class CLW_LoadLoadoutAction : ScriptedUserAction
 	protected bool HasSavedLoadoutFor(Faction userFaction)
 	{
 		SCR_ArsenalManagerComponent manager;
-		if (!SCR_ArsenalManagerComponent.GetArsenalManager(manager) || !manager.GetLocalPlayerLoadoutAvailable())
+		if (!SCR_ArsenalManagerComponent.GetArsenalManager(manager))
 			return false;
+
+		if (!manager.GetLocalPlayerLoadoutAvailable())
+		{
+			LogUnavailable(manager, userFaction);
+			return false;
+		}
 
 		if (!userFaction || !manager.m_LocalPlayerLoadoutData)
 			return true;	// no data to compare: let the server decide
@@ -98,6 +104,32 @@ class CLW_LoadLoadoutAction : ScriptedUserAction
 			return true;
 
 		return manager.m_LocalPlayerLoadoutData.FactionIndex == factionManager.GetFactionIndex(userFaction);
+	}
+
+	// Diagnostics (DS e2e 2026-10-15: greyed although the server stored and synced the kit): what the client knows, at most every 10 s.
+	protected static float s_fLastLog = -100;
+	protected static void LogUnavailable(SCR_ArsenalManagerComponent manager, Faction userFaction)
+	{
+		float now = GetGame().GetWorld().GetWorldTime() * 0.001;
+		if (now - s_fLastLog < 10)
+			return;
+
+		s_fLastLog = now;
+		int dataIndex = -2;
+		if (manager.m_LocalPlayerLoadoutData)
+			dataIndex = manager.m_LocalPlayerLoadoutData.FactionIndex;
+		int localIndex = -2;
+		string localKey = "none";
+		Faction local = SCR_FactionManager.SGetLocalPlayerFaction();
+		if (local && GetGame().GetFactionManager())
+		{
+			localIndex = GetGame().GetFactionManager().GetFactionIndex(local);
+			localKey = local.GetFactionKey();
+		}
+		string userKey = "none";
+		if (userFaction)
+			userKey = userFaction.GetFactionKey();
+		Print(string.Format("CLW: loadouts load client: no saved kit seen: data=%1 dataFaction=%2 localFaction=%3(%4) character=%5", manager.m_LocalPlayerLoadoutData != null, dataIndex, localKey, localIndex, userKey), LogLevel.NORMAL);
 	}
 }
 

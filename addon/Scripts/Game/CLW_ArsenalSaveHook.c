@@ -254,6 +254,11 @@ modded class SCR_ArsenalManagerComponent
 
 		DoSetPlayerLoadout(SCR_PlayerIdentityUtils.GetPlayerIdentityId(playerId), restored);
 		SyncPlayerloadout(playerId, restored);
+		PlayerController pc = GetGame().GetPlayerManager().GetPlayerController(playerId);
+		bool synced = false;
+		if (pc && pc.FindComponent(SCR_PlayerLoadoutComponent))
+			synced = true;
+		Print(string.Format("CLW: loadouts vanilla slot player %1 %2: factionIndex=%3 synced=%4", playerId, factionKey, restored.loadoutData.FactionIndex, synced), LogLevel.NORMAL);
 		return true;
 	}
 }
