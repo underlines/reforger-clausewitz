@@ -69,6 +69,10 @@ class CLW_RuleCommander
 	protected static int s_iMissionCounter;			// unique task IDs (a deleted task's ID may linger in the task system for a moment)
 	protected SCR_Task m_MissionTask;				// the one vanilla task (J menu + map) of this faction's human squad (legacy path)
 	protected string m_sMissionSquad;				// squad id the task belongs to ("" = none)
+	protected string m_sTuneLogged;					// persona trait whose tuning was logged ("" = none yet), once per war
+	protected string m_sBoldTarget;					// persona "crazy": objective id of the current bold strike ("" = none)
+	protected float m_fBoldUntil = -1;
+	protected float m_fBoldNextRoll;
 
 	// Squads come from the registry (all adopted, commandable groups of this faction, including ones added at runtime).
 	void Init(string factionKey, CLW_ContactBook book, CLW_SquadRegistry registry)
@@ -134,6 +138,64 @@ class CLW_RuleCommander
 		}
 
 		m_aSquads.Copy(ids);
+	}
+
+	// ---- persona (CLW_HqPersona) ----
+
+	// Tuning of this faction's HQ character; neutral (= the constants above) without a trait. Logs the effective values once per war.
+	protected CLW_HqPersonaTuning Tune()
+	{
+		CLW_HqPersonaTuning tune = CLW_HqPersona.Tuning(m_sFaction);
+		if (tune.m_sTrait != m_sTuneLogged)
+		{
+			m_sTuneLogged = tune.m_sTrait;
+			if (!tune.IsNeutral())
+				Print(string.Format("CLW: persona RuleCommander %1: %2", m_sFaction, tune.Describe()), LogLevel.NORMAL);
+		}
+
+		return tune;
+	}
+
+	// Persona "crazy": now and then (chance per roll, rolls every m_fBoldHoldSec) a bold strike on a far foreign objective, kept
+	// for the same time. Returns the objective to strike now, null otherwise.
+	protected CLW_ControlPoint BoldTarget(notnull CLW_HqPersonaTuning tune, notnull array<CLW_ControlPoint> foreign, vector ownBase)
+	{
+		if (tune.m_fBoldChance <= 0 || foreign.IsEmpty())
+		{
+			m_sBoldTarget = "";
+			return null;
+		}
+
+		float now = CLW_Orders.Now();
+		if (!m_sBoldTarget.IsEmpty() && now < m_fBoldUntil)
+		{
+			foreach (CLW_ControlPoint kept : foreign)
+			{
+				if (kept.m_sId == m_sBoldTarget)
+					return kept;
+			}
+
+			m_sBoldTarget = "";	// taken meanwhile
+		}
+
+		if (now < m_fBoldNextRoll)
+			return null;
+
+		m_fBoldNextRoll = now + tune.m_fBoldHoldSec;
+		m_sBoldTarget = "";
+		if (Math.RandomFloat(0, 1) >= tune.m_fBoldChance)
+			return null;
+
+		CLW_ControlPoint first = foreign[Math.RandomInt(0, foreign.Count())];
+		CLW_ControlPoint second = foreign[Math.RandomInt(0, foreign.Count())];
+		CLW_ControlPoint pick = first;
+		if (vector.DistanceXZ(ownBase, second.m_vPos) > vector.DistanceXZ(ownBase, first.m_vPos))
+			pick = second;
+
+		m_sBoldTarget = pick.m_sId;
+		m_fBoldUntil = now + tune.m_fBoldHoldSec;
+		Print(string.Format("CLW: persona RuleCommander %1: bold strike on %2 for %3 s", m_sFaction, pick.m_sId, tune.m_fBoldHoldSec), LogLevel.NORMAL);
+		return pick;
 	}
 
 	// ---- queries ----
@@ -372,6 +434,7 @@ class CLW_RuleCommander
 				tries++;
 				// WP6: the HQ reserve (mode param hqReserve, default 100) replaces the old fixed floor when it is higher
 				int floorSupplies = Math.Max(SUPPLY_RESERVE, CLW_EconomyGuard.HqReserve());
+				floorSupplies = Tune().Reserve(floorSupplies);	// persona: x0.6 .. x1.6 (neutral = unchanged)
 				int spendable = war.GetSupplies(m_sFaction) - floorSupplies;
 				if (spendable <= 0)
 				{
@@ -583,6 +646,8 @@ class CLW_RuleCommander
 
 		vector ownBase = bases.GetBasePos(m_sFaction);
 		vector enemyBase = bases.GetBasePos(war.GetEnemyKey(m_sFaction));
+		CLW_HqPersonaTuning tune = Tune();
+		float threatRadius = tune.ThreatRadius(THREAT_RADIUS_M);
 
 		array<CLW_ControlPoint> own = {};
 		array<CLW_ControlPoint> foreign = {};
@@ -622,7 +687,7 @@ class CLW_RuleCommander
 			foreach (CLW_Contact contact : contacts)
 			{
 				float dist = vector.DistanceXZ(contact.m_vPos, ownPoint.m_vPos);
-				if (dist <= THREAT_RADIUS_M)
+				if (dist <= threatRadius)
 				{
 					near++;
 					nearest = Math.Min(nearest, dist);
@@ -645,7 +710,7 @@ class CLW_RuleCommander
 			else
 				holdBrief = CLW_Loc.W("#CLW-Msn_Brief_HoldThreat", ownPoint.m_sName, ownPoint.m_sId, CLW_Loc.N(near), CLW_Loc.N(Math.Round(nearest)));
 			threatened.Insert(ownPoint.m_sId);
-			InsertTask(tasks, NewTask(CLW_ECommand.DEFEND, ownPoint, MAX_DEFEND_UNITS, 1000 + ownPoint.m_iValue * 100, why, "DEFEND", holdBrief));
+			InsertTask(tasks, NewTask(CLW_ECommand.DEFEND, ownPoint, tune.MaxDefend(MAX_DEFEND_UNITS), 1000 + ownPoint.m_iValue * 100, why, "DEFEND", holdBrief));
 		}
 
 		// 2. recon: the most valuable foreign point without contact information
@@ -669,11 +734,22 @@ class CLW_RuleCommander
 			break;
 		}
 
+		// 2b. persona "crazy": an occasional bold strike on a far objective (above recon, below defending a threatened point)
+		CLW_ControlPoint boldPoint = BoldTarget(tune, foreign, ownBase);
+		if (boldPoint)
+		{
+			string boldWhy = string.Format("bold strike on %1 %2 (value %3, owner %4)", boldPoint.m_sId, boldPoint.m_sName, boldPoint.m_iValue, boldPoint.m_sOwner);
+			InsertTask(tasks, NewTask(CLW_ECommand.ATTACK, boldPoint, tune.MaxAttack(MAX_ATTACK_UNITS), 700, boldWhy, "CAPTURE", CLW_Loc.W("#CLW-Msn_Brief_Capture", boldPoint.m_sName, boldPoint.m_sId, CLW_Loc.N(boldPoint.m_iValue))));
+		}
+
 		// 3. attack / capture in score order
 		foreach (int rank, CLW_ControlPoint target : foreign)
 		{
+			if (boldPoint && target == boldPoint)
+				continue;
+
 			string attackWhy = string.Format("take %1 %2 (value %3, owner %4)", target.m_sId, target.m_sName, target.m_iValue, target.m_sOwner);
-			InsertTask(tasks, NewTask(CLW_ECommand.ATTACK, target, MAX_ATTACK_UNITS, 500 - rank * 10, attackWhy, "CAPTURE", CLW_Loc.W("#CLW-Msn_Brief_Capture", target.m_sName, target.m_sId, CLW_Loc.N(target.m_iValue))));
+			InsertTask(tasks, NewTask(CLW_ECommand.ATTACK, target, tune.MaxAttack(MAX_ATTACK_UNITS), tune.AttackPriority(500 - rank * 10), attackWhy, "CAPTURE", CLW_Loc.W("#CLW-Msn_Brief_Capture", target.m_sName, target.m_sId, CLW_Loc.N(target.m_iValue))));
 		}
 
 		// 4. nothing to take: garrison own points, the ones nearest to the enemy first
@@ -865,7 +941,7 @@ class CLW_RuleCommander
 				continue;
 
 			CLW_Contact nearestContact;
-			float nearestDist = IDLE_ATTACK_RADIUS_M;
+			float nearestDist = Tune().AttackRadius(IDLE_ATTACK_RADIUS_M);
 			foreach (CLW_Contact contact : contacts)
 			{
 				float contactDist = vector.DistanceXZ(idlePos, contact.m_vPos);
