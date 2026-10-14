@@ -144,6 +144,7 @@ class CLW_RequestService
 		CLW_VehicleDelivery.Reset();	// M4 WP4
 		CLW_Reports.Reset();
 		CLW_HqChat.Reset();	// M3 phase A: pending /hq messages
+		CLW_Backup.Reset();	// help calls (/backup)
 	}
 
 	// War SETUP -> RUNNING: start the marker parser, tell the players the request costs once the catalogs exist.
@@ -154,6 +155,8 @@ class CLW_RequestService
 
 		CLW_Reports.Start();
 		CLW_HqChat.Start();	// M3 phase A: timeout tick of the /hq messages
+		CLW_Environment.OnWarStart();	// date, time, day speed, weather plan
+		CLW_HqPersona.OnWarStart();	// commander traits (random ones rolled now)
 		GetGame().GetCallqueue().CallLater(SendCostsToAll, CLW_RequestConfig.COSTS_DELAY_MS, false);
 	}
 

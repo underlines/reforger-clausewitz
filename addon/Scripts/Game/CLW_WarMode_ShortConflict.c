@@ -60,6 +60,9 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 		m_aParams.Insert(CLW_ModeParam.CreateBool("cap_serverKitCost", "#CLW-Param_cap_serverKitCost", "#CLW-Param_cap_serverKitCost_Desc", true));	// loadouts plan R3: spawning with a server loadout costs supplies
 		// friendly units on the player map (CLW_FriendlyMapSettings): mapMe, mapSquadmates, mapSquads, mapVehicles
 		CLW_FriendlyMapSettings.AddParams(m_aParams);
+		// weather and time (CLW_Environment), commander traits per side (CLW_HqPersona)
+		CLW_Environment.AddParams(m_aParams);
+		CLW_HqPersona.AddParams(m_aParams);
 	}
 
 	override string GetId()

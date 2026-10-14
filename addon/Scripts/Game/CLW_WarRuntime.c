@@ -366,6 +366,7 @@ class CLW_WarRuntime
 	{
 		GetGame().GetCallqueue().Remove(PollContacts);
 		GetGame().GetCallqueue().Remove(ThinkCommanders);
+		CLW_Environment.Stop();
 		m_Activity.RematchReset();
 		foreach (string markerKey, CLW_ContactMarkers markers : m_mMarkers)
 		{
