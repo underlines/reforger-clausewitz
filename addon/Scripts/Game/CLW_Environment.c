@@ -18,9 +18,9 @@ class CLW_Environment
 	static const string MODE_SLOTS = "slots";
 	static const string MODE_WORLD = "world";
 	static const int SLOTS = 6;
-	static const int POLL_MS = 10000;
+	static const int POLL_MS = 5000;
 	static const int DEFAULT_LIMIT_MIN = 60;
-	static const float TRANSITION_FRACTION = 0.1;			// of one slot
+	static const float BLEND_FRACTION = 0.5;				// the change to the next slot's weather takes the second half of a slot
 	static const float DAY_SECONDS = 86400;
 	static const float TWILIGHT_HOURS = 0.5;				// dawn / dusk: this long before and after sunrise / sunset
 	static const float DEFAULT_SUNRISE = 5;
@@ -32,7 +32,14 @@ class CLW_Environment
 	protected static bool s_bActive;
 	protected static bool s_bWorldWeather;
 	protected static float s_fSlotSec;
-	protected static int s_iSlot;							// slot whose weather is already (being) applied
+	protected static int s_iSlot;							// slot the war time is in
+	// blend schedule (war seconds): one step per weather state on the way, e.g. Rainy -> Overcast -> Cloudy -> Clear (owner 2026-10-15:
+	// rain to sun in 20 s looked like a cut, so the change is spread over half a slot and goes through the states in between)
+	protected static ref array<float> s_aStepAt;
+	protected static ref array<string> s_aStepState;
+	protected static ref array<float> s_aStepSec;
+	protected static ref array<string> s_aStepEvent;		// "" or the event pushed when the step starts (first step of a change)
+	protected static int s_iStep;
 	protected static string s_sDaylight;
 	protected static float s_fDaySpeed;
 
@@ -115,6 +122,7 @@ class CLW_Environment
 			RollPlan(mode);
 			Print("CLW: env weather plan (" + limitMin + " min, slot " + Math.Round(s_fSlotSec) + " s): " + PlanText(), LogLevel.NORMAL);
 			ForceWeather(manager, s_aPlan[0], 0);
+			BuildSteps();
 		}
 
 		s_sDaylight = Daylight(manager);
@@ -129,6 +137,7 @@ class CLW_Environment
 		GetGame().GetCallqueue().Remove(Poll);
 		s_bActive = false;
 		s_iSlot = 0;
+		s_iStep = 0;
 	}
 
 	// ---- outputs ----
@@ -269,6 +278,62 @@ class CLW_Environment
 		}
 	}
 
+	// The blend steps of the whole plan: the change from slot b-1 to slot b runs over the second half of slot b-1 and passes every state
+	// between the two in the world's list order (assumed mild -> severe, as the world authors it; logged at war start).
+	protected static void BuildSteps()
+	{
+		s_aStepAt = {};
+		s_aStepState = {};
+		s_aStepSec = {};
+		s_aStepEvent = {};
+		s_iStep = 0;
+		float window = s_fSlotSec * BLEND_FRACTION;
+		for (int border = 1; border < s_aPlan.Count(); border++)
+		{
+			string from = s_aPlan[border - 1];
+			string to = s_aPlan[border];
+			if (from == to)
+				continue;
+
+			array<string> path = {};
+			int a = s_aStateNames.Find(from);
+			int b = s_aStateNames.Find(to);
+			if (a >= 0 && b >= 0 && Math.AbsInt(b - a) > 1)
+			{
+				int dir = 1;
+				if (b < a)
+					dir = -1;
+				for (int i = a + dir; i != b; i += dir)
+				{
+					path.Insert(s_aStateNames[i]);
+				}
+			}
+			path.Insert(to);
+
+			float start = border * s_fSlotSec - window;
+			float step = window / path.Count();
+			foreach (int k, string state : path)
+			{
+				s_aStepAt.Insert(start + k * step);
+				s_aStepState.Insert(state);
+				s_aStepSec.Insert(step);
+				if (k == 0)
+					s_aStepEvent.Insert("Weather changing to " + to);
+				else
+					s_aStepEvent.Insert("");
+			}
+		}
+
+		string order = "";
+		foreach (string name : s_aStateNames)
+		{
+			if (!order.IsEmpty())
+				order += " > ";
+			order += name;
+		}
+		Print(string.Format("CLW: env blend steps %1 (window %2 s per change, state order %3)", s_aStepAt.Count(), Math.Round(window), order), LogLevel.NORMAL);
+	}
+
 	// Server: hold this weather state; transitionSec real seconds of blending (0 = at once).
 	protected static void ForceWeather(TimeAndWeatherManagerEntity manager, string state, float transitionSec)
 	{
@@ -306,12 +371,14 @@ class CLW_Environment
 			int slot = war.GetElapsedSec() / slotSec;
 			if (slot > SLOTS - 1)
 				slot = SLOTS - 1;
-			while (s_iSlot < slot)
+			s_iSlot = slot;
+			float elapsed = war.GetElapsedSec();
+			while (s_aStepAt && s_iStep < s_aStepAt.Count() && elapsed >= s_aStepAt[s_iStep])
 			{
-				s_iSlot++;
-				string state = s_aPlan[s_iSlot];
-				ForceWeather(manager, state, s_fSlotSec * TRANSITION_FRACTION);
-				PushAll(war, "Weather changing to " + state);
+				ForceWeather(manager, s_aStepState[s_iStep], s_aStepSec[s_iStep]);
+				if (!s_aStepEvent[s_iStep].IsEmpty())
+					PushAll(war, s_aStepEvent[s_iStep]);
+				s_iStep++;
 			}
 		}
 
