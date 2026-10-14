@@ -105,7 +105,12 @@ class CLW_Kits
 			if (valueLen <= 0 || valueLen > MAX_PREFAB_CHARS)
 				continue;
 
-			all.Insert(loadout.Substring(idx + 1, valueLen));
+			// vanilla writes bare GUIDs ("FAE8B9F7CEA49696", DS test 2026-10-14); Resource.Load needs "{GUID}"
+			string value = loadout.Substring(idx + 1, valueLen);
+			if (value.IndexOf("{") < 0)
+				value = "{" + value + "}";
+
+			all.Insert(value);
 		}
 	}
 

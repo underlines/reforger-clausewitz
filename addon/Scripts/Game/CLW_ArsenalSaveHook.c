@@ -176,6 +176,17 @@ class CLW_ArsenalSaveHook
 		{
 			CLW_RequestService.Answer(playerId, CLW_Loc.W("#CLW-Loadout_SaveRefused", CLW_Loc.N(missing.Count())), true);
 			Print(string.Format("CLW: loadouts save of player %1 refused, %2 items unavailable for %3", playerId, missing.Count(), factionKey), LogLevel.NORMAL);
+			for (int m = 0; m < missing.Count() && m < 3; m++)
+			{
+				Print("CLW: loadouts save refused item '" + missing[m] + "'", LogLevel.NORMAL);
+			}
+
+			FileHandle dump = FileIO.OpenFile("$profile:Clausewitz/last-refused-kit.json", FileMode.WRITE);
+			if (dump)
+			{
+				dump.Write(kit);
+				dump.Close();
+			}
 			return;
 		}
 
