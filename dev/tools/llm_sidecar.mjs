@@ -134,6 +134,10 @@ import * as J from "./agent/journal.mjs"; // HQ war journal (pure functions), se
 import * as FB from "./agent/fallback.mjs"; // backup (fallback) model per slot, see "model fallback" below
 import * as AUTH from "./auth.mjs"; // admin login (session cookie) + game token (X-CLW-Token)
 import * as LO from "./loadouts.mjs"; // loadout library store + REST handlers (/loadouts/*, /control, /api/loadouts*)
+import { personaCommander, personaSitrep } from "./agent/personality.mjs"; // HQ character traits (sit.hq.trait): commander / SITREP prompt text
+// environment paragraph (WP3, sit.env): lazy so the sidecar still starts when ./agent/environment.mjs is missing or broken
+let envPrompt = () => "";
+try { ({ envPrompt } = await import("./agent/environment.mjs")); } catch { /* optional */ }
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const DASH_DIR = path.join(DIR, "dashboard");
@@ -273,12 +277,21 @@ Style:
 - situation: objectives held/contested/lost, ticket trend, tempo. enemy: SALUTE as plain prose, freshest first, 1-3 sentences. mission: SMEAC who/what/where/why, 1-2 sentences. execution: "Main effort: ... Supporting effort: ... Reserve: ..." then one line on what helps players. logistics: supplies, replacements, vehicles, weak elements, in words.
 Example (invented): {"headline":"Holding two of five points; enemy armor massing north, push on Delta now.","situation":"We hold Alpha and Bravo; Charlie is contested. Tickets are bleeding slowly but we remain ahead.","enemy":"Platoon-sized mechanized force with dismounts moving south through Harbor Bridge just now. Squad-sized element at Delta, last few minutes.","mission":"Defeat the enemy at Charlie Mill and secure Delta to deny him the crossing.","execution":"Main effort: mechanized platoon to Charlie. Supporting effort: two rifle elements fix Delta. Reserve: AT team at Bravo. Players: join a squad moving on Charlie.","logistics":"Supplies healthy, income steady, replacements ordered. One element is thin and falling back."}`;
 
+// Help calls (/backup): the game puts the open ones in sit.helpCalls[].
+const HELP_CALLS_PROMPT = "HELP CALLS: the situation may carry helpCalls[] ({id, player, squad, grid, pos:[x,z], note, ageSec, answeredBy}) from players asking for backup. An open call (answeredBy empty) is urgent: send or keep a unit there (DEFEND or MOVE to pos) unless impossible, and mention it in the SITREP execution. A call already answered by a squad needs no second unit unless that squad is gone or weak.\n";
+
 // System prompt incl. the wakeup paragraph. v2 = protocol v2 situation. sitrep = ask for the SITREP object too.
-function systemPrompt(c, v2 = false, sitrep = false, manifest = DEFAULT_MANIFEST) {
+// sit (optional) = the situation: adds the HQ personality (sit.hq.trait), the environment paragraph (sit.env) and, with a SITREP, its tone.
+function systemPrompt(c, v2 = false, sitrep = false, manifest = DEFAULT_MANIFEST, sit = null) {
   let base = v2 ? SYSTEM_V2 + commandsSection(manifest ?? DEFAULT_MANIFEST) : SYSTEM;
   if (v2) base += "\n" + J.FLANK_PROMPT + " " + J.SQUAD_NAME_PROMPT + (c.memory?.enabled ? " " + J.JOURNAL_RULE : "") + "\n";
+  if (v2) base += HELP_CALLS_PROMPT;
+  if (v2 && sit) {
+    try { base += personaCommander(sit); } catch { /* optional */ }
+    try { const env = envPrompt(sit); if (env) base += "\n" + env + "\n"; } catch { /* optional */ }
+  }
   if (c.wakeup?.dynamic) base += wakeupText(c.wakeup);
-  if (v2 && sitrep) base += SITREP_PROMPT;
+  if (v2 && sitrep) base += SITREP_PROMPT + (sit ? personaSitrep(sit) : "");
   return base;
 }
 
@@ -975,14 +988,14 @@ async function callProvider(c, sit, opts = {}) {
       if (!c.apiKey) throw new Error("API key not set");
       url = (c.baseUrl || "https://api.anthropic.com") + "/v1/messages";
       headers = { "x-api-key": c.apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" };
-      body = { model: c.model, max_tokens: opts.maxTokens ?? c.maxTokens + (opts.sitrep ? SITREP_EXTRA_TOKENS : 0), system: opts.system ?? systemPrompt(c, isV2(sit), opts.sitrep, opts.manifest), messages: [{ role: "user", content: userMsg }] };
+      body = { model: c.model, max_tokens: opts.maxTokens ?? c.maxTokens + (opts.sitrep ? SITREP_EXTRA_TOKENS : 0), system: opts.system ?? systemPrompt(c, isV2(sit), opts.sitrep, opts.manifest, sit), messages: [{ role: "user", content: userMsg }] };
     } else {
       const base = c.provider === "openrouter" ? (c.baseUrl || OR_BASE) : c.baseUrl;
       if (!base) throw new Error("baseUrl not set");
       url = base + "/chat/completions";
       headers = { "content-type": "application/json" };
       if (c.apiKey) headers.authorization = "Bearer " + c.apiKey;
-      body = { model: c.model, max_tokens: opts.maxTokens ?? c.maxTokens + (opts.sitrep ? SITREP_EXTRA_TOKENS : 0), messages: [{ role: "system", content: opts.system ?? systemPrompt(c, isV2(sit), opts.sitrep, opts.manifest) },{ role: "user", content: userMsg }] };
+      body = { model: c.model, max_tokens: opts.maxTokens ?? c.maxTokens + (opts.sitrep ? SITREP_EXTRA_TOKENS : 0), messages: [{ role: "system", content: opts.system ?? systemPrompt(c, isV2(sit), opts.sitrep, opts.manifest, sit) },{ role: "user", content: userMsg }] };
       if (c.provider === "openrouter") body.usage = { include: true };
     }
     const r = await fetch(url, { method: "POST", signal: ac.signal, headers, body: JSON.stringify(body) });
@@ -1776,7 +1789,7 @@ async function handleOrders(req, res) {
     // war epoch (read-only bookkeeping for activeFactions): a faction whose game time went backwards starts a new epoch, unless it
     // is catching up with an epoch another faction already started.
     if (old && (old.epoch ?? 0) === (state.epoch ?? 0) && isNum(old.situation?.time) && isNum(sit.time) && sit.time < old.situation.time - 5) state.epoch = (state.epoch ?? 0) + 1;
-    state.factions[faction] = { ts: state.lastRequestTs, epoch: state.epoch ?? 0, situation: sit, side: isNum(sit.side) ? sit.side : null, identity: typeof sit.identity === "string" ? sit.identity : null, manifest: manifestHash ? { hash: manifestHash, known: !needManifest } : null, sitrep: composeSitrep(faction, sit, gameSitrep), orders: keepOld ? (old?.orders ?? []) : r.orders,
+    state.factions[faction] = { ts: state.lastRequestTs, epoch: state.epoch ?? 0, situation: sit, side: isNum(sit.side) ? sit.side : null, identity: typeof sit.identity === "string" ? sit.identity : null, hqTrait: typeof sit.hq?.trait === "string" ? sit.hq.trait : null, manifest: manifestHash ? { hash: manifestHash, known: !needManifest } : null, sitrep: composeSitrep(faction, sit, gameSitrep), orders: keepOld ? (old?.orders ?? []) : r.orders,
       buy: keepOld ? (old?.buy ?? []) : (r.buy ?? []), missions: keepOld ? (old?.missions ?? []) : (r.missions ?? []), fobs: keepOld ? (old?.fobs ?? []) : (r.fobs ?? []), eventLog, prevPos, orderTs };
   }
   if (!r.gated) state.exchanges.unshift({
