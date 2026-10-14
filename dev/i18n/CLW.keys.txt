@@ -620,3 +620,6 @@ CLW-Loadouts_RestartReason ::: Restart requested from the dashboard ::: Neustart
 CLW-Loadouts_NoSupplies ::: Server loadout '%1' costs %2 supplies, only %3 available: standard issue. ::: Server-Ausrüstung '%1' kostet %2 Nachschub, nur %3 vorhanden: Standardausrüstung.
 CLW-Loadouts_KitCost ::: Server loadout '%1' issued: %2 supplies. ::: Server-Ausrüstung '%1' ausgegeben: %2 Nachschub.
 CLW-Loadout_MySaved ::: My saved loadout ::: Mein gespeichertes Loadout
+CLW-Loadout_Save ::: Save my loadout ::: Mein Loadout speichern
+CLW-Loadout_SaveRefused ::: Loadout not saved: %1 items are not available to your side. ::: Loadout nicht gespeichert: %1 Gegenstände sind für deine Seite nicht verfügbar.
+CLW-Loadout_Saved ::: Loadout saved (%1 items). ::: Loadout gespeichert (%1 Gegenstände).

@@ -732,6 +732,18 @@ StringTable {
    Target_en_us "Not enough supplies: loadout costs %1, arsenal has %2."
    Target_de_de "Nicht genug Vorräte: Loadout kostet %1, Arsenal hat %2."
   }
+  CustomStringTableItem CLW-Loadout_Save {
+   Target_en_us "Save my loadout"
+   Target_de_de "Mein Loadout speichern"
+  }
+  CustomStringTableItem CLW-Loadout_Saved {
+   Target_en_us "Loadout saved (%1 items)."
+   Target_de_de "Loadout gespeichert (%1 Gegenstände)."
+  }
+  CustomStringTableItem CLW-Loadout_SaveRefused {
+   Target_en_us "Loadout not saved: %1 items are not available to your side."
+   Target_de_de "Loadout nicht gespeichert: %1 Gegenstände sind für deine Seite nicht verfügbar."
+  }
   CustomStringTableItem CLW-Loadout_WrongArsenal {
    Target_en_us "This arsenal does not serve your faction"
    Target_de_de "Dieses Arsenal gehört nicht zu deiner Fraktion"

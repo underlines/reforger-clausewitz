@@ -28,6 +28,8 @@ class CLW_Kits
 {
 	static const string STATUS_OK = "ok";
 	static const string STATUS_DEGRADED = "degraded";
+	// Items of the last Validate call that are not in the faction's arsenal pool (log only).
+	static int s_iLastOutsidePool;
 	static const string STATUS_INVALID = "invalid";
 	static const int MAX_PREFAB_CHARS = 1024;
 
@@ -153,6 +155,7 @@ class CLW_Kits
 	static string Validate(string loadout, string factionKey, notnull array<string> missing)
 	{
 		missing.Clear();
+		s_iLastOutsidePool = 0;
 		if (loadout.IsEmpty())
 			return STATUS_INVALID;
 
@@ -197,20 +200,20 @@ class CLW_Kits
 				continue;
 			}
 
+			surviving++;
 			if (!catalogs)
-			{
-				surviving++;
 				continue;
-			}
 
+			// Pool membership is informational only (DS test 2026-10-14): a kit also lists nested parts (magazines in weapons, attachments,
+			// uniform parts) and the character's spawn gear, which are often no ITEM catalog entries, so a normal kit failed with 5-51
+			// "unavailable" items. Missing = the prefab no longer loads (mod pack changed).
 			SCR_EntityCatalogEntry entry = catalogs.GetEntryWithPrefabFromFactionCatalog(EEntityCatalogType.ITEM, prefab, faction);
 			if (!entry)
 			{
-				missing.Insert(item);
+				s_iLastOutsidePool++;
 				continue;
 			}
 
-			surviving++;
 			SCR_ArsenalItem data = SCR_ArsenalItem.Cast(entry.GetEntityDataOfType(SCR_ArsenalItem));
 			if (data)
 			{
@@ -223,7 +226,7 @@ class CLW_Kits
 		if (missing.IsEmpty())
 			return STATUS_OK;
 
-		if (surviving > 0 && (weaponSurvives || !catalogs))
+		if (surviving > 0)
 			return STATUS_DEGRADED;
 
 		return STATUS_INVALID;
