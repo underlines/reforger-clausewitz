@@ -87,6 +87,23 @@ class CLW_CustomLoadouts
 		return best;
 	}
 
+	// "<factionKey>=<itemCount>;" for every record of a player (sent to the player's client, see CLW_LoadoutClient). "" if none.
+	static string FactionsWire(string identityId)
+	{
+		EnsureLoaded();
+		string wire = "";
+		for (int i = 0; i < s_mRecords.Count(); i++)
+		{
+			CLW_CustomLoadoutRec rec = s_mRecords.GetElement(i);
+			if (rec.identityId != identityId)
+				continue;
+
+			wire += rec.faction + "=" + rec.items.Count().ToString() + ";";
+		}
+
+		return wire;
+	}
+
 	// Stores (or replaces) the kit of a player for a faction, validates it, writes the file. Returns the record.
 	static CLW_CustomLoadoutRec Store(int playerId, string factionKey, string loadout)
 	{

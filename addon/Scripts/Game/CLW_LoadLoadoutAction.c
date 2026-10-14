@@ -2,8 +2,9 @@
 // addon/Prefabs/Props/Military/Arsenal/ArsenalBoxes/), next to the vanilla "Save loadout" action, so it shows on vanilla, RHS, WCS and our
 // HQ / FOB boxes that inherit the action list. Like the vanilla save action it is NOT local-effect-only: PerformAction runs on the server
 // (every other machine returns at once); CanBeShown / CanBePerformed run on the client, which only knows what vanilla replicates to it
-// (SCR_ArsenalManagerComponent: "has a saved loadout" and its faction index), so the server re-checks everything.
-// Server flow (CLW_LoadLoadout.Run): record of identity + current faction (CLW_CustomLoadouts, put into the vanilla slot on faction pick)
+// (CLW_LoadoutClient: the faction keys the server holds a record for, sent to the owning client; NOT vanilla's saved-loadout flag, which
+// loadout-editor mods replace), so the server re-checks everything.
+// Server flow (CLW_LoadLoadout.Run): record of identity + current faction (CLW_CustomLoadouts)
 // -> arsenal must be of the player's faction or a friendly one -> CLW_Kits.Validate (invalid = refused, degraded = unavailable items dropped)
 // -> supplies: kit cost with the arsenal's cost type against the arsenal's own supply consumer, refused when too low -> CLW_Kits.Apply
 // (whole gear replaced, old gear deleted) -> charge -> hint to the player. Only while a Clausewitz war runs.
@@ -82,54 +83,31 @@ class CLW_LoadLoadoutAction : ScriptedUserAction
 		return m_Arsenal;
 	}
 
-	// Client view: vanilla replicates "the local player has a saved loadout" and the faction index it was saved for. Our restore puts the
-	// record of the current faction into that slot when the faction is picked, so the slot answers "is there a kit for this faction".
+	// Client view: the server tells the owning client for which factions it holds a record (CLW_LoadoutClient), independent of vanilla's
+	// saved-loadout flag, which loadout-editor mods (WCS_LoadoutEditor ...) replace.
 	protected bool HasSavedLoadoutFor(Faction userFaction)
 	{
-		SCR_ArsenalManagerComponent manager;
-		if (!SCR_ArsenalManagerComponent.GetArsenalManager(manager))
+		if (!userFaction)
 			return false;
 
-		if (!manager.GetLocalPlayerLoadoutAvailable())
-		{
-			LogUnavailable(manager, userFaction);
-			return false;
-		}
-
-		if (!userFaction || !manager.m_LocalPlayerLoadoutData)
-			return true;	// no data to compare: let the server decide
-
-		FactionManager factionManager = GetGame().GetFactionManager();
-		if (!factionManager)
+		string key = userFaction.GetFactionKey();
+		if (CLW_LoadoutClient.Has(key))
 			return true;
 
-		return manager.m_LocalPlayerLoadoutData.FactionIndex == factionManager.GetFactionIndex(userFaction);
+		LogUnavailable(key);
+		return false;
 	}
 
-	// Diagnostics (DS e2e 2026-10-15: greyed although the server stored and synced the kit): what the client knows, at most every 10 s.
+	// Short diagnostic when the cache says no, at most every 10 s.
 	protected static float s_fLastLog = -100;
-	protected static void LogUnavailable(SCR_ArsenalManagerComponent manager, Faction userFaction)
+	protected static void LogUnavailable(string factionKey)
 	{
 		float now = GetGame().GetWorld().GetWorldTime() * 0.001;
 		if (now - s_fLastLog < 10)
 			return;
 
 		s_fLastLog = now;
-		int dataIndex = -2;
-		if (manager.m_LocalPlayerLoadoutData)
-			dataIndex = manager.m_LocalPlayerLoadoutData.FactionIndex;
-		int localIndex = -2;
-		string localKey = "none";
-		Faction local = SCR_FactionManager.SGetLocalPlayerFaction();
-		if (local && GetGame().GetFactionManager())
-		{
-			localIndex = GetGame().GetFactionManager().GetFactionIndex(local);
-			localKey = local.GetFactionKey();
-		}
-		string userKey = "none";
-		if (userFaction)
-			userKey = userFaction.GetFactionKey();
-		Print(string.Format("CLW: loadouts load client: no saved kit seen: data=%1 dataFaction=%2 localFaction=%3(%4) character=%5", manager.m_LocalPlayerLoadoutData != null, dataIndex, localKey, localIndex, userKey), LogLevel.NORMAL);
+		Print("CLW: loadouts load client: no saved kit known for faction " + factionKey + " (server state not received or no record)", LogLevel.NORMAL);
 	}
 }
 
