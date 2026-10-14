@@ -117,6 +117,15 @@ class CLW_HqMenuServer
 			if (status.IsEmpty())
 				status = CLW_Loc.W("#CLW-HqMenu_Answered");
 		}
+		else if (action == "mission" || action == "status")
+		{
+			// radial menu: the registry entries REQUEST_MISSION / REQUEST_STATUS as the player (same path as an /hq action)
+			string entryName = "REQUEST_STATUS";
+			if (action == "mission")
+				entryName = "REQUEST_MISSION";
+			status = RunPlayerEntry(playerId, entryName);
+			CLW_RequestService.Answer(playerId, status, true);
+		}
 		else if (action == "join")
 		{
 			status = JoinSquad(playerId, arg);
@@ -143,6 +152,34 @@ class CLW_HqMenuServer
 		}
 
 		Push(playerId, terminalPos, status);
+	}
+
+	// One player registry entry without params, run as the player (authority "player"); returns the answer wire.
+	protected static string RunPlayerEntry(int playerId, string actionName)
+	{
+		CLW_ActionRegistry registry = CLW_ActionRegistry.Get();
+		CLW_ActionEntry entry = registry.Find(actionName);
+		if (!entry || entry.m_sAuthority != CLW_ActionEntry.AUTH_PLAYER)
+			return CLW_Loc.W("#CLW-Hq_NotAllowed", actionName);
+
+		CLW_ActionCall call = new CLW_ActionCall();
+		call.m_sAction = actionName;
+		call.m_sFaction = CLW_RequestService.FactionKeyOf(playerId);
+		call.m_sAuthority = CLW_ActionEntry.AUTH_PLAYER;
+		call.m_sSource = "player";
+		call.m_iPlayerId = playerId;
+		call.m_sReason = "hq menu by " + CLW_RequestService.PlayerName(playerId);
+		CLW_RemoteCommander commander = CLW_GameMode.GetCommander(call.m_sFaction);
+		if (commander)
+			call.m_Rules = commander.GetRules();
+
+		string result;
+		bool granted = registry.Run(call, result);
+		Print(string.Format("CLW: hqmenu entry %1 player=%2 -> %3: %4", actionName, playerId, granted, result), LogLevel.NORMAL);
+		if (granted)
+			return CLW_Loc.W("#CLW-Req_Granted", call.PlayerWire(result));
+
+		return CLW_Loc.W("#CLW-Req_Refused", actionName, call.PlayerWire(result));
 	}
 
 	protected static void Push(int playerId, vector terminalPos, string status)
