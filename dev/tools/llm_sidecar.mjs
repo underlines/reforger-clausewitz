@@ -3,7 +3,7 @@
 // Env (initial defaults only; saved settings in dev/tools/sidecar-config.json win):
 //   CLW_PORT (default 8788), CLW_LLM=fake|anthropic|openai-compatible|openrouter (default fake),
 //   ANTHROPIC_API_KEY, CLW_MODEL (default claude-sonnet-5-5)
-// Listens on 127.0.0.1 only (CLW_HOST to change). Dashboard + /api/* need the admin login (auth.mjs, default password in README);
+// Listens on 127.0.0.1 only (CLW_HOST to change; CLW_ALLOWED_HOSTS = extra host names for a remote sidecar). Dashboard + /api/* need the admin login (auth.mjs, default password in README);
 // game endpoints use header X-CLW-Token when config gameToken is set. Loadout library: loadouts.mjs (/loadouts/*, /control, /api/loadouts*).
 // CLW_DATA_DIR = data dir (default dev/tools/.cache: sessions.json, loadouts-store.json, map caches).
 //
@@ -1633,9 +1633,12 @@ function serveStatic(res, name) {
 // CLW_HOST=0.0.0.0 opens the dashboard to the LAN: then private-network addresses pass the host/origin checks too
 // (anyone in the LAN can then pause the sidecar or change its config; the API key is never sent to the browser).
 const LAN = HOST !== "127.0.0.1" && HOST !== "localhost";
-const HOST_NAMES = LAN
+// CLW_ALLOWED_HOSTS: extra host names (comma-separated, e.g. a public domain or IP behind a reverse proxy) for a sidecar on another machine
+const EXTRA_HOSTS = (process.env.CLW_ALLOWED_HOSTS ?? "").split(",").map((h) => h.trim()).filter(Boolean)
+  .map((h) => h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+const HOST_NAMES = (LAN
   ? "localhost|127\\.0\\.0\\.1|10\\.\\d+\\.\\d+\\.\\d+|192\\.168\\.\\d+\\.\\d+|172\\.(1[6-9]|2\\d|3[01])\\.\\d+\\.\\d+|[\\w-]+(\\.local|\\.lan)?"
-  : "localhost|127\\.0\\.0\\.1";
+  : "localhost|127\\.0\\.0\\.1") + EXTRA_HOSTS.map((h) => "|" + h).join("");
 const LOCAL_HOST = new RegExp(`^(${HOST_NAMES})(:\\d+)?$`, "i");
 const LOCAL_ORIGIN = new RegExp(`^https?:\\/\\/(${HOST_NAMES})(:\\d+)?$`, "i");
 const hostOk = (req) => LOCAL_HOST.test(req.headers.host ?? "");

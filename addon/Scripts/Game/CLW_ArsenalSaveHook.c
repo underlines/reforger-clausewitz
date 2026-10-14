@@ -41,46 +41,10 @@ class CLW_ArsenalSaveHook
 	static const int RESTORE_DELAY_MS = 500;
 
 	protected static ref array<ref CLW_LoadoutPostCallback> s_aCallbacks = {};	// POSTs in flight (the engine keeps no reference to a callback)
-	protected static string s_sToken;
-	protected static bool s_bTokenRead;
-
-	// The shared token of the game <-> sidecar channel: overrides.json key "sidecarToken", "" when absent (nothing is sent then).
-	static string Token()
-	{
-		if (s_bTokenRead)
-			return s_sToken;
-
-		s_bTokenRead = true;
-		if (!FileIO.FileExists(CLW_CatalogOverrides.FILE_PATH))
-			return s_sToken;
-
-		string text = SCR_FileIOHelper.GetFileStringContent(CLW_CatalogOverrides.FILE_PATH, false);
-		if (text.IsEmpty())
-			return s_sToken;
-
-		string error;
-		CLW_JsonNode root = CLW_JsonReader.Parse(text, error);
-		if (root)
-			s_sToken = root.FieldText("sidecarToken");
-
-		return s_sToken;
-	}
-
-	// The common REST setup for the loadout endpoints (null when there is no REST context).
+	// The common REST setup for the loadout endpoints (null when there is no REST context); URL + token: CLW_SidecarLink.
 	static RestContext Context()
 	{
-		RestContext ctx = GetGame().GetRestApi().GetContext(CLW_RemoteCommander.BASE_URL);
-		if (!ctx)
-			return null;
-
-		ctx.SetTimeout(TIMEOUT_SECONDS);
-		string token = Token();
-		if (token.IsEmpty())
-			ctx.SetHeaders("Content-Type,application/json");
-		else
-			ctx.SetHeaders("Content-Type,application/json,X-CLW-Token," + token);
-
-		return ctx;
+		return CLW_SidecarLink.Context(TIMEOUT_SECONDS);
 	}
 
 	// POST one record to the sidecar (fire and forget, the file is the source of truth).

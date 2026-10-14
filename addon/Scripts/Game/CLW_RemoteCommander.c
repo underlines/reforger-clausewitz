@@ -122,7 +122,6 @@ class CLW_ManifestCallback : RestCallback
 class CLW_RemoteCommander
 {
 	static bool ENABLED = true;
-	static const string BASE_URL = "http://127.0.0.1:8788/";
 	static const int TIMEOUT_SECONDS = 60;		// above the sidecar's longest turn: HQ agent turn (agent.timeoutSec 40 s) + SITREP translation (i18n.translateTimeoutSec 10 s, parallel per language) + provider latency
 	static const float STUCK_SECONDS = 75;		// a request in flight longer than this is considered lost (above TIMEOUT_SECONDS)
 	static const float LOG_INTERVAL = 60;		// s: repeat the same fallback reason at most this often
@@ -239,15 +238,13 @@ class CLW_RemoteCommander
 		if (squads <= 0)
 			ThinkRules();	// still POST the situation below: the sidecar/dashboard must learn the faction has no squads left (it may still buy)
 
-		RestContext ctx = GetGame().GetRestApi().GetContext(BASE_URL);
+		RestContext ctx = CLW_SidecarLink.Context(TIMEOUT_SECONDS);
 		if (!ctx)
 		{
 			Fallback("no REST context");
 			return;
 		}
 
-		ctx.SetTimeout(TIMEOUT_SECONDS);
-		ctx.SetHeaders("Content-Type,application/json");
 		m_Callback = new CLW_RemoteCallback(this);
 		m_bInFlight = true;
 		m_fSentAt = now;
@@ -274,12 +271,10 @@ class CLW_RemoteCommander
 		if (hash == m_sManifestSent || m_bManifestInFlight)
 			return hash;
 
-		RestContext ctx = GetGame().GetRestApi().GetContext(BASE_URL);
+		RestContext ctx = CLW_SidecarLink.Context(TIMEOUT_SECONDS);
 		if (!ctx)
 			return hash;
 
-		ctx.SetTimeout(TIMEOUT_SECONDS);
-		ctx.SetHeaders("Content-Type,application/json");
 		m_ManifestCallback = new CLW_ManifestCallback(this);
 		m_sManifestPending = hash;
 		m_bManifestInFlight = true;

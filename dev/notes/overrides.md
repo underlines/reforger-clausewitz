@@ -41,6 +41,13 @@ Top-level key of the same file: `{"debugChat":true,"entries":[...]}`. Default `f
 Player-facing messages (setup menu, `/war` and `/sitrep` replies, mission popups, SITREP hints, war over, hold-all countdown) are never gated
 (`CLW_Debug.Show` / `CLW_Debug.Announce`).
 
+## LLM sidecar endpoint (`sidecarUrl`, `sidecarToken`)
+Top-level keys of the same file, read once per server start (`CLW_SidecarLink`, log `CLW: sidecar url ... (source, token set|no token)`).
+- `sidecarUrl`: base URL of the sidecar, e.g. `"http://10.0.0.5:8788/"` or `"https://clw.example.com/"`. Default `http://127.0.0.1:8788/`.
+  The command line `-clwSidecar <url>` wins over the file.
+- `sidecarToken`: sent as header `X-CLW-Token` on every game request; must equal the sidecar's `gameToken`. Command line
+  `-clwSidecarToken <token>` wins over the file. Set one whenever the sidecar is reachable from other machines.
+
 ## War setup preset (`setup`)
 Top-level key of the same file. It lets a dedicated server start the war unattended with chosen settings, without a human in the setup menu.
 Without it, the scenario's auto start (`m_iAutoStartSec`, 180 s on Arland) uses the defaults. Read once when the setup phase begins
