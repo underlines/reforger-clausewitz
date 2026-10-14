@@ -36,6 +36,20 @@ console.log("store");
   ok(!s.savePlayer({ identityId: "", faction: "US", loadout: "L" }).ok && !s.savePlayer({ identityId: "a", faction: "US" }).ok, "savePlayer validates");
   eq(LO.normRole("medic"), "ROLE_MEDIC", "normRole accepts bare names");
   eq(LO.normRole("ROLE_NOPE"), null, "normRole rejects unknown");
+  // item details (optional field): tolerant cleaning + summary
+  const info = [
+    { id: "{A}", name: "M4A1", type: "rifle", cost: 60, count: 1 }, { id: "{B}", name: "", key: "#AR-Mag_STANAG", path: "Prefabs/Weapons/Magazines/Mag_STANAG_30rnd.et", type: "magazine", cost: 3, count: 9 },
+    { id: "{C}", name: "Medkit", type: "medical", cost: 5, count: 2 }, { id: "{D}", name: "Pistol", type: "pistol", cost: 20, count: 1 },
+    { id: "", name: "no id" }, "junk", null, { id: "{E}", type: "Bad Type!", cost: -7, count: 0, name: 5 },
+  ];
+  ok(s.savePlayer({ identityId: "b", faction: "US", loadout: "L", itemInfo: info, totalCost: 211 }).ok, "savePlayer with itemInfo");
+  const stored = s.raw().players.find((p) => p.identityId === "b");
+  eq([stored.itemInfo.length, stored.itemInfo[4], stored.totalCost], [5, { id: "{E}", name: "", type: "other", cost: -1, count: 1 }, 211], "itemInfo cleaned: malformed entries dropped, numbers clamped, unknown type -> other");
+  eq(LO.summarize(stored), { items: 14, distinct: 5, totalCost: 211, types: { rifle: 1, magazine: 9, medical: 2, pistol: 1, other: 1 }, primary: "M4A1" }, "summarize: counts, types, primary weapon");
+  eq(LO.summarize({ itemInfo: [{ id: "{Z}", name: "", key: "", path: "Prefabs/Weapons/Foo_Bar.et", type: "mortar", cost: -1, count: 1 }] }).primary, "", "summarize: no weapon type, no primary");
+  eq([LO.summarize({}), LO.summarize({ itemInfo: [] }), LO.cleanItemInfo("x"), LO.cleanItemInfo(undefined)], [null, null, [], []], "no/invalid itemInfo is tolerated");
+  eq(s.raw().players.find((p) => p.identityId === "a").totalCost, -1, "old record: totalCost -1, itemInfo []");
+  ok(s.savePlayer({ identityId: "b", faction: "US", loadout: "L2" }).ok && s.raw().players.find((p) => p.identityId === "b").itemInfo.length === 0, "re-save without itemInfo clears stale details");
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
@@ -105,11 +119,22 @@ try {
   r = await call("POST", "/loadouts/player", rec(10, "USSR"), {}, false);
   r = await call("POST", "/loadouts/player", { identityId: "x", faction: "US" }, {}, false);
   eq(r.status, 400, "player record without loadout -> 400");
-  r = await call("POST", "/loadouts/player", rec(1, "US", { playerName: "Renamed1", status: "degraded", missing: ["{9}Prefabs/Gone.et"] }), {}, false);
+  const INFO = [{ id: "{1}Prefabs/Weapons/M16A2.et", name: "M16A2", type: "rifle", cost: 50, count: 1 }, { id: "{2}Prefabs/Items/Medkit.et", name: "", key: "#AR-Medkit", type: "medical", cost: 5, count: 2 }];
+  r = await call("POST", "/loadouts/player", rec(1, "US", { playerName: "Renamed1", status: "degraded", missing: ["{9}Prefabs/Gone.et"], itemInfo: INFO, totalCost: 60, extraUnknownField: { a: 1 } }), {}, false);
+  ok(r.status === 200, "record with itemInfo + unknown extra field accepted");
   r = await call("GET", "/api/loadouts");
   ok(r.status === 200 && r.json.players.length === 10, "list: 10 players (re-save upserts)", String(r.json?.players?.length));
   ok(r.json.players.every((p) => p.loadout === undefined && p.loadoutLen > 50_000), "list does not ship the loadout strings");
   eq([r.json.players.find((p) => p.identityId === "id-1").playerName, r.json.bad], ["Renamed1", 1], "upsert replaced the record; degraded counted");
+  const pl1 = r.json.players.find((p) => p.identityId === "id-1"), pl2 = r.json.players.find((p) => p.identityId === "id-2");
+  eq([pl1.itemInfo, pl1.summary, pl1.totalCost], [undefined, { items: 3, distinct: 2, totalCost: 60, types: { rifle: 1, medical: 2 }, primary: "M16A2" }, 60], "list: summary instead of the item list");
+  eq([pl2.summary, pl2.totalCost], [null, -1], "list: old record without itemInfo -> summary null");
+  r = await call("GET", "/api/loadouts/player/" + encodeURIComponent("id-1|US") + "/items");
+  eq([r.status, r.json.itemInfo, r.json.totalCost, r.json.items.length], [200, INFO, 60, 2], "GET player items endpoint");
+  r = await call("GET", "/api/loadouts/player/" + encodeURIComponent("id-2|US") + "/items");
+  eq([r.status, r.json.itemInfo, r.json.totalCost], [200, [], -1], "items endpoint of an old record: empty list");
+  eq((await call("GET", "/api/loadouts/player/nobody%7CUS/items")).status, 404, "items endpoint: unknown record -> 404");
+  r = await call("GET", "/api/loadouts");
   eq([r.json.maxActive, r.json.kinds.includes("infantry"), r.json.roles.includes("ROLE_MEDIC"), r.json.factions.sort()], [7, true, true, ["US", "USSR"]], "meta: cap, kinds, roles, factions");
   r = await call("GET", "/api/state");
   eq(r.json.loadouts.bad, 1, "/api/state loadouts.bad (tab badge)");
@@ -128,6 +153,9 @@ try {
   const e1 = r.json.library.find((e) => e.id === ids[0]), e2 = r.json.library.find((e) => e.id === ids[1]);
   eq([e1.name, e1.status, e1.missing, e1.createdFrom, e1.faction], ["Renamed1", "degraded", ["{9}Prefabs/Gone.et"], { identityId: "id-1", playerName: "Renamed1" }, "US"], "copy carries name, status, missing, createdFrom");
   eq(e2.role, "ROLE_MEDIC", "role normalised");
+  eq([e1.itemInfo, e1.summary.items, e2.summary], [undefined, 3, null], "library list: summary only; old-record copy has none");
+  r = await call("GET", "/api/loadouts/library/" + ids[0] + "/items");
+  eq([r.status, r.json.itemInfo, r.json.totalCost], [200, INFO, 60], "GET library items endpoint (copied from the player)");
 
   for (let i = 0; i < 7; i++) {
     r = await call("POST", "/api/loadouts/library/" + ids[i], { active: true });
@@ -181,6 +209,7 @@ try {
   r = await call("POST", "/loadouts/sync", { v: 1, round: 3, gameVersion: "1.5.0.1", addons: [{ guid: "AAAAAAAAAAAAAAAA", name: "Base Mod" }], factions: [{ key: "US", name: "US Army", side: 0 }, { key: "USSR", name: "Soviet", side: 1 }], players: [rec(11)] }, {}, false);
   ok(r.status === 200 && r.json.v === 1 && Array.isArray(r.json.library) && r.json.compositions && r.json.pins, "sync reply shape {v, library, compositions, pins}");
   const syncActive = r.json.library.filter((e) => e.active && e.faction === "US");
+  ok(r.json.library.every((e) => !("itemInfo" in e) && !("totalCost" in e)), "sync reply: no item details (the game DTO does not know them)");
   ok(syncActive.length === 7 && syncActive.every((e) => typeof e.loadout === "string" && e.loadout.length > 50_000), "sync reply: active entries incl. full loadout strings");
   ok(r.json.library.some((e) => e.id === ids[0] && e.name === "Rifleman AK" && e.role === "ROLE_RIFLEMAN"), "sync reply: edited entry");
   eq(r.json.compositions, { infantry: ["ROLE_LEADER", "ROLE_MACHINEGUNNER", "ROLE_RIFLEMAN"] }, "sync reply: compositions");
