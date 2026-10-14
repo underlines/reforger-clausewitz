@@ -7,6 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { loginFetch } from "./test-login.mjs"; // dashboard API needs the admin session
 import { fileURLToPath } from "node:url";
 import { manifest, situation } from "./agent/fixtures/hq_fixture.mjs";
 import * as I18N from "./agent/i18n.mjs";
@@ -66,7 +67,7 @@ const stub = http.createServer((req, res) => {
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "clw-i18n-"));
 const cfgFile = path.join(tmp, "cfg.json");
 fs.writeFileSync(cfgFile, JSON.stringify({ provider: "fake", model: "x", timeoutSec: 20 })); // an OLD single-provider config: no weak, no i18n group
-const proc = spawn(process.execPath, [path.join(DIR, "llm_sidecar.mjs")], { env: { ...process.env, CLW_PORT: String(PORT), CLW_LLM: "fake", CLW_CONFIG: cfgFile }, stdio: ["ignore", "pipe", "pipe"] });
+const proc = spawn(process.execPath, [path.join(DIR, "llm_sidecar.mjs")], { env: { ...process.env, CLW_PORT: String(PORT), CLW_LLM: "fake", CLW_CONFIG: cfgFile, CLW_DATA_DIR: path.join(tmp, "data") }, stdio: ["ignore", "pipe", "pipe"] });
 let log = "";
 proc.stdout.on("data", (d) => (log += d)); proc.stderr.on("data", (d) => (log += d));
 const post = async (p, body) => { const r = await fetch(BASE + p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); return { status: r.status, json: await r.json() }; };
@@ -88,6 +89,7 @@ const sitrepCall = (faction, extra = {}) => post("/orders", { ...situation, v: 4
 
 try {
   ok(await up(), "sidecar started");
+  await loginFetch(BASE);
   await post("/manifest", manifest);
 
   console.log("config (old single-provider config)");

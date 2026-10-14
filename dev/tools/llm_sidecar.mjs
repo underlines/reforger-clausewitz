@@ -3,7 +3,9 @@
 // Env (initial defaults only; saved settings in dev/tools/sidecar-config.json win):
 //   CLW_PORT (default 8788), CLW_LLM=fake|anthropic|openai-compatible|openrouter (default fake),
 //   ANTHROPIC_API_KEY, CLW_MODEL (default claude-sonnet-5-5)
-// Listens on 127.0.0.1 only.
+// Listens on 127.0.0.1 only (CLW_HOST to change; CLW_ALLOWED_HOSTS = extra host names for a remote sidecar). Dashboard + /api/* need the admin login (auth.mjs, default password in README);
+// game endpoints use header X-CLW-Token when config gameToken is set. Loadout library: loadouts.mjs (/loadouts/*, /control, /api/loadouts*).
+// CLW_DATA_DIR = data dir (default dev/tools/.cache: sessions.json, loadouts-store.json, map caches).
 //
 // Game API:
 //   GET  /health -> {"ok":true,"mode":"<provider>"}
@@ -130,10 +132,13 @@ import { cleanHistory } from "./agent/hqHistory.mjs";
 import * as I18N from "./agent/i18n.mjs"; // protocol v4: languages, structured /hq reply, translator (section "i18n" below)
 import * as J from "./agent/journal.mjs"; // HQ war journal (pure functions), see "HQ war journal" below
 import * as FB from "./agent/fallback.mjs"; // backup (fallback) model per slot, see "model fallback" below
+import * as AUTH from "./auth.mjs"; // admin login (session cookie) + game token (X-CLW-Token)
+import * as LO from "./loadouts.mjs"; // loadout library store + REST handlers (/loadouts/*, /control, /api/loadouts*)
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const DASH_DIR = path.join(DIR, "dashboard");
 const CONFIG_FILE = process.env.CLW_CONFIG ? path.resolve(process.env.CLW_CONFIG) : path.join(DIR, "sidecar-config.json"); // CLW_CONFIG: a second instance (tests) keeps its own settings file
+const DATA_DIR = process.env.CLW_DATA_DIR ? path.resolve(process.env.CLW_DATA_DIR) : path.join(DIR, ".cache"); // map/world caches, sessions.json, loadouts-store.json (CLW_DATA_DIR: tests)
 const PORT = Number(process.env.CLW_PORT) || 8788;
 const HOST = process.env.CLW_HOST || "127.0.0.1";	// 0.0.0.0 = reachable in the LAN (dashboard for other devices)
 const COMMANDS = new Set(["MOVE", "ATTACK", "DEFEND"]);
@@ -308,6 +313,10 @@ const cfg = {
   memory: { enabled: true, reviewMin: 5 },
   // broadcast translation (SITREP text_by_lang, POST /translate): translateTimeoutSec per language, then that language is omitted
   i18n: { enabled: true, translateTimeoutSec: 10 },
+  // dashboard login: {salt, hash} (scrypt) of the admin password; null = the default password from the README (see auth.mjs)
+  admin: null,
+  // shared secret of the game channel (header X-CLW-Token on /orders, /manifest, /translate, /world*, /health, /loadouts/*, /control); empty = open
+  gameToken: "",
 };
 
 // Group settings: "bool" or [min, max] number range per key. Partial objects are merged onto the current group.
@@ -434,6 +443,12 @@ function validateConfig(inp) {
         if (r.error) return r;
         out.weak = r.value; break;
       }
+      case "admin": // only loaded from the saved file; the password is changed through POST /api/password
+        if (v !== null && !AUTH.validAdmin(v)) return { error: "admin must be null or {salt, hash}" };
+        out.admin = v === null ? null : { salt: v.salt, hash: v.hash }; break;
+      case "gameToken":
+        if (typeof v !== "string" || v.length > 200 || /[\s\u0000-\u001f]/.test(v)) return { error: "gameToken must be a string without whitespace (max 200), empty = off" };
+        out.gameToken = v; break;
       case "maxTokens":
         if (!Number.isInteger(v) || v < 16 || v > 32000) return { error: "maxTokens must be an integer 16..32000" };
         out.maxTokens = v; break;
@@ -494,10 +509,10 @@ function saveConfig() {
 }
 
 function publicConfig() {
-  const { apiKey, weak, fallback, ...rest } = cfg;
+  const { apiKey, weak, fallback, admin, gameToken, ...rest } = cfg;
   const slot = (o) => ({ provider: o.provider, model: o.model, baseUrl: o.baseUrl, timeoutSec: o.timeoutSec, apiKeySet: !!o.apiKey, apiKeyLast4: o.apiKey ? o.apiKey.slice(-4) : "", fallback: FB.publicFallback(o.fallback) });
   // strong = the top-level provider/model/baseUrl/apiKey/timeoutSec (kept for old clients); weak.provider "none" = no weak slot (strong translates)
-  return { ...rest, apiKeySet: !!apiKey, apiKeyLast4: apiKey ? apiKey.slice(-4) : "", fallback: FB.publicFallback(fallback), strong: slot(cfg), weak: slot(weak), roles: ROLE_SLOT, translateSlot: weak.provider !== "none" ? "weak" : "strong" };
+  return { ...rest, gameTokenSet: !!gameToken, apiKeySet: !!apiKey, apiKeyLast4: apiKey ? apiKey.slice(-4) : "", fallback: FB.publicFallback(fallback), strong: slot(cfg), weak: slot(weak), roles: ROLE_SLOT, translateSlot: weak.provider !== "none" ? "weak" : "strong" };
 }
 
 // ---------- state ----------
@@ -1597,6 +1612,12 @@ function send(res, code, obj) {
   res.end(JSON.stringify(obj));
 }
 
+// ---------- auth + loadouts wiring (modules auth.mjs / loadouts.mjs) ----------
+const auth = AUTH.createAuth({ dataDir: DATA_DIR, getAdmin: () => cfg.admin, setAdmin: (a) => { cfg.admin = a; saveConfig(); } });
+const loadouts = LO.createStore(DATA_DIR, { log: (m) => console.log(m) });
+const GAME_ROUTES = new Set(["/health", "/orders", "/manifest", "/translate", "/world", "/world/roads", "/world/locations", "/world/buildings", "/loadouts/player", "/loadouts/sync", "/loadouts/status", "/control"]);
+const redirect = (res, to) => { res.writeHead(302, { Location: to, "Cache-Control": "no-store" }); res.end(); };
+
 const MIME = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".woff2": "font/woff2", ".png": "image/png", ".json": "application/json",
@@ -1612,9 +1633,12 @@ function serveStatic(res, name) {
 // CLW_HOST=0.0.0.0 opens the dashboard to the LAN: then private-network addresses pass the host/origin checks too
 // (anyone in the LAN can then pause the sidecar or change its config; the API key is never sent to the browser).
 const LAN = HOST !== "127.0.0.1" && HOST !== "localhost";
-const HOST_NAMES = LAN
+// CLW_ALLOWED_HOSTS: extra host names (comma-separated, e.g. a public domain or IP behind a reverse proxy) for a sidecar on another machine
+const EXTRA_HOSTS = (process.env.CLW_ALLOWED_HOSTS ?? "").split(",").map((h) => h.trim()).filter(Boolean)
+  .map((h) => h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+const HOST_NAMES = (LAN
   ? "localhost|127\\.0\\.0\\.1|10\\.\\d+\\.\\d+\\.\\d+|192\\.168\\.\\d+\\.\\d+|172\\.(1[6-9]|2\\d|3[01])\\.\\d+\\.\\d+|[\\w-]+(\\.local|\\.lan)?"
-  : "localhost|127\\.0\\.0\\.1";
+  : "localhost|127\\.0\\.0\\.1") + EXTRA_HOSTS.map((h) => "|" + h).join("");
 const LOCAL_HOST = new RegExp(`^(${HOST_NAMES})(:\\d+)?$`, "i");
 const LOCAL_ORIGIN = new RegExp(`^https?:\\/\\/(${HOST_NAMES})(:\\d+)?$`, "i");
 const hostOk = (req) => LOCAL_HOST.test(req.headers.host ?? "");
@@ -1776,7 +1800,7 @@ async function handleOrders(req, res) {
 // ---------- world info, map image, vector overlay (roads, locations) ----------
 // Game -> POST /world (every 60 s), /world/roads (chunks), /world/locations. The map image is resolved in the background by
 // ./map/index.mjs from the user's own game install (never committed); vector data is cached in .cache/vector/<worldKey>.json.
-const CACHE_DIR = path.join(DIR, ".cache");
+const CACHE_DIR = DATA_DIR;
 const WORLD_FILE = path.join(CACHE_DIR, "world.json");
 const VECTOR_DIR = path.join(CACHE_DIR, "vector");
 const worldState = { info: null, key: "", ts: 0 };
@@ -1981,12 +2005,16 @@ function manifestsView() {
 
 async function handleApi(req, res, url) {
   if (!hostOk(req)) return send(res, 403, { error: "forbidden host" });
+  const loCtx = { send, readBody, originOk };
+  if (await AUTH.handleHttp(auth, req, res, url, loCtx) !== false) return; // /api/login, /api/logout, /api/session, /api/password
+  if (!auth.isLoggedIn(req)) return send(res, 401, { error: "login required" }); // every other /api/* endpoint needs the session
+  if (await LO.handleApi(loadouts, req, res, url, loCtx)) return; // /api/loadouts*
   if (handleWorldApi(req, res, url) !== false) return;
   if (req.method === "GET" && url === "/api/state") {
     return send(res, 200, {
       now: Date.now(), startedAt: state.startedAt, lastRequestTs: state.lastRequestTs,
       factions: state.factions, activeFactions: activeFactions(), staleAfterSec: STALE_FACTION_MS / 1000,
-      exchanges: state.exchanges, hq: hqLog, debugLog: state.debugLog, manifests: manifestsView(), counters: state.counters, modelCooldowns: cooldownsView(), config: publicConfig(), usage: usageView(), scheduler: schedulerView(), journals: journalsView(), paused,
+      exchanges: state.exchanges, hq: hqLog, debugLog: state.debugLog, manifests: manifestsView(), counters: state.counters, modelCooldowns: cooldownsView(), config: publicConfig(), auth: { defaultPassword: auth.isDefaultPassword() }, loadouts: { bad: loadouts.badCount(), restartId: loadouts.restartId() }, usage: usageView(), scheduler: schedulerView(), journals: journalsView(), paused,
     });
   }
   if (req.method === "POST" && url === "/api/pause") {
@@ -2022,6 +2050,7 @@ async function handleApi(req, res, url) {
     if (!originOk(req)) return send(res, 403, { error: "forbidden origin" });
     let inp;
     try { inp = JSON.parse((await readBody(req, 100_000)) || "{}"); } catch { return send(res, 400, { error: "invalid JSON" }); }
+    if (inp && typeof inp === "object" && "admin" in inp) return send(res, 400, { error: "the admin password is changed through POST /api/password" });
     // /api/test {slot:"strong"|"weak"|"translate", which:"primary"|"fallback"}: slot "strong" (default) = a commander call; "weak" / "translate" = a translation call
     // (translate = the weak slot, else strong); which "fallback" tests the slot's backup model on its own. Both are tested without any fallback routing.
     let testSlot = "strong", testWhich = "primary";
@@ -2078,6 +2107,12 @@ async function handleApi(req, res, url) {
 
 http.createServer((req, res) => {
   const url = (req.url ?? "/").split("?")[0];
+  // game channel: no cookie, header X-CLW-Token when config gameToken is set
+  if (GAME_ROUTES.has(url) && !AUTH.gameTokenOk(req, cfg.gameToken)) return send(res, 401, { error: "bad or missing X-CLW-Token" });
+  if (url === "/control" || url.startsWith("/loadouts/")) {
+    return void LO.handleGame(loadouts, req, res, url, { send, readBody, originOk }).then((h) => { if (!h && !res.headersSent) send(res, 404, { error: "not found" }); })
+      .catch((e) => { console.log(`  loadouts handler error: ${e?.message ?? e}`); if (!res.headersSent) send(res, 500, { error: "internal" }); });
+  }
   if (req.method === "GET" && url === "/health") return send(res, 200, { ok: true, mode: cfg.provider });
   if (req.method === "POST" && url === "/manifest") {
     return void handleManifest(req, res).catch((e) => { if (!res.headersSent) send(res, 500, { error: String(e?.message ?? e) }); });
@@ -2096,9 +2131,15 @@ http.createServer((req, res) => {
   }
   if (req.method === "GET") {
     if (!hostOk(req)) return send(res, 403, { error: "forbidden host" });
+    // login page + its assets are public; every other dashboard page / asset needs the session
+    if (url === "/login") return auth.isLoggedIn(req) ? redirect(res, "/") : serveStatic(res, "login.html");
+    if (url === "/login.js") return serveStatic(res, "login.js");
+    const publicAsset = url === "/style.css" || url === "/i18n.js" || /^\/i18n\/[a-z]{2,3}\.json$/.test(url);
+    if (!publicAsset && !auth.isLoggedIn(req)) return redirect(res, "/login");
     if (url === "/" || url === "/index.html") return serveStatic(res, "index.html");
     if (url === "/app.js") return serveStatic(res, "app.js");
     if (url === "/journal.js") return serveStatic(res, "journal.js");
+    if (url === "/loadouts.js") return serveStatic(res, "loadouts.js");
     if (url === "/i18n.js") return serveStatic(res, "i18n.js");
     const li = /^\/i18n\/([a-z]{2,3})\.json$/.exec(url); // dashboard dictionaries (dashboard/i18n/<lang>.json)
     if (li) return serveStatic(res, "i18n/" + li[1] + ".json");

@@ -44,6 +44,7 @@ class CLW_Rematch
 	protected static int s_iDelaySec = DEFAULT_DELAY_SEC;
 	protected static int s_iRound = 1;			// the round that is running / just ended
 	protected static bool s_bPending;
+	protected static bool s_bForceRestart;		// RestartNow: the war end that is being forced skips the results delay and the rematch switch
 	protected static ref array<string> s_aPrevKeys = {};			// factions of the war that just ended (leftover sweeps)
 	protected static ref array<vector> s_aPrevAreas = {};			// its HQ and FOB positions
 	protected static ref array<float> s_aPrevAreaRadius = {};
@@ -93,6 +94,12 @@ class CLW_Rematch
 	// (EndGameMode, mode "reload"); false when the session stays up (inPlace schedules the next round, off does nothing).
 	static bool OnWarOver(CLW_WarState war, string winnerKey, string why)
 	{
+		if (s_bForceRestart)
+		{
+			Print("CLW: rematch: restart requested (dashboard), no results delay", LogLevel.NORMAL);
+			return false;
+		}
+
 		LoadConfig();
 		Print(string.Format("CLW: rematch: choice '%1' (overrides.json rematch: inPlace | reload | off), delay %2 s, round %3 just ended", s_sMode, s_iDelaySec, s_iRound), LogLevel.NORMAL);
 		if (s_sMode == MODE_RELOAD)
@@ -121,6 +128,37 @@ class CLW_Rematch
 			GetGame().GetCallqueue().CallLater(Countdown, (s_iDelaySec - COUNTDOWN_SEC) * 1000);
 
 		return false;
+	}
+
+	// Dashboard restart (CLW_LoadoutSync, loadouts plan R5): a running war ends as a draw and the reset sequence runs at once, whatever the
+	// rematch switch says (inPlace / reload / off) and without the results delay. False in SETUP (nothing to restart) or without a runtime.
+	// The next war start re-runs the loadout sync (CLW_WarRuntime.OnWarStarted).
+	static bool RestartNow(string whyWire)
+	{
+		if (!Replication.IsServer())
+			return false;
+
+		CLW_WarRuntime runtime = CLW_WarRuntime.Get();
+		CLW_WarState war;
+		if (runtime)
+			war = runtime.GetWarState();
+		if (!runtime || !war || war.GetPhase() == CLW_EWarPhase.SETUP)
+			return false;
+
+		if (war.IsRunning())
+		{
+			s_bForceRestart = true;
+			war.Finish("", EGameOverTypes.ENDREASON_DRAW, whyWire);
+			s_bForceRestart = false;
+		}
+
+		if (!war.IsEnded())
+			return false;
+
+		GetGame().GetCallqueue().Remove(Run);
+		GetGame().GetCallqueue().Remove(Countdown);
+		Run();
+		return true;
 	}
 
 	protected static void Countdown()

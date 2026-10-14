@@ -67,6 +67,10 @@ class CLW_Sides
 		CLW_ForceCatalog catalog = CLW_GameMode.GetForceCatalog();
 		array<string> keys = {};
 		scenario.GetActiveKeys(keys);
+		// Side-resolved spawn slots (CLW_LoadoutSlots) get their faction now so CheckLoadouts sees them; the war start rebuilds them
+		// with the validated library (CLW_LoadoutSync).
+		CLW_LoadoutSlots.Rebuild(keys);
+		CLW_LoadoutSlots.BindEntries();
 		foreach (string key : keys)
 		{
 			if (catalog)

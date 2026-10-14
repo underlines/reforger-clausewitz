@@ -189,3 +189,11 @@ Open:
 - 2026-10-12: Adaptive HQ wakeup (VISION 1b basic): game polls every 10 s (rule fallback throttled to 25 s), sidecar scheduler per faction (scheduled / trigger / manual wake, `next_check_sec` from the model, budget stretch), config groups `wakeup` and `triggers`, `POST /api/wake`, dashboard countdown chips + Wakeup/Triggers settings. Verified end-to-end (2026-10-12).
 - 2026-10-12: M4 (any map, any pack: auto scenario, wrapper worlds + generator, GM takeover, side pools, prop sets, HQ menu, FOB kit + timing gate, garrison) merged into `main` and released as v1.0.0 (local tag). Round 3 (`notes/m4-round3-plan.md`) and the owner client checklist are next.
 - 2026-10-13: i18n designed (`notes/i18n-design.md`): EN + DE stringtable and dashboard, LLM text per player language with override, strong/weak LLM split for broadcast translation. Not started.
+
+### Loadouts sprint (2026-10-14, branch `feature/loadouts`, builds #107-#115) - IN PROGRESS
+Plan `notes/loadouts-arsenal-plan.md`, contract `notes/loadouts-impl.md`; G1 roles/squads, G2 kits/custom loadout, G3 server loadouts/sync, S sidecar login + Loadouts tab (Sonnet subagents), then DS fixes.
+- [x] Compiles on the DS with packs-e2e-all; spawn screen 7 role slots + custom slot per side (RHS_USAF / RHS_AFRF); sidecar sync + cache file; role picker unique roles.
+- [x] Save at an RHS arsenal works (own `CLW_SaveLoadoutAction`, `saved ... items=41 status=ok`).
+- [ ] Next: Load my loadout (supplies charged), respawn with the custom slot, dashboard copy -> library -> active -> Restart war -> slot shows it, AI kits (R0.2 log lines), squad roles with vanilla groups, run without WCS_LoadoutEditor (vanilla save path), test matrix.
+- Findings: new prefabs/configs need a `resourceDatabase.rdb` rebuild (open the project once in Workbench) or overrides/replication silently fail; WCS_LoadoutEditor hides every vanilla `SCR_SaveArsenalLoadout` without a WCS slot (so we ship our own save action, hidden when a vanilla/WCS save is shown); vanilla kit strings hold bare GUIDs; the interaction UI shows one context only (helper inside a box never wins, helper now 1.6 m beside); custom slot shows "Default loadout" with WCS loaded.
+- Open: dashboard shows item GUIDs (resolve paths); helper box uses the vanilla arsenal mesh; remove the `last-refused-kit.json` dump before release.

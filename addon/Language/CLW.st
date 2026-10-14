@@ -700,6 +700,70 @@ StringTable {
    Target_en_us "Chinese"
    Target_de_de "Chinesisch"
   }
+  CustomStringTableItem CLW-Loadout_Failed {
+   Target_en_us "Loadout could not be applied."
+   Target_de_de "Loadout konnte nicht angewendet werden."
+  }
+  CustomStringTableItem CLW-Loadout_Invalid {
+   Target_en_us "Your saved loadout is no longer usable (mod pack changed). Save a new one."
+   Target_de_de "Dein gespeichertes Loadout ist nicht mehr nutzbar (Modpaket geändert). Speichere ein neues."
+  }
+  CustomStringTableItem CLW-Loadout_Load {
+   Target_en_us "Load my loadout"
+   Target_de_de "Mein Loadout laden"
+  }
+  CustomStringTableItem CLW-Loadout_Loaded {
+   Target_en_us "Loadout loaded (%1 supplies)."
+   Target_de_de "Loadout geladen (%1 Vorräte)."
+  }
+  CustomStringTableItem CLW-Loadout_LoadedPartial {
+   Target_en_us "Loadout loaded, %1 items unavailable (%2 supplies)."
+   Target_de_de "Loadout geladen, %1 Gegenstände nicht verfügbar (%2 Vorräte)."
+  }
+  CustomStringTableItem CLW-Loadout_MySaved {
+   Target_en_us "My saved loadout"
+   Target_de_de "Mein gespeichertes Loadout"
+  }
+  CustomStringTableItem CLW-Loadout_NoneSaved {
+   Target_en_us "No saved loadout for your faction"
+   Target_de_de "Kein gespeichertes Loadout für deine Fraktion"
+  }
+  CustomStringTableItem CLW-Loadout_NoSupplies {
+   Target_en_us "Not enough supplies: loadout costs %1, arsenal has %2."
+   Target_de_de "Nicht genug Vorräte: Loadout kostet %1, Arsenal hat %2."
+  }
+  CustomStringTableItem CLW-Loadout_Save {
+   Target_en_us "Save my loadout"
+   Target_de_de "Mein Loadout speichern"
+  }
+  CustomStringTableItem CLW-Loadout_Saved {
+   Target_en_us "Loadout saved (%1 items)."
+   Target_de_de "Loadout gespeichert (%1 Gegenstände)."
+  }
+  CustomStringTableItem CLW-Loadout_SaveRefused {
+   Target_en_us "Loadout not saved: %1 items are not available to your side."
+   Target_de_de "Loadout nicht gespeichert: %1 Gegenstände sind für deine Seite nicht verfügbar."
+  }
+  CustomStringTableItem CLW-Loadout_WrongArsenal {
+   Target_en_us "This arsenal does not serve your faction"
+   Target_de_de "Dieses Arsenal gehört nicht zu deiner Fraktion"
+  }
+  CustomStringTableItem CLW-Loadouts_KitCost {
+   Target_en_us "Server loadout '%1' issued: %2 supplies."
+   Target_de_de "Server-Ausrüstung '%1' ausgegeben: %2 Nachschub."
+  }
+  CustomStringTableItem CLW-Loadouts_NoSupplies {
+   Target_en_us "Server loadout '%1' costs %2 supplies, only %3 available: standard issue."
+   Target_de_de "Server-Ausrüstung '%1' kostet %2 Nachschub, nur %3 vorhanden: Standardausrüstung."
+  }
+  CustomStringTableItem CLW-Loadouts_RestartReason {
+   Target_en_us "Restart requested from the dashboard"
+   Target_de_de "Neustart vom Dashboard angefordert"
+  }
+  CustomStringTableItem CLW-Loadouts_Warn {
+   Target_en_us "%1: %2 active server loadout(s) unavailable (mod pack changed), defaults used; %3 with missing items."
+   Target_de_de "%1: %2 aktive Server-Ausrüstung(en) nicht verfügbar (Modpaket geändert), Standard wird genutzt; %3 mit fehlenden Gegenständen."
+  }
   CustomStringTableItem CLW-Log_ConvoyLost {
    Target_en_us "%1 supply convoy %2 was lost with %3 supplies."
    Target_de_de "Der Nachschubkonvoi %2 von %1 ging mit %3 Nachschub verloren."
@@ -1051,6 +1115,14 @@ StringTable {
   CustomStringTableItem CLW-Param_cap_logistics_Desc {
    Target_en_us "Per-base supplies and convoys. Off: one supply pool per side."
    Target_de_de "Nachschub je Basis und Konvois. Aus: ein gemeinsamer Nachschubvorrat je Seite."
+  }
+  CustomStringTableItem CLW-Param_cap_serverKitCost {
+   Target_en_us "Server loadout cost"
+   Target_de_de "Kosten für Server-Ausrüstung"
+  }
+  CustomStringTableItem CLW-Param_cap_serverKitCost_Desc {
+   Target_en_us "Spawning with a server loadout costs supplies. Off: free."
+   Target_de_de "Spawnen mit Server-Ausrüstung kostet Nachschub. Aus: kostenlos."
   }
   CustomStringTableItem CLW-Param_convoyMax {
    Target_en_us "Max convoys per side"

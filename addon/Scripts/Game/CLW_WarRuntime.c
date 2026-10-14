@@ -384,7 +384,9 @@ class CLW_WarRuntime
 	// Rematch last step: the war systems of a new round (scenario reloaded, war state back in SETUP). False when no scenario resolved.
 	bool RematchRestart()
 	{
-		return BootWar(true);
+		bool booted = BootWar(true);
+		CLW_LoadoutSync.OnRestart();	// loadouts R3: spawn slots cleared, one sync refreshes the library cache for the next war start
+		return booted;
 	}
 
 	// The game mode ends (world shutdown / reload, every machine): forget the holder so a reloaded world starts clean. A stale holder
@@ -682,6 +684,7 @@ class CLW_WarRuntime
 	{
 		Print("CLW: war started: building force catalogs and spawning start forces", LogLevel.NORMAL);
 		CLW_Rematch.OnWarStart();	// rematch: delete leftovers of the previous round before anything is spawned
+		CLW_LoadoutSync.OnWarStart();	// loadouts R3: library (cache, then sidecar sync), spawn slots, validation; before the start forces take their kits
 		if (m_Catalog)
 			m_Catalog.BuildAll();
 		CLW_Services.OnWarStart(m_War);	// base services + supply link, before the start forces take their parking spots

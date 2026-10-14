@@ -5,6 +5,23 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 
 ## [Unreleased]
 
+### Added
+- Configurable LLM sidecar endpoint: command line `-clwSidecar <url>` or `sidecarUrl` in `$profile:Clausewitz/overrides.json` (default `http://127.0.0.1:8788/`), token via `-clwSidecarToken <token>` or `sidecarToken`; the server log shows the URL in use (`CLW: sidecar url ...`). Sidecar: `CLW_ALLOWED_HOSTS` for a sidecar on another machine behind a domain or public IP.
+- Languages: mod texts in English and German (string table); every player gets SITREPs, HQ replies and mission texts in their game language, or the one chosen with `/hq language <code>` or in the HQ menu; broadcast SITREPs are translated per language by the LLM.
+- Sidecar: separate strong and weak LLM slots (decisions vs. translation), an optional backup model per slot, dashboard in English and German.
+- Friendly units on the in-game map: own position, squadmates, own squads and vehicles (setup switches `mapMe`, `mapSquadmates`, `mapSquads`, `mapVehicles`).
+- HQ chat: per-player conversation history; new player requests "mission" and "status" (`REQUEST_MISSION`, `REQUEST_STATUS`).
+- Loadouts (beta): save your kit at any arsenal (vanilla, RHS, WCS), restored as "My saved loadout" in the spawn menu after restarts; server loadout library edited on the sidecar dashboard (Loadouts tab) and synced at war start; squad roles with unique role kits.
+- Sidecar dashboard admin login (default password in the README, change it on first login) and an optional game token (`gameToken`) for the game endpoints.
+
+### Changed
+- Spawned infantry of pack factions belongs to the buying faction, so pack squads (e.g. TF_US / TF_RF) can be joined.
+- Players without a character are parked during setup until the war starts.
+
+### Fixed
+- Collision-free vehicle spawn spots (road first within 50 m, size-aware, keeps clear of base services).
+- The game now sends the sidecar token on situation and manifest requests too (before only on loadout requests).
+
 ## [1.1.0] - 2026-10-13
 
 ### Added

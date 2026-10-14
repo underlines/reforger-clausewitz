@@ -91,6 +91,7 @@ class CLW_PlayerSquad
 		}
 
 		Print(string.Format("CLW: PlayerSquad AdoptAI player=%1 squad=%2 from=%3: %4 AI moved in", playerId, playerSquad, from, toMove.Count()), LogLevel.NORMAL);
+		CLW_SquadRoles.OnRecruitsAdopted(playerSquad, playerId, toMove.Count());
 		Establish(playerSquad, playerId);	// idempotent: moves the new AI on into the slave group
 		return toMove.Count();
 	}
