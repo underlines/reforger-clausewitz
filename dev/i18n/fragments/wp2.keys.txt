@@ -1,0 +1,39 @@
+CLW-HqRadial_Report ::: Report contact ::: Feind melden
+CLW-HqRadial_ReportS ::: Report ::: Meldung
+CLW-HqRadial_Requests ::: Requests ::: Anforderungen
+CLW-HqRadial_RequestsS ::: Request ::: Anfordern
+CLW-HqRadial_Backup ::: Backup! (call for help) ::: Verstärkung! (Hilferuf)
+CLW-HqRadial_BackupS ::: Backup! ::: Hilfe!
+CLW-HqRadial_Cancel ::: Cancel my last report ::: Letzte Meldung zurückziehen
+CLW-HqRadial_CancelS ::: Cancel ::: Zurückziehen
+CLW-HqRadial_Sitrep ::: Show SITREP ::: LAGE anzeigen
+CLW-HqRadial_SitrepS ::: SITREP ::: LAGE
+CLW-HqRadial_Menu ::: Full HQ menu ::: Volles HQ-Menü
+CLW-HqRadial_MenuS ::: HQ menu ::: HQ-Menü
+CLW-HqRadial_Kind_inf ::: Infantry ::: Infanterie
+CLW-HqRadial_Kind_veh ::: Vehicles ::: Fahrzeuge
+CLW-HqRadial_Kind_armor ::: Armor ::: Panzer
+CLW-HqRadial_Kind_air ::: Aircraft ::: Luftfahrzeuge
+CLW-HqRadial_Kind_unknown ::: Unknown ::: Unbekannt
+CLW-HqRadial_Count ::: %1x ::: %1x
+CLW-HqRadial_Dist ::: %1 m ::: %1 m
+CLW-HqRadial_Sum ::: Report: %1 ::: Meldung: %1
+CLW-HqRadial_Dir_ahead ::: Ahead (view) ::: Voraus (Blick)
+CLW-HqRadial_Dir_N ::: North ::: Nord
+CLW-HqRadial_Dir_NE ::: North-east ::: Nordost
+CLW-HqRadial_Dir_E ::: East ::: Ost
+CLW-HqRadial_Dir_SE ::: South-east ::: Südost
+CLW-HqRadial_Dir_S ::: South ::: Süd
+CLW-HqRadial_Dir_SW ::: South-west ::: Südwest
+CLW-HqRadial_Dir_W ::: West ::: West
+CLW-HqRadial_Dir_NW ::: North-west ::: Nordwest
+CLW-HqRadial_Vehicle ::: Vehicle ::: Fahrzeug
+CLW-HqRadial_Resupply ::: Resupply ::: Nachschub
+CLW-HqRadial_Squad ::: Squad ::: Trupp
+CLW-HqRadial_Reinforce ::: Reinforce ::: Verstärkung
+CLW-HqRadial_Mission ::: Mission ::: Auftrag
+CLW-HqRadial_Status ::: Status ::: Lage
+CLW-HqRadial_Loading ::: Loading... ::: Lädt...
+CLW-Keybind_CLW_HqRadial ::: HQ radial menu ::: HQ-Radialmenü
+CLW-KeybindCategory_CLW ::: Clausewitz ::: Clausewitz
+CLW-KeybindSeparator_General ::: General ::: Allgemein
