@@ -1,0 +1,19 @@
+CLW-Rep_Usage2 ::: Usage: /report <count> <inf|veh|armor|air|unknown> <distance m> [direction N|NE|E|SE|S|SW|W|NW, degrees or ahead], or /report cancel ::: Verwendung: /report <Anzahl> <inf|veh|armor|air|unknown> <Entfernung m> [Richtung N|NE|E|SE|S|SW|W|NW, Grad oder ahead], oder /report cancel
+CLW-Rep_Type2 ::: The type must be inf, veh, armor, air or unknown. ::: Der Typ muss inf, veh, armor, air oder unknown sein.
+CLW-Rep_DirectionUnclear2 ::: Direction not understood (N NE E SE S SW W NW, degrees 0-360 or ahead). ::: Richtung nicht verstanden (N NE E SE S SW W NW, Grad 0-360 oder ahead).
+CLW-Rep_DirAhead ::: ahead (%1 deg) ::: voraus (%1 deg)
+CLW-Rep_Kind_air ::: aircraft ::: Luftfahrzeuge
+CLW-Rep_Kind_unknown ::: unknown contacts ::: unbekannte Kontakte
+CLW-Rep_CancelNone ::: You have no report to cancel. ::: Du hast keine Meldung zum Zurücknehmen.
+CLW-Rep_CancelGone ::: Your last report is no longer on the map (expired, merged into another contact or replaced). ::: Deine letzte Meldung ist nicht mehr auf der Karte (abgelaufen, mit einem anderen Kontakt verschmolzen oder ersetzt).
+CLW-Rep_Cancelled ::: Report at grid %1 cancelled. ::: Meldung bei Planquadrat %1 zurückgenommen.
+CLW-Bkp_Kind ::: backup ::: Unterstützung
+CLW-Bkp_Cooldown ::: You called for backup a moment ago, try again in %1 s. ::: Du hast gerade erst Unterstützung angefordert, versuche es in %1 s erneut.
+CLW-Bkp_NoGroup ::: Help call received, but no free group is available. HQ has been informed. ::: Hilferuf empfangen, aber keine freie Gruppe verfügbar. Das HQ ist informiert.
+CLW-Bkp_Sent ::: Help call received. %1 is moving to your position, %2 m away. ::: Hilferuf empfangen. %1 rückt zu deiner Position vor, %2 m entfernt.
+CLW-HqMenu_KindAir ::: Aircraft ::: Luftfahrzeuge
+CLW-HqMenu_KindUnknown ::: Unknown ::: Unbekannt
+CLW-HqMenu_DirAhead ::: Ahead (view) ::: Voraus (Blickrichtung)
+CLW-HqMenu_CancelReport ::: Cancel my last report ::: Meine letzte Meldung zurücknehmen
+CLW-HqMenu_Backup ::: Backup! ::: Verstärkung!
+CLW-HqMenu_BackupHelp ::: Help call (same as /backup): HQ sends the nearest free group to your position. ::: Hilferuf (wie /backup): das HQ schickt die nächste freie Gruppe zu deiner Position.
