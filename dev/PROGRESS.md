@@ -65,7 +65,7 @@ Local DS in `D:\GitHub\ReforgerMods\_dedicated\` (junction to `addon/`, no pack 
 - [x] With one joined client (owner, 2026-10-12, `_dedicated/start-client.ps1`): connect + faction join, setup menu sent to the owner (war then auto-started at 180 s), squad join (group id 1003, player leader, 3 AI moved), mission offers in the J menu, AI commanding (radial menu), groups menu (group mirror / registration replicate), ticket HUD, SITREP rules v2 + LLM v3/v4 delivered to the US player only; sidecar (OpenRouter) driven by the DS. No `SCRIPT (E)`.
 - [x] Unstuck helper seen on DS (2026-10-12): two soldiers stuck on an LAV-25 turret teleported off. Setup menu Start war pressed by the owner (values applied, small layout, `humans moved=1`).
 - [x] Still open on DS: two players on opposite sides (SITREP isolation per side), late join after war start, setup menu "Start war" pressed by a human, battle-size teleport of players at war start.
-- [ ] Before publish: `addon/Missions/CLW_Arland.conf` (`SCR_MissionHeader`) for `scenarioId` / host menu.
+- [x] Mission headers `addon/Missions/CLW_Arland|Eden|Cain.conf` (scenarioId `{C1A05E7B3D9F5A01|02|03}`), verified from the Workshop copy on a clean DS (2026-10-14).
 - [x] Sidecar config path is hard-wired to the script folder: add a `--config` / env override (would also fix the fake-vs-openrouter test gotcha).
 - Noise to look at later: every unit placement logs "via fallback"; one `ATTACK ... failed: waypoints lost` 40 s after start.
 
@@ -190,10 +190,15 @@ Open:
 - 2026-10-12: M4 (any map, any pack: auto scenario, wrapper worlds + generator, GM takeover, side pools, prop sets, HQ menu, FOB kit + timing gate, garrison) merged into `main` and released as v1.0.0 (local tag). Round 3 (`notes/m4-round3-plan.md`) and the owner client checklist are next.
 - 2026-10-13: i18n designed (`notes/i18n-design.md`): EN + DE stringtable and dashboard, LLM text per player language with override, strong/weak LLM split for broadcast translation. Not started.
 
-### Loadouts sprint (2026-10-14, branch `feature/loadouts`, builds #107-#115) - IN PROGRESS
+### Loadouts sprint (2026-10-14, builds #107-#115) - merged into main, shipped as beta in v1.2.0; testing continues
 Plan `notes/loadouts-arsenal-plan.md`, contract `notes/loadouts-impl.md`; G1 roles/squads, G2 kits/custom loadout, G3 server loadouts/sync, S sidecar login + Loadouts tab (Sonnet subagents), then DS fixes.
 - [x] Compiles on the DS with packs-e2e-all; spawn screen 7 role slots + custom slot per side (RHS_USAF / RHS_AFRF); sidecar sync + cache file; role picker unique roles.
 - [x] Save at an RHS arsenal works (own `CLW_SaveLoadoutAction`, `saved ... items=41 status=ok`).
 - [ ] Next: Load my loadout (supplies charged), respawn with the custom slot, dashboard copy -> library -> active -> Restart war -> slot shows it, AI kits (R0.2 log lines), squad roles with vanilla groups, run without WCS_LoadoutEditor (vanilla save path), test matrix.
 - Findings: new prefabs/configs need a `resourceDatabase.rdb` rebuild (open the project once in Workbench) or overrides/replication silently fail; WCS_LoadoutEditor hides every vanilla `SCR_SaveArsenalLoadout` without a WCS slot (so we ship our own save action, hidden when a vanilla/WCS save is shown); vanilla kit strings hold bare GUIDs; the interaction UI shows one context only (helper inside a box never wins, helper now 1.6 m beside); custom slot shows "Default loadout" with WCS loaded.
 - Open: dashboard shows item GUIDs (resolve paths); helper box uses the vanilla arsenal mesh; remove the `last-refused-kit.json` dump before release.
+
+## Published: v1.2.0 (2026-10-14)
+- [x] Workshop https://reforger.armaplatform.com/workshop/C1A05E7B3D9F4A28 (3 scenarios), public repo https://github.com/underlines/reforger-clausewitz (MIT, tags + GitHub release).
+- [x] Configurable sidecar endpoint (-clwSidecar / sidecarUrl, token -clwSidecarToken / sidecarToken, sidecar CLW_ALLOWED_HOSTS), verified on the DS with a sidecar on port 8799.
+- [ ] Own mission images (.edds with sources): the vanilla loading screens are not bundled, so the scenarios have no thumbnail.
