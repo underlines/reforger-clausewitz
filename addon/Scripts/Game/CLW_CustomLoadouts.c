@@ -123,10 +123,23 @@ class CLW_CustomLoadouts
 	{
 		s_mRecords.Clear();
 		s_bLoaded = false;
+		CLW_ItemInfo.ClearCache();
 	}
 
-	// One record as a JSON object (file entry and POST body). '+' only.
+	// One record as a JSON object for the sidecar (POST body and sync): the file form plus "totalCost" and "itemInfo" (CLW_ItemInfo, cached;
+	// both optional for the receiver). '+' only.
 	static string RecordJson(notnull CLW_CustomLoadoutRec rec)
+	{
+		string json = RecordFileJson(rec);
+		string info = CLW_ItemInfo.JsonFor(rec);
+		if (info.IsEmpty())
+			return json;
+
+		return CLW_Str.DropLast(json) + info + "}";
+	}
+
+	// One record as the JSON object of the game file (the DTO shape, no item details). '+' only.
+	static string RecordFileJson(notnull CLW_CustomLoadoutRec rec)
 	{
 		string json = "{\"identityId\":\"" + Esc(rec.identityId) + "\",\"playerName\":\"" + Esc(rec.playerName) + "\",\"faction\":\"" + Esc(rec.faction) + "\"";
 		json += ",\"loadout\":\"" + Esc(rec.loadout) + "\"";
@@ -233,7 +246,7 @@ class CLW_CustomLoadouts
 		handle.WriteLine("{\"v\":1,\"records\":[");
 		for (int i = 0; i < s_mRecords.Count(); i++)
 		{
-			string line = RecordJson(s_mRecords.GetElement(i));
+			string line = RecordFileJson(s_mRecords.GetElement(i));
 			if (i < s_mRecords.Count() - 1)
 				line += ",";
 

@@ -111,3 +111,11 @@ Records:
 - R0.3 manual: which arsenal boxes (vanilla / RHS / WCS) show `CLW_LoadLoadoutAction`, and how do WCS/Bacon actions look next to it.
 - R0.4 `CLW: loadouts slot <side> <idx> faction=<key> name=<..> source=<library|role|hidden>` on server and client.
 - R0.5 after a dashboard restart: client spawn screen shows the new slot names without reconnect?
+
+## Item details (WP7, 2026-10)
+Optional record fields (game `CLW_ItemInfo.c` -> `POST /loadouts/player` and `/loadouts/sync` players, never in `player-loadouts.json`):
+`totalCost` (int, kit supply cost, -1 unknown) and `itemInfo: [{id, name, key?, path?, type, cost, count}]` (`id` = `{GUID}` prefab, `name` translated UI
+name or "", `key` = raw localization key when untranslated, `type` = rifle|sniper|machinegun|launcher|pistol|weapon|magazine|attachment|headwear|torso|
+legs|footwear|handwear|clothing|vest|backpack|equipment|medical|throwable|explosive|vehicle|other, `cost` per unit, `count` occurrences).
+Sidecar: cleans leniently, copies to library entries, strips from the sync reply, list view carries `summary` only,
+`GET /api/loadouts/(library|player)/<id>/items` returns the full list. Old records without the fields work everywhere.

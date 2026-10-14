@@ -295,3 +295,19 @@ input.lo-name { min-width: 170px; }
 .lo-pins { border-top: 1px solid var(--line); }
 td select { width: auto; padding: 3px 8px; }
 .banner a { color: inherit; text-decoration: underline; }
+/* loadout item details: summary cell + expandable item table */
+.lo-sum { min-width: 190px; max-width: 360px; }
+.lo-sumline { white-space: normal; }
+.lo-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 3px 0 4px; }
+.lo-chip { background: rgba(255,255,255,.07); border-radius: 10px; padding: 0 7px; font-size: 11px; color: var(--mut); white-space: nowrap; }
+tr.lo-detail > td { padding: 4px 8px 10px; background: rgba(255,255,255,.03); }
+.lo-details { display: flex; flex-direction: column; gap: 6px; max-width: 640px; }
+input.lo-filter { width: 100%; max-width: 280px; padding: 4px 8px; }
+.lo-itemwrap { max-height: 340px; overflow: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line); border-radius: 6px; }
+table.lo-itemtable { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.lo-itemtable th, .lo-itemtable td { padding: 2px 8px; text-align: left; }
+.lo-itemtable thead th { position: sticky; top: 0; background: var(--panel-solid); z-index: 1; }
+.lo-itemtable th.num, .lo-itemtable td.num { text-align: right; white-space: nowrap; width: 1%; }
+.lo-itemtable tr.lo-grp th { background: rgba(255,255,255,.06); color: var(--mut); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.lo-type { font-size: 11px; margin-left: 4px; }
+@media (max-width: 600px) { .lo-sum { min-width: 150px; } .lo-itemwrap { max-height: 60vh; } .lo-type { display: block; margin-left: 0; } }

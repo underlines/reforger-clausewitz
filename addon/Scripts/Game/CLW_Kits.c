@@ -154,6 +154,26 @@ class CLW_Kits
 		}
 	}
 
+	// Same as Items, plus how often each prefab occurs in the kit (counts[i] belongs to items[i]); for the dashboard item details.
+	static void ItemsCounted(string loadout, notnull array<string> items, notnull array<int> counts)
+	{
+		array<string> all = {};
+		ScanPrefabs(loadout, all);
+		for (int i = 1; i < all.Count(); i++)
+		{
+			int at = items.Find(all[i]);
+			if (at < 0)
+			{
+				items.Insert(all[i]);
+				counts.Insert(1);
+			}
+			else
+			{
+				counts[at] = counts[at] + 1;
+			}
+		}
+	}
+
 	// ---- validation (R6) ----
 
 	// "ok" | "degraded" | "invalid"; missing = prefabs that do not load or are outside the faction's current arsenal pool.
