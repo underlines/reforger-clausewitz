@@ -46,4 +46,29 @@ class CLW_SideCustomLoadout : SCR_PlayerArsenalLoadout
 
 		return super.IsLoadoutAvailableClient();
 	}
+
+	// Vanilla applies the kit strictly to this entry's base prefab: a kit captured on another soldier (squad leader saved, rifleman base) fails on
+	// a storage id, and vanilla then DELETES the saved slot, so the player spawned with the default gear and "Load my loadout" went grey (DS e2e
+	// 2026-10-15, RHS_USAF). When the vanilla slot is gone after super, the player's record is applied with the tolerant CLW_Kits.Apply and put
+	// back into the vanilla slot.
+	override void OnLoadoutSpawned(GenericEntity pOwner, int playerId)
+	{
+		super.OnLoadoutSpawned(pOwner, playerId);
+		if (!pOwner || !Replication.IsServer() || !CLW_ArsenalSaveHook.VanillaKit(playerId).IsEmpty())
+			return;
+
+		string factionKey = CLW_LoadoutSlots.SideKey(m_iSide);
+		CLW_CustomLoadoutRec rec = CLW_CustomLoadouts.Get(CLW_CustomLoadouts.IdentityOf(playerId), factionKey);
+		if (!rec)
+			return;
+
+		array<string> missing = {};
+		bool applied = CLW_Kits.Apply(pOwner, rec.loadout, "custom spawn player " + playerId, missing);
+		SCR_ArsenalManagerComponent manager;
+		bool restored;
+		if (SCR_ArsenalManagerComponent.GetArsenalManager(manager))
+			restored = manager.CLW_RestoreLoadout(playerId, factionKey, rec.loadout);
+
+		Print(string.Format("CLW: loadouts custom spawn player %1 %2: vanilla apply dropped the kit, re-applied=%3 missing=%4 slot restored=%5", playerId, factionKey, applied, missing.Count(), restored), LogLevel.NORMAL);
+	}
 }
