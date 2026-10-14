@@ -19,6 +19,11 @@ import { JOURNAL_RULE } from "./journal.mjs";
 import { normLang, normSetLanguage, hqLanguageRules, parseStructuredReply } from "./i18n.mjs";
 import { isRetryable } from "./fallback.mjs";
 import { historyBlock } from "./hqHistory.mjs";
+// optional parallel modules (HQ character, environment): absent = no extra prompt lines
+let personaRadio = () => "", envPrompt = () => "";
+try { ({ personaRadio } = await import("./personality.mjs")); } catch { /* not present */ }
+try { ({ envPrompt } = await import("./environment.mjs")); } catch { /* not present */ }
+const extraLine = (fn, sit) => { try { const t = fn(sit); return t ? `${String(t).trim()}\n` : ""; } catch { return ""; } };
 
 export const DEFAULTS = { maxSteps: 4, timeoutSec: 40, maxActions: 3, coreToolsMax: 8, maxOutputTokens: 700 };
 const isNum = (n) => typeof n === "number" && Number.isFinite(n);
@@ -160,11 +165,14 @@ Rules:
 - If the player asks for something (a vehicle, a squad, ammo/resupply, reinforcements, a recon), call the matching tool ONCE with the parameters the player gave. The game's rules then grant or refuse it and tell the player the result, so never promise delivery.
 - Soldiers may only get resupply and vehicles; squad, reinforce and recon are for squad leaders. If the role cannot do it, say so and offer the alternative instead of calling.
 - If the player asks for a task, objective or something to do, call REQUEST_MISSION (squad leader only; a soldier is told to ask his leader). If the player asks for the situation or status (supplies, objectives, enemy nearby), call REQUEST_STATUS: the game shows the answer to the player, so only acknowledge.
+- Enemy sighting / contact report ("2 enemy infantry 100m north", "contact front, 3 vehicles 400 meters", "2 feindliche Infanteristen 100m nördlich"): call REPORT_CONTACT ONCE with kind (inf|veh|armor|air|unknown), count (number, default 1), distance in METRES (convert number words, km, yards) and direction (N NE E SE S SW W NW or a bearing 0-359; no direction, "front/ahead/in front of me/vor mir" or 12 o'clock = ahead; German Nord/Ost/Süd/West = N/E/S/W). Never invent a distance: if it is missing, ask one short question and do not call. For left/right/behind or a clock direction other than 12, ask for a compass direction instead of guessing.
+- Urgent help ("need help/backup", "pinned down", "under fire", "brauchen Hilfe"): call REQUEST_BACKUP ONCE with a short note, for any role (soldiers too); HQ sends the nearest free group now. REQUEST_REINFORCE is different: the squad leader's planned reinforcement request, not the urgent call.
+- To retract or correct the player's last report ("cancel my last report", "that report was wrong", "Meldung zurückziehen"): call REPORT_CANCEL (no parameters). Do not call REPORT_CONTACT again unless the player gives the corrected sighting.
 - Use the query_* tools only when the player asks about forces, bases or enemies. HQ knows only what units reported (fog of war).
 - Do not invent ids, types, grids or numbers. If something is unclear, ask one short question instead of guessing.
 - The radio reply is 1-2 short sentences. After calling a tool, only acknowledge (for example "Roger, requesting a truck for you.").
 ${lang ? hqLanguageRules(lang) : "- Your final text is the radio reply, in the language the player wrote."}
-${tools.find_tools ? "- Tools not shown are found with find_tools.\n" : ""}${historyBlock(message.history)}${journal ? `\n${journal}\n${JOURNAL_RULE}\n` : ""}`;
+${extraLine(personaRadio, situation)}${extraLine(envPrompt, situation)}${tools.find_tools ? "- Tools not shown are found with find_tools.\n" : ""}${historyBlock(message.history)}${journal ? `\n${journal}\n${JOURNAL_RULE}\n` : ""}`;
 }
 
 // ---------- model seam ----------
@@ -236,7 +244,8 @@ const FAKE_RULES = [
   [/\b(vehicle|truck|car|jeep|apc|transport|ride|fahrzeug|lkw)\b/i, "REQUEST_VEHICLE"],
   [/\b(squad|team|fireteam|men|infantry|truppe|trupp)\b/i, "REQUEST_SQUAD"],
   [/\b(ammo|ammunition|resupply|supplies|munition|nachschub|box)\b/i, "REQUEST_RESUPPLY"],
-  [/\b(reinforce|reinforcement|backup|help|support|verst[aä]rkung)\b/i, "REQUEST_REINFORCE"],
+  [/\b(help|hilfe)\b/i, "REQUEST_BACKUP"], // urgent help call (any role); falls through to REINFORCE when the tool does not exist
+  [/\b(reinforce\w*|backup|help|support|verst[aä]rkung)\b/i, "REQUEST_REINFORCE"],
   [/\b(recon|scout|look|observe|aufkl[aä]r)\b/i, "REQUEST_RECON"],
 ];
 const FAKE_LANGS = { english: "en", englisch: "en", german: "de", deutsch: "de", french: "fr", franzoesisch: "fr", spanish: "es", spanisch: "es", japanese: "ja", japanisch: "ja", russian: "ru", russisch: "ru", polish: "pl", polnisch: "pl", italian: "it", italienisch: "it" };
@@ -247,21 +256,77 @@ export function fakeSetLanguage(text) {
   if (/\b(auto|default|standard)\b/.test(t)) return "auto";
   return null;
 }
+// ---- fake parser for reports / backup / cancel (EN + DE). Works on lowercase text with umlauts folded (ö->oe, ä->ae, ü->ue, ß->ss).
+const fold = (s) => String(s ?? "").toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss");
+const NUMW = { zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+  eins: 1, ein: 1, eine: 1, einen: 1, zwei: 2, drei: 3, vier: 4, fuenf: 5, sechs: 6, sieben: 7, acht: 8, neun: 9, zehn: 10, elf: 11, zwoelf: 12 };
+const CONTACT_WORDS = /\b(enem(?:y|ies)|hostiles?|contacts?|spotted|sighted|opfor|i see|we see|eyes on|feind\w*|kontakt\w*|gegner\w*|gesichtet|sichtung|sehe|sehen|entdeckt)\b/;
+const KIND_RULES = [["armor", /\b(tanks?|armou?r\w*|apcs?|ifvs?|bmp\w*|btr\w*|panzer\w*|schuetzenpanzer)\b/], ["air", /\b(heli\w*|helicopters?|aircraft|planes?|jets?|hubschrauber\w*|flugzeug\w*)\b/],
+  ["veh", /\b(vehicles?|trucks?|lorry|cars?|jeeps?|uaz|ural|fahrzeug\w*|lkws?|wagen)\b/], ["inf", /\b(infantr\w*|infanterist\w*|infanterie|soldiers?|soldaten?|men|troops?|troopers?|rifle\w*|squad|mann|maenner|truppen|fussvolk)\b/]];
+const DIR_RULES = [["NE", /\b(?:north|nord|noerd)\w*?[- ]?(?:east|ost|oest)\w*/], ["SE", /\b(?:south|sued)\w*?[- ]?(?:east|ost|oest)\w*/], ["SW", /\b(?:south|sued)\w*?[- ]?(?:west)\w*/], ["NW", /\b(?:north|nord|noerd)\w*?[- ]?(?:west)\w*/],
+  ["N", /\b(?:north|nord|noerd)\w*/], ["E", /\b(?:east|ost|oest)\w*/], ["S", /\b(?:south|sued)\w*/], ["W", /\bwest\w*/]];
+const AHEAD = /\b(ahead|in front|front|vor mir|vor uns|voraus|vorne|geradeaus|12 o'?clock|12 uhr)\b/;
+const RELATIVE = /\b(left|right|behind|links|rechts|hinter (?:mir|uns)|[0-9]{1,2} ?o'?clock|[0-9]{1,2} uhr)\b/;
+export function parseReport(raw) {
+  let t = fold(raw), bearing = null;
+  const b = /\b(?:bearing|azimuth|peilung|kurs)\s*(\d{1,3})\b/.exec(t) ?? /\b(\d{1,3})\s*(?:degrees?|deg|grad|°)/.exec(t);
+  if (b) { if (+b[1] <= 359) bearing = +b[1]; t = t.replace(b[0], " "); }
+  let distance = null;
+  const d = /(\d+(?:[.,]\d+)?)\s*(kilometers?|kilometres?|km|meters?|metres?|metern?|yards?|yds?|m)\b/.exec(t);
+  if (d) {
+    const v = parseFloat(d[1].replace(",", ".")), u = d[2];
+    distance = Math.round(/^k/.test(u) ? v * 1000 : /^y/.test(u) ? v * 0.9144 : v);
+    t = t.replace(d[0], " ");
+  }
+  let count = 1;
+  const n = /\b(\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|eins|eine|einen|ein|zwei|drei|vier|fuenf|sechs|sieben|acht|neun|zehn|elf|zwoelf)\b/.exec(t.replace(/\b(?:12|\d{1,2}) (?:o'?clock|uhr)\b/g, " "));
+  if (n) count = /^\d/.test(n[1]) ? +n[1] : NUMW[n[1]];
+  count = Math.max(1, Math.min(99, count || 1));
+  const kind = (KIND_RULES.find(([, re]) => re.test(t)) ?? ["unknown"])[0];
+  let direction = bearing !== null ? String(bearing) : (DIR_RULES.find(([, re]) => re.test(t)) ?? [null])[0];
+  const relative = !direction && !AHEAD.test(t) && RELATIVE.test(t);
+  return { kind, count, distance, direction: direction ?? "ahead", relative, contact: CONTACT_WORDS.test(t), hasKind: kind !== "unknown" || KIND_RULES.some(([, re]) => re.test(t)), hasDir: !!direction || AHEAD.test(t) };
+}
+const CANCEL_VERB = /\b(cancel\w*|retract\w*|withdraw\w*|revoke\w*|undo|delete|remove|scrap|take back|zurueckzieh\w*|zurueckgezogen|zuruecknehm\w*|zuruecknahme|widerruf\w*|storn\w*|loesch\w*|vergiss)\b/;
+const REPORT_WORD = /\b(reports?|meldung\w*|sichtung\w*|kontakt\w*|contacts?)\b/;
+const REPORT_WRONG = /\b(reports?|meldung\w*)\b.*\b(wrong|false|incorrect|mistake|error|falsch\w*|irrtum)\b|\b(wrong|false|incorrect|falsche\w*)\s+(report|meldung)/;
+const BACKUP_STRONG = /\b(pinned down|under fire|taking fire|under attack|being (?:shot|hit|attacked)|mayday|sos|backup|need help|help us|help me|unter beschuss|unter feuer|festgenagelt|werden beschossen|brauchen hilfe|hilfe)\b/;
+const REINFORCE_WORD = /\b(reinforce\w*|verstaerkung\w*)\b/;
+// -> { name, input, reply } (tool call), { reply } (a clarifying question, no call) or null (fall through to FAKE_RULES)
+function fakeSpecial(text, tools) {
+  const t = fold(text);
+  if (tools.REPORT_CANCEL && ((CANCEL_VERB.test(t) && REPORT_WORD.test(t)) || REPORT_WRONG.test(t)))
+    return { name: "REPORT_CANCEL", input: {}, reply: "Roger, withdrawing your last report." };
+  if (tools.REQUEST_BACKUP && BACKUP_STRONG.test(t) && !REINFORCE_WORD.test(t))
+    return { name: "REQUEST_BACKUP", input: { note: String(text).trim().slice(0, 120) }, reply: "Roger, calling backup to your position." };
+  if (tools.REPORT_CONTACT) {
+    const r = parseReport(text);
+    if (r.distance !== null && r.contact) {
+      if (r.relative) return { reply: "Say again, which compass direction (north, northeast...) or bearing?" };
+      return { name: "REPORT_CONTACT", input: { kind: r.kind, count: String(r.count), distance: String(r.distance), direction: r.direction }, reply: "Roger, contact report passed on." };
+    }
+    if (r.distance === null && r.contact && (r.hasKind || r.hasDir) && !/\?\s*$/.test(text.trim()) && !/^(where|wo|what|wie|is|are|gibt)\b/.test(t))
+      return { reply: "Say again, how far away is the enemy (metres)?" };
+  }
+  return null;
+}
 async function fakeTurn({ tools, message, manifest }) {
   const steps = [];
   const text = String(message.text ?? "");
-  const hit = FAKE_RULES.find(([re, name]) => re.test(text) && tools[name]);
+  const special = fakeSpecial(text, tools);
+  const hit = special?.name ? [null, special.name] : special ? null : FAKE_RULES.find(([re, name]) => re.test(text) && tools[name]);
   let reply;
-  if (hit) {
+  if (special && !special.name) reply = special.reply;
+  else if (hit) {
     const name = hit[1], entry = [...(manifest.primitives ?? []), ...(manifest.intents ?? [])].find((e) => e.name === name);
-    const input = {};
-    for (const p of entry?.params ?? []) {
+    const input = special?.input ?? {};
+    for (const p of special ? [] : entry?.params ?? []) {
       if (p.name === "where") { const g = /\b(\d{3})[- ]?(\d{3})\b/.exec(text); input.where = g ? `${g[1]}-${g[2]}` : "here"; }
       if (p.name === "type") { const m = /\b(truck|apc|jeep|rifle|at|mg|sniper|medic)\b/i.exec(text); if (m) input.type = m[1].toLowerCase(); }
     }
     const output = await tools[name].execute(input, {});
     steps.push({ n: 1, text: "", finishReason: "tool-calls", toolCalls: [{ name, input, output }], usage: { input: 0, output: 0, cost: null } });
-    reply = `Roger, HQ is working on your request (${name.replace(/^REQUEST_/, "").toLowerCase()}).`;
+    reply = special?.reply ?? `Roger, HQ is working on your request (${name.replace(/^REQUEST_/, "").toLowerCase()}).`;
   } else if (/\b(enemy|contact|where|status|forces?)\b/i.test(text) && tools.query_contacts) {
     const output = await tools.query_contacts.execute({}, {});
     steps.push({ n: 1, text: "", finishReason: "tool-calls", toolCalls: [{ name: "query_contacts", input: {}, output }], usage: { input: 0, output: 0, cost: null } });
