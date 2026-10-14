@@ -13,20 +13,56 @@ class CLW_LoadLoadoutAction : ScriptedUserAction
 {
 	protected SCR_ArsenalComponent m_Arsenal;
 
+	protected float m_fNextDiag;
+
+	// No war-state gate here: CLW_ArsenalPool.IsActive is not reliable on clients; the server re-checks everything in CLW_LoadLoadout.Run.
 	override bool CanBeShownScript(IEntity user)
 	{
-		if (!CLW_ArsenalPool.IsActive())
-			return false;
-
 		SCR_ChimeraCharacter character = SCR_ChimeraCharacter.Cast(user);
 		if (!character)
 			return false;
 
 		SCR_PlayerController controller = SCR_PlayerController.Cast(GetGame().GetPlayerController());
+		Diag(character, controller);
 		if (!controller || controller.IsPossessing())
 			return false;
 
 		return FindArsenal() != null;
+	}
+
+	// Client diagnostics (every 5 s while the action is evaluated): the gates of the vanilla save action next to this one
+	// (SCR_SaveArsenalLoadout.CanBeShownScript) and of this action. Log "CLW: loadouts actiondiag".
+	protected void Diag(SCR_ChimeraCharacter character, SCR_PlayerController controller)
+	{
+		float now = GetGame().GetWorld().GetWorldTime();
+		if (now < m_fNextDiag)
+			return;
+
+		m_fNextDiag = now + 5000;
+		SCR_ArsenalManagerComponent manager;
+		SCR_ArsenalManagerComponent.GetArsenalManager(manager);
+		SCR_ArsenalComponent arsenal = FindArsenal();
+		SCR_Faction faction = SCR_Faction.Cast(character.GetFaction());
+		string line = "CLW: loadouts actiondiag manager=" + (manager != null).ToString();
+		line += " arsenal=" + (arsenal != null).ToString();
+		if (arsenal)
+		{
+			line += " inventory=" + (arsenal.GetArsenalInventoryComponent() != null).ToString();
+			line += " saveType=" + typename.EnumToString(SCR_EArsenalSaveType, arsenal.GetArsenalSaveType());
+			line += " shownIfDisabled=" + arsenal.IsArsenalSavingDisplayedIfDisabled().ToString();
+		}
+
+		line += " controller=" + (controller != null).ToString();
+		if (controller)
+			line += " possessing=" + controller.IsPossessing().ToString();
+
+		if (faction)
+			line += " faction=" + faction.GetFactionKey() + " customSupported=" + faction.IsCustomLoadoutSupported().ToString();
+		else
+			line += " faction=none";
+
+		line += " poolActive=" + CLW_ArsenalPool.IsActive().ToString() + " server=" + Replication.IsServer().ToString();
+		Print(line, LogLevel.NORMAL);
 	}
 
 	override bool CanBePerformedScript(IEntity user)
