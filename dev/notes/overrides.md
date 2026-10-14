@@ -184,7 +184,8 @@ entries afterwards, so an explicit `weight` there wins. `ownOnly`, `excludeFacti
 | `kinFill` | `missing` (default) or `all`, per side key, `*` or in `sidesDefault` |
 | `kinWeight` | number > 0, weight factor of kin entries imported for a role the side already has (default 0.5) |
 | `kinAllInfantry` | `true`: kinFill all also imports foot entries for roles the side already has (default false) |
-| `sidesDefault` | `{"kinFill":..., "kinWeight":...}`: default for every side; a `*` or per-faction `sides` value overrides it |
+| `kinInfantry` | `own` (default): every infantry group of an imported kin entry (cargo group, foot team) is replaced by the side's own group closest in size; `kin`: keep the kin faction's soldiers (old behaviour). Per side key, `*` or in `sidesDefault` |
+| `sidesDefault` | `{"kinFill":..., "kinWeight":..., "kinInfantry":...}`: default for every side; a `*` or per-faction `sides` value overrides it |
 
 Enable `all` for every side:
 ```json

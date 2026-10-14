@@ -37,6 +37,30 @@ catalog. This could not be confirmed offline: check the new line `catalog discov
 other possible route is a motorized entry whose `m_CargoGroupPrefab` came from a kin clone; the log shows `source=kin` then and the kin fill is
 by design.
 
+## Kin imports carry the side's own soldiers (WP8)
+Problem: the side pool (`CLW_ForceCatalog.FillFromKin`) cloned kin entries as they were, so RHS_AFRF got `kin_recon_team` (`Group_USSR_ReconTeam.et`)
+and kin motorized/mech entries whose cargo group was a vanilla USSR squad. Borrowing kin VEHICLES stays (RHS AFRF has no BRDM); borrowing kin SOLDIERS does not.
+Rule (`CLW_ForceCatalog.SwapKinInfantry`, picker `CLW_SidePool.PickOwnGroup`), applied to every kin import, any role:
+1. Every infantry group of the clone is replaced: the foot entry's `m_GroupPrefab`, the embarked `m_CargoGroupPrefab`, the escort group of a vehicle entry.
+2. The replacement is an own foot entry of the side (enabled, no vehicle, not itself a kin import). Cargo: closest in member count among groups with
+   <= the vehicle's cargo seats (none fits: the smallest). Foot entry of kind recon: the own recon groups first (closest size), no own recon group: the
+   SMALLEST own group. Other foot entries: own infantry kind first. Anti-armour is matched with anti-armour (own AT team for a kin AT team, else a non-AT group).
+3. Cost: foot entry takes the own group's cost; a vehicle+cargo entry with `m_iVehicleCost` is re-priced as vehicle cost + own group cost. Size fields
+   (`m_iGroupMembers` / `m_iCargoMembers`) are updated, the name "<vehicle> + <group>" is rebuilt.
+4. Vehicle crews are the vehicle prefab's default occupants and cannot be swapped here: logged and kept (the spawner re-affiliates them).
+5. Tiny pack: the side has NO own foot group at all -> the kin soldiers are kept, WARNING.
+6. Two kin foot teams that end on the same own group are deduped (the second is not imported).
+7. Own entries and sides without kin imports are untouched (US, USSR, FIA). Switch: overrides.json `kinInfantry: "kin"` restores the old behaviour (see overrides.md).
+Log lines (RHS_AFRF):
+```
+CLW: sidepool RHS_AFRF: kin_recon_team infantry Group_USSR_ReconTeam.et -> own Group_RHS_..._FireGroup.et (2 -> 4 members)
+CLW: sidepool RHS_AFRF: kin_auto_motorized_571 cargo infantry Group_USSR_RifleSquad.et -> own Group_RHS_..._FireGroup.et (8 -> 4 members, 4 seats)
+CLW: sidepool RHS_AFRF: kin_armored_recon vehicle crew (2 seats) is the vehicle prefab's default occupants, kept (not swappable)
+CLW: sidepool <side>: <type> keeps kin infantry <group>, the side has no own infantry group (tiny pack)      (WARNING)
+```
+Risks: the "closest size" choice has no weapon/role signal beyond kind and anti-armour; a side whose only own foot group is large gives a big team for a kin
+recon (smallest own group). Vanilla sides that import kin vehicles now also get their own soldiers on them.
+
 ## Data
 - `Configs/CLW/SquadCompositions.conf`: `m_aCompositions` (per kind) and `m_aSubstitutes` (per role, `m_aStandIns`).
 - Code constants: `CLW_RolePicker.MIN_OWN_ROLES`.
