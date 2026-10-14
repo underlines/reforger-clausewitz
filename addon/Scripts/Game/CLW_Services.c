@@ -1250,7 +1250,7 @@ class CLW_Services
 		{
 			foreach (IEntity existing : inst.m_aHelpers)
 			{
-				if (existing && !existing.IsDeleted() && vector.DistanceSq(existing.GetOrigin(), box.GetOrigin()) < 0.25)
+				if (existing && !existing.IsDeleted() && vector.DistanceSq(existing.GetOrigin(), HelperPos(box)) < 0.25)
 					helper = true;
 			}
 
@@ -1262,6 +1262,7 @@ class CLW_Services
 					EntitySpawnParams params = new EntitySpawnParams();
 					params.TransformMode = ETransformMode.WORLD;
 					box.GetWorldTransform(params.Transform);
+					params.Transform[3] = HelperPos(box);	// beside the box: its own collider and action context (one context shows at a time)
 					IEntity spawned = GetGame().SpawnEntityPrefab(resource, GetGame().GetWorld(), params);
 					if (spawned)
 					{
@@ -1273,6 +1274,15 @@ class CLW_Services
 		}
 
 		Print(string.Format("CLW: services arsenal actions %1 %2 helper=%3 (save=%4 load=%5 on box)", sideKey, baseId, helper, hasSave, hasLoad), LogLevel.NORMAL);
+	}
+
+	// Helper position: 1.6 m to the right of the box at its height, so the player aims at the helper separately (the interaction UI shows the
+	// actions of one context only; a helper inside the box never wins against the box's own context).
+	protected static vector HelperPos(IEntity box)
+	{
+		vector transform[4];
+		box.GetWorldTransform(transform);
+		return transform[3] + transform[0] * 1.6;
 	}
 
 	protected static void DeleteHelpers(CLW_ServiceInstance inst)
