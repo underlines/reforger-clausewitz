@@ -10,21 +10,22 @@ class CLW_HqRadialController : SCR_RadialMenuController
 	{
 		// the base constructor ran with no inputs (nothing to listen to): build them here. Attribute defaults only apply to config-loaded objects.
 		m_sEnableControl = true;
-		m_RMControls = new SCR_RadialMenuControllerInputs();
-		m_RMControls.m_sOpenAction = CLW_HqRadial.ACTION_OPEN;
-		m_RMControls.m_bCloseOnReleaseOpen = true;
-		m_RMControls.m_bPerformOnClose = true;
-		m_RMControls.m_bCloseOnPerform = true;
-		m_RMControls.m_bOpenInRoot = true;
-		m_RMControls.m_bPreventEmptyMenuOpen = false;
-		m_RMControls.m_bShowWhileUnconcious = false;
-		m_RMControls.m_bUseRightStick = true;
-		m_RMControls.m_bDeselectInCenter = true;
-		m_RMControls.m_bUseLargeSize = true;
-		m_RMControls.m_fCustomSize = -1;
-		m_RMControls.m_bShowCrosshair = false;
-		m_RMControls.m_bShowInnerBackground = true;
-		m_RMControls.m_bUseQuickActions = true;
+		SCR_RadialMenuControllerInputs inputs = new SCR_RadialMenuControllerInputs();	// typed local: the radial fields are not on the base class of m_RMControls
+		inputs.m_sOpenAction = CLW_HqRadial.ACTION_OPEN;
+		inputs.m_bCloseOnReleaseOpen = true;
+		inputs.m_bPerformOnClose = true;
+		inputs.m_bCloseOnPerform = true;
+		inputs.m_bOpenInRoot = true;
+		inputs.m_bPreventEmptyMenuOpen = false;
+		inputs.m_bShowWhileUnconcious = false;
+		inputs.m_bUseRightStick = true;
+		inputs.m_bDeselectInCenter = true;
+		inputs.m_bUseLargeSize = true;
+		inputs.m_fCustomSize = -1;
+		inputs.m_bShowCrosshair = false;
+		inputs.m_bShowInnerBackground = true;
+		inputs.m_bUseQuickActions = true;
+		m_RMControls = inputs;
 
 		GetGame().GetInputManager().AddActionListener(CLW_HqRadial.ACTION_OPEN, EActionTrigger.DOWN, OnInputOpen);
 	}
