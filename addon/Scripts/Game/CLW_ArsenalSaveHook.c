@@ -106,6 +106,7 @@ class CLW_ArsenalSaveHook
 
 		Print(string.Format("CLW: loadouts saved %1 %2 items=%3 status=%4 missing=%5 via=%6", rec.identityId, rec.faction, rec.items.Count(), rec.status, rec.missing.Count(), via), LogLevel.NORMAL);
 		PostRecord(rec);
+		CLW_LoadoutClient.Push(playerId);	// the client's "has a kit" flag is ours, not vanilla's
 		return rec;
 	}
 
@@ -201,6 +202,7 @@ class CLW_ArsenalSaveHook
 		if (!SCR_ArsenalManagerComponent.GetArsenalManager(manager))
 			return;
 
+		CLW_LoadoutClient.Push(playerId);	// our own flag first: independent of whatever the vanilla slot / a loadout-editor mod does
 		CLW_CustomLoadoutRec rec = CLW_CustomLoadouts.Get(CLW_CustomLoadouts.IdentityOf(playerId), factionKey);
 		string vanillaKit = VanillaKit(playerId);
 		if (rec)
@@ -228,6 +230,18 @@ modded class SCR_ArsenalManagerComponent
 		super.SetPlayerArsenalLoadout(playerId, characterEntity, arsenalComponent, arsenalSupplyType);
 		if (characterEntity)
 			CLW_ArsenalSaveHook.OnSaved(playerId);
+	}
+
+	// A player passed the audit (connect): tell the client which kits it has, once the records are loadable and the controller is ready.
+	// Chains super (loadout-editor mods override this too).
+	override void OnPlayerAuditSuccess(int playerId)
+	{
+		super.OnPlayerAuditSuccess(playerId);
+		if (GetGameMode() && GetGameMode().IsMaster())
+		{
+			CLW_LoadoutClient.PushDelayed(playerId, 2000);
+			CLW_LoadoutClient.PushDelayed(playerId, 8000);	// second chance: the controller may replicate late
+		}
 	}
 
 	// Puts a kit into the vanilla saved-loadout slot of a player (what the persistence deserializer does with a stored loadout). The preview

@@ -119,3 +119,27 @@ name or "", `key` = raw localization key when untranslated, `type` = rifle|snipe
 legs|footwear|handwear|clothing|vest|backpack|equipment|medical|throwable|explosive|vehicle|other, `cost` per unit, `count` occurrences).
 Sidecar: cleans leniently, copies to library entries, strips from the sync reply, list view carries `summary` only,
 `GET /api/loadouts/(library|player)/<id>/items` returns the full list. Old records without the fields work everywhere.
+
+## Own availability flag (WP9, 2026-10-15)
+Why: Workshop loadout editors replace vanilla's single-slot store. WCS_LoadoutEditor's `modded SCR_ArsenalManagerComponent` overrides
+`GetLocalPlayerLoadoutAvailable()` to read its own multi-slot map, clears `m_aPlayerLoadouts` in `OnPlayerAuditSuccess` and adds `m_sWCSSlotId`
+to `SCR_PlayerArsenalLoadout`; Bacon, JPLE, GMPersistentLoadouts etc. also mod the manager. DS e2e (RHS_USAF + WCS): the client had the vanilla
+data with the right faction index but `GetLocalPlayerLoadoutAvailable()` stayed false -> "Load my loadout" greyed, spawn entry hidden. Our
+availability therefore no longer reads any vanilla/manager state.
+
+Flow:
+- Truth = server `CLW_CustomLoadouts.Get(identity, factionKey)`.
+- Server -> owning client RPC `SCR_PlayerController.CLW_RpcAsk_LoadoutState(wire)` (Reliable, Owner; listen-server host calls the cache directly).
+  Wire `"<factionKey>=<itemCount>;..."` (`CLW_CustomLoadouts.FactionsWire`). Client cache: `CLW_LoadoutClient.Has(factionKey)` (`CLW_LoadoutClient.c`).
+- Pushed (`CLW_LoadoutClient.Push`): record stored (`StoreKit`: vanilla save hook + save action), faction set (`RestoreDelayed`), audit success
+  (+2 s and +8 s via the modded `SCR_ArsenalManagerComponent.OnPlayerAuditSuccess`, chains super), after a custom spawn.
+- `CLW_LoadLoadoutAction.CanBePerformed` -> `CLW_LoadoutClient.Has(user faction key)`; `Run` re-checks on the server (unchanged).
+- `CLW_SideCustomLoadout`: server `IsLoadoutAvailable` = slot visible && record exists; client `IsLoadoutAvailableClient` = slot visible &&
+  `CLW_LoadoutClient.Has(side faction)`. No WCS symbols referenced.
+- Spawn: `OnLoadoutSpawned` calls super (faction affiliation; vanilla/WCS may try and fail, deleting THEIR slot only), then always
+  `CLW_Kits.Apply` of our record, then `CLW_RestoreLoadout` (compat nicety, never a source of truth). Records live only in CLW_CustomLoadouts
+  and are never touched by a vanilla failure path.
+
+Log lines: `CLW: loadouts state sent to player N: '<wire>'` (server), `CLW: loadouts state received on client: '<wire>'` (client),
+`CLW: loadouts load client: no saved kit known for faction X ...` (client, throttled 10 s, when the cache says no),
+`CLW: loadouts custom spawn player N FACTION: applied=.. missing=.. vanilla slot synced=..` (server), `... no record, nothing applied`.
