@@ -937,6 +937,12 @@ class CLW_ForceCatalog
 		catalog.GetEntityList(list);
 		bool needSpawnerData = AnySpawnerData(list);
 		int added;
+		map<string, bool> ownChars = new map<string, bool>();
+		map<string, bool> otherChars = new map<string, bool>();
+		CLW_RolePicker.OwnershipSets(faction, ownChars, otherChars);
+		array<ref CLW_ForceEntry> pending = {};
+		array<bool> pendingForeign = {};
+		array<ResourceName> pendingPath = {};
 		foreach (SCR_EntityCatalogEntry entry : list)
 		{
 			if (!entry || !entry.IsEnabled())
@@ -963,6 +969,8 @@ class CLW_ForceCatalog
 
 			if (members < CLW_WarConfig.DISCOVER_MIN_GROUP_MEMBERS)
 				continue;
+
+			bool foreignGroup = !slots.IsEmpty() && CLW_RolePicker.IsForeignGroup(slots, ownChars, otherChars);
 
 			// roles from the member prefabs
 			int scouts;
@@ -1005,13 +1013,42 @@ class CLW_ForceCatalog
 			fresh.m_bAntiArmor = antiTank > 0;
 			if (slots.IsEmpty() && members <= CLW_WarConfig.DISCOVER_AT_TEAM_MAX_MEMBERS && labels.Contains(EEditableEntityLabel.TRAIT_ARMORPIERCING))
 				fresh.m_bAntiArmor = true;
-			string sig = Signature(fresh) + "|" + cost;
+			pending.Insert(fresh);
+			pendingForeign.Insert(foreignGroup);
+			pendingPath.Insert(prefab);
+		}
+
+		// Groups made of another faction's soldiers (a vanilla squad listed in a pack faction's catalog) only fill a kind the faction has no
+		// group of its own for. Order and signature dedupe are as before, so a faction without foreign groups is unchanged.
+		array<string> ownKinds = {};
+		for (int p = 0; p < pending.Count(); p++)
+		{
+			if (!pendingForeign[p] && !ownKinds.Contains(pending[p].m_sKind))
+				ownKinds.Insert(pending[p].m_sKind);
+		}
+
+		for (int q = 0; q < pending.Count(); q++)
+		{
+			CLW_ForceEntry candidate = pending[q];
+			if (pendingForeign[q])
+			{
+				if (ownKinds.Contains(candidate.m_sKind))
+				{
+					Print(string.Format("CLW: catalog discovery %1: group %2 skipped (its members are another faction's characters, the faction has its own %3 groups)", factionKey, pendingPath[q], candidate.m_sKind), LogLevel.NORMAL);
+					continue;
+				}
+
+				Print(string.Format("CLW: catalog discovery %1: group %2 is made of another faction's characters but the faction has no own %3 group, kept", factionKey, pendingPath[q], candidate.m_sKind), LogLevel.WARNING);
+			}
+
+			string sig = Signature(candidate) + "|" + candidate.m_iCost;
 			if (signatures.Contains(sig))
 				continue;
 
 			signatures.Insert(sig);
-			entries.Insert(fresh);
+			entries.Insert(candidate);
 			added++;
+			Print(string.Format("CLW: catalog discovery %1: group %2 -> %3 (%4, %5 members, foreign=%6)", factionKey, pendingPath[q], candidate.m_sType, candidate.m_sKind, candidate.m_iGroupMembers, pendingForeign[q]), LogLevel.NORMAL);
 		}
 
 		return added;

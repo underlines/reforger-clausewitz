@@ -8,6 +8,8 @@
 // Roles: members keep their group slot's role (pack groups keep their designed composition). When the slots carry no role or are all the same, or the
 // dashboard set a composition for the kind (CLW_LoadoutLibrary.CompositionOverride), the composition of the kind applies (CLW_SquadCompositions,
 // Configs/CLW/SquadCompositions.conf). Recruits of a player squad (reinforcements bought by a request) fill the roles the squad still misses.
+// A composition role the faction has no character for is played by its own stand-in (CLW_RolePicker, "substituted"), never by a kin prefab; the
+// slot of a pack group stays when only a kin prefab could fill it (tiny packs, "fallback").
 // Every failure keeps today's behaviour: the slot prefab stays, a member without a kit keeps the gear of its prefab. Log prefix "CLW: squad roles".
 
 // Shape of the optional flag in overrides.json (other keys of the file are ignored).
@@ -248,6 +250,7 @@ class CLW_SquadRoles
 			Fit(wanted, count, fitted);
 			array<ResourceName> fresh = {};
 			int swapped;
+			int substituted;
 			for (int j = 0; j < count; j++)
 			{
 				fresh.Insert(slots[j]);
@@ -255,22 +258,30 @@ class CLW_SquadRoles
 				if (target.IsEmpty() || target == slotRoles[j])
 					continue;
 
+				// the faction's own character (or its own stand-in for a role it lacks); a kin prefab (tiny packs only) never replaces a pack's slot
 				ResourceName rolePrefab = CLW_RolePicker.RolePrefab(factionKey, target);
-				if (rolePrefab.IsEmpty())
+				string roleSource = CLW_RolePicker.SourceOf(factionKey, target);
+				if (rolePrefab.IsEmpty() || roleSource == "kin")
 				{
 					plan.m_iFallback++;
 					continue;
 				}
 
-				fresh.Set(j, rolePrefab);
+				if (roleSource != "own")
+					substituted++;
+
 				plan.m_aRoles.Set(j, target);
+				if (CLW_ForceCatalog.PathOf(rolePrefab) == CLW_ForceCatalog.PathOf(slots[j]))
+					continue;	// the slot already is that character
+
+				fresh.Set(j, rolePrefab);
 				swapped++;
 			}
 
 			if (swapped > 0)
 				group.m_aUnitPrefabSlots = fresh;	// a new array: never write into a list a prefab may share
 
-			Print(string.Format("CLW: squad roles plan %1 %2 source=%3 swapped=%4 fallback=%5", unitId, kind, source, swapped, plan.m_iFallback), LogLevel.NORMAL);
+			Print(string.Format("CLW: squad roles plan %1 %2 source=%3 swapped=%4 substituted=%5 fallback=%6", unitId, kind, source, swapped, substituted, plan.m_iFallback), LogLevel.NORMAL);
 		}
 
 		s_aPlans.Insert(plan);
