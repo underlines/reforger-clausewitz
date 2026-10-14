@@ -1,17 +1,22 @@
 // Role picker (loadouts-arsenal-plan R2): per faction and ROLE_* label ONE official CHARACTER catalog prefab, so the 7 spawn slots (R3) and the
-// AI squad members (R4, CLW_SquadRoles) can be "a rifleman / medic / AT soldier of this faction" without any configuration. Kin factions (friendly
-// lists, CLW_ArsenalPool.GetKin) fill the roles the faction itself does not have (pack factions that only ship a few characters).
+// AI squad members (R4, CLW_SquadRoles) can be "a rifleman / medic / AT soldier of this faction" without any configuration.
+// OWN FACTION FIRST (dev/notes/own-faction-roles.md): a role the faction has no character for is SUBSTITUTED by the closest own role (stand-in chains in
+// Configs/CLW/SquadCompositions.conf, CLW_SquadCompositionStore.StandIns), never filled with a kin (friendly vanilla) prefab. Kin factions
+// (CLW_ArsenalPool.GetKin) are used only when the faction itself has fewer than MIN_OWN_ROLES roles ("tiny pack": cannot field a squad alone).
 // Pick rules: skip ROLE_GUARD and vehicle / helicopter crew characters; the leader first, then the specific roles, the rifleman last; per role prefer
-// own faction over kin, a prefab not used for another role, the leader's unit folder, fewer roles on the character, SIZE_M, the shorter file name
-// (the plain variant before camo / Conflict copies), then catalog order. Only catalog data goes in, so the
-// answer is the same on the server and on every client. Results are cached per faction (an empty result is not cached: catalogs may fill late).
-// No faction keys, unit names or prefab GUIDs in code. Log: "CLW: squad roles picker <faction> <ROLE>=<prefab> ..." (once per faction and machine).
+// own faction over kin, a prefab not used for another role, the leader's unit folder, fewer roles on the character, SIZE_M, (rifleman only) the
+// character the faction's own groups field most often, the shorter file name (the plain variant before camo / Conflict copies), then catalog order.
+// Only catalog data goes in, so the answer is the same on the server and on every client. Results are cached per faction (an empty result is not
+// cached: catalogs may fill late). No faction keys, unit names or prefab GUIDs in code.
+// Log: "CLW: squad roles picker <faction> <ROLE>=<own|sub(<ROLE>)|kin>:<prefab> ..." (once per faction and machine).
 
 // Result for one faction.
 class CLW_FactionRoles
 {
-	ref array<string> m_aRoles = {};						// roles that have a prefab, in the default slot order
-	ref map<string, ResourceName> m_mPrefab = new map<string, ResourceName>();
+	ref array<string> m_aRoles = {};						// roles with a character of their own (or kin in a tiny pack), in the default slot order: the spawn slots
+	ref map<string, ResourceName> m_mPrefab = new map<string, ResourceName>();	// also the substituted roles (AI squads)
+	ref map<string, string> m_mSource = new map<string, string>();				// role -> "own" | "kin" | "sub(<ROLE>)"
+	bool m_bTiny;											// fewer own roles than MIN_OWN_ROLES: kin fills in
 }
 
 // One usable character of a catalog (picker input).
@@ -23,10 +28,12 @@ class CLW_RoleCandidate
 	int m_iOrder;		// catalog order (deterministic ties)
 	bool m_bSizeM;
 	string m_sDir;		// unit folder of the prefab
+	int m_iFreq;		// how often the faction's own groups field this character (rank 0 only)
 }
 
 class CLW_RolePicker
 {
+	static const int MIN_OWN_ROLES = 2;		// fewer own roles than this = tiny pack, kin characters fill in
 	protected static ref map<string, ref CLW_FactionRoles> s_mCache = new map<string, ref CLW_FactionRoles>();
 	protected static ref array<string> s_aOrder;
 
@@ -92,7 +99,7 @@ class CLW_RolePicker
 		return RoleOfLabels(labels);
 	}
 
-	// One CHARACTER catalog prefab per ROLE_* for the faction (kin factions fill missing roles); "" if none.
+	// One CHARACTER catalog prefab per ROLE_* for the faction: its own, else the own stand-in (SourceOf tells which), kin only in a tiny pack; "" if none.
 	static ResourceName RolePrefab(string factionKey, string role)
 	{
 		CLW_FactionRoles data = Get(factionKey);
@@ -106,7 +113,22 @@ class CLW_RolePicker
 		return "";
 	}
 
-	// Roles the faction can field, in the default slot order (leader, rifleman, machinegunner, antitank, grenadier, medic, sharpshooter, ...).
+	// Where the role's prefab comes from: "own", "kin" (tiny pack), "sub(<ROLE>)" (own stand-in) or "" (no prefab).
+	static string SourceOf(string factionKey, string role)
+	{
+		CLW_FactionRoles data = Get(factionKey);
+		if (!data)
+			return "";
+
+		string source;
+		if (data.m_mSource.Find(role, source))
+			return source;
+
+		return "";
+	}
+
+	// Roles the faction really has a character for (own; kin in a tiny pack), in the default slot order (leader, rifleman, machinegunner,
+	// antitank, grenadier, medic, sharpshooter, ...). Substituted roles are NOT listed: RolePrefab still answers for them (AI squads).
 	static void Roles(string factionKey, notnull array<string> roles)
 	{
 		CLW_FactionRoles data = Get(factionKey);
@@ -167,23 +189,73 @@ class CLW_RolePicker
 			return null;
 
 		CLW_FactionRoles data = new CLW_FactionRoles();
+		map<string, int> freq = new map<string, int>();
+		GroupFrequency(faction, freq);
 		array<ref CLW_RoleCandidate> candidates = {};
-		Collect(faction, 0, candidates);
-
-		// kin factions fill the roles the faction does not have (rank 1+: they never beat an own candidate)
-		array<SCR_Faction> kin = {};
-		CLW_ArsenalPool.GetKin(faction, kin);
-		int rank = 1;
-		foreach (SCR_Faction kinFaction : kin)
-		{
-			Collect(kinFaction, rank, candidates);
-			rank++;
-		}
-
+		Collect(faction, 0, freq, candidates);
 		Assign(candidates, data);
 
+		int ownRoles = data.m_mPrefab.Count();
+		if (ownRoles < MIN_OWN_ROLES)
+		{
+			// tiny pack: the faction alone cannot field a squad, kin characters fill the missing roles (rank 1+: they never beat an own candidate)
+			data = new CLW_FactionRoles();
+			data.m_bTiny = true;
+			array<SCR_Faction> kin = {};
+			CLW_ArsenalPool.GetKin(faction, kin);
+			map<string, int> noFreq = new map<string, int>();
+			int rank = 1;
+			foreach (SCR_Faction kinFaction : kin)
+			{
+				Collect(kinFaction, rank, noFreq, candidates);
+				rank++;
+			}
+
+			Assign(candidates, data);
+			Print(string.Format("CLW: squad roles picker %1 TINY pack: only %2 own role(s), kin characters fill in (%3 roles now)", factionKey, ownRoles, data.m_mPrefab.Count()), LogLevel.WARNING);
+		}
+
+		// a role without a character of its own is played by the closest own role (never by a kin prefab)
 		array<string> all = {};
 		AllRoles(all);
+		foreach (string missingRole : all)
+		{
+			if (data.m_mPrefab.Contains(missingRole))
+				continue;
+
+			array<string> standIns = {};
+			CLW_SquadCompositionStore.StandIns(missingRole, standIns);
+			string chosen = "";
+			foreach (string standIn : standIns)
+			{
+				if (HasRealPrefab(data, standIn))
+				{
+					chosen = standIn;
+					break;
+				}
+			}
+
+			if (chosen.IsEmpty())
+			{
+				foreach (string anyRole : all)
+				{
+					if (HasRealPrefab(data, anyRole))
+					{
+						chosen = anyRole;
+						break;
+					}
+				}
+			}
+
+			if (chosen.IsEmpty())
+				continue;
+
+			ResourceName standPrefab;
+			data.m_mPrefab.Find(chosen, standPrefab);
+			data.m_mPrefab.Set(missingRole, standPrefab);
+			data.m_mSource.Set(missingRole, "sub(" + chosen + ")");
+		}
+
 		string line;
 		foreach (string role : all)
 		{
@@ -191,8 +263,12 @@ class CLW_RolePicker
 			if (!data.m_mPrefab.Find(role, picked))
 				continue;
 
-			data.m_aRoles.Insert(role);
-			line += " " + role + "=" + ShortName(picked);
+			string source = "own";
+			data.m_mSource.Find(role, source);
+			if (HasRealPrefab(data, role))
+				data.m_aRoles.Insert(role);
+
+			line += " " + role + "=" + source + ":" + ShortName(picked);
 		}
 
 		if (data.m_aRoles.IsEmpty())
@@ -203,8 +279,132 @@ class CLW_RolePicker
 		return data;
 	}
 
+	// The role has a character of its own (or a kin one in a tiny pack), not a stand-in.
+	protected static bool HasRealPrefab(notnull CLW_FactionRoles data, string role)
+	{
+		string source;
+		if (!data.m_mSource.Find(role, source))
+			return false;
+
+		return source == "own" || source == "kin";
+	}
+
+	// How often each character (lower-case path without GUID) appears in the faction's own GROUP catalog entries. The plain rifleman is the one
+	// squads field most; a specialist that is only labelled ROLE_RIFLEMAN (a grenade launcher man) appears once.
+	protected static void GroupFrequency(notnull SCR_Faction faction, notnull map<string, int> freq)
+	{
+		SCR_EntityCatalog catalog = faction.GetFactionEntityCatalogOfType(EEntityCatalogType.GROUP, false);
+		if (!catalog)
+			return;
+
+		array<SCR_EntityCatalogEntry> list = {};
+		catalog.GetEntityList(list);
+		foreach (SCR_EntityCatalogEntry entry : list)
+		{
+			if (!entry || !entry.IsEnabled())
+				continue;
+
+			array<ResourceName> slots = {};
+			if (!GroupSlots(entry.GetPrefab(), slots))
+				continue;
+
+			foreach (ResourceName slot : slots)
+			{
+				string key = CLW_ForceCatalog.PathOf(slot);
+				int count = 0;
+				freq.Find(key, count);
+				freq.Set(key, count + 1);
+			}
+		}
+	}
+
+	// Member character prefabs of a group prefab (SCR_AIGroup.m_aUnitPrefabSlots). False when unreadable.
+	static bool GroupSlots(ResourceName prefab, notnull array<ResourceName> slots)
+	{
+		if (prefab.IsEmpty())
+			return false;
+
+		Resource resource = Resource.Load(prefab);
+		if (!resource || !resource.IsValid())
+			return false;
+
+		BaseResourceObject object = resource.GetResource();
+		if (!object)
+			return false;
+
+		BaseContainer container = object.ToBaseContainer();
+		if (!container)
+			return false;
+
+		array<ResourceName> raw = {};
+		if (!container.Get("m_aUnitPrefabSlots", raw))
+			return false;
+
+		foreach (ResourceName slot : raw)
+		{
+			if (!slot.IsEmpty())
+				slots.Insert(slot);
+		}
+
+		return !slots.IsEmpty();
+	}
+
+	// ---- character ownership (also used by CLW_ForceCatalog to skip groups made of another faction's soldiers) ----
+
+	// Lower-case paths (no GUID) of the enabled CHARACTER catalog entries of a faction.
+	static void CharacterPaths(notnull SCR_Faction faction, notnull map<string, bool> paths)
+	{
+		SCR_EntityCatalog catalog = faction.GetFactionEntityCatalogOfType(EEntityCatalogType.CHARACTER, false);
+		if (!catalog)
+			return;
+
+		array<SCR_EntityCatalogEntry> list = {};
+		catalog.GetEntityList(list);
+		foreach (SCR_EntityCatalogEntry entry : list)
+		{
+			if (entry && entry.IsEnabled() && !entry.GetPrefab().IsEmpty())
+				paths.Set(CLW_ForceCatalog.PathOf(entry.GetPrefab()), true);
+		}
+	}
+
+	// own = the faction's characters; other = the characters of every other faction (own wins when both list one).
+	static void OwnershipSets(notnull SCR_Faction faction, notnull map<string, bool> own, notnull map<string, bool> other)
+	{
+		CharacterPaths(faction, own);
+		FactionManager manager = GetGame().GetFactionManager();
+		if (!manager)
+			return;
+
+		array<Faction> all = {};
+		manager.GetFactionsList(all);
+		foreach (Faction item : all)
+		{
+			SCR_Faction candidate = SCR_Faction.Cast(item);
+			if (candidate && candidate != faction)
+				CharacterPaths(candidate, other);
+		}
+	}
+
+	// A group is foreign when none of its members is a character of the faction and at least one belongs to another faction (its soldiers are
+	// that faction's, e.g. a vanilla rifle squad listed in a pack faction's catalog). Uncatalogued members count as neither.
+	static bool IsForeignGroup(notnull array<ResourceName> slots, notnull map<string, bool> own, notnull map<string, bool> other)
+	{
+		int ownCount;
+		int foreignCount;
+		foreach (ResourceName slot : slots)
+		{
+			string key = CLW_ForceCatalog.PathOf(slot);
+			if (own.Contains(key))
+				ownCount++;
+			else if (other.Contains(key))
+				foreignCount++;
+		}
+
+		return ownCount == 0 && foreignCount > 0;
+	}
+
 	// Every usable character of one faction's CHARACTER catalog (no guards, no vehicle / helicopter crew), with its roles.
-	protected static void Collect(notnull SCR_Faction faction, int rank, notnull array<ref CLW_RoleCandidate> candidates)
+	protected static void Collect(notnull SCR_Faction faction, int rank, notnull map<string, int> freq, notnull array<ref CLW_RoleCandidate> candidates)
 	{
 		SCR_EntityCatalog catalog = faction.GetFactionEntityCatalogOfType(EEntityCatalogType.CHARACTER, false);
 		if (!catalog)
@@ -246,6 +446,9 @@ class CLW_RolePicker
 			candidate.m_iOrder = candidates.Count();
 			candidate.m_bSizeM = labels.Contains(EEditableEntityLabel.SIZE_M);
 			candidate.m_sDir = DirOf(prefab);
+			int fielded = 0;
+			freq.Find(CLW_ForceCatalog.PathOf(prefab), fielded);
+			candidate.m_iFreq = fielded;
 			candidates.Insert(candidate);
 		}
 	}
@@ -276,7 +479,7 @@ class CLW_RolePicker
 				if (!candidate.m_aRoles.Contains(wanted))
 					continue;
 
-				int score = ScoreOf(candidate, family, used.Contains(candidate.m_Prefab));
+				int score = ScoreOf(candidate, family, used.Contains(candidate.m_Prefab), wanted);
 				if (!best || IsBetter(score, candidate, bestScore, best))
 				{
 					best = candidate;
@@ -288,6 +491,11 @@ class CLW_RolePicker
 				continue;
 
 			data.m_mPrefab.Set(wanted, best.m_Prefab);
+			if (best.m_iRank == 0)
+				data.m_mSource.Set(wanted, "own");
+			else
+				data.m_mSource.Set(wanted, "kin");
+
 			used.Set(best.m_Prefab, true);
 			if (wanted == "ROLE_LEADER")
 				family = best.m_sDir;
@@ -295,8 +503,8 @@ class CLW_RolePicker
 	}
 
 	// Own faction before any kin faction (rank), then not used for another role, same unit folder as the leader, fewer roles on the character,
-	// SIZE_M.
-	protected static int ScoreOf(notnull CLW_RoleCandidate candidate, string family, bool used)
+	// SIZE_M; for the rifleman also how often the faction's own groups field the character (a plain rifleman is the common member).
+	protected static int ScoreOf(notnull CLW_RoleCandidate candidate, string family, bool used, string wanted)
 	{
 		int score = -1000 * candidate.m_iRank;
 		if (!used)
@@ -311,6 +519,9 @@ class CLW_RolePicker
 
 		if (candidate.m_bSizeM)
 			score += 1;
+
+		if (wanted == "ROLE_RIFLEMAN")
+			score += 4 * Math.Min(candidate.m_iFreq, 6);
 
 		return score;
 	}
