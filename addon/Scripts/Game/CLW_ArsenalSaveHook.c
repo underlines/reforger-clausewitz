@@ -130,12 +130,64 @@ class CLW_ArsenalSaveHook
 		if (existing && existing.loadout == vanillaKit)
 			return;	// vanilla refused the new save (the old kit is still the stored one) or nothing changed
 
-		CLW_CustomLoadoutRec rec = CLW_CustomLoadouts.Store(playerId, factionKey, vanillaKit);
+		StoreKit(playerId, factionKey, vanillaKit, "vanilla");
+	}
+
+	// The one store path (vanilla save hook and CLW_SaveLoadoutAction): record in CLW_CustomLoadouts + POST to the sidecar. Null if not stored.
+	protected static CLW_CustomLoadoutRec StoreKit(int playerId, string factionKey, string kit, string via)
+	{
+		CLW_CustomLoadoutRec rec = CLW_CustomLoadouts.Store(playerId, factionKey, kit);
+		if (!rec)
+			return null;
+
+		Print(string.Format("CLW: loadouts saved %1 %2 items=%3 status=%4 missing=%5 via=%6", rec.identityId, rec.faction, rec.items.Count(), rec.status, rec.missing.Count(), via), LogLevel.NORMAL);
+		PostRecord(rec);
+		return rec;
+	}
+
+	// Server: save the kit the character wears (CLW_SaveLoadoutAction). Captures, refuses a kit invalid for the player faction (hint),
+	// stores it like the vanilla save and puts it into the vanilla saved slot so the spawn screen offers it.
+	static void StoreFromCharacter(int playerId, IEntity character, SCR_ArsenalComponent arsenal, string via)
+	{
+		if (!CLW_ArsenalPool.IsActive() || !character || !arsenal)
+			return;
+
+		SCR_ChimeraCharacter chimera = SCR_ChimeraCharacter.Cast(character);
+		Faction userFaction;
+		if (chimera)
+			userFaction = chimera.GetFaction();
+
+		if (!userFaction || !CLW_LoadLoadout.ArsenalAllows(arsenal, userFaction))
+		{
+			Print("CLW: loadouts save of player " + playerId + " refused, no faction or the arsenal serves another one", LogLevel.NORMAL);
+			return;
+		}
+
+		string factionKey = userFaction.GetFactionKey();
+		string kit = CLW_Kits.Capture(character);
+		if (kit.IsEmpty())
+		{
+			Print("CLW: loadouts save of player " + playerId + " failed, the kit could not be captured", LogLevel.WARNING);
+			return;
+		}
+
+		array<string> missing = {};
+		if (CLW_Kits.Validate(kit, factionKey, missing) == CLW_Kits.STATUS_INVALID)
+		{
+			CLW_RequestService.Answer(playerId, CLW_Loc.W("#CLW-Loadout_SaveRefused", CLW_Loc.N(missing.Count())), true);
+			Print(string.Format("CLW: loadouts save of player %1 refused, %2 items unavailable for %3", playerId, missing.Count(), factionKey), LogLevel.NORMAL);
+			return;
+		}
+
+		CLW_CustomLoadoutRec rec = StoreKit(playerId, factionKey, kit, via);
 		if (!rec)
 			return;
 
-		Print(string.Format("CLW: loadouts saved %1 %2 items=%3 status=%4 missing=%5", rec.identityId, rec.faction, rec.items.Count(), rec.status, rec.missing.Count()), LogLevel.NORMAL);
-		PostRecord(rec);
+		SCR_ArsenalManagerComponent manager;
+		if (SCR_ArsenalManagerComponent.GetArsenalManager(manager))
+			manager.CLW_RestoreLoadout(playerId, factionKey, rec.loadout);
+
+		CLW_RequestService.Answer(playerId, CLW_Loc.W("#CLW-Loadout_Saved", CLW_Loc.N(rec.items.Count())), true);
 	}
 
 	// The kit vanilla currently holds for the player ("" if none).

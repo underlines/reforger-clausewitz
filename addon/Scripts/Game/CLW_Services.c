@@ -1237,7 +1237,7 @@ class CLW_Services
 			actions.GetActionsList(list);
 			foreach (BaseUserAction action : list)
 			{
-				if (SCR_SaveArsenalLoadout.Cast(action))
+				if (CLW_SaveLoadoutAction.Cast(action))
 					hasSave = true;
 				else if (CLW_LoadLoadoutAction.Cast(action))
 					hasLoad = true;

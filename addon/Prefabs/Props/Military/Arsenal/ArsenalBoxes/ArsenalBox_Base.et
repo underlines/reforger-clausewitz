@@ -109,6 +109,16 @@ GenericEntity {
      Duration 1
      "Sort Priority" 10
     }
+    CLW_SaveLoadoutAction "{7D3A91C45E4F0003}" {
+     ParentContextList {
+      "default"
+     }
+     UIInfo UIInfo "{7D3A91C45E4F0004}" {
+      Name "#CLW-Loadout_Save"
+     }
+     Duration 1
+     "Sort Priority" 10
+    }
     CLW_LoadLoadoutAction "{7D3A91C45E4F0001}" {
      ParentContextList {
       "default"

@@ -21,12 +21,12 @@ GenericEntity {
     }
    }
    additionalActions {
-    CLW_SaveArsenalLoadoutAction "{39237DC9580C2D97}" {
+    CLW_SaveLoadoutAction "{39237DC9580C2D97}" {
      ParentContextList {
       "default"
      }
      UIInfo UIInfo "{30BA1E8B1659403F}" {
-      Name "#AR-Loadout_Action_SaveLoadout"
+      Name "#CLW-Loadout_Save"
      }
      Duration 1
      "Sort Priority" 10
