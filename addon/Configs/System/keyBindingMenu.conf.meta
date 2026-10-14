@@ -1,0 +1,17 @@
+MetaFileClass {
+ Name "{4EE7794C9A3F11EF}Configs/System/keyBindingMenu.conf"
+ Configurations {
+  ConfigurationClass PC {
+  }
+  ConfigurationClass XBOX_ONE : PC {
+  }
+  ConfigurationClass XBOX_SERIES : PC {
+  }
+  ConfigurationClass PS4 : PC {
+  }
+  ConfigurationClass PS5 : PC {
+  }
+  ConfigurationClass HEADLESS : PC {
+  }
+ }
+}
