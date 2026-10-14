@@ -724,13 +724,15 @@ class CLW_SidePool
 				diff = candidate.m_iGroupMembers;	// nothing fits: the smallest
 			}
 
+			// fit and size first, anti-armour only breaks ties: own rifle squads carry AT soldiers, so ranking AT first put a 2-man MG team
+			// into every borrowed truck (DS e2e 2026-10-15)
 			bool better = !best;
-			if (best && at != bestAt)
-				better = at < bestAt;
-			else if (best && noFit != bestNoFit)
+			if (best && noFit != bestNoFit)
 				better = noFit < bestNoFit;
-			else if (best)
+			else if (best && diff != bestDiff)
 				better = diff < bestDiff;
+			else if (best)
+				better = at < bestAt;
 
 			if (better)
 			{
