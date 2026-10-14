@@ -60,6 +60,24 @@ modded class SCR_PlayerController
 		CLW_HqChat.Chat(GetPlayerId(), text);	// the sender: never a player id from the client
 	}
 
+	// HQ comms: /backup [note] help call (CLW_Backup).
+	void CLW_SendBackup(string note)
+	{
+		if (Replication.IsServer())
+		{
+			CLW_Backup.Chat(GetPlayerId(), note);
+			return;
+		}
+
+		Rpc(CLW_RpcAsk_Backup, note);
+	}
+
+	[RplRpc(RplChannel.Reliable, RplRcver.Server)]
+	protected void CLW_RpcAsk_Backup(string note)
+	{
+		CLW_Backup.Chat(GetPlayerId(), note);	// the sender: never a player id from the client
+	}
+
 	// ---- server -> owning client ----
 
 	void CLW_RequestAnswer(string text, bool hint)
@@ -122,9 +140,12 @@ class CLW_RequestClient
 		ChatCommandInvoker hq = chat.GetCommandInvoker("hq");
 		if (hq)
 			hq.Insert(OnHqChat);
+		ChatCommandInvoker backup = chat.GetCommandInvoker("backup");
+		if (backup)
+			backup.Insert(OnBackupChat);
 
 		SCR_PlayerController.CLW_MarkRequestChatRegistered();
-		Print("CLW: chat commands /request, /report and /hq registered", LogLevel.NORMAL);
+		Print("CLW: chat commands /request, /report, /hq and /backup registered", LogLevel.NORMAL);
 	}
 
 	static void OnRequestChat(SCR_ChatPanel panel, string data)
@@ -145,6 +166,16 @@ class CLW_RequestClient
 
 		Print("CLW: chat /hq " + data, LogLevel.NORMAL);
 		controller.CLW_SendHq(data);
+	}
+
+	static void OnBackupChat(SCR_ChatPanel panel, string data)
+	{
+		SCR_PlayerController controller = SCR_PlayerController.Cast(GetGame().GetPlayerController());
+		if (!controller)
+			return;
+
+		Print("CLW: chat /backup " + data, LogLevel.NORMAL);
+		controller.CLW_SendBackup(data);
 	}
 
 	static void OnReportChat(SCR_ChatPanel panel, string data)
