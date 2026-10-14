@@ -5,6 +5,8 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-14
+
 ### Added
 - Configurable LLM sidecar endpoint: command line `-clwSidecar <url>` or `sidecarUrl` in `$profile:Clausewitz/overrides.json` (default `http://127.0.0.1:8788/`), token via `-clwSidecarToken <token>` or `sidecarToken`; the server log shows the URL in use (`CLW: sidecar url ...`). Sidecar: `CLW_ALLOWED_HOSTS` for a sidecar on another machine behind a domain or public IP.
 - Languages: mod texts in English and German (string table); every player gets SITREPs, HQ replies and mission texts in their game language, or the one chosen with `/hq language <code>` or in the HQ menu; broadcast SITREPs are translated per language by the LLM.
