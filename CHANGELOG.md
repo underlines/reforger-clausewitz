@@ -5,6 +5,22 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 
 ## [Unreleased]
 
+### Added
+- HQ radial menu: hold `U` (or `/hqr`) for reports, help calls, requests, missions and status in one menu.
+- Radio reports: `/report cancel`, `ahead`/`air`/`unknown` reports, and `/backup [note]` help calls (any role): the HQ sends the nearest free group. With the LLM, `/hq` understands natural-language contact reports, help calls and cancels (English and German).
+- Weather and time of day as war settings (start time, weather, changes during the war, smooth transitions); the SITREP and the LLM HQ take them into account.
+- HQ character traits per side (aggressive, cautious, ...): they tune the rule commander and the LLM HQ's style.
+- Loadouts: item details (names, types, costs) on the dashboard; default arsenal prices for items without one.
+- Sidecar: Docker variant (`dev/tools/docker/`) and a Latency tab on the dashboard (time, tokens and cache hits per LLM call).
+
+### Changed
+- Squad roles and imported groups use the side's own faction first (role stand-ins instead of foreign prefabs).
+- LLM HQ much faster: orders, the planner (buys, FOBs, logistics) and the SITREP are separate, smaller calls; terse reply format, compact situation, provider prompt caching, a model per call type. Reasoning of reasoning models is off by default (`output.reasoning`): orders calls went from 15-20 s (and timeouts) to about 4 s.
+
+### Fixed
+- `/hq` answers within seconds: HQ chat no longer waits behind the commander's LLM call (own request channel).
+- Saved loadouts: re-applied when the strict vanilla apply dropped them; own availability flag independent of vanilla/WCS saved kits.
+
 ## [1.2.0] - 2026-10-14
 
 ### Added
