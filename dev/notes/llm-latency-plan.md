@@ -35,5 +35,18 @@ input (prefill) matters less. Confirm with real numbers (step 1) before tuning.
 8. **Prompt budget test** (future-proofing): a test builds prompts from a recorded large situation and fails when a section
    exceeds its token budget, so features must fit or justify more.
 
+## Open: /hq fast path does not reach the sidecar in game (DS e2e 2026-10-15, build #119)
+`CLW: hq #1 fast path failed (timeout), situation path stays in charge` after 30 s, and the sidecar logged nothing for it.
+A direct `curl POST /hq` against the same sidecar answered in 1.4 s (`hq fast ... 1200ms`), so the route works. Likely cause:
+the game's RestContext (CLW_SidecarLink.Context, shared with the commander POST /orders) runs requests one at a time, so /hq
+queues behind the ~40 s orders call. Fix first: a separate RestContext for /hq (verify how GetRestApi().GetContext keys contexts),
+then retest. Steps 2 + 3 below also shrink the queue time.
+
+## Open tests (re-run once the commander call is fast / /hq has its own context)
+1. `/hq 2 enemy infantry about 100m north of my position` -> reply within seconds + REPORT_CONTACT (2 inf, 100 m, N).
+2. `/hq wir werden beschossen, brauchen Hilfe` -> REQUEST_BACKUP, nearest free group sent.
+3. `/hq cancel my last report` -> REPORT_CANCEL removes the last report.
+4. `/backup taking fire` (chat, no LLM) -> group sent; also via the radial "Backup!" (already passed via the radial on 2026-10-15).
+
 Recommendation: 1 + 2 + 3 first (small, high payoff, low risk; expected commander call on ling-3.1-flash well under 10 s), then 4
 with 5 + 6 inside it; 7 + 8 as standing practice. Implementation via Sonnet subagents (disjoint files), lead does the DS e2e.
