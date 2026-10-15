@@ -896,6 +896,7 @@ function Log({ st, faction }) {
       ${x.request?.events?.length ? html`<h3>${t("log.hEvents")}</h3><pre>${x.request.events.join("\n")}</pre>` : ""}
       ${x.dropped?.length ? html`<h3>${t("log.hDropped")}</h3><pre>${J(x.dropped)}</pre>` : ""}
       ${x.rawReply != null ? html`<h3>${t("log.hRaw")}</h3><pre>${x.rawReply}</pre>` : ""}
+      <${MetricsBox} m=${x.metrics} />
       <h3>${t("col.request")}</h3><pre>${J(x.request)}</pre></div></details>`)}
     ${!ex.length && html`<div class="empty">${t("log.empty")}</div>`}</div></section>`;
 }
@@ -1223,8 +1224,62 @@ function ActionsView({ st }) {
   </main>`;
 }
 
+// ---- Latency (LLM call metrics: st.latency per role, st.llmCalls ring; both optional, older sidecars have neither) ----
+const SLOW_MS = 10000;
+const fmtMs = (v) => (!num(v) ? "-" : v < 1000 ? `${Math.round(v)} ms` : `${(v / 1000).toFixed(1)} s`);
+const fmtTok = (v) => (num(v) ? String(Math.round(v)) : "-");
+const roleLabel = (r) => tk("lat.role", r) ?? "?";
+// a call is slow above the role's configured timeout (config.roleTimeouts, seconds, 0 = slot default) or above 10 s
+const isSlow = (c, cfg) => { const to = cfg?.roleTimeouts?.[c.role]; return num(c.totalMs) && (c.totalMs > SLOW_MS || (num(to) && to > 0 && c.totalMs > to * 1000)); };
+// prompt sections {name: {chars, tokens}}, largest first, one bar each (width relative to the largest)
+function SectionBars({ sections, title }) {
+  const rows = Object.entries(sections && typeof sections === "object" ? sections : {}).filter(([, v]) => v && typeof v === "object").map(([k, v]) => [k, num(v.chars) ? v.chars : 0, num(v.tokens) ? v.tokens : 0]).sort((a, b) => b[2] - a[2] || b[1] - a[1]);
+  if (!rows.length) return "";
+  const mx = Math.max(1, rows[0][2]), tot = rows.reduce((n, r) => n + r[2], 0);
+  return html`<div class="secbars">${title ? html`<h3>${title}</h3>` : ""}${rows.map(([k, ch, tok]) => html`<div class="secrow" key=${k}><span class="secname mono">${k}</span>
+    <span class="secbar"><i style=${{ width: Math.max(1, Math.round((100 * tok) / mx)) + "%" }}></i></span>
+    <span class="secval mono muted">${t("lat.secVal", ch, tok, tot ? Math.round((100 * tok) / tot) : 0)}</span></div>`)}</div>`;
+}
+// metrics of one LLM call (exchange.metrics = the llmCalls entry of its commander call)
+function MetricsBox({ m }) {
+  if (!m || typeof m !== "object") return "";
+  return html`<h3>${t("lat.metrics")}</h3><div class="metrics">
+    <span>${t("lat.ttft")} <b>${fmtMs(m.ttftMs)}</b></span><span>${t("lat.total")} <b>${fmtMs(m.totalMs)}</b></span>
+    <span>${t("lat.tokIn")} <b>${fmtTok(m.inTok)}</b></span><span>${t("lat.tokOut")} <b>${fmtTok(m.outTok)}</b></span><span>${t("lat.tokCached")} <b>${fmtTok(m.cachedTok)}</b></span>
+    ${m.outputMode ? html`<span>${t("lat.mode")} <b>${m.outputMode}</b></span>` : ""}${m.slot ? html`<span>${t("lat.slot")} <b>${m.slot}</b></span>` : ""}
+    ${num(m.promptChars) ? html`<span>${t("lat.promptChars")} <b>${m.promptChars}</b></span>` : ""}${m.fellBack ? html`<span class="badge warn">${t("fb.badge")}</span>` : ""}</div>
+    <${SectionBars} sections=${m.sections} />`;
+}
+function LatencyView({ st }) {
+  const [open, setOpen] = useState(null);
+  const lat = st.latency && typeof st.latency === "object" ? st.latency : {}, calls = Array.isArray(st.llmCalls) ? st.llmCalls : [], cfg = st.config ?? {};
+  const roles = Object.keys(lat).filter((r) => lat[r] && typeof lat[r] === "object");
+  const now = st.now ?? Date.now();
+  const callKey = (c, i) => `${c.ts}|${c.faction}|${c.role}|${i}`;
+  return html`<main class="view">
+    <section class="panel"><h2>${t("lat.sumTitle")} <span class="sub">${t("lat.sumSub")}</span></h2><div class="scroll"><table>
+      <thead><tr><th>${t("lat.col.role")}</th><th>${t("lat.col.n")}</th><th>${t("lat.col.ok")}</th><th>${t("lat.col.p50")}</th><th>${t("lat.col.p90")}</th><th>${t("lat.col.ttft")}</th><th>${t("lat.col.in")}</th><th>${t("lat.col.out")}</th><th>${t("lat.col.cached")}</th><th>${t("lat.col.last")}</th></tr></thead><tbody>
+      ${roles.map((r) => { const e = lat[r], slow = num(e.p90Ms) && e.p90Ms > SLOW_MS; return html`<tr key=${r}><td><b>${roleLabel(r)}</b></td><td>${dash(e.n)}</td>
+        <td><span class=${"badge " + (num(e.n) && e.okN === e.n ? "ok" : "warn")}>${dash(e.okN)}/${dash(e.n)}</span></td>
+        <td class="mono">${fmtMs(e.p50Ms)}</td><td class=${"mono" + (slow ? " slow" : "")}>${fmtMs(e.p90Ms)}</td><td class="mono">${fmtMs(e.avgTtftMs)}</td>
+        <td class="mono">${fmtTok(e.avgInTok)}</td><td class="mono">${fmtTok(e.avgOutTok)}</td><td class="mono">${fmtTok(e.avgCachedTok)}</td>
+        <td class="mono muted">${fmtMs(e.lastMs)}${num(e.lastAt) ? " , " + t("time.agoS", Math.max(0, Math.round((now - e.lastAt) / 1000))) : ""}</td></tr>`; })}</tbody></table>
+      ${!roles.length && html`<div class="empty">${t("lat.sumEmpty")}</div>`}</div></section>
+    <section class="panel" style=${{ marginTop: "12px" }}><h2>${t("lat.callsTitle")} <span class="sub">${t("lat.callsSub", calls.length)}</span></h2><div class="scroll"><table>
+      <thead><tr><th>${t("lat.col.time")}</th><th>${t("lat.col.faction")}</th><th>${t("lat.col.role")}</th><th>${t("cfg.model")}</th><th>${t("lat.col.in")}</th><th>${t("lat.col.out")}</th><th>${t("lat.col.cached")}</th><th>${t("lat.col.ttft")}</th><th>${t("lat.total")}</th><th>${t("lat.col.status")}</th><th>${t("lat.mode")}</th></tr></thead><tbody>
+      ${calls.slice(0, 200).map((c, i) => { if (!c || typeof c !== "object") return ""; const k = callKey(c, i), isOpen = open === k, slow = isSlow(c, cfg);
+        return [html`<tr key=${k} class=${"sqrow" + (isOpen ? " sel" : "") + (slow ? " slowrow" : "")} onClick=${() => setOpen(isOpen ? null : k)} title=${t("lat.rowTip")}>
+          <td class="mono muted">${num(c.ts) ? fmtClock(c.ts) : "-"}</td><td class=${facClass(c.faction)}>${dash(c.faction)}</td><td><b>${roleLabel(c.role)}</b></td><td class="muted">${dash(c.model)}</td>
+          <td class="mono">${fmtTok(c.inTok)}</td><td class="mono">${fmtTok(c.outTok)}</td><td class="mono">${fmtTok(c.cachedTok)}</td><td class="mono">${fmtMs(c.ttftMs)}</td><td class=${"mono" + (slow ? " slow" : "")}>${fmtMs(c.totalMs)}${slow ? html` <span class="badge warn">${t("lat.slow")}</span>` : ""}</td>
+          <td>${c.ok ? html`<span class="badge ok">${t("log.ok")}</span>` : html`<span class="badge bad" title=${c.error ?? ""}>${t("lat.err")}</span>`}${c.fellBack ? html` <span class="badge warn" title=${t("fb.tip", c.error ?? "?")}>${t("fb.badge")}</span>` : ""}</td>
+          <td class="muted">${dash(c.outputMode)}</td></tr>`,
+          isOpen && html`<tr key=${k + "d"} class="secdetail"><td colspan="11">${c.error ? html`<div class="muted wrap">${t("lat.error", c.error)}</div>` : ""}
+            <${SectionBars} sections=${c.sections} title=${t("lat.sections", dash(c.promptChars))} />${!c.sections || !Object.keys(c.sections).length ? html`<div class="dim">${t("lat.noSections")}</div>` : ""}</td></tr>`]; })}</tbody></table>
+      ${!calls.length && html`<div class="empty">${t("lat.callsEmpty")}</div>`}</div></section></main>`;
+}
+
 // ---- tabs ----
-const TABS = [["overview", "tab.overview"], ["map", "tab.map"], ["forces", "tab.forces"], ["hq", "tab.hq"], ["journal", "tab.journal"], ["missions", "tab.missions"], ["requests", "tab.requests"], ["hqchat", "tab.hqchat"], ["actions", "tab.actions"], ["loadouts", "tab.loadouts"], ["debug", "tab.debug"], ["usage", "tab.usage"]];
+const TABS = [["overview", "tab.overview"], ["map", "tab.map"], ["forces", "tab.forces"], ["hq", "tab.hq"], ["journal", "tab.journal"], ["missions", "tab.missions"], ["requests", "tab.requests"], ["hqchat", "tab.hqchat"], ["actions", "tab.actions"], ["loadouts", "tab.loadouts"], ["latency", "tab.latency"], ["debug", "tab.debug"], ["usage", "tab.usage"]];
 const TAB_KEY = "clw.tab", INACT_KEY = "clw.showInactive";
 const tabOf = (s) => { const k = String(s ?? "").replace(/^#/, ""), t = k === "config" ? "usage" : k; return TABS.some(([id]) => id === t) ? t : null; };
 function loadTab() {
@@ -1300,6 +1355,79 @@ function BackupBox({ v, setV, meta, busy, onTest, res }) {
     </div></details>`;
 }
 // small "answered by the backup model" badge for exchange / chat log rows
+// ---------- latency settings groups (llm-latency-design.md "New config"): key -> [type, default, min, max] ----------
+// A group is shown only when GET /api/config returned it (older sidecars lack most of them), and posted only when changed, so nothing is ever rejected as unknown.
+const ROLE_KEYS = ["commander", "planner", "sitrep", "journal", "hq", "translate"];
+const LAT_GROUPS = {
+  sitrep: { enabled: ["b", true], intervalSec: ["n", 120, 30, 3600] },
+  output: { mode: ["s", "json_object"], terse: ["b", true], reasonWords: ["n", 12, 4, 30] },
+  planner: { enabled: ["b", true], intervalSec: ["n", 180, 60, 900] },
+  roles: { commander: ["s", "strong"], planner: ["s", "strong"], sitrep: ["s", "weak"], journal: ["s", "weak"], hq: ["s", "strong"], translate: ["s", "weak"] },
+  escalate: { enabled: ["b", false], slot: ["s", "strong"] },
+  roleTimeouts: { commander: ["n", 0, 0, 300], planner: ["n", 0, 0, 300], sitrep: ["n", 0, 0, 300], journal: ["n", 0, 0, 300], hq: ["n", 0, 0, 300] },
+  prompt: { lean: ["b", true], staticBlock: ["b", true], cache: ["b", true], contactMax: ["n", 25, 5, 60], contactMaxAgeSec: ["n", 600, 60, 1800] },
+};
+const latTyped = (g, v) => Object.fromEntries(Object.entries(LAT_GROUPS[g]).map(([k, [ty, def]]) => {
+  const x = v?.[k];
+  return [k, ty === "b" ? (typeof x === "boolean" ? x : x === undefined || x === null ? def : !!x) : ty === "n" ? (x === "" || x === null || x === undefined || !Number.isFinite(Number(x)) ? def : Number(x)) : (typeof x === "string" && x ? x : def)];
+}));
+// form state from the config reply: groups the backend did not return are left out (their UI is hidden)
+function latInit(c) {
+  const out = { _lat: { snap: {} } };
+  for (const g of Object.keys(LAT_GROUPS)) {
+    const v = c?.[g];
+    if (!v || typeof v !== "object" || Array.isArray(v)) continue;
+    if (g === "roles" && !("planner" in v)) continue; // the pre-latency sidecar reports a read-only role map here
+    out[g] = latTyped(g, v);
+    out._lat.snap[g] = JSON.stringify(out[g]);
+  }
+  return out;
+}
+// adds the changed groups to the POST body
+function latBody(f, b) {
+  for (const g of Object.keys(f._lat?.snap ?? {})) {
+    const v = latTyped(g, f[g]);
+    if (JSON.stringify(v) !== f._lat.snap[g]) b[g] = v;
+  }
+}
+function LatencySettings({ f, setG }) {
+  const has_ = (g) => !!f._lat?.snap && g in f._lat.snap;
+  if (!Object.keys(f._lat?.snap ?? {}).some((g) => g !== "sitrep")) return "";
+  const sw = (g, k, label) => html`<label class="switch"><input type="checkbox" checked=${f[g][k]} onChange=${(e) => setG(g, k, e.target.checked)} /><span>${label}</span></label>`;
+  const nm = (g, k, label) => { const [, , min, max] = LAT_GROUPS[g][k]; return html`<label class="field"><span>${label}</span><input type="number" min=${min} max=${max} value=${f[g][k]} onInput=${(e) => setG(g, k, e.target.value)} /></label>`; };
+  const slotSel = (g, k, label) => html`<label class="field"><span>${label}</span><select value=${f[g][k]} onChange=${(e) => setG(g, k, e.target.value)}>
+    <option value="strong">${t("cfg.l.strong")}</option><option value="weak">${t("cfg.l.weak")}</option></select></label>`;
+  return html`<h3 class="cfgh">${t("cfg.l.title")}</h3><small class="muted">${t("cfg.l.note")}</small>
+    ${has_("output") && html`<h3 class="cfgh">${t("cfg.l.output")}</h3>
+      <label class="field"><span>${t("cfg.l.mode")}</span><select value=${f.output.mode} onChange=${(e) => setG("output", "mode", e.target.value)}>
+        <option value="json_object">${t("cfg.l.mode.json_object")}</option><option value="json_schema">${t("cfg.l.mode.json_schema")}</option><option value="text">${t("cfg.l.mode.text")}</option></select>
+        <small>${t("cfg.l.modeHelp")}</small></label>
+      <div class="pair">${sw("output", "terse", t("cfg.l.terse"))}${nm("output", "reasonWords", t("cfg.l.reasonWords"))}</div>
+      <small class="muted">${t("cfg.l.terseHelp")}</small>`}
+    ${has_("planner") && html`<h3 class="cfgh">${t("cfg.l.planner")}</h3>
+      <div class="pair">${sw("planner", "enabled", t("cfg.l.plannerOn"))}${nm("planner", "intervalSec", t("cfg.l.plannerInt"))}</div>
+      <small class="muted">${t("cfg.l.plannerHelp")}</small>`}
+    ${has_("roles") && html`<h3 class="cfgh">${t("cfg.l.roles")}</h3><small class="muted">${t("cfg.l.rolesHelp")}</small>
+      <div class="pair">${ROLE_KEYS.map((r) => slotSel("roles", r, tk("lat.role", r)))}</div>`}
+    ${has_("escalate") && html`<h3 class="cfgh">${t("cfg.l.escalate")}</h3>
+      <div class="pair">${sw("escalate", "enabled", t("cfg.l.escalateOn"))}${slotSel("escalate", "slot", t("cfg.l.escalateSlot"))}</div>
+      <small class="muted">${t("cfg.l.escalateHelp")}</small>`}
+    ${has_("roleTimeouts") && html`<h3 class="cfgh">${t("cfg.l.timeouts")}</h3><small class="muted">${t("cfg.l.timeoutsHelp")}</small>
+      <div class="pair">${Object.keys(LAT_GROUPS.roleTimeouts).map((r) => nm("roleTimeouts", r, tk("lat.role", r)))}</div>`}
+    ${has_("prompt") && html`<h3 class="cfgh">${t("cfg.l.prompt")}</h3>
+      <div class="pair">${sw("prompt", "lean", t("cfg.l.lean"))}${sw("prompt", "staticBlock", t("cfg.l.staticBlock"))}</div>
+      ${sw("prompt", "cache", t("cfg.l.cache"))}
+      <div class="pair">${nm("prompt", "contactMax", t("cfg.l.contactMax"))}${nm("prompt", "contactMaxAgeSec", t("cfg.l.contactAge"))}</div>
+      <small class="muted">${t("cfg.l.promptHelp")}</small>`}`;
+}
+// SITREP group (enabled + interval): the SITREP is its own LLM call on the sitrep role's slot
+function SitrepSettings({ f, setG }) {
+  if (!f._lat?.snap || !("sitrep" in f._lat.snap)) return "";
+  return html`<h3 class="cfgh">${t("cfg.l.sitrep")}</h3>
+    <div class="pair"><label class="switch"><input type="checkbox" checked=${f.sitrep.enabled} onChange=${(e) => setG("sitrep", "enabled", e.target.checked)} /><span>${t("cfg.l.sitrepOn")}</span></label>
+      <label class="field"><span>${t("cfg.l.sitrepInt")}</span><input type="number" min="30" max="3600" value=${f.sitrep.intervalSec} onInput=${(e) => setG("sitrep", "intervalSec", e.target.value)} /></label></div>
+    <small class="muted">${t("cfg.l.sitrepHelp")}</small>`;
+}
 const FbBadge = ({ x }) => (x?.fellBack ? html`<span class="badge warn" title=${t("fb.tip", x.primaryError ?? "?")}>${t("fb.badge")}</span>` : "");
 function Config({ st, toast, refresh }) {
   const [f, setF] = useState(null);
@@ -1316,7 +1444,7 @@ function Config({ st, toast, refresh }) {
       setF({ provider: c.provider, model: c.model, baseUrl: c.baseUrl, apiKey: "", timeoutSec: c.timeoutSec, maxTokens: c.maxTokens, enabled: !!c.enabled, engine: c.engine ?? "llm", minIntervalSec: c.minIntervalSec ?? 0, skipUnchanged: c.skipUnchanged !== false, stopAtLimit: c.stopAtLimit !== false, wakeup: { ...c.wakeup }, triggers: { ...c.triggers }, memory: { ...c.memory },
         fallback: fbForm(c.fallback),
         weak: { provider: c.weak?.provider ?? "none", model: c.weak?.model ?? "", baseUrl: c.weak?.baseUrl ?? "", apiKey: "", timeoutSec: c.weak?.timeoutSec ?? 30, fallback: fbForm(c.weak?.fallback) },
-        i18n: { enabled: c.i18n?.enabled !== false, translateTimeoutSec: c.i18n?.translateTimeoutSec ?? 10 } });
+        i18n: { enabled: c.i18n?.enabled !== false, translateTimeoutSec: c.i18n?.translateTimeoutSec ?? 10 }, ...latInit(c) });
       setKeyMeta({ set: c.apiKeySet, last4: c.apiKeyLast4 });
       setWeakKeyMeta({ set: !!c.weak?.apiKeySet, last4: c.weak?.apiKeyLast4 ?? "" });
       setFbKeyMeta({ strong: { set: !!c.fallback?.apiKeySet, last4: c.fallback?.apiKeyLast4 ?? "" }, weak: { set: !!c.weak?.fallback?.apiKeySet, last4: c.weak?.fallback?.apiKeyLast4 ?? "" } });
@@ -1337,6 +1465,7 @@ function Config({ st, toast, refresh }) {
     if (f.weak.provider === "none") b.weak = null; // no weak slot: the strong LLM translates
     else { b.weak = { provider: f.weak.provider, model: f.weak.model, baseUrl: f.weak.baseUrl, timeoutSec: Number(f.weak.timeoutSec), fallback: fbBody(f.weak.fallback) }; if (f.weak.apiKey) b.weak.apiKey = f.weak.apiKey; }
     b.i18n = { enabled: f.i18n.enabled, translateTimeoutSec: Number(f.i18n.translateTimeoutSec) };
+    latBody(f, b);
     return b;
   };
   const save = async (e) => {
@@ -1436,6 +1565,8 @@ function Config({ st, toast, refresh }) {
       <div class="pair">${gsw("triggers", "objectiveChanged", t("cfg.tr.objectiveChanged"))}${gsw("triggers", "unitSpawned", t("cfg.tr.unitSpawned"))}</div>
       <div class="pair">${gsw("triggers", "missionEvent", t("cfg.tr.missionEvent"))}${gnum("triggers", "ticketsDropPct", t("cfg.tr.ticketsDrop"), 0, 100)}</div>
       <small class="muted">${t("cfg.trNote")}</small>
+      <${SitrepSettings} f=${f} setG=${setG} />
+      <${LatencySettings} f=${f} setG=${setG} />
       <${MemorySettings} f=${f} setG=${setG} />
       ${f.provider === "openrouter" && html`<label class="switch"><input type="checkbox" checked=${f.stopAtLimit} onChange=${(e) => set("stopAtLimit", e.target.checked)} />
         <span>${t("cfg.stopAtLimit")} <span class="muted">${t("cfg.stopAtLimitNote")}</span></span></label>`}
@@ -1543,7 +1674,7 @@ function App() {
       <button class="btn ghost mini" type="button" onClick=${logout}>${t("auth.logout")}</button>
       <select class="langsel" value=${getLang()} onChange=${(e) => setLang(e.target.value)} title=${t("lang.title")} aria-label=${t("lang.title")}>${LANGS.map((l) => html`<option key=${l} value=${l}>${l.toUpperCase()}</option>`)}</select>
     </header>
-    ${tab !== "usage" && tab !== "debug" && tab !== "actions" && tab !== "loadouts" && html`<div class="subwrap"><${FactionBar} names=${names} faction=${fac} setFaction=${setFaction} hidden=${st.hidden ?? []} showInactive=${showInactive} setShowInactive=${setShowInactive} /></div>`}
+    ${tab !== "usage" && tab !== "debug" && tab !== "actions" && tab !== "loadouts" && tab !== "latency" && html`<div class="subwrap"><${FactionBar} names=${names} faction=${fac} setFaction=${setFaction} hidden=${st.hidden ?? []} showInactive=${showInactive} setShowInactive=${setShowInactive} /></div>`}
     ${st.auth?.defaultPassword && html`<div class="subwrap"><div class="banner warn">${t("auth.defaultBanner")} <a href="#usage" onClick=${go("usage")}>${t("auth.defaultGo")}</a></div></div>`}
     ${tab === "overview" && html`<${Overview} ...${common} />`}
     ${tab === "map" && html`<${MapView} ...${common} layers=${layers} setLayers=${setLayers} world=${world} />`}
@@ -1555,6 +1686,7 @@ function App() {
     ${tab === "hqchat" && html`<${HqChatView} st=${st} faction=${fac} />`}
     ${tab === "actions" && html`<${ActionsView} st=${st} />`}
     ${tab === "loadouts" && html`<${LoadoutsView} toast=${toast} />`}
+    ${tab === "latency" && html`<${LatencyView} st=${st} />`}
     ${tab === "debug" && html`<${DebugView} st=${st} />`}
     ${tab === "usage" && html`<${Config} st=${st} toast=${toast} refresh=${refresh} />`}
     <div class="toasts">${toasts.map((t) => html`<div class=${"toast " + t.kind} key=${t.id}>${t.text}</div>`)}</div>
