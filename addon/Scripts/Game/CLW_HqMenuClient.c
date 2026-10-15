@@ -1,6 +1,7 @@
 // HQ menu, client side data and entry points (M4 WP4). Wire format: see CLW_HqMenuServer.c. The dialog is CLW_HqMenuDialog
 // (preset Configs/CLW/UI/HqMenuDialog.conf, content layout UI/layouts/CLW/HqMenuContent.layout), same approach as the setup menu.
 // Text fields of the payload are CLW_Loc wires (or plain content names): the dialog renders them with CLW_Loc.Resolve in the game language.
+// The same payload also feeds the HQ radial menu (CLW_HqRadial.OnPayload; it asks with the action "refresh").
 // Log prefix: "CLW: hqmenu".
 
 class CLW_HqOption
@@ -202,6 +203,8 @@ class CLW_HqMenuClient
 			return;
 		}
 
+		CLW_HqRadial.OnPayload(data);	// cached for the radial menu, which never opens the dialog
+
 		if (s_Dialog && s_Dialog.IsOpen())
 		{
 			s_Dialog.Update(data);
@@ -241,6 +244,9 @@ class CLW_HqMenuClient
 
 	static void RegisterChatCommand()
 	{
+		CLW_HqRadial.Init();	// the radial menu (input action CLW_HqRadial) starts with the first controlled character, like /hqmenu
+		CLW_HqRadial.RegisterChatCommand();
+
 		SCR_ChatPanelManager chat = SCR_ChatPanelManager.GetInstance();
 		if (!chat)
 			return;

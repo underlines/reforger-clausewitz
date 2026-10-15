@@ -1,6 +1,6 @@
 // HQ menu, server side (M4 WP4, VISION 6a light). One dialog (CLW_HqMenuDialog) with the sections Requests, Squad, Base, Contact report.
 // Opened from the "Open HQ menu" action of the request terminal (CLW_HqMenuAction) or the chat command /hqmenu. Server authoritative:
-// every button runs the SAME code as the chat commands (CLW_RequestService.Handle = /request, CLW_Reports.Chat = /report,
+// every button runs the SAME code as the chat commands (CLW_RequestService.Handle = /request, CLW_Reports.Chat = /report, CLW_Backup.Chat = /backup,
 // CLW_PlayerSquad.Join = joining AI squads, CLW_SitrepClient = /sitrep), so rules, cooldowns and logs stay in one place.
 // Data to the client is a flat TAB / LF text (same idea as CLW_SetupServer.BuildWire), one line per item, first field = line type:
 //   H <faction> <role> <supplies> <base label> <running 0|1>            header (who you are, where the stock comes from)
@@ -63,7 +63,7 @@ class CLW_HqMenuServer
 		Push(playerId, terminalPos, "");
 	}
 
-	// A button of the menu. action: req | join | leave | report | lang | refresh. Runs the shared code, then pushes fresh data.
+	// A button of the menu. action: req | join | leave | report (arg = /report syntax, direction may be a bearing or ahead) | report_cancel | backup (arg = note) | lang | refresh. Runs the shared code, then pushes fresh data.
 	static void Action(int playerId, string action, string arg, vector terminalPos)
 	{
 		if (!Replication.IsServer() || playerId <= 0)
@@ -105,6 +105,27 @@ class CLW_HqMenuServer
 			if (status.IsEmpty())
 				status = CLW_Loc.W("#CLW-HqMenu_Answered");
 		}
+		else if (action == "report_cancel")
+		{
+			CLW_Reports.ChatWire(playerId, "cancel", status);	// the same code as /report cancel; answers chat + hint itself
+			if (status.IsEmpty())
+				status = CLW_Loc.W("#CLW-HqMenu_Answered");
+		}
+		else if (action == "backup")
+		{
+			CLW_Backup.ChatWire(playerId, arg, status);	// the same code as /backup <note> (arg = note); answers chat + hint itself
+			if (status.IsEmpty())
+				status = CLW_Loc.W("#CLW-HqMenu_Answered");
+		}
+		else if (action == "mission" || action == "status")
+		{
+			// radial menu: the registry entries REQUEST_MISSION / REQUEST_STATUS as the player (same path as an /hq action)
+			string entryName = "REQUEST_STATUS";
+			if (action == "mission")
+				entryName = "REQUEST_MISSION";
+			status = RunPlayerEntry(playerId, entryName);
+			CLW_RequestService.Answer(playerId, status, true);
+		}
 		else if (action == "join")
 		{
 			status = JoinSquad(playerId, arg);
@@ -131,6 +152,34 @@ class CLW_HqMenuServer
 		}
 
 		Push(playerId, terminalPos, status);
+	}
+
+	// One player registry entry without params, run as the player (authority "player"); returns the answer wire.
+	protected static string RunPlayerEntry(int playerId, string actionName)
+	{
+		CLW_ActionRegistry registry = CLW_ActionRegistry.Get();
+		CLW_ActionEntry entry = registry.Find(actionName);
+		if (!entry || entry.m_sAuthority != CLW_ActionEntry.AUTH_PLAYER)
+			return CLW_Loc.W("#CLW-Hq_NotAllowed", actionName);
+
+		CLW_ActionCall call = new CLW_ActionCall();
+		call.m_sAction = actionName;
+		call.m_sFaction = CLW_RequestService.FactionKeyOf(playerId);
+		call.m_sAuthority = CLW_ActionEntry.AUTH_PLAYER;
+		call.m_sSource = "player";
+		call.m_iPlayerId = playerId;
+		call.m_sReason = "hq menu by " + CLW_RequestService.PlayerName(playerId);
+		CLW_RemoteCommander commander = CLW_GameMode.GetCommander(call.m_sFaction);
+		if (commander)
+			call.m_Rules = commander.GetRules();
+
+		string result;
+		bool granted = registry.Run(call, result);
+		Print(string.Format("CLW: hqmenu entry %1 player=%2 -> %3: %4", actionName, playerId, granted, result), LogLevel.NORMAL);
+		if (granted)
+			return CLW_Loc.W("#CLW-Req_Granted", call.PlayerWire(result));
+
+		return CLW_Loc.W("#CLW-Req_Refused", actionName, call.PlayerWire(result));
 	}
 
 	protected static void Push(int playerId, vector terminalPos, string status)

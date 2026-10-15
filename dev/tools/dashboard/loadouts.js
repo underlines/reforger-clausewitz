@@ -3,7 +3,7 @@
 // (sidecar, loadouts.mjs; loadout strings are not sent to the browser). Writes: POST /api/loadouts/copy|reorder|compositions|pins|restart,
 // POST/DELETE /api/loadouts/library/<id>. The 7-active-per-faction cap is enforced by the sidecar (HTTP 409 -> toast).
 import { html, useState, useEffect, useCallback } from "/vendor/standalone.module.js";
-import { t, getLang } from "/i18n.js";
+import { t, tk, getLang } from "/i18n.js";
 
 const num = (v) => typeof v === "number" && Number.isFinite(v);
 const STATUS_CLS = { ok: "ok", degraded: "warn", invalid: "bad" };
@@ -18,7 +18,76 @@ async function call(method, url, body) {
   return { ok: r.ok, status: r.status, j };
 }
 
-const StatusBadge = ({ s }) => html`<span class=${"badge " + (STATUS_CLS[s] ?? "")}>${s ?? "-"}</span>`;
+// ---------- item details (optional per record: a summary comes with the list, the full list is fetched on "Show items") ----------
+const GROUPS = [
+  ["weapons", ["rifle", "sniper", "machinegun", "launcher", "pistol", "weapon"]],
+  ["ammo", ["magazine"]],
+  ["attachments", ["attachment"]],
+  ["clothing", ["headwear", "torso", "legs", "footwear", "handwear", "clothing"]],
+  ["gear", ["vest", "backpack", "equipment"]],
+  ["medical", ["medical"]],
+  ["explosives", ["throwable", "explosive"]],
+];
+const GROUP_ORDER = [...GROUPS.map(([g]) => g), "other"];
+const groupOf = (type) => (GROUPS.find(([, ts]) => ts.includes(type)) ?? ["other"])[0];
+const itemName = (i) => i.name || i.key || (i.path ? shortPath(i.path).replace(/[.][a-z]+$/i, "") : "") || i.id; // the GUID is the last resort
+const FILTER_FROM = 12; // the filter box shows from this many distinct items
+function groupCounts(types) {
+  const c = {};
+  for (const [type, n] of Object.entries(types ?? {})) c[groupOf(type)] = (c[groupOf(type)] ?? 0) + n;
+  return GROUP_ORDER.filter((g) => c[g]).map((g) => [g, c[g]]);
+}
+
+// compact summary + toggle; records without details show the plain item count
+function ItemsCell({ rec, open, toggle }) {
+  const s = rec.summary, n = s ? s.items : (rec.items ?? []).length;
+  const chips = s ? groupCounts(s.types) : [];
+  return html`<div class="lo-sum">
+    <div class="lo-sumline"><b>${n}</b> ${t("lo.itemsWord")}${s && s.totalCost >= 0 ? " · " + t("lo.supplies", s.totalCost) : ""}${s?.primary ? " · " + t("lo.primary", s.primary) : ""}${rec.missing?.length ? html` <${Missing} list=${rec.missing} />` : ""}</div>
+    ${chips.length > 0 && html`<div class="lo-chips">${chips.map(([g, c]) => html`<span class="lo-chip" key=${g}>${c} ${t("lo.grp." + g)}</span>`)}</div>`}
+    <button class="btn ghost mini" type="button" aria-expanded=${open} onClick=${toggle}>${open ? t("lo.hideItems") : t("lo.showItems")}</button>
+  </div>`;
+}
+
+// expanded row: items grouped by type (name, count, cost), sorted, filter box for long lists; raw prefab ids when the game sent no details
+function ItemDetails({ kind, recKey, stamp }) {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    let off = false;
+    call("GET", "/api/loadouts/" + kind + "/" + encodeURIComponent(recKey) + "/items")
+      .then((r) => { if (off) return; if (r.ok) { setData(r.j); setErr(null); } else setErr(r.j.error ?? String(r.status)); })
+      .catch((e) => { if (!off) setErr(e.message); });
+    return () => { off = true; };
+  }, [kind, recKey, stamp]);
+  if (err) return html`<div class="muted">${t("common.failed", err)}</div>`;
+  if (!data) return html`<div class="muted">${t("common.loading")}</div>`;
+  const info = data.itemInfo ?? [];
+  if (!info.length) return html`<div><small class="muted">${t("lo.noDetails")}</small><br /><${Items} list=${data.items} /></div>`;
+  const needle = q.trim().toLowerCase();
+  const shown = needle ? info.filter((i) => (itemName(i) + " " + i.type + " " + i.id).toLowerCase().includes(needle)) : info;
+  const byGroup = new Map(GROUP_ORDER.map((g) => [g, []]));
+  for (const i of shown) byGroup.get(groupOf(i.type)).push(i);
+  const sum = info.reduce((a, i) => a + (i.cost >= 0 ? i.cost * i.count : 0), 0);
+  return html`<div class="lo-details">
+    ${info.length >= FILTER_FROM && html`<input type="search" class="lo-filter" value=${q} placeholder=${t("lo.filter")} onInput=${(e) => setQ(e.target.value)} />`}
+    <div class="lo-itemwrap"><table class="lo-itemtable">
+      <thead><tr><th>${t("lo.col.name")}</th><th class="num">${t("lo.col.qty")}</th><th class="num">${t("lo.col.cost")}</th></tr></thead>
+      ${GROUP_ORDER.filter((g) => byGroup.get(g).length).map((g) => html`<tbody key=${g}>
+        <tr class="lo-grp"><th colSpan="3">${t("lo.grp." + g)} <span class="muted">(${byGroup.get(g).reduce((a, i) => a + i.count, 0)})</span></th></tr>
+        ${[...byGroup.get(g)].sort((a, b) => itemName(a).localeCompare(itemName(b), getLang()) || a.id.localeCompare(b.id)).map((i) => html`<tr key=${i.id}>
+          <td title=${i.id + (i.path ? "\n" + i.path : "")}>${itemName(i)} <span class="muted lo-type">${tk("lo.type", i.type)}</span></td>
+          <td class="num">${i.count > 1 ? "x" + i.count : "1"}</td><td class="num">${i.cost >= 0 ? i.cost : "-"}</td></tr>`)}
+      </tbody>`)}
+    </table></div>
+    ${shown.length === 0 && html`<div class="muted">${t("lo.noMatch")}</div>`}
+    <small class="muted">${t("lo.itemsFoot", sum, data.totalCost >= 0 ? data.totalCost : "-")}</small>
+  </div>`;
+}
+const DetailRow = ({ span, ...props }) => html`<tr class="lo-detail"><td colSpan=${span}><${ItemDetails} ...${props} /></td></tr>`;
+
+const StatusBadge =({ s }) => html`<span class=${"badge " + (STATUS_CLS[s] ?? "")}>${s ?? "-"}</span>`;
 const Items = ({ list }) => (list?.length
   ? html`<span class="lo-items">${list.map((p) => html`<span class="mono lo-item" title=${p}>${shortPath(p)}</span>`)}</span>`
   : html`<span class="muted">-</span>`);
@@ -58,10 +127,11 @@ function PlayersTable({ faction, rows, d, act }) {
 }
 function PlayerRow({ p, d, open, startCopy, cancel, doCopy, name, setName, role, setRole }) {
   const bad = p.status === "degraded" || p.status === "invalid";
-  return html`<tr class=${bad ? "lo-bad" : ""}>
+  const [showItems, setShowItems] = useState(false);
+  return [html`<tr class=${bad ? "lo-bad" : ""} key="row">
       <td><b>${p.playerName || p.identityId}</b> <span class="muted mono" title=${p.identityId}>${p.basePrefab ? shortPath(p.basePrefab) : ""}</span></td>
       <td class="muted">${fmtSaved(p.savedAt)}</td>
-      <td title=${(p.items ?? []).join("\n")}>${(p.items ?? []).length}${p.missing?.length ? html` <${Missing} list=${p.missing} />` : ""}</td>
+      <td title=${(p.items ?? []).join("\n")}><${ItemsCell} rec=${p} open=${showItems} toggle=${() => setShowItems(!showItems)} /></td>
       <td><${Addons} list=${p.addons} d=${d} /></td>
       <td><${StatusBadge} s=${p.status} /></td>
       <td>${open
@@ -70,7 +140,7 @@ function PlayerRow({ p, d, open, startCopy, cancel, doCopy, name, setName, role,
             <button class="btn mini" type="button" onClick=${() => doCopy(p)}>${t("lo.copyConfirm")}</button>
             <button class="btn ghost mini" type="button" onClick=${cancel}>${t("common.cancel")}</button></span>`
         : html`<button class="btn ghost mini" type="button" onClick=${() => startCopy(p)}>${t("lo.copy")}</button>`}</td>
-    </tr>`;
+    </tr>`, showItems && html`<${DetailRow} key="detail" span=${6} kind="player" recKey=${p.identityId + "|" + p.faction} stamp=${p.savedAt} />`];
 }
 
 const Missing = ({ list }) => html`<span class="badge bad" title=${list.join("\n")}>${t("lo.missingN", list.length)}</span>`;
@@ -92,22 +162,24 @@ function LibraryTable({ faction, rows, d, act }) {
   const sorted = [...rows].sort((a, b) => (b.active - a.active) || (a.order - b.order) || a.id.localeCompare(b.id, "en", { numeric: true }));
   return html`<div class="scroll"><table>
     <thead><tr><th>${t("lo.col.active")}</th><th>${t("lo.col.order")}</th><th>${t("lo.col.name")}</th><th>${t("lo.col.role")}</th><th>${t("col.status")}</th><th>${t("lo.col.items")}</th><th>${t("lo.col.addons")}</th><th>${t("lo.col.source")}</th><th></th></tr></thead>
-    <tbody>${sorted.map((e) => {
-      const bad = e.status === "degraded" || e.status === "invalid";
-      return html`<tr key=${e.id} class=${bad ? "lo-bad" : ""}>
-        <td><label class="switch"><input type="checkbox" checked=${e.active} onChange=${(ev) => act("POST", "/api/loadouts/library/" + e.id, { active: ev.target.checked })} /></label></td>
-        <td class="nowrap">${e.active ? html`<b>${e.order}</b>
-          <button class="btn ghost mini" type="button" disabled=${e.order <= 1} onClick=${() => move(e, -1)} title=${t("lo.up")}>^</button><button class="btn ghost mini" type="button" disabled=${e.order >= active.length} onClick=${() => move(e, 1)} title=${t("lo.down")}>v</button>` : html`<span class="muted">-</span>`}</td>
-        <td><input type="text" class="lo-name" value=${e.name} key=${e.id + e.name} maxlength="80" onBlur=${(ev) => { const v = ev.target.value.trim(); if (v && v !== e.name) act("POST", "/api/loadouts/library/" + e.id, { name: v }); }} /></td>
-        <td><select value=${e.role} onChange=${(ev) => act("POST", "/api/loadouts/library/" + e.id, { role: ev.target.value })}><option value="">${t("lo.noRole")}</option>${d.roles.map((r) => html`<option value=${r}>${roleLabel(r)}</option>`)}</select></td>
-        <td><${StatusBadge} s=${e.status} /></td>
-        <td class="wrap"><span title=${(e.items ?? []).join("\n")}>${(e.items ?? []).length}</span>${e.missing?.length ? html` <${Missing} list=${e.missing} /> <${Items} list=${e.missing} />` : ""}</td>
-        <td class="wrap"><${Addons} list=${e.addons} d=${d} /></td>
-        <td class="muted">${e.createdFrom?.playerName || e.createdFrom?.identityId || "-"}</td>
-        <td><button class="btn ghost mini" type="button" onClick=${() => del(e)}>${t("lo.delete")}</button></td>
-      </tr>`;
-    })}</tbody>
+    <tbody>${sorted.map((e) => html`<${LibraryRow} key=${e.id} e=${e} active=${active} d=${d} act=${act} move=${move} del=${del} />`)}</tbody>
   </table></div>`;
+}
+function LibraryRow({ e, active, d, act, move, del }) {
+  const bad = e.status === "degraded" || e.status === "invalid";
+  const [showItems, setShowItems] = useState(false);
+  return [html`<tr class=${bad ? "lo-bad" : ""} key="row">
+        <td><label class="switch"><input type="checkbox" checked=${e.active} onChange=${(ev) => act("POST", "/api/loadouts/library/" + e.id, { active: ev.target.checked })} /></label></td>
+    <td class="nowrap">${e.active ? html`<b>${e.order}</b>
+      <button class="btn ghost mini" type="button" disabled=${e.order <= 1} onClick=${() => move(e, -1)} title=${t("lo.up")}>^</button><button class="btn ghost mini" type="button" disabled=${e.order >= active.length} onClick=${() => move(e, 1)} title=${t("lo.down")}>v</button>` : html`<span class="muted">-</span>`}</td>
+    <td><input type="text" class="lo-name" value=${e.name} key=${e.id + e.name} maxlength="80" onBlur=${(ev) => { const v = ev.target.value.trim(); if (v && v !== e.name) act("POST", "/api/loadouts/library/" + e.id, { name: v }); }} /></td>
+    <td><select value=${e.role} onChange=${(ev) => act("POST", "/api/loadouts/library/" + e.id, { role: ev.target.value })}><option value="">${t("lo.noRole")}</option>${d.roles.map((r) => html`<option value=${r}>${roleLabel(r)}</option>`)}</select></td>
+    <td><${StatusBadge} s=${e.status} /></td>
+    <td class="wrap"><span title=${(e.items ?? []).join("\n")}><${ItemsCell} rec=${e} open=${showItems} toggle=${() => setShowItems(!showItems)} /></span>${e.missing?.length ? html` <${Items} list=${e.missing} />` : ""}</td>
+    <td class="wrap"><${Addons} list=${e.addons} d=${d} /></td>
+    <td class="muted">${e.createdFrom?.playerName || e.createdFrom?.identityId || "-"}</td>
+    <td><button class="btn ghost mini" type="button" onClick=${() => del(e)}>${t("lo.delete")}</button></td>
+      </tr>`, showItems && html`<${DetailRow} key="detail" span=${9} kind="library" recKey=${e.id} stamp=${e.id + ":" + (e.summary?.items ?? 0) + ":" + (e.totalCost ?? "")} />`];
 }
 
 function CompositionsPanel({ d, act }) {

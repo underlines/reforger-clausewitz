@@ -93,10 +93,32 @@ class CLW_Situation
 		AppendLogistics(json);
 		AppendRequests(json);
 		AppendStructures(json);
+		AppendHqContext(json);
 		return squadCount;
 	}
 
-	// Own base/FOB structures (structures[]: base, kind, label, pos [x,z], grid) for the dashboard map. Appended after the trim.
+	// Weather and time (env), the commander's trait (hq) and open help calls (helpCalls[]). Appended after the trim; each part is
+	// left out when its module has nothing (dev/notes/hq-comms-env-traits-design.md).
+	protected void AppendHqContext(inout string json)
+	{
+		if (json.Length() < 2)
+			return;
+
+		string extra = "";
+		string env = CLW_Environment.GetJson();
+		if (!env.IsEmpty())
+			extra += ",\"env\":" + env;
+		string hq = CLW_HqPersona.GetJson(m_sFaction);
+		if (!hq.IsEmpty())
+			extra += ",\"hq\":" + hq;
+		string calls = CLW_Backup.GetJson(m_sFaction);
+		if (!calls.IsEmpty())
+			extra += ",\"helpCalls\":" + calls;
+		if (!extra.IsEmpty())
+			json = CLW_Str.DropLast(json) + extra + "}";
+	}
+
+	// Own base/FOB structures (structures[: base, kind, label, pos [x,z], grid) for the dashboard map. Appended after the trim.
 	protected void AppendStructures(inout string json)
 	{
 		if (json.Length() < 2)

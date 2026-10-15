@@ -381,6 +381,68 @@ class CLW_ForceCatalog
 		return type;
 	}
 
+	// A kin entry shows the side's own soldiers: every infantry group it carries (own group of a foot entry, embarked cargo group, escort
+	// group of a vehicle entry) is replaced by the side's own foot group closest in size (CLW_SidePool.PickOwnGroup). Vehicle crews come from
+	// the vehicle prefab (default occupants) and cannot be swapped here, they are logged. A side without any own foot group (tiny pack) keeps
+	// the kin soldiers, with a WARNING. overrides.json kinInfantry "kin" turns this off.
+	protected void SwapKinInfantry(string sideKey, notnull CLW_ForceEntry copy, notnull array<ref CLW_ForceEntry> own, notnull CLW_SideRules rules)
+	{
+		if (copy.HasVehicle() && copy.m_iCrewSeats != 0)
+			Print(string.Format("CLW: sidepool %1: %2 vehicle crew (%3 seats) is the vehicle prefab's default occupants, kept (not swappable)", sideKey, copy.m_sType, copy.m_iCrewSeats), LogLevel.NORMAL);
+
+		if (!rules.KinInfantryOwn())
+			return;
+
+		if (!copy.m_GroupPrefab.IsEmpty())
+		{
+			string groupKind = CLW_ForceKind.INFANTRY;
+			bool groupAt;
+			if (!copy.HasVehicle())
+			{
+				groupKind = copy.m_sKind;
+				groupAt = copy.m_bAntiArmor;
+			}
+
+			CLW_ForceEntry groupPick = CLW_SidePool.PickOwnGroup(own, groupKind, copy.m_iGroupMembers, -1, groupAt);
+			if (!groupPick)
+			{
+				Print(string.Format("CLW: sidepool %1: %2 keeps kin infantry %3, the side has no own infantry group (tiny pack)", sideKey, copy.m_sType, CLW_SidePool.BaseOf(copy.m_GroupPrefab)), LogLevel.WARNING);
+			}
+			else
+			{
+				Print(string.Format("CLW: sidepool %1: %2 infantry %3 -> own %4 (%5 -> %6 members)", sideKey, copy.m_sType, CLW_SidePool.BaseOf(copy.m_GroupPrefab), CLW_SidePool.BaseOf(groupPick.m_GroupPrefab), copy.m_iGroupMembers, groupPick.m_iGroupMembers), LogLevel.NORMAL);
+				copy.m_GroupPrefab = groupPick.m_GroupPrefab;
+				copy.m_iGroupMembers = groupPick.m_iGroupMembers;
+				if (!copy.HasVehicle())
+				{
+					copy.m_iCost = groupPick.m_iCost;
+					copy.m_bAntiArmor = groupPick.m_bAntiArmor;
+				}
+			}
+		}
+
+		if (!copy.m_CargoGroupPrefab.IsEmpty())
+		{
+			int capacity = copy.m_iCargoSeats;
+			CLW_ForceEntry cargoPick = CLW_SidePool.PickOwnGroup(own, CLW_ForceKind.INFANTRY, copy.m_iCargoMembers, capacity, false);
+			if (!cargoPick)
+			{
+				Print(string.Format("CLW: sidepool %1: %2 keeps kin cargo infantry %3, the side has no own infantry group (tiny pack)", sideKey, copy.m_sType, CLW_SidePool.BaseOf(copy.m_CargoGroupPrefab)), LogLevel.WARNING);
+			}
+			else
+			{
+				Print(string.Format("CLW: sidepool %1: %2 cargo infantry %3 -> own %4 (%5 -> %6 members, %7 seats)", sideKey, copy.m_sType, CLW_SidePool.BaseOf(copy.m_CargoGroupPrefab), CLW_SidePool.BaseOf(cargoPick.m_GroupPrefab), copy.m_iCargoMembers, cargoPick.m_iGroupMembers, capacity), LogLevel.NORMAL);
+				copy.m_CargoGroupPrefab = cargoPick.m_GroupPrefab;
+				copy.m_iCargoMembers = cargoPick.m_iGroupMembers;
+				if (copy.m_iVehicleCost > 0)
+					copy.m_iCost = copy.m_iVehicleCost + cargoPick.m_iCost;
+
+				if (!copy.m_sVehicleName.IsEmpty() && copy.m_sName.Contains(" + "))
+					copy.m_sName = copy.m_sVehicleName + " + " + cargoPick.m_sName;
+			}
+		}
+	}
+
 	// Fills the roles (kinds) the own list lacks from the kin factions in priority order. Own entries stay untouched; imported clones go to
 	// 'imported' (type id "kin_<type>", m_sKinFrom / m_sSource tell the origin). A role is filled by the first kin faction that has it.
 	protected void FillFromKin(string sideKey, CLW_FactionProfile profile, notnull CLW_SideRules rules, notnull array<ref CLW_ForceEntry> entries, notnull array<ref CLW_ForceEntry> imported)
@@ -458,6 +520,10 @@ class CLW_ForceCatalog
 					copy.m_sType = UniqueType("kin_" + candidate.m_sType, entries, imported);
 					copy.m_sKinFrom = kinKey;
 					copy.m_sSource = "kin " + kinKey;
+					SwapKinInfantry(sideKey, copy, entries, rules);
+					if (!copy.HasVehicle() && CLW_SidePool.IsDuplicate(imported, copy))
+						continue;	// two kin foot teams ended up on the same own group
+
 					string how = "filled from";
 					if (!missing.Contains(kind))
 					{
@@ -937,6 +1003,12 @@ class CLW_ForceCatalog
 		catalog.GetEntityList(list);
 		bool needSpawnerData = AnySpawnerData(list);
 		int added;
+		map<string, bool> ownChars = new map<string, bool>();
+		map<string, bool> otherChars = new map<string, bool>();
+		CLW_RolePicker.OwnershipSets(faction, ownChars, otherChars);
+		array<ref CLW_ForceEntry> pending = {};
+		array<bool> pendingForeign = {};
+		array<ResourceName> pendingPath = {};
 		foreach (SCR_EntityCatalogEntry entry : list)
 		{
 			if (!entry || !entry.IsEnabled())
@@ -963,6 +1035,8 @@ class CLW_ForceCatalog
 
 			if (members < CLW_WarConfig.DISCOVER_MIN_GROUP_MEMBERS)
 				continue;
+
+			bool foreignGroup = !slots.IsEmpty() && CLW_RolePicker.IsForeignGroup(slots, ownChars, otherChars);
 
 			// roles from the member prefabs
 			int scouts;
@@ -1005,13 +1079,42 @@ class CLW_ForceCatalog
 			fresh.m_bAntiArmor = antiTank > 0;
 			if (slots.IsEmpty() && members <= CLW_WarConfig.DISCOVER_AT_TEAM_MAX_MEMBERS && labels.Contains(EEditableEntityLabel.TRAIT_ARMORPIERCING))
 				fresh.m_bAntiArmor = true;
-			string sig = Signature(fresh) + "|" + cost;
+			pending.Insert(fresh);
+			pendingForeign.Insert(foreignGroup);
+			pendingPath.Insert(prefab);
+		}
+
+		// Groups made of another faction's soldiers (a vanilla squad listed in a pack faction's catalog) only fill a kind the faction has no
+		// group of its own for. Order and signature dedupe are as before, so a faction without foreign groups is unchanged.
+		array<string> ownKinds = {};
+		for (int p = 0; p < pending.Count(); p++)
+		{
+			if (!pendingForeign[p] && !ownKinds.Contains(pending[p].m_sKind))
+				ownKinds.Insert(pending[p].m_sKind);
+		}
+
+		for (int q = 0; q < pending.Count(); q++)
+		{
+			CLW_ForceEntry candidate = pending[q];
+			if (pendingForeign[q])
+			{
+				if (ownKinds.Contains(candidate.m_sKind))
+				{
+					Print(string.Format("CLW: catalog discovery %1: group %2 skipped (its members are another faction's characters, the faction has its own %3 groups)", factionKey, pendingPath[q], candidate.m_sKind), LogLevel.NORMAL);
+					continue;
+				}
+
+				Print(string.Format("CLW: catalog discovery %1: group %2 is made of another faction's characters but the faction has no own %3 group, kept", factionKey, pendingPath[q], candidate.m_sKind), LogLevel.WARNING);
+			}
+
+			string sig = Signature(candidate) + "|" + candidate.m_iCost;
 			if (signatures.Contains(sig))
 				continue;
 
 			signatures.Insert(sig);
-			entries.Insert(fresh);
+			entries.Insert(candidate);
 			added++;
+			Print(string.Format("CLW: catalog discovery %1: group %2 -> %3 (%4, %5 members, foreign=%6)", factionKey, pendingPath[q], candidate.m_sType, candidate.m_sKind, candidate.m_iGroupMembers, pendingForeign[q]), LogLevel.NORMAL);
 		}
 
 		return added;

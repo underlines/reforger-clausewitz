@@ -623,3 +623,132 @@ CLW-Loadout_MySaved ::: My saved loadout ::: Mein gespeichertes Loadout
 CLW-Loadout_Save ::: Save my loadout ::: Mein Loadout speichern
 CLW-Loadout_SaveRefused ::: Loadout not saved: %1 items are not available to your side. ::: Loadout nicht gespeichert: %1 Gegenstände sind für deine Seite nicht verfügbar.
 CLW-Loadout_Saved ::: Loadout saved (%1 items). ::: Loadout gespeichert (%1 Gegenstände).
+
+// ---- wp1 (hq-comms-env-traits) ----
+CLW-Rep_Usage2 ::: Usage: /report <count> <inf|veh|armor|air|unknown> <distance m> [direction N|NE|E|SE|S|SW|W|NW, degrees or ahead], or /report cancel ::: Verwendung: /report <Anzahl> <inf|veh|armor|air|unknown> <Entfernung m> [Richtung N|NE|E|SE|S|SW|W|NW, Grad oder ahead], oder /report cancel
+CLW-Rep_Type2 ::: The type must be inf, veh, armor, air or unknown. ::: Der Typ muss inf, veh, armor, air oder unknown sein.
+CLW-Rep_DirectionUnclear2 ::: Direction not understood (N NE E SE S SW W NW, degrees 0-360 or ahead). ::: Richtung nicht verstanden (N NE E SE S SW W NW, Grad 0-360 oder ahead).
+CLW-Rep_DirAhead ::: ahead (%1 deg) ::: voraus (%1 deg)
+CLW-Rep_Kind_air ::: aircraft ::: Luftfahrzeuge
+CLW-Rep_Kind_unknown ::: unknown contacts ::: unbekannte Kontakte
+CLW-Rep_CancelNone ::: You have no report to cancel. ::: Du hast keine Meldung zum Zurücknehmen.
+CLW-Rep_CancelGone ::: Your last report is no longer on the map (expired, merged into another contact or replaced). ::: Deine letzte Meldung ist nicht mehr auf der Karte (abgelaufen, mit einem anderen Kontakt verschmolzen oder ersetzt).
+CLW-Rep_Cancelled ::: Report at grid %1 cancelled. ::: Meldung bei Planquadrat %1 zurückgenommen.
+CLW-Bkp_Kind ::: backup ::: Unterstützung
+CLW-Bkp_Cooldown ::: You called for backup a moment ago, try again in %1 s. ::: Du hast gerade erst Unterstützung angefordert, versuche es in %1 s erneut.
+CLW-Bkp_NoGroup ::: Help call received, but no free group is available. HQ has been informed. ::: Hilferuf empfangen, aber keine freie Gruppe verfügbar. Das HQ ist informiert.
+CLW-Bkp_Sent ::: Help call received. %1 is moving to your position, %2 m away. ::: Hilferuf empfangen. %1 rückt zu deiner Position vor, %2 m entfernt.
+CLW-HqMenu_KindAir ::: Aircraft ::: Luftfahrzeuge
+CLW-HqMenu_KindUnknown ::: Unknown ::: Unbekannt
+CLW-HqMenu_DirAhead ::: Ahead (view) ::: Voraus (Blickrichtung)
+CLW-HqMenu_CancelReport ::: Cancel my last report ::: Meine letzte Meldung zurücknehmen
+CLW-HqMenu_Backup ::: Backup! ::: Verstärkung!
+CLW-HqMenu_BackupHelp ::: Help call (same as /backup): HQ sends the nearest free group to your position. ::: Hilferuf (wie /backup): das HQ schickt die nächste freie Gruppe zu deiner Position.
+
+// ---- wp3 (hq-comms-env-traits) ----
+CLW-Param_daySpeed ::: Day speed ::: Tagesgeschwindigkeit
+CLW-Param_daySpeed_Desc ::: How fast game time runs: 1x = 24 h real time per game day, 4x = 6 h, 24x = 1 h, 96x = 15 min; 0x stops the clock. ::: Wie schnell die Spielzeit läuft: 1x = 24 Std. Echtzeit pro Spieltag, 4x = 6 Std., 24x = 1 Std., 96x = 15 Min.; 0x hält die Uhr an.
+CLW-Param_startHour ::: Start time (hour) ::: Startzeit (Stunde)
+CLW-Param_startHour_Desc ::: Time of day when the war starts (0-23.5, 8 = 08:00). ::: Tageszeit bei Kriegsbeginn (0-23,5; 8 = 08:00).
+CLW-Param_startYear ::: Start year ::: Startjahr
+CLW-Param_startYear_Desc ::: Calendar year of the war start (affects sunrise and sunset). ::: Kalenderjahr bei Kriegsbeginn (beeinflusst Sonnenauf- und -untergang).
+CLW-Param_startMonth ::: Start month ::: Startmonat
+CLW-Param_startMonth_Desc ::: Month of the war start (affects day length). ::: Monat bei Kriegsbeginn (beeinflusst die Tageslänge).
+CLW-Param_startDay ::: Start day ::: Starttag
+CLW-Param_startDay_Desc ::: Day of the month of the war start; invalid days are shortened to the month's end. ::: Tag des Monats bei Kriegsbeginn; ungültige Tage werden auf das Monatsende gekürzt.
+CLW-Param_weatherMode ::: Weather mode ::: Wettermodus
+CLW-Param_weatherMode_Desc ::: Slots: six weather steps spread over the time limit. World: leave the world's own automatic weather. ::: Slots: sechs Wetterstufen verteilt über das Zeitlimit. Welt: das eigene automatische Wetter der Welt bleibt.
+CLW-Choice_weatherMode_slots ::: slots ::: Slots
+CLW-Choice_weatherMode_world ::: world ::: Welt
+CLW-Param_weather1 ::: Weather slot 1 ::: Wetter Abschnitt 1
+CLW-Param_weather1_Desc ::: Weather in the 1. sixth of the time limit; the weather blends into the next slot's weather at the border. Random picks a state at war start. ::: Wetter im 1. Sechstel des Zeitlimits; am Übergang geht es in das Wetter des nächsten Abschnitts über. Zufällig wählt beim Kriegsbeginn.
+CLW-Choice_weather1_random ::: random ::: zufällig
+CLW-Param_weather2 ::: Weather slot 2 ::: Wetter Abschnitt 2
+CLW-Param_weather2_Desc ::: Weather in the 2. sixth of the time limit; the weather blends into the next slot's weather at the border. Random picks a state at war start. ::: Wetter im 2. Sechstel des Zeitlimits; am Übergang geht es in das Wetter des nächsten Abschnitts über. Zufällig wählt beim Kriegsbeginn.
+CLW-Choice_weather2_random ::: random ::: zufällig
+CLW-Param_weather3 ::: Weather slot 3 ::: Wetter Abschnitt 3
+CLW-Param_weather3_Desc ::: Weather in the 3. sixth of the time limit; the weather blends into the next slot's weather at the border. Random picks a state at war start. ::: Wetter im 3. Sechstel des Zeitlimits; am Übergang geht es in das Wetter des nächsten Abschnitts über. Zufällig wählt beim Kriegsbeginn.
+CLW-Choice_weather3_random ::: random ::: zufällig
+CLW-Param_weather4 ::: Weather slot 4 ::: Wetter Abschnitt 4
+CLW-Param_weather4_Desc ::: Weather in the 4. sixth of the time limit; the weather blends into the next slot's weather at the border. Random picks a state at war start. ::: Wetter im 4. Sechstel des Zeitlimits; am Übergang geht es in das Wetter des nächsten Abschnitts über. Zufällig wählt beim Kriegsbeginn.
+CLW-Choice_weather4_random ::: random ::: zufällig
+CLW-Param_weather5 ::: Weather slot 5 ::: Wetter Abschnitt 5
+CLW-Param_weather5_Desc ::: Weather in the 5. sixth of the time limit; the weather blends into the next slot's weather at the border. Random picks a state at war start. ::: Wetter im 5. Sechstel des Zeitlimits; am Übergang geht es in das Wetter des nächsten Abschnitts über. Zufällig wählt beim Kriegsbeginn.
+CLW-Choice_weather5_random ::: random ::: zufällig
+CLW-Param_weather6 ::: Weather slot 6 ::: Wetter Abschnitt 6
+CLW-Param_weather6_Desc ::: Weather in the 6. sixth of the time limit; the weather blends into the next slot's weather at the border. Random picks a state at war start. ::: Wetter im 6. Sechstel des Zeitlimits; am Übergang geht es in das Wetter des nächsten Abschnitts über. Zufällig wählt beim Kriegsbeginn.
+CLW-Choice_weather6_random ::: random ::: zufällig
+CLW-Sit_Env_Day ::: day ::: Tag
+CLW-Sit_Env_Dusk ::: dusk ::: Abenddämmerung
+CLW-Sit_Env_Night ::: night ::: Nacht
+CLW-Sit_Env_Dawn ::: dawn ::: Morgendämmerung
+CLW-Sit_Env_Line ::: Time %1, %2; weather %3. ::: Uhrzeit %1, %2; Wetter %3.
+CLW-Sit_Env_LineNext ::: Time %1, %2; weather %3, turning %4 in about %5 minutes. ::: Uhrzeit %1, %2; Wetter %3, wechselt in etwa %5 Minuten auf %4.
+
+// ---- wp4 (hq-comms-env-traits) ----
+CLW-Param_hqTraitA ::: HQ character, side A ::: HQ-Charakter, Seite A
+CLW-Param_hqTraitA_Desc ::: Character of side A's commander: shapes its decisions, reports and radio style. Random is rolled at war start and not told to the enemy. ::: Charakter des Kommandeurs von Seite A: prägt Entscheidungen, Berichte und Funkstil. Zufall wird beim Kriegsstart gewürfelt und dem Feind nicht verraten.
+CLW-Param_hqTraitB ::: HQ character, side B ::: HQ-Charakter, Seite B
+CLW-Param_hqTraitB_Desc ::: Character of side B's commander: shapes its decisions, reports and radio style. Random is rolled at war start and not told to the enemy. ::: Charakter des Kommandeurs von Seite B: prägt Entscheidungen, Berichte und Funkstil. Zufall wird beim Kriegsstart gewürfelt und dem Feind nicht verraten.
+CLW-Choice_hqTraitA_random ::: random ::: Zufall
+CLW-Choice_hqTraitA_aggressive ::: aggressive ::: aggressiv
+CLW-Choice_hqTraitA_defensive ::: defensive ::: defensiv
+CLW-Choice_hqTraitA_methodical ::: methodical ::: methodisch
+CLW-Choice_hqTraitA_cautious ::: cautious ::: vorsichtig
+CLW-Choice_hqTraitA_opportunistic ::: opportunistic ::: opportunistisch
+CLW-Choice_hqTraitA_crazy ::: crazy ::: verrückt
+CLW-Choice_hqTraitB_random ::: random ::: Zufall
+CLW-Choice_hqTraitB_aggressive ::: aggressive ::: aggressiv
+CLW-Choice_hqTraitB_defensive ::: defensive ::: defensiv
+CLW-Choice_hqTraitB_methodical ::: methodical ::: methodisch
+CLW-Choice_hqTraitB_cautious ::: cautious ::: vorsichtig
+CLW-Choice_hqTraitB_opportunistic ::: opportunistic ::: opportunistisch
+CLW-Choice_hqTraitB_crazy ::: crazy ::: verrückt
+CLW-Trait_aggressive ::: aggressive ::: aggressiv
+CLW-Trait_defensive ::: defensive ::: defensiv
+CLW-Trait_methodical ::: methodical ::: methodisch
+CLW-Trait_cautious ::: cautious ::: vorsichtig
+CLW-Trait_opportunistic ::: opportunistic ::: opportunistisch
+CLW-Trait_crazy ::: crazy ::: verrückt
+CLW-Persona_Told ::: Your HQ commander is %1. ::: Euer HQ-Kommandeur ist %1.
+
+// ---- wp2 (hq-comms-env-traits) ----
+CLW-HqRadial_Report ::: Report contact ::: Feind melden
+CLW-HqRadial_ReportS ::: Report ::: Meldung
+CLW-HqRadial_Requests ::: Requests ::: Anforderungen
+CLW-HqRadial_RequestsS ::: Request ::: Anfordern
+CLW-HqRadial_Backup ::: Backup! (call for help) ::: Verstärkung! (Hilferuf)
+CLW-HqRadial_BackupS ::: Backup! ::: Hilfe!
+CLW-HqRadial_Cancel ::: Cancel my last report ::: Letzte Meldung zurückziehen
+CLW-HqRadial_CancelS ::: Cancel ::: Zurückziehen
+CLW-HqRadial_Sitrep ::: Show SITREP ::: LAGE anzeigen
+CLW-HqRadial_SitrepS ::: SITREP ::: LAGE
+CLW-HqRadial_Menu ::: Full HQ menu ::: Volles HQ-Menü
+CLW-HqRadial_MenuS ::: HQ menu ::: HQ-Menü
+CLW-HqRadial_Kind_inf ::: Infantry ::: Infanterie
+CLW-HqRadial_Kind_veh ::: Vehicles ::: Fahrzeuge
+CLW-HqRadial_Kind_armor ::: Armor ::: Panzer
+CLW-HqRadial_Kind_air ::: Aircraft ::: Luftfahrzeuge
+CLW-HqRadial_Kind_unknown ::: Unknown ::: Unbekannt
+CLW-HqRadial_Count ::: %1x ::: %1x
+CLW-HqRadial_Dist ::: %1 m ::: %1 m
+CLW-HqRadial_Sum ::: Report: %1 ::: Meldung: %1
+CLW-HqRadial_Dir_ahead ::: Ahead (view) ::: Voraus (Blick)
+CLW-HqRadial_Dir_N ::: North ::: Nord
+CLW-HqRadial_Dir_NE ::: North-east ::: Nordost
+CLW-HqRadial_Dir_E ::: East ::: Ost
+CLW-HqRadial_Dir_SE ::: South-east ::: Südost
+CLW-HqRadial_Dir_S ::: South ::: Süd
+CLW-HqRadial_Dir_SW ::: South-west ::: Südwest
+CLW-HqRadial_Dir_W ::: West ::: West
+CLW-HqRadial_Dir_NW ::: North-west ::: Nordwest
+CLW-HqRadial_Vehicle ::: Vehicle ::: Fahrzeug
+CLW-HqRadial_Resupply ::: Resupply ::: Nachschub
+CLW-HqRadial_Squad ::: Squad ::: Trupp
+CLW-HqRadial_Reinforce ::: Reinforce ::: Verstärkung
+CLW-HqRadial_Mission ::: Mission ::: Auftrag
+CLW-HqRadial_Status ::: Status ::: Lage
+CLW-HqRadial_Loading ::: Loading... ::: Lädt...
+CLW-Keybind_CLW_HqRadial ::: HQ radial menu ::: HQ-Radialmenü
+CLW-KeybindCategory_CLW ::: Clausewitz ::: Clausewitz
+CLW-KeybindSeparator_General ::: General ::: Allgemein

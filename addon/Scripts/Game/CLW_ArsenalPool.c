@@ -292,6 +292,7 @@ modded class SCR_EntityCatalogManagerComponent
 				CLW_ExtendPool(faction, everything, -1, -1, -1, -1, fullDetail, fullKin, fullRule, fullBlocked);
 				CLW_ArsenalPool.LogOnce(factionKey, string.Format("own=%1 kin=%2 rules=%3 blocked=%4 total=%5 |%6", ownCount, fullKin, fullRule, fullBlocked, everything.Count(), fullDetail));
 				CLW_SelfTestLookup(faction, everything, ownCount);
+				CLW_ArsenalPrices.LogFaction(factionKey, everything);
 			}
 		}
 

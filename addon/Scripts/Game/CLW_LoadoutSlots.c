@@ -173,7 +173,9 @@ class CLW_LoadoutSlots
 	}
 
 	// Slots from the library (active entry with order == slot, status ok / degraded), else the R2 role prefab for the default role order, else
-	// hidden. keys = the war's faction keys (side A, side B).
+	// hidden. The default roles are only the roles the faction has its own character for (CLW_RolePicker.Roles: no stand-ins, no kin soldiers
+	// outside a tiny pack), so a pack faction without grenadier / medic gets fewer slots instead of vanilla soldiers or duplicate riflemen.
+	// keys = the war's faction keys (side A, side B).
 	static void Rebuild(notnull array<string> keys)
 	{
 		Clear();
@@ -233,6 +235,7 @@ class CLW_LoadoutSlots
 			roleName = defaultRole;
 
 		Set(side, slot, roleName, rolePrefab, SRC_ROLE, "");
+		Print("CLW: loadouts slot " + SideLetter(side) + " " + slot.ToString() + " role " + defaultRole + " " + CLW_RolePicker.SourceOf(key, defaultRole) + ": " + CLW_RolePicker.ShortName(rolePrefab), LogLevel.NORMAL);
 	}
 
 	// Slot 0: the player's own saved kit. Base prefab = the rifleman role prefab (any role of the faction when it has no rifleman).

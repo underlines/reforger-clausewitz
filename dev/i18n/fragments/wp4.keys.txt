@@ -1,0 +1,25 @@
+CLW-Param_hqTraitA ::: HQ character, side A ::: HQ-Charakter, Seite A
+CLW-Param_hqTraitA_Desc ::: Character of side A's commander: shapes its decisions, reports and radio style. Random is rolled at war start and not told to the enemy. ::: Charakter des Kommandeurs von Seite A: prägt Entscheidungen, Berichte und Funkstil. Zufall wird beim Kriegsstart gewürfelt und dem Feind nicht verraten.
+CLW-Param_hqTraitB ::: HQ character, side B ::: HQ-Charakter, Seite B
+CLW-Param_hqTraitB_Desc ::: Character of side B's commander: shapes its decisions, reports and radio style. Random is rolled at war start and not told to the enemy. ::: Charakter des Kommandeurs von Seite B: prägt Entscheidungen, Berichte und Funkstil. Zufall wird beim Kriegsstart gewürfelt und dem Feind nicht verraten.
+CLW-Choice_hqTraitA_random ::: random ::: Zufall
+CLW-Choice_hqTraitA_aggressive ::: aggressive ::: aggressiv
+CLW-Choice_hqTraitA_defensive ::: defensive ::: defensiv
+CLW-Choice_hqTraitA_methodical ::: methodical ::: methodisch
+CLW-Choice_hqTraitA_cautious ::: cautious ::: vorsichtig
+CLW-Choice_hqTraitA_opportunistic ::: opportunistic ::: opportunistisch
+CLW-Choice_hqTraitA_crazy ::: crazy ::: verrückt
+CLW-Choice_hqTraitB_random ::: random ::: Zufall
+CLW-Choice_hqTraitB_aggressive ::: aggressive ::: aggressiv
+CLW-Choice_hqTraitB_defensive ::: defensive ::: defensiv
+CLW-Choice_hqTraitB_methodical ::: methodical ::: methodisch
+CLW-Choice_hqTraitB_cautious ::: cautious ::: vorsichtig
+CLW-Choice_hqTraitB_opportunistic ::: opportunistic ::: opportunistisch
+CLW-Choice_hqTraitB_crazy ::: crazy ::: verrückt
+CLW-Trait_aggressive ::: aggressive ::: aggressiv
+CLW-Trait_defensive ::: defensive ::: defensiv
+CLW-Trait_methodical ::: methodical ::: methodisch
+CLW-Trait_cautious ::: cautious ::: vorsichtig
+CLW-Trait_opportunistic ::: opportunistic ::: opportunistisch
+CLW-Trait_crazy ::: crazy ::: verrückt
+CLW-Persona_Told ::: Your HQ commander is %1. ::: Euer HQ-Kommandeur ist %1.

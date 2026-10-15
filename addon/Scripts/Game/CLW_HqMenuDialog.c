@@ -3,7 +3,7 @@
 // (CLW_HqMenuData), with the vanilla widget library layouts, exactly like the setup menu. Every button sends an action to the
 // server (CLW_HqMenuClient.Act); the server runs the same code as the chat commands and pushes fresh data, which rebuilds the sections.
 // Sections: REQUESTS (vehicle / squad / resupply / reinforce / recon), SQUAD (join / leave HQ squads, SITREP), BASE (stock, FOBs,
-// convoys), CONTACT REPORT (count, type, distance, direction), LANGUAGE (HQ language of the player, same as /hq language).
+// convoys), CONTACT REPORT (count, type, distance, direction; cancel last report; Backup help call), LANGUAGE (HQ language of the player, same as /hq language).
 // Texts: stringtable keys (CLW_Loc.F) and the server's wires / content names (CLW_Loc.Resolve) in the game language. Log prefix: "CLW: hqmenu".
 
 class CLW_HqMenuButton
@@ -268,12 +268,15 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 
 		AddText(m_wReportBox, CLW_Loc.F("#CLW-HqMenu_ReportHelp"), Color.FromSRGBA(160, 160, 160, 255));
 		m_RepCountComp = AddSlider(m_wReportBox, CLW_Loc.F("#CLW-HqMenu_Count"), 1, 30, 1, m_fRepCount);
-		array<string> kindNames = {CLW_Loc.F("#CLW-HqMenu_KindInf"), CLW_Loc.F("#CLW-HqMenu_KindVeh"), CLW_Loc.F("#CLW-HqMenu_KindArmor")};
-		array<string> dirNames = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
+		array<string> kindNames = {CLW_Loc.F("#CLW-HqMenu_KindInf"), CLW_Loc.F("#CLW-HqMenu_KindVeh"), CLW_Loc.F("#CLW-HqMenu_KindArmor"), CLW_Loc.F("#CLW-HqMenu_KindAir"), CLW_Loc.F("#CLW-HqMenu_KindUnknown")};
+		array<string> dirNames = {CLW_Loc.F("#CLW-HqMenu_DirAhead"), "N", "NE", "E", "SE", "S", "SW", "W", "NW"};
 		m_RepKindComp = AddSpin(m_wReportBox, CLW_Loc.F("#CLW-HqMenu_Type"), kindNames, m_iRepKind);
 		m_RepDistComp = AddSlider(m_wReportBox, CLW_Loc.F("#CLW-HqMenu_Distance"), 50, 1500, 50, m_fRepDist);
 		m_RepDirComp = AddSpin(m_wReportBox, CLW_Loc.F("#CLW-HqMenu_Direction"), dirNames, m_iRepDir);
 		AddButton(m_wReportBox, CLW_Loc.F("#CLW-HqMenu_SendReport"), "report", "", -1);
+		AddButton(m_wReportBox, CLW_Loc.F("#CLW-HqMenu_CancelReport"), "report_cancel", "", -1);
+		AddText(m_wReportBox, CLW_Loc.F("#CLW-HqMenu_BackupHelp"), Color.FromSRGBA(160, 160, 160, 255));
+		AddButton(m_wReportBox, CLW_Loc.F("#CLW-HqMenu_Backup"), "backup", "", -1);
 	}
 
 	// HQ language of the player (wire line G): "auto" or a code. The list shows the common languages; any other ISO code is set
@@ -504,11 +507,11 @@ class CLW_HqMenuDialog : SCR_ConfigurableDialogUi
 		CLW_HqMenuClient.Act(button.m_sAction, arg);
 	}
 
-	// "<count> <inf|veh|armor> <dist> <dir>" (CLW_Reports.Chat format).
+	// "<count> <inf|veh|armor|air|unknown> <dist> <dir>" (CLW_Reports.Chat format; dir may be "ahead" = the view direction, read on the server).
 	protected string ReportArgs()
 	{
-		array<string> kinds = {"inf", "veh", "armor"};
-		array<string> dirs = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
+		array<string> kinds = {"inf", "veh", "armor", "air", "unknown"};
+		array<string> dirs = {"ahead", "N", "NE", "E", "SE", "S", "SW", "W", "NW"};
 		float count = m_fRepCount;
 		float dist = m_fRepDist;
 		SCR_SliderComponent countSlider = SCR_SliderComponent.Cast(m_RepCountComp);

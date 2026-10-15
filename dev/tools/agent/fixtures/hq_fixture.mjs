@@ -12,6 +12,13 @@ export const manifest = {
     req("REQUEST_RESUPPLY", "A player asks HQ for an ammo / resupply box at the player's position (near a friendly base) or at the HQ.", [], 20),
     req("REQUEST_REINFORCE", "A player (squad leader) asks HQ to send the nearest free AI group to the player's position."),
     req("REQUEST_RECON", "A player (squad leader) asks HQ to send the nearest free AI group to look at a map grid, an objective or the player's position.", [{ name: "where", type: "string", required: false, hint: "grid 'ddd-ddd' (100 m cells), objective id or 'here'" }]),
+    req("REPORT_CONTACT", "A player reports an enemy sighting (same as /report): kind, count, distance in metres, direction. HQ records the contact.", [
+      { name: "kind", type: "enum", enum: ["inf", "veh", "armor", "air", "unknown"], required: true, hint: "inf|veh|armor|air|unknown" },
+      { name: "count", type: "string", required: false, hint: "number of enemies, default 1" },
+      { name: "distance", type: "string", required: true, hint: "distance in metres" },
+      { name: "direction", type: "string", required: false, hint: "N NE E SE S SW W NW, a bearing 0-359 or 'ahead' (default: where the player is looking)" }]),
+    req("REPORT_CANCEL", "A player withdraws his last contact report (it was wrong or outdated)."),
+    req("REQUEST_BACKUP", "Urgent help call by any player (soldier or leader): HQ sends the nearest free group to the player now.", [{ name: "note", type: "string", required: false, hint: "what is happening" }]),
     extra("REQUEST_CONVOY", "A player asks HQ to send a supply convoy with a truck to a base or FOB.", ["logistics", "supply"], [{ name: "to", type: "base", required: true, hint: "base or FOB id" }]),
     extra("REQUEST_MEDEVAC", "A player asks for a medical evacuation vehicle to the player's position.", ["medical", "evac"]),
     extra("REQUEST_ARTILLERY", "A player asks for an artillery fire mission on a grid.", ["fire", "support"], [{ name: "where", type: "position", required: true, hint: "target" }]),

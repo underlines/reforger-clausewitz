@@ -238,7 +238,7 @@ class CLW_RemoteCommander
 		if (squads <= 0)
 			ThinkRules();	// still POST the situation below: the sidecar/dashboard must learn the faction has no squads left (it may still buy)
 
-		RestContext ctx = CLW_SidecarLink.Context(TIMEOUT_SECONDS);
+		RestContext ctx = CLW_SidecarLink.Context(TIMEOUT_SECONDS, "cmd-" + m_sFaction);	// one context per faction: the two commanders run in parallel
 		if (!ctx)
 		{
 			Fallback("no REST context");
@@ -271,7 +271,7 @@ class CLW_RemoteCommander
 		if (hash == m_sManifestSent || m_bManifestInFlight)
 			return hash;
 
-		RestContext ctx = CLW_SidecarLink.Context(TIMEOUT_SECONDS);
+		RestContext ctx = CLW_SidecarLink.Context(TIMEOUT_SECONDS, "cmd-" + m_sFaction);	// one context per faction: the two commanders run in parallel
 		if (!ctx)
 			return hash;
 

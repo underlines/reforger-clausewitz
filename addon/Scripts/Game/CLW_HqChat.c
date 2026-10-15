@@ -4,6 +4,8 @@
 // player with the reply text and runs each action through the action registry AS THE REQUESTING PLAYER (authority "player"), so the
 // request grant rules apply exactly as for /request: the five request kinds use CLW_RequestService.Handle (same history, same answer),
 // any other player entry of the registry runs through a generic registry call. Without the LLM (sidecar off / unreachable / engine rules)
+// FAST PATH: each message is also POSTed on its own to /hq right away (SendFast) and answered on that request, independent of the slow commander
+// call; the hq[] in the situation POST stays as the fallback (the sidecar dedupes by message). Log lines "CLW: hq #N fast path ...".
 // or when no answer arrives within TIMEOUT_SEC, the player gets the /request menu hint instead. Server only. Log lines "CLW: hq ...".
 
 // Shapes of the sidecar reply (filled by SCR_JsonLoadContext, field names = JSON keys), used by CLW_OrdersReply.
@@ -132,9 +134,46 @@ class CLW_HqText
 	}
 }
 
+// Reply of POST /hq (fast path): handled=false (reason) = the sidecar started nothing, the situation path stays in charge.
+class CLW_HqFastReply
+{
+	bool handled;
+	string reason;
+	ref array<ref CLW_HqActionDto> hqActions = {};
+	ref array<ref CLW_HqReplyDto> hqReplies = {};
+}
+
+// REST callback of one POST /hq. Kept alive by CLW_HqChat (s_aFast) until pruned, never freed from inside its own method.
+class CLW_HqFastCallback : RestCallback
+{
+	int m_iMsgId;
+	string m_sFaction;
+	float m_fSentAt;
+	bool m_bDone;
+
+	override void OnSuccess(string data, int dataSize)
+	{
+		m_bDone = true;
+		CLW_HqChat.OnFastReply(m_iMsgId, m_sFaction, true, data, "");
+	}
+
+	override void OnError(int errorCode)
+	{
+		m_bDone = true;
+		CLW_HqChat.OnFastReply(m_iMsgId, m_sFaction, false, "", string.Format("error code=%1 http=%2 result=%3", errorCode, GetHttpCode(), GetRestResult()));
+	}
+
+	override void OnTimeout()
+	{
+		m_bDone = true;
+		CLW_HqChat.OnFastReply(m_iMsgId, m_sFaction, false, "", "timeout");
+	}
+}
+
 class CLW_HqConfig
 {
 	static const float TIMEOUT_SEC = 90;			// a message without an answer gets the fallback hint (above CLW_RemoteCommander.TIMEOUT_SECONDS, one slow turn)
+	static const int FAST_TIMEOUT_SEC = 30;			// REST timeout of POST /hq (the sidecar caps its agent turn for this route at 25 s)
 	static const int TICK_MS = 5000;
 	static const int MAX_TEXT = 240;
 	static const int MAX_PENDING = 12;
@@ -161,6 +200,7 @@ class CLW_HqChat
 {
 	protected static ref array<ref CLW_HqMessage> s_aPending = {};
 	protected static ref map<int, float> s_mLastMessage = new map<int, float>();	// player -> world time of the last /hq
+	protected static ref array<ref CLW_HqFastCallback> s_aFast = {};	// callbacks of POST /hq in flight (and finished ones until the next Tick)
 	protected static int s_iSeq;
 	protected static bool s_bTicking;
 
@@ -170,6 +210,7 @@ class CLW_HqChat
 	{
 		s_aPending.Clear();
 		s_mLastMessage.Clear();
+		s_aFast.Clear();
 		CLW_HqHistory.Reset();	// war rematch / new war: no conversation memory carried over
 		s_iSeq = 0;
 		if (s_bTicking)
@@ -258,8 +299,66 @@ class CLW_HqChat
 		msg.m_sText = clean;
 		msg.m_fTime = now;
 		s_aPending.Insert(msg);
-		Print(string.Format("CLW: hq #%1 player=%2(%3) faction=%4 role=%5 text='%6' -> sent to the sidecar with the next situation", msg.m_iId, playerId, name, faction, msg.m_sRole, clean), LogLevel.NORMAL);
+		Print(string.Format("CLW: hq #%1 player=%2(%3) faction=%4 role=%5 text='%6' -> sent to the sidecar (own request, and with the next situation as fallback)", msg.m_iId, playerId, name, faction, msg.m_sRole, clean), LogLevel.NORMAL);
 		CLW_RequestService.Answer(playerId, CLW_Loc.W("#CLW-Hq_Received"), false);
+		SendFast(msg);
+	}
+
+	// ---- fast path: POST /hq (own request per message, answered when the agent turn ends) ----
+
+	// The situation POST carries the message too (GetJson) as the fallback; the sidecar dedupes by message, so only one of the two runs it.
+	protected static void SendFast(CLW_HqMessage msg)
+	{
+		RestContext ctx = CLW_SidecarLink.Context(CLW_HqConfig.FAST_TIMEOUT_SEC, "hq");	// own context: never queued behind a commander call
+		if (!ctx)
+		{
+			Print(string.Format("CLW: hq #%1 fast path: no REST context, situation path only", msg.m_iId), LogLevel.WARNING);
+			return;
+		}
+
+		CLW_HqFastCallback callback = new CLW_HqFastCallback();
+		callback.m_iMsgId = msg.m_iId;
+		callback.m_sFaction = msg.m_sFaction;
+		callback.m_fSentAt = CLW_RequestService.Now();
+		string body = "{\"faction\":\"" + CLW_Situation.Escape(msg.m_sFaction) + "\",\"msg\":" + MessageJson(msg, CLW_RequestService.Now()) + "}";
+		s_aFast.Insert(callback);
+		if (ctx.POST(callback, "hq", body) < 0)
+		{
+			callback.m_bDone = true;
+			Print(string.Format("CLW: hq #%1 fast path: POST not sent, situation path only", msg.m_iId), LogLevel.WARNING);
+		}
+	}
+
+	// Main thread (REST callback). Applies the answer exactly like a reply of the situation path; on failure or handled=false the message
+	// stays pending for the situation path (or the TIMEOUT_SEC hint).
+	static void OnFastReply(int msgId, string factionKey, bool ok, string data, string failure)
+	{
+		CLW_WarState war = CLW_GameMode.GetWarState();
+		if (!war || !war.IsRunning())
+			return;
+
+		if (!ok)
+		{
+			Print(string.Format("CLW: hq #%1 fast path failed (%2), situation path stays in charge", msgId, failure), LogLevel.WARNING);
+			return;
+		}
+
+		SCR_JsonLoadContext loader = new SCR_JsonLoadContext();
+		CLW_HqFastReply reply = new CLW_HqFastReply();
+		if (!loader.ImportFromString(data) || !loader.ReadValue("", reply))
+		{
+			Print(string.Format("CLW: hq #%1 fast path: reply is not valid JSON, situation path stays in charge", msgId), LogLevel.WARNING);
+			return;
+		}
+
+		if (!reply.handled)
+		{
+			Print(string.Format("CLW: hq #%1 fast path declined (%2), situation path stays in charge", msgId, reply.reason), LogLevel.NORMAL);
+			return;
+		}
+
+		Print(string.Format("CLW: hq #%1 fast path answered (%2 reply, %3 action)", msgId, reply.hqReplies.Count(), reply.hqActions.Count()), LogLevel.NORMAL);
+		Apply(factionKey, reply.hqActions, reply.hqReplies);
 	}
 
 	// "/hq language", "/hq language <code>", "/hq language auto" (works without the LLM). True = handled.
@@ -314,14 +413,7 @@ class CLW_HqChat
 
 			if (written > 0)
 				text += ",";
-			text += "{\"id\":" + msg.m_iId + ",\"player\":\"" + CLW_Situation.Escape(msg.m_sName) + "\",\"role\":\"" + msg.m_sRole + "\",\"squad\":\"" + CLW_Situation.Escape(msg.m_sSquad) + "\"";
-			text += ",\"grid\":\"" + CLW_Places.Grid(msg.m_vPos) + "\",\"pos\":[" + Math.Round(msg.m_vPos[0]) + "," + Math.Round(msg.m_vPos[2]) + "]";
-			text += ",\"lang\":\"" + CLW_Situation.Escape(CLW_PlayerLang.Resolve(msg.m_iPlayer)) + "\"";
-			text += ",\"text\":\"" + CLW_Situation.Escape(msg.m_sText) + "\",\"ageSec\":" + Math.Round(Math.Max(0, now - msg.m_fTime));
-			string history = CLW_HqHistory.GetJson(msg.m_iPlayer);	// the asker's own last exchanges, oldest first (sidecar: "Recent conversation")
-			if (!history.IsEmpty())
-				text += ",\"history\":" + history;
-			text += "}";
+			text += MessageJson(msg, now);
 			written++;
 		}
 
@@ -329,6 +421,20 @@ class CLW_HqChat
 			return "";
 
 		return "[" + text + "]";
+	}
+
+	// One message as the sidecar wants it (situation hq[] entry and POST /hq msg).
+	protected static string MessageJson(CLW_HqMessage msg, float now)
+	{
+		string text = "{\"id\":" + msg.m_iId + ",\"player\":\"" + CLW_Situation.Escape(msg.m_sName) + "\",\"role\":\"" + msg.m_sRole + "\",\"squad\":\"" + CLW_Situation.Escape(msg.m_sSquad) + "\"";
+		text += ",\"grid\":\"" + CLW_Places.Grid(msg.m_vPos) + "\",\"pos\":[" + Math.Round(msg.m_vPos[0]) + "," + Math.Round(msg.m_vPos[2]) + "]";
+		text += ",\"lang\":\"" + CLW_Situation.Escape(CLW_PlayerLang.Resolve(msg.m_iPlayer)) + "\"";
+		text += ",\"text\":\"" + CLW_Situation.Escape(msg.m_sText) + "\",\"ageSec\":" + Math.Round(Math.Max(0, now - msg.m_fTime));
+		string history = CLW_HqHistory.GetJson(msg.m_iPlayer);	// the asker's own last exchanges, oldest first (sidecar: "Recent conversation")
+		if (!history.IsEmpty())
+			text += ",\"history\":" + history;
+		text += "}";
+		return text;
 	}
 
 	// ---- sidecar reply ----
@@ -577,6 +683,12 @@ class CLW_HqChat
 	protected static void Tick()
 	{
 		CLW_HqHistory.Prune();
+		for (int k = s_aFast.Count() - 1; k >= 0; k--)
+		{
+			if (s_aFast[k].m_bDone)
+				s_aFast.Remove(k);
+		}
+
 		float now = CLW_RequestService.Now();
 		for (int i = s_aPending.Count() - 1; i >= 0; i--)
 		{

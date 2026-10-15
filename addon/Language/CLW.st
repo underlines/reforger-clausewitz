@@ -80,6 +80,22 @@ StringTable {
    Target_en_us "%1: unknown step %2"
    Target_de_de "%1: unbekannter Schritt %2"
   }
+  CustomStringTableItem CLW-Bkp_Cooldown {
+   Target_en_us "You called for backup a moment ago, try again in %1 s."
+   Target_de_de "Du hast gerade erst Unterstützung angefordert, versuche es in %1 s erneut."
+  }
+  CustomStringTableItem CLW-Bkp_Kind {
+   Target_en_us "backup"
+   Target_de_de "Unterstützung"
+  }
+  CustomStringTableItem CLW-Bkp_NoGroup {
+   Target_en_us "Help call received, but no free group is available. HQ has been informed."
+   Target_de_de "Hilferuf empfangen, aber keine freie Gruppe verfügbar. Das HQ ist informiert."
+  }
+  CustomStringTableItem CLW-Bkp_Sent {
+   Target_en_us "Help call received. %1 is moving to your position, %2 m away."
+   Target_de_de "Hilferuf empfangen. %1 rückt zu deiner Position vor, %2 m entfernt."
+  }
   CustomStringTableItem CLW-Choice_battleSize_large {
    Target_en_us "large"
    Target_de_de "groß"
@@ -100,6 +116,62 @@ StringTable {
    Target_en_us "timed"
    Target_de_de "zeitgesteuert"
   }
+  CustomStringTableItem CLW-Choice_hqTraitA_aggressive {
+   Target_en_us "aggressive"
+   Target_de_de "aggressiv"
+  }
+  CustomStringTableItem CLW-Choice_hqTraitA_cautious {
+   Target_en_us "cautious"
+   Target_de_de "vorsichtig"
+  }
+  CustomStringTableItem CLW-Choice_hqTraitA_crazy {
+   Target_en_us "crazy"
+   Target_de_de "verrückt"
+  }
+  CustomStringTableItem CLW-Choice_hqTraitA_defensive {
+   Target_en_us "defensive"
+   Target_de_de "defensiv"
+  }
+  CustomStringTableItem CLW-Choice_hqTraitA_methodical {
+   Target_en_us "methodical"
+   Target_de_de "methodisch"
+  }
+  CustomStringTableItem CLW-Choice_hqTraitA_opportunistic {
+   Target_en_us "opportunistic"
+   Target_de_de "opportunistisch"
+  }
+  CustomStringTableItem CLW-Choice_hqTraitA_random {
+   Target_en_us "random"
+   Target_de_de "Zufall"
+  }
+  CustomStringTableItem CLW-Choice_hqTraitB_aggressive {
+   Target_en_us "aggressive"
+   Target_de_de "aggressiv"
+  }
+  CustomStringTableItem CLW-Choice_hqTraitB_cautious {
+   Target_en_us "cautious"
+   Target_de_de "vorsichtig"
+  }
+  CustomStringTableItem CLW-Choice_hqTraitB_crazy {
+   Target_en_us "crazy"
+   Target_de_de "verrückt"
+  }
+  CustomStringTableItem CLW-Choice_hqTraitB_defensive {
+   Target_en_us "defensive"
+   Target_de_de "defensiv"
+  }
+  CustomStringTableItem CLW-Choice_hqTraitB_methodical {
+   Target_en_us "methodical"
+   Target_de_de "methodisch"
+  }
+  CustomStringTableItem CLW-Choice_hqTraitB_opportunistic {
+   Target_en_us "opportunistic"
+   Target_de_de "opportunistisch"
+  }
+  CustomStringTableItem CLW-Choice_hqTraitB_random {
+   Target_en_us "random"
+   Target_de_de "Zufall"
+  }
   CustomStringTableItem CLW-Choice_startObjectives_none {
    Target_en_us "none"
    Target_de_de "keine"
@@ -115,6 +187,38 @@ StringTable {
   CustomStringTableItem CLW-Choice_startPositions_random {
    Target_en_us "random"
    Target_de_de "zufällig"
+  }
+  CustomStringTableItem CLW-Choice_weather1_random {
+   Target_en_us "random"
+   Target_de_de "zufällig"
+  }
+  CustomStringTableItem CLW-Choice_weather2_random {
+   Target_en_us "random"
+   Target_de_de "zufällig"
+  }
+  CustomStringTableItem CLW-Choice_weather3_random {
+   Target_en_us "random"
+   Target_de_de "zufällig"
+  }
+  CustomStringTableItem CLW-Choice_weather4_random {
+   Target_en_us "random"
+   Target_de_de "zufällig"
+  }
+  CustomStringTableItem CLW-Choice_weather5_random {
+   Target_en_us "random"
+   Target_de_de "zufällig"
+  }
+  CustomStringTableItem CLW-Choice_weather6_random {
+   Target_en_us "random"
+   Target_de_de "zufällig"
+  }
+  CustomStringTableItem CLW-Choice_weatherMode_slots {
+   Target_en_us "slots"
+   Target_de_de "Slots"
+  }
+  CustomStringTableItem CLW-Choice_weatherMode_world {
+   Target_en_us "world"
+   Target_de_de "Welt"
   }
   CustomStringTableItem CLW-Common_Close {
    Target_en_us "Close"
@@ -232,6 +336,14 @@ StringTable {
    Target_en_us "HQ answered, see the message on screen."
    Target_de_de "Das HQ hat geantwortet, siehe Meldung auf dem Bildschirm."
   }
+  CustomStringTableItem CLW-HqMenu_Backup {
+   Target_en_us "Backup!"
+   Target_de_de "Verstärkung!"
+  }
+  CustomStringTableItem CLW-HqMenu_BackupHelp {
+   Target_en_us "Help call (same as /backup): HQ sends the nearest free group to your position."
+   Target_de_de "Hilferuf (wie /backup): das HQ schickt die nächste freie Gruppe zu deiner Position."
+  }
   CustomStringTableItem CLW-HqMenu_Base {
    Target_en_us "BASE"
    Target_de_de "BASIS"
@@ -271,6 +383,10 @@ StringTable {
   CustomStringTableItem CLW-HqMenu_Blk_Supplies {
    Target_en_us "needs %1 supplies, the base has %2"
    Target_de_de "braucht %1 Nachschub, die Basis hat %2"
+  }
+  CustomStringTableItem CLW-HqMenu_CancelReport {
+   Target_en_us "Cancel my last report"
+   Target_de_de "Meine letzte Meldung zurücknehmen"
   }
   CustomStringTableItem CLW-HqMenu_Cat_all {
    Target_en_us "All"
@@ -327,6 +443,10 @@ StringTable {
   CustomStringTableItem CLW-HqMenu_DepotTitle {
    Target_en_us "VEHICLE DEPOT - %1 vehicle(s) in this category, delivered next to this depot"
    Target_de_de "FAHRZEUGDEPOT - %1 Fahrzeug(e) in dieser Kategorie, geliefert direkt neben dem Depot"
+  }
+  CustomStringTableItem CLW-HqMenu_DirAhead {
+   Target_en_us "Ahead (view)"
+   Target_de_de "Voraus (Blickrichtung)"
   }
   CustomStringTableItem CLW-HqMenu_Direction {
    Target_en_us "Direction"
@@ -388,6 +508,10 @@ StringTable {
    Target_en_us "HQ: joining %1."
    Target_de_de "HQ: trete %1 bei."
   }
+  CustomStringTableItem CLW-HqMenu_KindAir {
+   Target_en_us "Aircraft"
+   Target_de_de "Luftfahrzeuge"
+  }
   CustomStringTableItem CLW-HqMenu_KindArmor {
    Target_en_us "Armor"
    Target_de_de "Panzer"
@@ -395,6 +519,10 @@ StringTable {
   CustomStringTableItem CLW-HqMenu_KindInf {
    Target_en_us "Infantry"
    Target_de_de "Infanterie"
+  }
+  CustomStringTableItem CLW-HqMenu_KindUnknown {
+   Target_en_us "Unknown"
+   Target_de_de "Unbekannt"
   }
   CustomStringTableItem CLW-HqMenu_KindVeh {
    Target_en_us "Vehicles"
@@ -612,6 +740,150 @@ StringTable {
    Target_en_us "Your squad: %1"
    Target_de_de "Dein Trupp: %1"
   }
+  CustomStringTableItem CLW-HqRadial_Backup {
+   Target_en_us "Backup! (call for help)"
+   Target_de_de "Verstärkung! (Hilferuf)"
+  }
+  CustomStringTableItem CLW-HqRadial_BackupS {
+   Target_en_us "Backup!"
+   Target_de_de "Hilfe!"
+  }
+  CustomStringTableItem CLW-HqRadial_Cancel {
+   Target_en_us "Cancel my last report"
+   Target_de_de "Letzte Meldung zurückziehen"
+  }
+  CustomStringTableItem CLW-HqRadial_CancelS {
+   Target_en_us "Cancel"
+   Target_de_de "Zurückziehen"
+  }
+  CustomStringTableItem CLW-HqRadial_Count {
+   Target_en_us "%1x"
+   Target_de_de "%1x"
+  }
+  CustomStringTableItem CLW-HqRadial_Dir_ahead {
+   Target_en_us "Ahead (view)"
+   Target_de_de "Voraus (Blick)"
+  }
+  CustomStringTableItem CLW-HqRadial_Dir_E {
+   Target_en_us "East"
+   Target_de_de "Ost"
+  }
+  CustomStringTableItem CLW-HqRadial_Dir_N {
+   Target_en_us "North"
+   Target_de_de "Nord"
+  }
+  CustomStringTableItem CLW-HqRadial_Dir_NE {
+   Target_en_us "North-east"
+   Target_de_de "Nordost"
+  }
+  CustomStringTableItem CLW-HqRadial_Dir_NW {
+   Target_en_us "North-west"
+   Target_de_de "Nordwest"
+  }
+  CustomStringTableItem CLW-HqRadial_Dir_S {
+   Target_en_us "South"
+   Target_de_de "Süd"
+  }
+  CustomStringTableItem CLW-HqRadial_Dir_SE {
+   Target_en_us "South-east"
+   Target_de_de "Südost"
+  }
+  CustomStringTableItem CLW-HqRadial_Dir_SW {
+   Target_en_us "South-west"
+   Target_de_de "Südwest"
+  }
+  CustomStringTableItem CLW-HqRadial_Dir_W {
+   Target_en_us "West"
+   Target_de_de "West"
+  }
+  CustomStringTableItem CLW-HqRadial_Dist {
+   Target_en_us "%1 m"
+   Target_de_de "%1 m"
+  }
+  CustomStringTableItem CLW-HqRadial_Kind_air {
+   Target_en_us "Aircraft"
+   Target_de_de "Luftfahrzeuge"
+  }
+  CustomStringTableItem CLW-HqRadial_Kind_armor {
+   Target_en_us "Armor"
+   Target_de_de "Panzer"
+  }
+  CustomStringTableItem CLW-HqRadial_Kind_inf {
+   Target_en_us "Infantry"
+   Target_de_de "Infanterie"
+  }
+  CustomStringTableItem CLW-HqRadial_Kind_unknown {
+   Target_en_us "Unknown"
+   Target_de_de "Unbekannt"
+  }
+  CustomStringTableItem CLW-HqRadial_Kind_veh {
+   Target_en_us "Vehicles"
+   Target_de_de "Fahrzeuge"
+  }
+  CustomStringTableItem CLW-HqRadial_Loading {
+   Target_en_us "Loading..."
+   Target_de_de "Lädt..."
+  }
+  CustomStringTableItem CLW-HqRadial_Menu {
+   Target_en_us "Full HQ menu"
+   Target_de_de "Volles HQ-Menü"
+  }
+  CustomStringTableItem CLW-HqRadial_MenuS {
+   Target_en_us "HQ menu"
+   Target_de_de "HQ-Menü"
+  }
+  CustomStringTableItem CLW-HqRadial_Mission {
+   Target_en_us "Mission"
+   Target_de_de "Auftrag"
+  }
+  CustomStringTableItem CLW-HqRadial_Reinforce {
+   Target_en_us "Reinforce"
+   Target_de_de "Verstärkung"
+  }
+  CustomStringTableItem CLW-HqRadial_Report {
+   Target_en_us "Report contact"
+   Target_de_de "Feind melden"
+  }
+  CustomStringTableItem CLW-HqRadial_ReportS {
+   Target_en_us "Report"
+   Target_de_de "Meldung"
+  }
+  CustomStringTableItem CLW-HqRadial_Requests {
+   Target_en_us "Requests"
+   Target_de_de "Anforderungen"
+  }
+  CustomStringTableItem CLW-HqRadial_RequestsS {
+   Target_en_us "Request"
+   Target_de_de "Anfordern"
+  }
+  CustomStringTableItem CLW-HqRadial_Resupply {
+   Target_en_us "Resupply"
+   Target_de_de "Nachschub"
+  }
+  CustomStringTableItem CLW-HqRadial_Sitrep {
+   Target_en_us "Show SITREP"
+   Target_de_de "LAGE anzeigen"
+  }
+  CustomStringTableItem CLW-HqRadial_SitrepS {
+   Target_en_us "SITREP"
+   Target_de_de "LAGE"
+  }
+  CustomStringTableItem CLW-HqRadial_Squad {
+   Target_en_us "Squad"
+   Target_de_de "Trupp"
+  }
+  CustomStringTableItem CLW-HqRadial_Status {
+   Target_en_us "Status"
+   Target_de_de "Lage"
+  }
+  CustomStringTableItem CLW-HqRadial_Sum {
+   Target_en_us "Report: %1"
+   Target_de_de "Meldung: %1"
+  }
+  CustomStringTableItem CLW-HqRadial_Vehicle {
+   Target_en_us "Vehicle"
+   Target_de_de "Fahrzeug"
+  }
   CustomStringTableItem CLW-Hud_Draw {
    Target_en_us "Draw"
    Target_de_de "Unentschieden"
@@ -651,6 +923,18 @@ StringTable {
   CustomStringTableItem CLW-Journal_NoContact {
    Target_en_us "No enemy contact reported yet."
    Target_de_de "Noch kein Feindkontakt gemeldet."
+  }
+  CustomStringTableItem CLW-Keybind_CLW_HqRadial {
+   Target_en_us "HQ radial menu"
+   Target_de_de "HQ-Radialmenü"
+  }
+  CustomStringTableItem CLW-KeybindCategory_CLW {
+   Target_en_us "Clausewitz"
+   Target_de_de "Clausewitz"
+  }
+  CustomStringTableItem CLW-KeybindSeparator_General {
+   Target_en_us "General"
+   Target_de_de "Allgemein"
   }
   CustomStringTableItem CLW-Lang_auto {
    Target_en_us "Automatic"
@@ -1140,6 +1424,14 @@ StringTable {
    Target_en_us "A convoy only leaves with at least this many supplies (HQ stock minus the reserve)."
    Target_de_de "Ein Konvoi fährt nur mit mindestens so viel Nachschub los (HQ-Vorrat abzüglich der Reserve)."
   }
+  CustomStringTableItem CLW-Param_daySpeed {
+   Target_en_us "Day speed"
+   Target_de_de "Tagesgeschwindigkeit"
+  }
+  CustomStringTableItem CLW-Param_daySpeed_Desc {
+   Target_en_us "How fast game time runs: 1x = 24 h real time per game day, 4x = 6 h, 24x = 1 h, 96x = 15 min; 0x stops the clock."
+   Target_de_de "Wie schnell die Spielzeit läuft: 1x = 24 Std. Echtzeit pro Spieltag, 4x = 6 Std., 24x = 1 Std., 96x = 15 Min.; 0x hält die Uhr an."
+  }
   CustomStringTableItem CLW-Param_factionA {
    Target_en_us "Side A"
    Target_de_de "Seite A"
@@ -1220,6 +1512,22 @@ StringTable {
    Target_en_us "AI purchases (rule commander, LLM) and convoys never take the HQ stock below this. Player requests still may. 0 = no floor."
    Target_de_de "KI-Käufe (Regelkommandeur, LLM) und Konvois lassen den HQ-Vorrat nie unter diesen Wert sinken. Spieleranfragen dürfen. 0 = keine Untergrenze."
   }
+  CustomStringTableItem CLW-Param_hqTraitA {
+   Target_en_us "HQ character, side A"
+   Target_de_de "HQ-Charakter, Seite A"
+  }
+  CustomStringTableItem CLW-Param_hqTraitA_Desc {
+   Target_en_us "Character of side A's commander: shapes its decisions, reports and radio style. Random is rolled at war start and not told to the enemy."
+   Target_de_de "Charakter des Kommandeurs von Seite A: prägt Entscheidungen, Berichte und Funkstil. Zufall wird beim Kriegsstart gewürfelt und dem Feind nicht verraten."
+  }
+  CustomStringTableItem CLW-Param_hqTraitB {
+   Target_en_us "HQ character, side B"
+   Target_de_de "HQ-Charakter, Seite B"
+  }
+  CustomStringTableItem CLW-Param_hqTraitB_Desc {
+   Target_en_us "Character of side B's commander: shapes its decisions, reports and radio style. Random is rolled at war start and not told to the enemy."
+   Target_de_de "Charakter des Kommandeurs von Seite B: prägt Entscheidungen, Berichte und Funkstil. Zufall wird beim Kriegsstart gewürfelt und dem Feind nicht verraten."
+  }
   CustomStringTableItem CLW-Param_idleDespawnMin {
    Target_en_us "Idle despawn (min)"
    Target_de_de "Untätig entfernen (Min.)"
@@ -1276,6 +1584,30 @@ StringTable {
    Target_en_us "Random start positions: the same seed gives the same layout. 0 = a new one each war (logged)."
    Target_de_de "Zufällige Startpositionen: derselbe Wert ergibt dieselbe Aufstellung. 0 = jeder Krieg neu (wird protokolliert)."
   }
+  CustomStringTableItem CLW-Param_startDay {
+   Target_en_us "Start day"
+   Target_de_de "Starttag"
+  }
+  CustomStringTableItem CLW-Param_startDay_Desc {
+   Target_en_us "Day of the month of the war start; invalid days are shortened to the month's end."
+   Target_de_de "Tag des Monats bei Kriegsbeginn; ungültige Tage werden auf das Monatsende gekürzt."
+  }
+  CustomStringTableItem CLW-Param_startHour {
+   Target_en_us "Start time (hour)"
+   Target_de_de "Startzeit (Stunde)"
+  }
+  CustomStringTableItem CLW-Param_startHour_Desc {
+   Target_en_us "Time of day when the war starts (0-23.5, 8 = 08:00)."
+   Target_de_de "Tageszeit bei Kriegsbeginn (0-23,5; 8 = 08:00)."
+  }
+  CustomStringTableItem CLW-Param_startMonth {
+   Target_en_us "Start month"
+   Target_de_de "Startmonat"
+  }
+  CustomStringTableItem CLW-Param_startMonth_Desc {
+   Target_en_us "Month of the war start (affects day length)."
+   Target_de_de "Monat bei Kriegsbeginn (beeinflusst die Tageslänge)."
+  }
   CustomStringTableItem CLW-Param_startObjectives {
    Target_en_us "Start objectives"
    Target_de_de "Startziele"
@@ -1308,6 +1640,14 @@ StringTable {
    Target_en_us "War will of each side; at 0 the side loses."
    Target_de_de "Kriegswille jeder Seite; bei 0 verliert die Seite."
   }
+  CustomStringTableItem CLW-Param_startYear {
+   Target_en_us "Start year"
+   Target_de_de "Startjahr"
+  }
+  CustomStringTableItem CLW-Param_startYear_Desc {
+   Target_en_us "Calendar year of the war start (affects sunrise and sunset)."
+   Target_de_de "Kalenderjahr bei Kriegsbeginn (beeinflusst Sonnenauf- und -untergang)."
+  }
   CustomStringTableItem CLW-Param_ticketBleed {
    Target_en_us "Ticket bleed"
    Target_de_de "Ticketverlust"
@@ -1323,6 +1663,66 @@ StringTable {
   CustomStringTableItem CLW-Param_timeLimitMin_Desc {
    Target_en_us "The war ends after this time; more tickets wins."
    Target_de_de "Der Krieg endet nach dieser Zeit; wer mehr Tickets hat, gewinnt."
+  }
+  CustomStringTableItem CLW-Param_weather1 {
+   Target_en_us "Weather slot 1"
+   Target_de_de "Wetter Abschnitt 1"
+  }
+  CustomStringTableItem CLW-Param_weather1_Desc {
+   Target_en_us "Weather in the 1. sixth of the time limit; the weather blends into the next slot's weather at the border. Random picks a state at war start."
+   Target_de_de "Wetter im 1. Sechstel des Zeitlimits; am Übergang geht es in das Wetter des nächsten Abschnitts über. Zufällig wählt beim Kriegsbeginn."
+  }
+  CustomStringTableItem CLW-Param_weather2 {
+   Target_en_us "Weather slot 2"
+   Target_de_de "Wetter Abschnitt 2"
+  }
+  CustomStringTableItem CLW-Param_weather2_Desc {
+   Target_en_us "Weather in the 2. sixth of the time limit; the weather blends into the next slot's weather at the border. Random picks a state at war start."
+   Target_de_de "Wetter im 2. Sechstel des Zeitlimits; am Übergang geht es in das Wetter des nächsten Abschnitts über. Zufällig wählt beim Kriegsbeginn."
+  }
+  CustomStringTableItem CLW-Param_weather3 {
+   Target_en_us "Weather slot 3"
+   Target_de_de "Wetter Abschnitt 3"
+  }
+  CustomStringTableItem CLW-Param_weather3_Desc {
+   Target_en_us "Weather in the 3. sixth of the time limit; the weather blends into the next slot's weather at the border. Random picks a state at war start."
+   Target_de_de "Wetter im 3. Sechstel des Zeitlimits; am Übergang geht es in das Wetter des nächsten Abschnitts über. Zufällig wählt beim Kriegsbeginn."
+  }
+  CustomStringTableItem CLW-Param_weather4 {
+   Target_en_us "Weather slot 4"
+   Target_de_de "Wetter Abschnitt 4"
+  }
+  CustomStringTableItem CLW-Param_weather4_Desc {
+   Target_en_us "Weather in the 4. sixth of the time limit; the weather blends into the next slot's weather at the border. Random picks a state at war start."
+   Target_de_de "Wetter im 4. Sechstel des Zeitlimits; am Übergang geht es in das Wetter des nächsten Abschnitts über. Zufällig wählt beim Kriegsbeginn."
+  }
+  CustomStringTableItem CLW-Param_weather5 {
+   Target_en_us "Weather slot 5"
+   Target_de_de "Wetter Abschnitt 5"
+  }
+  CustomStringTableItem CLW-Param_weather5_Desc {
+   Target_en_us "Weather in the 5. sixth of the time limit; the weather blends into the next slot's weather at the border. Random picks a state at war start."
+   Target_de_de "Wetter im 5. Sechstel des Zeitlimits; am Übergang geht es in das Wetter des nächsten Abschnitts über. Zufällig wählt beim Kriegsbeginn."
+  }
+  CustomStringTableItem CLW-Param_weather6 {
+   Target_en_us "Weather slot 6"
+   Target_de_de "Wetter Abschnitt 6"
+  }
+  CustomStringTableItem CLW-Param_weather6_Desc {
+   Target_en_us "Weather in the 6. sixth of the time limit; the weather blends into the next slot's weather at the border. Random picks a state at war start."
+   Target_de_de "Wetter im 6. Sechstel des Zeitlimits; am Übergang geht es in das Wetter des nächsten Abschnitts über. Zufällig wählt beim Kriegsbeginn."
+  }
+  CustomStringTableItem CLW-Param_weatherMode {
+   Target_en_us "Weather mode"
+   Target_de_de "Wettermodus"
+  }
+  CustomStringTableItem CLW-Param_weatherMode_Desc {
+   Target_en_us "Slots: six weather steps spread over the time limit. World: leave the world's own automatic weather."
+   Target_de_de "Slots: sechs Wetterstufen verteilt über das Zeitlimit. Welt: das eigene automatische Wetter der Welt bleibt."
+  }
+  CustomStringTableItem CLW-Persona_Told {
+   Target_en_us "Your HQ commander is %1."
+   Target_de_de "Euer HQ-Kommandeur ist %1."
   }
   CustomStringTableItem CLW-Rematch_Countdown {
    Target_en_us "The next round starts in %1 s."
@@ -1340,13 +1740,33 @@ StringTable {
    Target_en_us "Round %1: back to the setup phase. The setup owner opens the menu (/war setup) or the server preset starts the war."
    Target_de_de "Runde %1: zurück in der Setup-Phase. Der Setup-Besitzer öffnet das Menü (/war setup) oder die Server-Vorgabe startet den Krieg."
   }
+  CustomStringTableItem CLW-Rep_CancelGone {
+   Target_en_us "Your last report is no longer on the map (expired, merged into another contact or replaced)."
+   Target_de_de "Deine letzte Meldung ist nicht mehr auf der Karte (abgelaufen, mit einem anderen Kontakt verschmolzen oder ersetzt)."
+  }
+  CustomStringTableItem CLW-Rep_Cancelled {
+   Target_en_us "Report at grid %1 cancelled."
+   Target_de_de "Meldung bei Planquadrat %1 zurückgenommen."
+  }
+  CustomStringTableItem CLW-Rep_CancelNone {
+   Target_en_us "You have no report to cancel."
+   Target_de_de "Du hast keine Meldung zum Zurücknehmen."
+  }
   CustomStringTableItem CLW-Rep_CountNumber {
    Target_en_us "The count must be a number."
    Target_de_de "Die Anzahl muss eine Zahl sein."
   }
+  CustomStringTableItem CLW-Rep_DirAhead {
+   Target_en_us "ahead (%1 deg)"
+   Target_de_de "voraus (%1 deg)"
+  }
   CustomStringTableItem CLW-Rep_DirectionUnclear {
    Target_en_us "Direction not understood (N NE E SE S SW W NW or degrees 0-360)."
    Target_de_de "Richtung nicht verstanden (N NE E SE S SW W NW oder Grad 0-360)."
+  }
+  CustomStringTableItem CLW-Rep_DirectionUnclear2 {
+   Target_en_us "Direction not understood (N NE E SE S SW W NW, degrees 0-360 or ahead)."
+   Target_de_de "Richtung nicht verstanden (N NE E SE S SW W NW, Grad 0-360 oder ahead)."
   }
   CustomStringTableItem CLW-Rep_DistanceRange {
    Target_en_us "The distance must be %1 to %2 m."
@@ -1356,9 +1776,17 @@ StringTable {
    Target_en_us "Distance not understood (meters, e.g. 300 or 1.2km)."
    Target_de_de "Entfernung nicht verstanden (Meter, z. B. 300 oder 1.2km)."
   }
+  CustomStringTableItem CLW-Rep_Kind_air {
+   Target_en_us "aircraft"
+   Target_de_de "Luftfahrzeuge"
+  }
   CustomStringTableItem CLW-Rep_Kind_infantry {
    Target_en_us "infantry"
    Target_de_de "Infanterie"
+  }
+  CustomStringTableItem CLW-Rep_Kind_unknown {
+   Target_en_us "unknown contacts"
+   Target_de_de "unbekannte Kontakte"
   }
   CustomStringTableItem CLW-Rep_Kind_vehicle {
    Target_en_us "vehicles"
@@ -1392,9 +1820,17 @@ StringTable {
    Target_en_us "The type must be inf, veh or armor."
    Target_de_de "Der Typ muss inf, veh oder armor sein."
   }
+  CustomStringTableItem CLW-Rep_Type2 {
+   Target_en_us "The type must be inf, veh, armor, air or unknown."
+   Target_de_de "Der Typ muss inf, veh, armor, air oder unknown sein."
+  }
   CustomStringTableItem CLW-Rep_Usage {
    Target_en_us "Usage: /report <count> <inf|veh|armor> <distance m> <direction N|NE|E|SE|S|SW|W|NW or degrees>"
    Target_de_de "Verwendung: /report <Anzahl> <inf|veh|armor> <Entfernung m> <Richtung N|NE|E|SE|S|SW|W|NW oder Grad>"
+  }
+  CustomStringTableItem CLW-Rep_Usage2 {
+   Target_en_us "Usage: /report <count> <inf|veh|armor|air|unknown> <distance m> [direction N|NE|E|SE|S|SW|W|NW, degrees or ahead], or /report cancel"
+   Target_de_de "Verwendung: /report <Anzahl> <inf|veh|armor|air|unknown> <Entfernung m> [Richtung N|NE|E|SE|S|SW|W|NW, Grad oder ahead], oder /report cancel"
   }
   CustomStringTableItem CLW-Rep_Wait {
    Target_en_us "Wait a few seconds between reports."
@@ -2100,6 +2536,30 @@ StringTable {
    Target_en_us "one element"
    Target_de_de "ein Element"
   }
+  CustomStringTableItem CLW-Sit_Env_Dawn {
+   Target_en_us "dawn"
+   Target_de_de "Morgendämmerung"
+  }
+  CustomStringTableItem CLW-Sit_Env_Day {
+   Target_en_us "day"
+   Target_de_de "Tag"
+  }
+  CustomStringTableItem CLW-Sit_Env_Dusk {
+   Target_en_us "dusk"
+   Target_de_de "Abenddämmerung"
+  }
+  CustomStringTableItem CLW-Sit_Env_Line {
+   Target_en_us "Time %1, %2; weather %3."
+   Target_de_de "Uhrzeit %1, %2; Wetter %3."
+  }
+  CustomStringTableItem CLW-Sit_Env_LineNext {
+   Target_en_us "Time %1, %2; weather %3, turning %4 in about %5 minutes."
+   Target_de_de "Uhrzeit %1, %2; Wetter %3, wechselt in etwa %5 Minuten auf %4."
+  }
+  CustomStringTableItem CLW-Sit_Env_Night {
+   Target_en_us "night"
+   Target_de_de "Nacht"
+  }
   CustomStringTableItem CLW-Sit_Force_Depleted {
    Target_en_us "Our forces are badly depleted."
    Target_de_de "Unsere Kräfte sind stark dezimiert."
@@ -2575,6 +3035,30 @@ StringTable {
   CustomStringTableItem CLW-Terminal_RequestSquad {
    Target_en_us "Request squad"
    Target_de_de "Trupp anfordern"
+  }
+  CustomStringTableItem CLW-Trait_aggressive {
+   Target_en_us "aggressive"
+   Target_de_de "aggressiv"
+  }
+  CustomStringTableItem CLW-Trait_cautious {
+   Target_en_us "cautious"
+   Target_de_de "vorsichtig"
+  }
+  CustomStringTableItem CLW-Trait_crazy {
+   Target_en_us "crazy"
+   Target_de_de "verrückt"
+  }
+  CustomStringTableItem CLW-Trait_defensive {
+   Target_en_us "defensive"
+   Target_de_de "defensiv"
+  }
+  CustomStringTableItem CLW-Trait_methodical {
+   Target_en_us "methodical"
+   Target_de_de "methodisch"
+  }
+  CustomStringTableItem CLW-Trait_opportunistic {
+   Target_en_us "opportunistic"
+   Target_de_de "opportunistisch"
   }
   CustomStringTableItem CLW-War_EndHeldAll {
    Target_en_us "%1 held all points for %2 s"

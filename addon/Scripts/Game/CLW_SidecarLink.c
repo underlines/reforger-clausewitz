@@ -30,9 +30,16 @@ class CLW_SidecarLink
 	}
 
 	// A REST context on the sidecar with timeout, JSON content type and the token header (null when there is no REST context).
-	static RestContext Context(int timeoutSeconds)
+	// channel: "" = the shared default context; any other name gets its OWN context (base URL + "ch/<channel>/", the sidecar strips that
+	// prefix). One context runs its requests one after another (DS e2e 2026-10-15: always exactly 1 game->sidecar connection), so a slow
+	// commander call of one faction delayed the other faction and every /hq reply; each context also keeps its own timeout and headers.
+	static RestContext Context(int timeoutSeconds, string channel = "")
 	{
-		RestContext ctx = GetGame().GetRestApi().GetContext(BaseUrl());
+		string url = BaseUrl();
+		if (!channel.IsEmpty())
+			url += "ch/" + channel + "/";
+
+		RestContext ctx = GetGame().GetRestApi().GetContext(url);
 		if (!ctx)
 			return null;
 

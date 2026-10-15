@@ -1,0 +1,38 @@
+CLW-Param_daySpeed ::: Day speed ::: Tagesgeschwindigkeit
+CLW-Param_daySpeed_Desc ::: How fast game time runs: 1x = 24 h real time per game day, 4x = 6 h, 24x = 1 h, 96x = 15 min; 0x stops the clock. ::: Wie schnell die Spielzeit läuft: 1x = 24 Std. Echtzeit pro Spieltag, 4x = 6 Std., 24x = 1 Std., 96x = 15 Min.; 0x hält die Uhr an.
+CLW-Param_startHour ::: Start time (hour) ::: Startzeit (Stunde)
+CLW-Param_startHour_Desc ::: Time of day when the war starts (0-23.5, 8 = 08:00). ::: Tageszeit bei Kriegsbeginn (0-23,5; 8 = 08:00).
+CLW-Param_startYear ::: Start year ::: Startjahr
+CLW-Param_startYear_Desc ::: Calendar year of the war start (affects sunrise and sunset). ::: Kalenderjahr bei Kriegsbeginn (beeinflusst Sonnenauf- und -untergang).
+CLW-Param_startMonth ::: Start month ::: Startmonat
+CLW-Param_startMonth_Desc ::: Month of the war start (affects day length). ::: Monat bei Kriegsbeginn (beeinflusst die Tageslänge).
+CLW-Param_startDay ::: Start day ::: Starttag
+CLW-Param_startDay_Desc ::: Day of the month of the war start; invalid days are shortened to the month's end. ::: Tag des Monats bei Kriegsbeginn; ungültige Tage werden auf das Monatsende gekürzt.
+CLW-Param_weatherMode ::: Weather mode ::: Wettermodus
+CLW-Param_weatherMode_Desc ::: Slots: six weather steps spread over the time limit. World: leave the world's own automatic weather. ::: Slots: sechs Wetterstufen verteilt über das Zeitlimit. Welt: das eigene automatische Wetter der Welt bleibt.
+CLW-Choice_weatherMode_slots ::: slots ::: Slots
+CLW-Choice_weatherMode_world ::: world ::: Welt
+CLW-Param_weather1 ::: Weather slot 1 ::: Wetter Abschnitt 1
+CLW-Param_weather1_Desc ::: Weather in the 1. sixth of the time limit; the weather blends into the next slot's weather at the border. Random picks a state at war start. ::: Wetter im 1. Sechstel des Zeitlimits; am Übergang geht es in das Wetter des nächsten Abschnitts über. Zufällig wählt beim Kriegsbeginn.
+CLW-Choice_weather1_random ::: random ::: zufällig
+CLW-Param_weather2 ::: Weather slot 2 ::: Wetter Abschnitt 2
+CLW-Param_weather2_Desc ::: Weather in the 2. sixth of the time limit; the weather blends into the next slot's weather at the border. Random picks a state at war start. ::: Wetter im 2. Sechstel des Zeitlimits; am Übergang geht es in das Wetter des nächsten Abschnitts über. Zufällig wählt beim Kriegsbeginn.
+CLW-Choice_weather2_random ::: random ::: zufällig
+CLW-Param_weather3 ::: Weather slot 3 ::: Wetter Abschnitt 3
+CLW-Param_weather3_Desc ::: Weather in the 3. sixth of the time limit; the weather blends into the next slot's weather at the border. Random picks a state at war start. ::: Wetter im 3. Sechstel des Zeitlimits; am Übergang geht es in das Wetter des nächsten Abschnitts über. Zufällig wählt beim Kriegsbeginn.
+CLW-Choice_weather3_random ::: random ::: zufällig
+CLW-Param_weather4 ::: Weather slot 4 ::: Wetter Abschnitt 4
+CLW-Param_weather4_Desc ::: Weather in the 4. sixth of the time limit; the weather blends into the next slot's weather at the border. Random picks a state at war start. ::: Wetter im 4. Sechstel des Zeitlimits; am Übergang geht es in das Wetter des nächsten Abschnitts über. Zufällig wählt beim Kriegsbeginn.
+CLW-Choice_weather4_random ::: random ::: zufällig
+CLW-Param_weather5 ::: Weather slot 5 ::: Wetter Abschnitt 5
+CLW-Param_weather5_Desc ::: Weather in the 5. sixth of the time limit; the weather blends into the next slot's weather at the border. Random picks a state at war start. ::: Wetter im 5. Sechstel des Zeitlimits; am Übergang geht es in das Wetter des nächsten Abschnitts über. Zufällig wählt beim Kriegsbeginn.
+CLW-Choice_weather5_random ::: random ::: zufällig
+CLW-Param_weather6 ::: Weather slot 6 ::: Wetter Abschnitt 6
+CLW-Param_weather6_Desc ::: Weather in the 6. sixth of the time limit; the weather blends into the next slot's weather at the border. Random picks a state at war start. ::: Wetter im 6. Sechstel des Zeitlimits; am Übergang geht es in das Wetter des nächsten Abschnitts über. Zufällig wählt beim Kriegsbeginn.
+CLW-Choice_weather6_random ::: random ::: zufällig
+CLW-Sit_Env_Day ::: day ::: Tag
+CLW-Sit_Env_Dusk ::: dusk ::: Abenddämmerung
+CLW-Sit_Env_Night ::: night ::: Nacht
+CLW-Sit_Env_Dawn ::: dawn ::: Morgendämmerung
+CLW-Sit_Env_Line ::: Time %1, %2; weather %3. ::: Uhrzeit %1, %2; Wetter %3.
+CLW-Sit_Env_LineNext ::: Time %1, %2; weather %3, turning %4 in about %5 minutes. ::: Uhrzeit %1, %2; Wetter %3, wechselt in etwa %5 Minuten auf %4.

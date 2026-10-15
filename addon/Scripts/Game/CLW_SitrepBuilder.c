@@ -214,6 +214,9 @@ class CLW_SitrepBuilder
 		CLW_ForceSpawner spawner = CLW_GameMode.GetForceSpawner();
 		if (spawner)
 			timeline = Join(timeline, ForceStateWords(spawner.GetLiveAI(factionKey), war.GetAiCap(factionKey)));
+		string environment = CLW_Environment.SitrepLine();	// weather and time of day (wire or "")
+		if (!environment.IsEmpty())
+			timeline = AppendLine(timeline, environment);
 		sitrep.SetBody(0, AppendLine(objectives, timeline));
 
 		// ---- E: intel ----

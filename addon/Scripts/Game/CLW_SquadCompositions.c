@@ -12,11 +12,26 @@ class CLW_SquadComposition
 	ref array<string> m_aRoles;
 }
 
+// Stand-ins of one role: the first listed role the faction has an OWN character for fills in when it has none for m_sRole
+// (dev/notes/own-faction-roles.md).
+[BaseContainerProps()]
+class CLW_RoleSubstitute
+{
+	[Attribute("", UIWidgets.EditBox, "ROLE_* label that a faction may lack")]
+	string m_sRole;
+
+	[Attribute(desc: "Stand-in roles in priority order (ROLE_* label names)")]
+	ref array<string> m_aStandIns;
+}
+
 [BaseContainerProps(configRoot: true)]
 class CLW_SquadCompositions
 {
 	[Attribute()]
 	ref array<ref CLW_SquadComposition> m_aCompositions;
+
+	[Attribute()]
+	ref array<ref CLW_RoleSubstitute> m_aSubstitutes;
 }
 
 class CLW_SquadCompositionStore
@@ -68,5 +83,29 @@ class CLW_SquadCompositionStore
 		}
 
 		return false;
+	}
+
+	// Stand-in roles for a role the faction has no own character for, in priority order: the file's list, else the generic rifleman.
+	static void StandIns(string role, notnull array<string> standIns)
+	{
+		CLW_SquadCompositions data = GetData();
+		if (data && data.m_aSubstitutes)
+		{
+			foreach (CLW_RoleSubstitute substitute : data.m_aSubstitutes)
+			{
+				if (!substitute || substitute.m_sRole != role || !substitute.m_aStandIns)
+					continue;
+
+				foreach (string standIn : substitute.m_aStandIns)
+				{
+					standIns.Insert(standIn);
+				}
+
+				return;
+			}
+		}
+
+		if (role != "ROLE_RIFLEMAN")
+			standIns.Insert("ROLE_RIFLEMAN");
 	}
 }

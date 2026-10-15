@@ -7,6 +7,9 @@
 //   pins           {<faction>: {<kind>: [libId]}}
 //   restartId      int, bumped by the dashboard "Restart war"; the game polls GET /control
 //   lastSync       {time, round, gameVersion, addons[{guid,name}], factions[{key,name,side}]} of the last POST /loadouts/sync
+// Item details (optional, WP7): a record may carry itemInfo [{id, name, key?, path?, type, cost, count}] and totalCost (supplies, -1 = unknown),
+// resolved by the game (CLW_ItemInfo.c). Old records without them work everywhere; the list endpoint ships only a small `summary`, the full
+// list comes from GET /api/loadouts/(library|player)/<id>/items.
 // Game endpoints (X-CLW-Token, see auth.mjs): POST /loadouts/player, POST /loadouts/sync, POST /loadouts/status, GET /control.
 // Dashboard endpoints (session): see handleApi.
 import fs from "node:fs";
@@ -25,6 +28,41 @@ const isInt = (v) => typeof v === "number" && Number.isInteger(v);
 const line = (v, max) => typeof v === "string" && v.length <= max && !/[\u0000-\u001f]/.test(v);
 const strList = (a, max, len) => (Array.isArray(a) ? a.filter((x) => typeof x === "string" && x.length > 0 && x.length <= len).slice(0, max) : []);
 const fail = (status, error) => ({ ok: false, status, error });
+
+// ---- item details ----
+const MAX_ITEM_INFO = 600;
+const TYPE_RE = /^[a-z][a-z_]{0,31}$/;
+const PRIMARY_ORDER = ["rifle", "sniper", "machinegun", "launcher", "weapon", "pistol"];
+const nameOf = (i) => i.name || i.key || (i.path ? String(i.path).split("/").pop().replace(/\.[a-z]+$/i, "") : "") || i.id;
+
+// tolerant: skips malformed entries, clamps numbers, never throws; non-arrays give []
+export function cleanItemInfo(a) {
+  if (!Array.isArray(a)) return [];
+  const out = [];
+  for (const x of a) {
+    if (out.length >= MAX_ITEM_INFO) break;
+    if (!isObj(x) || !line(x.id, 400) || !x.id) continue;
+    out.push({
+      id: x.id, name: line(x.name, 200) ? x.name : "", ...(line(x.key, 200) && x.key ? { key: x.key } : {}), ...(line(x.path, 400) && x.path ? { path: x.path } : {}),
+      type: typeof x.type === "string" && TYPE_RE.test(x.type) ? x.type : "other",
+      cost: isInt(x.cost) && x.cost >= 0 && x.cost <= 1e9 ? x.cost : -1, count: isInt(x.count) && x.count >= 1 && x.count <= 9999 ? x.count : 1,
+    });
+  }
+  return out;
+}
+const cleanTotal = (v) => (isInt(v) && v >= 0 && v <= 1e9 ? v : -1);
+
+// small list-view digest of a record's item details; null when it has none
+export function summarize(rec) {
+  const info = rec?.itemInfo;
+  if (!Array.isArray(info) || !info.length) return null;
+  const types = {};
+  let items = 0;
+  for (const i of info) { items += i.count; types[i.type] = (types[i.type] ?? 0) + i.count; }
+  let primary = "";
+  for (const t of PRIMARY_ORDER) { const p = info.find((i) => i.type === t); if (p) { primary = nameOf(p); break; } }
+  return { items, distinct: info.length, totalCost: cleanTotal(rec.totalCost), types, primary };
+}
 
 export function normRole(r) {
   if (r === "" || r === null || r === undefined) return "";
@@ -48,6 +86,7 @@ function cleanPlayer(b, now) {
       items: strList(b.items, 600, 400), addons: strList(b.addons, 600, 64),
       gameVersion: line(b.gameVersion, 64) ? b.gameVersion : "", savedAt: isInt(b.savedAt) && b.savedAt > 0 ? b.savedAt : Math.floor(now / 1000),
       status, missing: strList(b.missing, 600, 400),
+      itemInfo: cleanItemInfo(b.itemInfo), totalCost: cleanTotal(b.totalCost),
     },
   };
 }
@@ -114,7 +153,7 @@ export function createStore(dataDir, { now = () => Date.now(), log = () => {} } 
     };
     save();
     log(`loadouts sync: players ${n} (${bad} rejected), library ${S.library.length}, restartId ${S.restartId}`);
-    return { ok: true, reply: { v: 1, library: S.library, compositions: S.compositions, pins: S.pins } };
+    return { ok: true, reply: { v: 1, library: S.library.map(({ itemInfo, totalCost, ...rest }) => rest), compositions: S.compositions, pins: S.pins } };
   }
 
   function setStatus(body) {
@@ -147,6 +186,7 @@ export function createStore(dataDir, { now = () => Date.now(), log = () => {} } 
       id: "lib-" + S.nextId++, name: nm.trim(), role: r, faction: p.faction, active: false, order: 0,
       loadout: p.loadout, basePrefab: p.basePrefab, items: [...p.items], addons: [...p.addons], gameVersion: p.gameVersion,
       createdFrom: { identityId: p.identityId, playerName: p.playerName }, status: p.status, missing: [...p.missing],
+      itemInfo: (p.itemInfo ?? []).map((i) => ({ ...i })), totalCost: cleanTotal(p.totalCost),
     };
     S.library.push(e);
     save();
@@ -224,7 +264,7 @@ export function createStore(dataDir, { now = () => Date.now(), log = () => {} } 
   const badCount = () => S.library.filter((e) => e.status === "degraded" || e.status === "invalid").length + S.players.filter((p) => p.status === "degraded" || p.status === "invalid").length;
   function restart() { S.restartId++; save(); log(`loadouts: restart requested, restartId ${S.restartId}`); return { ok: true, restartId: S.restartId }; }
 
-  const slim = (o) => { const { loadout, ...rest } = o; return { ...rest, loadoutLen: typeof loadout === "string" ? loadout.length : 0 }; };
+  const slim = (o) => { const { loadout, itemInfo, ...rest } = o; return { ...rest, loadoutLen: typeof loadout === "string" ? loadout.length : 0, summary: summarize(o) }; };
   function view() {
     const facs = new Set([...S.players.map((p) => p.faction), ...S.library.map((e) => e.faction), ...(S.lastSync?.factions ?? []).map((f) => f.key)]);
     return {
@@ -263,6 +303,13 @@ export async function handleGame(store, req, res, url, ctx) {
 export async function handleApi(store, req, res, url, ctx) {
   if (!url.startsWith("/api/loadouts")) return false;
   if (req.method === "GET" && url === "/api/loadouts") { ctx.send(res, 200, store.view()); return true; }
+  const items = /^\/api\/loadouts\/(library|player)\/([^/]+)\/items$/.exec(url);
+  if (req.method === "GET" && items) { // item details of one record (the list view only carries a summary)
+    const S = store.raw(), dec = decodeURIComponent(items[2]);
+    const rec = items[1] === "library" ? S.library.find((e) => e.id === dec) : S.players.find((p) => p.identityId + "|" + p.faction === dec);
+    ctx.send(res, rec ? 200 : 404, rec ? { items: rec.items ?? [], itemInfo: rec.itemInfo ?? [], totalCost: cleanTotal(rec.totalCost) } : { error: "not found" });
+    return true;
+  }
   if (req.method === "GET" && /^\/api\/loadouts\/(library|player)\/[^/]+$/.test(url)) { // one record with its loadout string (export / debugging)
     const [, kind, id] = /^\/api\/loadouts\/(library|player)\/([^/]+)$/.exec(url);
     const S = store.raw(), dec = decodeURIComponent(id);

@@ -313,6 +313,7 @@ class CLW_SideRules
 {
 	bool m_bOwnOnly;
 	bool m_bKinAllInfantry;						// kinFill all also imports foot entries for roles the side has
+	string m_sKinInfantry;						// "" = not set (inherit), "own" (default) | "kin": soldiers of imported kin entries
 	string m_sKinFill;							// "" = not set (inherit), "missing" (default) | "all"
 	float m_fKinWeight = -1;					// < 0 = not set (inherit), default 0.5 (CLW_SideRules.DEFAULT_KIN_WEIGHT)
 	ref array<string> m_aKin = {};				// explicit kin faction keys (tried first)
@@ -321,12 +322,20 @@ class CLW_SideRules
 
 	static const string KIN_MISSING = "missing";
 	static const string KIN_ALL = "all";
+	static const string INFANTRY_OWN = "own";
+	static const string INFANTRY_KIN = "kin";
 	static const float DEFAULT_KIN_WEIGHT = 0.5;
 
 	// kinFill all: kin entries are also imported for roles the own faction already has.
 	bool KinAll()
 	{
 		return m_sKinFill == KIN_ALL;
+	}
+
+	// kinInfantry: imported kin entries carry the side's OWN infantry groups (default); "kin" keeps the kin faction's soldiers.
+	bool KinInfantryOwn()
+	{
+		return m_sKinInfantry != INFANTRY_KIN;
 	}
 
 	float KinWeight()
@@ -349,6 +358,13 @@ class CLW_SideRules
 
 		if (body.FieldBool("kinAllInfantry", false))
 			m_bKinAllInfantry = true;
+
+		string infantry = body.FieldText("kinInfantry");
+		infantry.ToLower();
+		if (infantry == INFANTRY_OWN || infantry == INFANTRY_KIN)
+			m_sKinInfantry = infantry;
+		else if (!infantry.IsEmpty())
+			Print("CLW: ERROR overrides " + where + ": kinInfantry must be \"own\" or \"kin\" (got '" + infantry + "'), ignored", LogLevel.ERROR);
 
 		string weight = body.FieldText("kinWeight");
 		if (!weight.IsEmpty())
@@ -404,6 +420,8 @@ class CLW_SideRules
 
 		if (other.m_bKinAllInfantry)
 			m_bKinAllInfantry = true;
+		if (!other.m_sKinInfantry.IsEmpty())
+			m_sKinInfantry = other.m_sKinInfantry;
 		if (!other.m_sKinFill.IsEmpty())
 			m_sKinFill = other.m_sKinFill;
 		if (other.m_fKinWeight >= 0)
@@ -520,8 +538,8 @@ class CLW_AdminOverrides
 			while (j < body.m_aKeys.Count())
 			{
 				string field = body.m_aKeys[j];
-				if (field != "ownOnly" && field != "kin" && field != "excludeFactions" && field != "excludePathContains" && field != "kinFill" && field != "kinWeight" && field != "kinAllInfantry")
-					Print("CLW: overrides sides '" + key + "': unknown key '" + field + "' ignored (known: ownOnly, kin, kinFill, kinWeight, kinAllInfantry, excludeFactions, excludePathContains)", LogLevel.WARNING);
+				if (field != "ownOnly" && field != "kin" && field != "excludeFactions" && field != "excludePathContains" && field != "kinFill" && field != "kinWeight" && field != "kinAllInfantry" && field != "kinInfantry")
+					Print("CLW: overrides sides '" + key + "': unknown key '" + field + "' ignored (known: ownOnly, kin, kinFill, kinWeight, kinAllInfantry, kinInfantry, excludeFactions, excludePathContains)", LogLevel.WARNING);
 
 				j++;
 			}
@@ -654,6 +672,78 @@ class CLW_SidePool
 			if (!have)
 				missing.Insert(kind);
 		}
+	}
+
+	// The side's own infantry group (foot entry of the side itself, never a kin import) that replaces a kin group of 'want' members.
+	// kind recon: the own recon entries first (closest in size), none -> the SMALLEST own group; any other kind: own infantry groups first.
+	// capacity >= 0: only groups with <= capacity members count, none fits -> the smallest. Anti-armour entries only match when antiArmor is
+	// wanted (and vice versa) unless nothing else exists. Null = the side has no own foot group at all (tiny pack).
+	static CLW_ForceEntry PickOwnGroup(notnull array<ref CLW_ForceEntry> own, string kind, int want, int capacity, bool antiArmor)
+	{
+		bool wantRecon = kind == CLW_ForceKind.RECON;
+		string preferred = CLW_ForceKind.INFANTRY;
+		if (wantRecon)
+			preferred = CLW_ForceKind.RECON;
+
+		array<CLW_ForceEntry> pool = {};
+		int preferredCount;
+		foreach (CLW_ForceEntry entry : own)
+		{
+			if (!entry.m_bEnabled || entry.HasVehicle() || entry.m_GroupPrefab.IsEmpty() || entry.m_iGroupMembers <= 0 || !entry.m_sKinFrom.IsEmpty())
+				continue;
+
+			pool.Insert(entry);
+			if (entry.m_sKind == preferred)
+				preferredCount++;
+		}
+
+		if (pool.IsEmpty())
+			return null;
+
+		if (wantRecon && preferredCount == 0)
+			want = 0;	// no own recon team: the smallest own group plays it
+
+		CLW_ForceEntry best;
+		int bestAt;
+		int bestNoFit;
+		int bestDiff;
+		foreach (CLW_ForceEntry candidate : pool)
+		{
+			if (preferredCount > 0 && candidate.m_sKind != preferred)
+				continue;
+
+			int at = 0;
+			if (candidate.m_bAntiArmor != antiArmor)
+				at = 1;
+
+			int noFit = 0;
+			int diff = Math.AbsInt(candidate.m_iGroupMembers - want);
+			if (capacity >= 0 && candidate.m_iGroupMembers > capacity)
+			{
+				noFit = 1;
+				diff = candidate.m_iGroupMembers;	// nothing fits: the smallest
+			}
+
+			// fit and size first, anti-armour only breaks ties: own rifle squads carry AT soldiers, so ranking AT first put a 2-man MG team
+			// into every borrowed truck (DS e2e 2026-10-15)
+			bool better = !best;
+			if (best && noFit != bestNoFit)
+				better = noFit < bestNoFit;
+			else if (best && diff != bestDiff)
+				better = diff < bestDiff;
+			else if (best)
+				better = at < bestAt;
+
+			if (better)
+			{
+				best = candidate;
+				bestAt = at;
+				bestNoFit = noFit;
+				bestDiff = diff;
+			}
+		}
+
+		return best;
 	}
 
 	static string BaseOf(ResourceName prefab)
