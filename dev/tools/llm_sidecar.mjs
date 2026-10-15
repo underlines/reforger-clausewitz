@@ -54,6 +54,10 @@
 //     Base structures: the situation carries "structures":[{"base","kind","label","pos":[x,z],"grid"}] (own side, one per placed service, same set as the in-game map markers). Dashboard map layer only (GET /api/state factions[<name>].situation.structures); stripped from the LLM prompt.
 //     Reply channels: orders / buy / missions (same command JSON as v2) + "fobs" (M3 phase F: [{"command":"ESTABLISH_FOB","site":"<fobSites id>"} or {"command":"UPGRADE_FOB","fob":"<fobs id>"}], max 1; phase L adds {"command":"RESUPPLY","fob":"<fobs id>"} and {"command":"CONVOY","origin":"<base id>","dest":"<base id>"}, max 3 per reply in total, only with the logistics capability + blocks convoys[] / logisticsRules; situation blocks fobs[] / fobSites[] / fobRules). New channels need game + sidecar support.
 //
+//   POST /hq {faction, msg:{id,player,role,squad,grid,pos,lang,text,ageSec,history}} (WP11 fast path, X-CLW-Token): runs the /hq agent turn at once against the
+//     faction's cached situation (capped at 25 s) and answers ON THAT REQUEST {handled:true, hqReplies?, hqActions?}; {handled:false, reason} = nothing started (no cached
+//     situation / message already started by the other path), the hq[] of POST /orders stays the fallback. Dedupe by faction|id|player|text; if the game hung up before the
+//     turn ended, the result rides on the next /orders reply as before. See "FAST PATH" in the HQ chat section.
 //   Protocol v4 ("v":4; i18n, design: dev/notes/i18n-design.md) = v3 + languages. v3 stays accepted; no language field = English / old behaviour.
 //     /hq (POST /orders "hq"[] messages): each message may carry "lang" (ISO 639-1, the asker's language). The strong LLM then writes the reply in that
 //       language in the SAME agent call (final text = JSON {"reply","setLanguage"?}). hqReplies[] entries: {msgId,text,setLanguage?}; setLanguage = "<xx>"
@@ -1301,7 +1305,13 @@ async function handleManifest(req, res) {
 // faction: hqActions [{msgId,id,action,args:[{name,value}]}] (the game runs them through its action registry as the player) and
 // hqReplies [{msgId,text,fallback?}] (fallback:true = no answer, the game shows its /request menu hint). The SDK is loaded lazily, so the
 // strategic tick keeps working without node_modules.
-const HQ_MAX = 60, HQ_SEEN_MAX = 400, HQ_MAX_AGE_SEC = 90;
+// FAST PATH (WP11): the game also POSTs each message on its own to POST /hq {faction,msg} (right when the player types it) and gets the
+// answer on THAT request ({handled,hqReplies,hqActions}), so the reply no longer waits for the commander LLM call that carries the
+// situation POST. The agent turn runs against the situation cached by the faction's last /orders POST (hqSitCache). Dedupe by the same
+// hqSeen key: a message started by one path is skipped by the other. If the game hung up before the turn ended, the result goes to
+// hqOut and rides on the next /orders reply as before. {handled:false,reason} = nothing started, the situation path stays in charge.
+const HQ_MAX = 60, HQ_SEEN_MAX = 400, HQ_MAX_AGE_SEC = 90, HQ_FAST_TURN_SEC = 25; // 25 s < the game's /hq REST timeout (30 s)
+const hqSitCache = {};       // faction -> {sit, ts} (the last valid situation, cached on arrival, before the commander call)
 const hqLog = [];            // newest first: dashboard "HQ chat" view
 const hqSeen = new Set();    // faction|id|player|text
 const hqOut = {};            // faction -> {actions:[], replies:[]}
@@ -1327,7 +1337,7 @@ function hqFallbackReason(c) {
   return null;
 }
 function hqFinish(entry, faction, r) {
-  const out = hqOutFor(faction);
+  const out = { actions: [], replies: [] }; // this turn's delivery: to the fast request if it is still open, else to the next /orders reply
   entry.state = "done"; entry.ok = r.ok; entry.error = r.error ?? null; entry.latencyMs = r.latencyMs; entry.usage = r.usage; entry.steps = r.steps; entry.tools = r.tools;
   entry.modelUsed = r.ok ? (r.modelUsed ?? entry.model) : null; entry.fellBack = !!r.fellBack; entry.primaryError = r.primaryError ?? null;
   entry.actions = r.actions; entry.reply = r.ok ? r.replyText : ""; entry.lang = entry.msg.lang || null; entry.setLanguage = r.ok ? (r.setLanguage ?? null) : null;
@@ -1335,7 +1345,9 @@ function hqFinish(entry, faction, r) {
     for (const a of r.actions) out.actions.push({ msgId: entry.msg.id, id: a.id, action: a.action, args: a.args });
     out.replies.push({ msgId: entry.msg.id, text: r.replyText, ...(r.setLanguage ? { setLanguage: r.setLanguage } : {}) }); // setLanguage: v4 only, validated ^[a-z]{2}$|auto
   } else out.replies.push({ msgId: entry.msg.id, text: "", fallback: true });
-  console.log(`hq faction=${faction} msg=${entry.msg.id} player=${entry.msg.player} ${r.ok ? `actions=${r.actions.length} steps=${r.steps.length}` : "FAILED " + r.error} ${r.latencyMs}ms${r.usage?.cost ? ` cost=$${r.usage.cost.toFixed(5)}` : ""}`);
+  const viaFast = !!entry.fast?.deliver(out);
+  if (!viaFast) { const q = hqOutFor(faction); q.actions.push(...out.actions); q.replies.push(...out.replies); }
+  console.log(`hq ${viaFast ? "fast " : ""}faction=${faction} msg=${entry.msg.id} player=${entry.msg.player} ${r.ok ? `actions=${r.actions.length} steps=${r.steps.length}` : "FAILED " + r.error} ${r.latencyMs}ms${r.usage?.cost ? ` cost=$${r.usage.cost.toFixed(5)}` : ""}`);
 }
 async function hqRun(job) {
   hqRunning++;
@@ -1346,7 +1358,7 @@ async function hqRun(job) {
     const ch = slotChain(c, "hq");
     const fallback = ch.fallback ? { config: ch.fallback, primaryCooling: () => coolLeftMs(ch.slot, ch.primary) > 0,
       onFailure: (which, err) => noteCooldown(ch.slot, which === "primary" ? ch.primary : ch.fallback, err, true), onFallback: (err) => noteFellBack(ch.slot, ch.primary.model, err) } : null;
-    const r = await mod.runAgentTurn({ manifest, situation: sit, message: entry.msg, config: c, agentConfig: { maxSteps: c.agent.maxSteps, timeoutSec: c.agent.timeoutSec }, journal: journalBlock(faction, c, sit), fallback });
+    const r = await mod.runAgentTurn({ manifest, situation: sit, message: entry.msg, config: c, agentConfig: { maxSteps: c.agent.maxSteps, timeoutSec: entry.fast ? Math.min(c.agent.timeoutSec, HQ_FAST_TURN_SEC) : c.agent.timeoutSec }, journal: journalBlock(faction, c, sit), fallback });
     if ((r.fellBack ? ch.fallback?.provider : c.provider) === "openrouter") recordUsage(r.modelUsed ?? c.model, faction, r.usage);
     hqFinish(entry, faction, r);
   } catch (e) {
@@ -1357,22 +1369,24 @@ async function hqRun(job) {
   }
 }
 // Called by handleOrders with the faction's situation (hq already cut out of it).
-function hqIngest(faction, sit, list, manifest, c) {
+// fast (optional) = {deliver(out) -> bool, skip(reason)}: the POST /hq request that carries the (single) message.
+function hqIngest(faction, sit, list, manifest, c, fast = null) {
   if (!Array.isArray(list)) return;
   for (const raw of list.slice(0, 10)) {
     const msg = cleanHqMessage(raw);
     if (!msg) continue;
     const key = `${faction}|${msg.id}|${msg.player}|${msg.text}`;
-    if (hqSeen.has(key)) continue;
+    if (hqSeen.has(key)) { fast?.skip("already started"); continue; }
     hqSeen.add(key);
     if (hqSeen.size > HQ_SEEN_MAX) { const first = hqSeen.values().next().value; hqSeen.delete(first); }
-    const entry = { ts: Date.now(), faction, msg, provider: c.provider, model: c.provider === "fake" ? null : c.model, modelUsed: null, fellBack: false, primaryError: null, state: "running", ok: null, error: null, steps: [], tools: [], actions: [], reply: "", usage: null, latencyMs: null, lang: msg.lang || null, setLanguage: null, historyCount: msg.history.length };
+    const entry = { ts: Date.now(), faction, msg, provider: c.provider, model: c.provider === "fake" ? null : c.model, modelUsed: null, fellBack: false, primaryError: null, state: "running", ok: null, error: null, steps: [], tools: [], actions: [], reply: "", usage: null, latencyMs: null, lang: msg.lang || null, setLanguage: null, historyCount: msg.history.length, path: fast ? "fast" : "situation", fast };
     hqLog.unshift(entry); if (hqLog.length > HQ_MAX) hqLog.length = HQ_MAX;
     const why = hqFallbackReason(c) ?? (msg.ageSec > HQ_MAX_AGE_SEC ? "message too old" : null);
     if (why) {
       entry.state = "done"; entry.ok = false; entry.error = "fallback: " + why;
-      hqOutFor(faction).replies.push({ msgId: msg.id, text: "", fallback: true });
-      console.log(`hq faction=${faction} msg=${msg.id} player=${msg.player}: fallback (${why})`);
+      const fb = { actions: [], replies: [{ msgId: msg.id, text: "", fallback: true }] };
+      if (!fast?.deliver(fb)) hqOutFor(faction).replies.push(...fb.replies);
+      console.log(`hq ${fast ? "fast " : ""}faction=${faction} msg=${msg.id} player=${msg.player}: fallback (${why})`);
       continue;
     }
     const job = { faction, entry, sit, manifest, cfg: { ...c, agent: { ...c.agent } } };
@@ -1628,7 +1642,7 @@ function send(res, code, obj) {
 // ---------- auth + loadouts wiring (modules auth.mjs / loadouts.mjs) ----------
 const auth = AUTH.createAuth({ dataDir: DATA_DIR, getAdmin: () => cfg.admin, setAdmin: (a) => { cfg.admin = a; saveConfig(); } });
 const loadouts = LO.createStore(DATA_DIR, { log: (m) => console.log(m) });
-const GAME_ROUTES = new Set(["/health", "/orders", "/manifest", "/translate", "/world", "/world/roads", "/world/locations", "/world/buildings", "/loadouts/player", "/loadouts/sync", "/loadouts/status", "/control"]);
+const GAME_ROUTES = new Set(["/health", "/orders", "/hq", "/manifest", "/translate", "/world", "/world/roads", "/world/locations", "/world/buildings", "/loadouts/player", "/loadouts/sync", "/loadouts/status", "/control"]);
 const redirect = (res, to) => { res.writeHead(302, { Location: to, "Cache-Control": "no-store" }); res.end(); };
 
 const MIME = {
@@ -1689,6 +1703,7 @@ async function handleOrders(req, res) {
   const faction = typeof sit?.faction === "string" ? sit.faction : "?";
   const known = manifestHash ? manifests[faction] : null;
   const manifest = known && known.hash === manifestHash ? known : DEFAULT_MANIFEST;
+  if (sit && typeof sit === "object" && Array.isArray(sit.squads)) hqSitCache[faction] = { sit, ts: Date.now() }; // for POST /hq, available while the commander call is still running
   if (hqList) hqIngest(faction, sit, hqList, manifests[faction] ?? DEFAULT_MANIFEST, snapshot);
   const needManifest = !!manifestHash && manifest === DEFAULT_MANIFEST; // v3 post with an unknown hash: ask the game to resend
   const lc = (lastCall[faction] ??= { ts: 0, sit: null });
@@ -1808,6 +1823,30 @@ async function handleOrders(req, res) {
   if (needManifest) reply.needManifest = true;
   Object.assign(reply, hqDrain(faction));
   send(res, 200, reply);
+}
+
+// POST /hq {faction, msg:{id,player,role,squad,grid,pos,lang,text,ageSec,history}} -> {handled, reason?, hqReplies?, hqActions?} (see FAST PATH above).
+// The response comes when the agent turn ends (<= HQ_FAST_TURN_SEC); handled:false = nothing was started (no cached situation, duplicate, bad message).
+async function handleHq(req, res) {
+  let body;
+  try { body = JSON.parse(await readBody(req)); } catch { return send(res, 400, { error: "invalid JSON" }); }
+  const faction = typeof body?.faction === "string" ? body.faction : "";
+  const msg = cleanHqMessage(body?.msg);
+  if (!faction || !msg) return send(res, 400, { error: "faction and msg {id,text,...} required" });
+  const cached = hqSitCache[faction];
+  if (!cached) return send(res, 200, { handled: false, reason: "no situation cached for " + faction });
+  let closed = false, done = false;
+  res.on("close", () => { closed = true; });
+  const fast = {
+    skip: (reason) => { done = true; send(res, 200, { handled: false, reason }); },
+    deliver: (out) => {
+      if (done || closed || res.destroyed || res.writableEnded) return false;
+      done = true;
+      send(res, 200, { handled: true, ...(out.actions.length ? { hqActions: out.actions } : {}), ...(out.replies.length ? { hqReplies: out.replies } : {}) });
+      return true;
+    },
+  };
+  hqIngest(faction, cached.sit, [body.msg], manifests[faction] ?? DEFAULT_MANIFEST, { ...cfg }, fast);
 }
 
 // ---------- world info, map image, vector overlay (roads, locations) ----------
@@ -2027,7 +2066,7 @@ async function handleApi(req, res, url) {
     return send(res, 200, {
       now: Date.now(), startedAt: state.startedAt, lastRequestTs: state.lastRequestTs,
       factions: state.factions, activeFactions: activeFactions(), staleAfterSec: STALE_FACTION_MS / 1000,
-      exchanges: state.exchanges, hq: hqLog, debugLog: state.debugLog, manifests: manifestsView(), counters: state.counters, modelCooldowns: cooldownsView(), config: publicConfig(), auth: { defaultPassword: auth.isDefaultPassword() }, loadouts: { bad: loadouts.badCount(), restartId: loadouts.restartId() }, usage: usageView(), scheduler: schedulerView(), journals: journalsView(), paused,
+      exchanges: state.exchanges, hq: hqLog.map(({ fast, ...e }) => e), debugLog: state.debugLog, manifests: manifestsView(), counters: state.counters, modelCooldowns: cooldownsView(), config: publicConfig(), auth: { defaultPassword: auth.isDefaultPassword() }, loadouts: { bad: loadouts.badCount(), restartId: loadouts.restartId() }, usage: usageView(), scheduler: schedulerView(), journals: journalsView(), paused,
     });
   }
   if (req.method === "POST" && url === "/api/pause") {
@@ -2132,6 +2171,9 @@ http.createServer((req, res) => {
   }
   if (req.method === "POST" && url === "/translate") {
     return void handleTranslate(req, res).catch((e) => { if (!res.headersSent) send(res, 500, { error: String(e?.message ?? e) }); });
+  }
+  if (req.method === "POST" && url === "/hq") {
+    return void handleHq(req, res).catch((e) => { console.log(`  hq handler error: ${e?.message ?? e}`); if (!res.headersSent) send(res, 500, { error: "internal" }); });
   }
   if (req.method === "POST" && url === "/orders") {
     return void handleOrders(req, res).catch((e) => { console.log(`  handler error: ${e?.message ?? e}`); if (!res.headersSent) send(res, 500, { error: "internal" }); });
