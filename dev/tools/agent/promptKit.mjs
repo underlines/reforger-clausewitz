@@ -199,9 +199,10 @@ const DROP_KEYS = new Set(["structures", "debug", "manifest", "v"]);
 const STATIC_SCALARS = new Set(["faction", "map", "world", "mapInfo", "mode"]);
 // array key -> {static: fields that go into the static block (in this order), sort: row sort key}
 const STATIC_ARRAYS = {
-  objectives: { fields: ["id", "name", "pos", "radius", "value", "side"], sort: "id" },
+  objectives: { fields: ["id", "name", "pos", "grid", "radius", "value", "side"], sort: "id" },
   fobSites: { fields: ["id", "name", "pos", "grid", "place"], sort: "id" },
-  bases: { fields: null, sort: "faction" },
+  // bases: id is "HQ" for every row, `faction` is the join key; stock (logistics) changes, so it is dynamic and must not sit in the cacheable static block
+  bases: { fields: ["id", "faction", "pos"], sort: "faction", keys: ["faction"] },
   catalog: { fields: null, sort: "type" },
 };
 
@@ -268,13 +269,15 @@ export function leanSituation(sit, opts = {}) {
       let sRows = rows, dRows = null;
       if (sa.fields) {
         sRows = rows.map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => sa.fields.includes(k))));
-        dRows = rows.map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => k === "id" || !sa.fields.includes(k))));
+        const jk = sa.keys ?? ["id"];
+        dRows = rows.map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => jk.includes(k) || !sa.fields.includes(k))));
       }
       const order = sa.sort ? [...rows.keys()].sort((a, b) => cmp(String(rows[a][sa.sort] ?? ""), String(rows[b][sa.sort] ?? "")) || a - b) : rows.map((_, i) => i);
       stat[key] = tabulate(order.map((i) => sRows[i]), sa.fields);
       if (dRows) {
-        const dyn1 = tabulate(dRows, ["id"]);
-        if (dyn1.cols.some((c) => c !== "id")) dyn[key] = dyn1; // dynamic part of objectives / fobSites (owner, contested, progress, ...)
+        const jk = sa.keys ?? ["id"];
+        const dyn1 = tabulate(dRows, jk);
+        if (dyn1.cols.some((c) => !jk.includes(c))) dyn[key] = dyn1; // dynamic part of objectives / fobSites (owner, contested, progress, ...)
       }
       continue;
     }

@@ -3,6 +3,9 @@
 //   buildSitrepPrompt({config, sit, orders})               -> {system, user, sections}
 //   buildPlannerPrompt({config, sit, manifest, journal, orders, trigger}) -> {system, user, sections, spec}   (planner split: buy + FOB + logistics)
 //   buildCommanderPrompt with config.planner.enabled = the ORDERS call (no buy / FOB text, PLAN block in the user message)
+// config.prompt {lean, staticBlock, contactMax, contactMaxAgeSec} (builders read it; absent = lean off = the raw-situation prompts, byte-identical to before):
+//   lean: the situation JSON is promptKit.leanSituation(...).dynamic (+ one LEAN_NOTE line in the rules); staticBlock: the .static part is the last section
+//   of the SYSTEM prompt ("MAP AND CATALOG (static)", section "static"), else it heads the user message. See "lean situation" below.
 // `sections` = {name: text}, every part of system + user that the call sends, measurable with promptKit.sectionStats.
 // Layout of the v2 commander call (stable first, so providers can cache the prefix):
 //   system = rules | commands + reply spec | persona | conditional paragraphs (FOBS / LOGISTICS / HELP CALLS only when they apply)
@@ -10,7 +13,7 @@
 // Content-agnostic: names, kinds, types and objective ids come from the situation / manifest (nothing vanilla is hard-wired).
 import * as J from "./journal.mjs";
 import { personaCommander, personaSitrep } from "./personality.mjs";
-import { terseSpec } from "./promptKit.mjs";
+import { terseSpec, leanSituation } from "./promptKit.mjs";
 // environment paragraph (WP3, sit.env): lazy so the prompts still build when ./environment.mjs is missing or broken
 let envPrompt = () => "";
 try { ({ envPrompt } = await import("./environment.mjs")); } catch { /* optional */ }
@@ -212,6 +215,44 @@ export function commandsSection(m, opts = {}) {
   return { commands: t, reply };
 }
 
+// ---------------------------------------------------------------- lean situation (config prompt.lean)
+// With config.prompt.lean the model gets promptKit.leanSituation instead of the raw situation: tables for arrays of objects, [x,z] positions, relevance
+// filtered contacts. The static part (map, objectives' fixed fields, bases, catalog, fobSites) goes to the END of the system prompt (config prompt.staticBlock,
+// the cacheable prefix; section "static"), else to the head of the user message. Without lean every prompt is exactly the raw-situation prompt.
+// The raw situation stays the truth for everything else (rules SITREP, validation, journal, triggers, dashboard): lean is only what is sent to the model.
+export const LEAN_NOTE = "SITUATION ENCODING: arrays of objects are tables {cols, rows}; nested fields are columns a.b (objective.status); an absent column = null/false/empty in every row; positions are [x,z]; war.mode is warMode, and fixed objective/base/site/catalog facts are in the MAP AND CATALOG block, joined by id.\n";
+export const STATIC_HEAD = "MAP AND CATALOG (static)";
+// Per prompt: top-level situation keys the prompt has no use for (and no rule mentions), table columns dropped, catalog descriptions kept or not.
+// Everything else passes through (content-agnostic: unknown fields stay). The orders call of a planner split has no buy / FOB / logistics rules, so it gets none of their data.
+export const LEAN_PROFILES = {
+  commander: { drop: ["fobTasks", "env"], cols: { squads: ["dormant", "heading"], contacts: ["grid"] }, catalogDesc: true },
+  orders: { drop: ["fobTasks", "env", "catalog", "fobSites", "fobRules", "logisticsRules", "convoys"], cols: { squads: ["dormant", "heading"], contacts: ["grid"] }, catalogDesc: false },
+  planner: { drop: ["fobTasks", "env"], cols: { squads: ["dormant", "heading"], contacts: ["grid"] }, catalogDesc: true },
+  sitrep: { drop: ["fobTasks", "catalog", "fobSites", "fobRules", "logisticsRules"], cols: { squads: ["dormant", "heading"] }, catalogDesc: false },
+};
+const dropCols = (tbl, names) => {
+  if (!tbl || !Array.isArray(tbl.cols) || !names?.length) return tbl;
+  const keep = tbl.cols.map((c, i) => [c, i]).filter(([c]) => !names.includes(c)).map(([, i]) => i);
+  return keep.length === tbl.cols.length ? tbl : { cols: keep.map((i) => tbl.cols[i]), rows: tbl.rows.map((r) => keep.map((i) => r[i])) };
+};
+/** role = commander | orders | planner | sitrep. -> {static, dynamic, stats} (promptKit.leanSituation of the situation minus what this prompt does not use). */
+export function leanFor(sit, config, role) {
+  const prof = LEAN_PROFILES[role] ?? LEAN_PROFILES.commander, p = config?.prompt ?? {};
+  const src = Object.fromEntries(Object.entries(sit ?? {}).filter(([k]) => !prof.drop.includes(k)));
+  const opts = { catalogDesc: prof.catalogDesc };
+  if (isNum(p.contactMax)) opts.contactMax = p.contactMax;
+  if (isNum(p.contactMaxAgeSec)) opts.contactMaxAgeSec = p.contactMaxAgeSec;
+  const L = leanSituation(src, opts);
+  for (const [k, names] of Object.entries(prof.cols)) if (L.dynamic[k]) L.dynamic[k] = dropCols(L.dynamic[k], names);
+  return L;
+}
+const leanOn = (config) => !!config?.prompt?.lean;
+const staticInSystem = (config) => leanOn(config) && config.prompt.staticBlock !== false;
+const leanRules = (rules) => rules.replace(/\[x, ?y, ?z\]/g, "[x,z]") + LEAN_NOTE;
+const leanFob = (t) => t.replace("Prefer the first fobSites entry (best toward the front)", "Prefer the first fobSites row of the situation table (best toward the front)");
+/** The static block text ("" when empty), ending with a newline so that system = concatenation of its sections. */
+const staticText = (L) => (L.static && Object.keys(L.static).length ? STATIC_HEAD + "\n" + JSON.stringify(L.static) + "\n" : "");
+
 // ---------------------------------------------------------------- planner split helpers
 const PLAN_CHANNELS = ["buy", "fob"];
 /** A manifest view without / with only the given channels (the orders call drops buy + fob, the planner call keeps only those). */
@@ -224,7 +265,7 @@ export const plannerSplit = (config, manifest) => !!config?.planner?.enabled && 
 
 const compact = (sections) => Object.fromEntries(Object.entries(sections).filter(([, v]) => v));
 const safe = (fn, sit) => { try { return fn(sit) || ""; } catch { return ""; } };
-const ORDER = ["rules", "commands", "persona", "fobs", "logistics", "helpCalls", "situation", "plan", "wake", "env", "journal"];
+const ORDER = ["rules", "commands", "persona", "fobs", "logistics", "helpCalls", "static", "situation", "plan", "wake", "env", "journal"];
 const reorder = (s) => Object.fromEntries(ORDER.filter((k) => k in s).map((k) => [k, s[k]]));
 
 /** The PLAN block of the orders call (split mode): the planner's last result + when it runs next. plan = {buy, fobs, ageSec, nextInSec, running} | null. */
@@ -261,20 +302,24 @@ export function buildCommanderPrompt({ config = {}, sit = null, manifest = DEFAU
   const terse = !!config.output?.terse;
   const spec = terse ? terseSpecOf(m, config) : null;
   const cs = commandsSection(m, { terse, spec });
-  const rules = isSplit
+  const lean = leanOn(config);
+  const rules0 = isSplit
     ? SYSTEM_ORDERS_V2 + "\n" + ORDERS_FLANK + " " + J.SQUAD_NAME_PROMPT + (config.memory?.enabled ? " " + J.JOURNAL_RULE.replace(", FOB", "") : "") + "\n"
     : SYSTEM_V2 + "\n" + J.FLANK_PROMPT + " " + J.SQUAD_NAME_PROMPT + (config.memory?.enabled ? " " + J.JOURNAL_RULE : "") + "\n";
+  const rules = lean ? leanRules(rules0) : rules0;
   const commands = cs.commands + cs.reply + (terse ? "" : wakeText) + "\n";
   const persona = safe(personaCommander, sit);
-  const fobs = !isSplit && fobRelevant(m, sit) ? FOB_PROMPT : "", logistics = !isSplit && logisticsRelevant(m, sit) ? LOGISTICS_PROMPT : "", helpCalls = helpCallsRelevant(sit) ? HELP_CALLS_PROMPT : "";
-  const system = rules + commands + persona + fobs + logistics + helpCalls;
+  const fobs = !isSplit && fobRelevant(m, sit) ? (lean ? leanFob(FOB_PROMPT) : FOB_PROMPT) : "", logistics = !isSplit && logisticsRelevant(m, sit) ? LOGISTICS_PROMPT : "", helpCalls = helpCallsRelevant(sit) ? HELP_CALLS_PROMPT : "";
   const { wake, ...rest } = llmSit;
-  const situation = "Current situation:\n" + JSON.stringify(rest);
+  const L = lean ? leanFor(rest, config, isSplit ? "orders" : "commander") : null;
+  const stat = L ? staticText(L) : "", statSys = staticInSystem(config) ? stat : "";
+  const system = rules + commands + persona + fobs + logistics + helpCalls + statSys;
+  const situation = "Current situation:\n" + JSON.stringify(L ? L.dynamic : rest);
   const planText = isSplit ? planBlock(plan) : "";
   const wakeBlock = wake ? "WAKE (why you are consulted now):\n" + JSON.stringify(wake) : "";
   const env = safe(envPrompt, sit);
-  const user = situation + (planText ? "\n\n" + planText : "") + (wakeBlock ? "\n\n" + wakeBlock : "") + (env ? "\n\n" + env : "") + (journal ? "\n\n" + journal : "");
-  return { system, user, sections: reorder(compact({ rules, commands, persona, fobs, logistics, helpCalls, situation, plan: planText, wake: wakeBlock, env, journal })), spec };
+  const user = (stat && !statSys ? stat + "\n" : "") + situation + (planText ? "\n\n" + planText : "") + (wakeBlock ? "\n\n" + wakeBlock : "") + (env ? "\n\n" + env : "") + (journal ? "\n\n" + journal : "");
+  return { system, user, sections: reorder(compact({ rules, commands, persona, fobs, logistics, helpCalls, static: stat, situation, plan: planText, wake: wakeBlock, env, journal })), spec };
 }
 
 /**
@@ -291,33 +336,40 @@ export function buildPlannerPrompt({ config = {}, sit = null, manifest = DEFAULT
   const spec = terse ? { ...terseSpecOf(m, config), wake: null, missions: false } : null;
   const cs = commandsSection(m, { terse, spec, omitHuman: true });
   const reply = cs.reply.replace('{"k":1} alone = keep all current orders.', '{"k":1} alone = nothing to buy or build now.');
-  const rules = PLANNER_SYSTEM;
+  const lean = leanOn(config);
+  const rules = lean ? leanRules(PLANNER_SYSTEM) : PLANNER_SYSTEM;
   const commands = cs.commands + reply + "\n";
-  const fobs = fobRelevant(m, sit) ? FOB_PROMPT : "", logistics = logisticsRelevant(m, sit) ? LOGISTICS_PROMPT : "";
-  const system = rules + commands + fobs + logistics;
-  const situation = "Current situation:\n" + JSON.stringify(llmSit);
+  const fobs = fobRelevant(m, sit) ? (lean ? leanFob(FOB_PROMPT) : FOB_PROMPT) : "", logistics = logisticsRelevant(m, sit) ? LOGISTICS_PROMPT : "";
+  const L = lean ? leanFor(llmSit, config, "planner") : null;
+  const stat = L ? staticText(L) : "", statSys = staticInSystem(config) ? stat : "";
+  const system = rules + commands + fobs + logistics + statSys;
+  const situation = "Current situation:\n" + JSON.stringify(L ? L.dynamic : llmSit);
   const list = Array.isArray(orders) ? orders : [];
   const ord = "ORDERS IN FORCE (last decision of the commander, with reasons):\n" + (list.length
     ? JSON.stringify(list.map((o) => ({ squad: o.squad, command: o.command, ...(o.target ? { target: o.target } : o.pos ? { pos: o.pos } : {}), reason: o.reason ?? "" })))
     : "none yet");
   const trig = "PLANNER WAKE: " + (trigger || "scheduled run");
-  const user = situation + "\n\n" + ord + (journal ? "\n\n" + journal : "") + "\n\n" + trig;
-  return { system, user, sections: compact({ rules, commands, fobs, logistics, situation, orders: ord, journal, trigger: trig }), spec };
+  const user = (stat && !statSys ? stat + "\n" : "") + situation + "\n\n" + ord + (journal ? "\n\n" + journal : "") + "\n\n" + trig;
+  return { system, user, sections: compact({ rules, commands, fobs, logistics, static: stat, situation, orders: ord, journal, trigger: trig }), spec };
 }
 
 /**
  * The SITREP call (role sitrep). orders = the commander's last validated orders [{squad, command, target|pos, reason}].
  * -> {system, user, sections:{rules, persona, help, situation, orders}}
  */
-export function buildSitrepPrompt({ sit = null, orders = [] } = {}) {
+export function buildSitrepPrompt({ config = {}, sit = null, orders = [] } = {}) {
   const { structures: _structures, wake: _wake, ...llmSit } = sit ?? {};
   const persona = safe(personaSitrep, sit);
   const help = helpCallsRelevant(sit) ? SITREP_HELP_PROMPT : "";
-  const system = SITREP_PROMPT + persona + (help ? "\n" + help : "");
-  const situation = "Current situation:\n" + JSON.stringify(llmSit);
+  const lean = leanOn(config);
+  const rules = lean ? SITREP_PROMPT + "\n" + LEAN_NOTE : SITREP_PROMPT; // lean: contacts keep place / grid / size (the SITREP style needs them)
+  const L = lean ? leanFor(llmSit, config, "sitrep") : null;
+  const stat = L ? staticText(L) : "", statSys = staticInSystem(config) ? stat : "";
+  const system = rules + persona + (help ? "\n" + help : "") + statSys;
+  const situation = "Current situation:\n" + JSON.stringify(L ? L.dynamic : llmSit);
   const list = Array.isArray(orders) ? orders : [];
   const ord = "HQ orders in force (last commander decision, with reasons):\n" + (list.length
     ? JSON.stringify(list.map((o) => ({ squad: o.squad, command: o.command, ...(o.target ? { target: o.target } : o.pos ? { pos: o.pos } : {}), reason: o.reason ?? "" })))
     : "none yet");
-  return { system, user: situation + "\n\n" + ord, sections: compact({ rules: SITREP_PROMPT, persona, help, situation, orders: ord }) };
+  return { system, user: (stat && !statSys ? stat + "\n" : "") + situation + "\n\n" + ord, sections: compact({ rules, persona, help, static: stat, situation, orders: ord }) };
 }

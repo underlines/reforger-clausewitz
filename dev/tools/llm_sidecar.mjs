@@ -6,6 +6,8 @@
 // Listens on 127.0.0.1 only (CLW_HOST to change; CLW_ALLOWED_HOSTS = extra host names for a remote sidecar). Dashboard + /api/* need the admin login (auth.mjs, default password in README);
 // game endpoints use header X-CLW-Token when config gameToken is set. Loadout library: loadouts.mjs (/loadouts/*, /control, /api/loadouts*).
 // CLW_DATA_DIR = data dir (default dev/tools/.cache: sessions.json, loadouts-store.json, map caches).
+// CLW_RECORD_DIR = optional: the last RAW v2 situation of each faction that went to a commander call is written to <dir>/<faction>.json (overwrite, at most once per
+//   60 s per faction; the body as the game posted it, with structures). Use it on a real DS run to refresh dev/tools/fixtures/large_situation.json (prompt budget test).
 //
 // Game API:
 //   GET  /health -> {"ok":true,"mode":"<provider>"}
@@ -123,12 +125,15 @@
 //     convoy; HELP CALLS only with helpCalls[]); user = situation, WAKE object, environment paragraph, HQ journal. Stable parts first so providers can cache
 //     the prefix; config prompt {lean, staticBlock, cache, contactMax 5..60, contactMaxAgeSec 60..1800} (default true,true,true,25,600): cache = cache_control
 //     on the system prompt where the provider needs it (OpenRouter anthropic/* and google/gemini*, Anthropic API); lean/staticBlock/contact* are accepted and stored
-//     but not wired yet (lean situation work).
+//     lean (default on): the model gets promptKit.leanSituation (tables {cols, rows}, [x,z] positions, contacts filtered by contactMax / contactMaxAgeSec, per-prompt
+//     profile in commanderPrompt.LEAN_PROFILES: the orders call of a planner split gets no catalog / FOB / logistics data) in the commander, planner and SITREP prompts;
+//     staticBlock (default on): its static part (map, objective / base / site facts, catalog) is the last section "static" of the SYSTEM prompt (cacheable prefix), else
+//     it heads the user message. The raw situation still feeds the rules SITREP, validateV2, the journal, the triggers and the dashboard. Protocol v1 is never lean.
 //
 //   Call metrics (design: llm-latency-design.md "Metrics"): every provider call is streamed (agent/llmCall.mjs: TTFT, usage, cached tokens) and recorded.
 //     GET /api/state: "llmCalls" = ring of 200, newest first, {ts (epoch ms), faction, role (commander|planner|sitrep|journal|translate|hq), slot (strong|weak), model, ok, error,
 //     inTok, outTok, cachedTok, ttftMs (null = unknown; hq turns have none), totalMs, promptChars, sections:{<name>:{chars,tokens}} (rules, commands, persona, fobs,
-//     logistics, helpCalls, situation, wake, env, journal for the commander call; rules/persona/situation/orders for the SITREP call; system/user otherwise), outputMode
+//     logistics, helpCalls, static, situation, wake, env, journal for the commander call; rules/persona/situation/orders for the SITREP call; system/user otherwise), outputMode
 //     (response_format actually sent: json_object|json_schema|text), fellBack, terse?, cost?}; "latency" = per role {n, okN, p50Ms, p90Ms, avgTtftMs, avgInTok, avgOutTok,
 //     avgCachedTok, lastMs, lastAt} over the ring. Every exchange has "metrics" = the llmCalls entry of its commander call (null for fake/none). One log line per call:
 //     "llm role=<r> faction=<f> model=<m> in=<n> out=<n> cached=<n> ttft=<ms>ms total=<ms>ms sections=<name>:<tok>,...". The fake provider is recorded too (model "fake", no tokens).
@@ -247,7 +252,7 @@ const cfg = {
   // commander reply format: mode = response_format sent to openrouter/openai-compatible (json_object | json_schema | text = none); terse = compact tuple replies
   // (promptKit.terseSpec / expandTerse) instead of the verbose JSON; reasonWords = words asked per reason (validation tolerates 1.5x, 120 chars hard cap)
   output: { mode: "json_object", terse: true, reasonWords: 12 },
-  // prompt shaping: cache = cache hints on the (stable) system prompt; lean / staticBlock / contactMax / contactMaxAgeSec are wired by the lean-situation work (no effect yet)
+  // prompt shaping: lean = tabular lean situation to the model, staticBlock = its static part at the end of the system prompt, cache = cache hints on the (stable) system prompt
   prompt: { lean: true, staticBlock: true, cache: true, contactMax: 25, contactMaxAgeSec: 600 },
   // HQ chat (/hq <text>): AI SDK agent turn per player message, see agent/agentTurn.mjs and "HQ chat" below
   agent: { enabled: true, maxSteps: 4, timeoutSec: 40, maxConcurrent: 3 },
@@ -810,6 +815,19 @@ async function handleTranslate(req, res) {
   return send(res, 200, { ok: true, text_by_lang: tr.by_lang, failed: tr.failed, cached: tr.cached });
 }
 
+// ---------- situation recording (env CLW_RECORD_DIR) ----------
+// The last raw v2 situation of each faction that went to a commander call, for refreshing the prompt budget fixture from a real run. Throttled to once per 60 s per faction.
+const RECORD_DIR = process.env.CLW_RECORD_DIR ? path.resolve(process.env.CLW_RECORD_DIR) : "";
+const RECORD_GAP_MS = 60_000, recordedAt = {};
+function recordSituation(faction, sit, now = Date.now()) {
+  if (!RECORD_DIR || !sit || typeof sit !== "object" || now - (recordedAt[faction] ?? 0) < RECORD_GAP_MS) return;
+  recordedAt[faction] = now;
+  try {
+    fs.mkdirSync(RECORD_DIR, { recursive: true });
+    fs.writeFileSync(path.join(RECORD_DIR, String(faction).replace(/[^A-Za-z0-9_.-]/g, "_") + ".json"), JSON.stringify(sit, null, 1));
+  } catch (e) { console.log(`record situation ${faction} failed: ${e.message}`); }
+}
+
 // ---------- SITREP as its own background call ----------
 // The SITREP is NOT part of the commander call any more (that call is slow because of its output tokens). When one is due, handleOrders starts
 // sitrepJob() next to the commander call (parallel, role "sitrep" = weak slot, strong when none is configured; at most one in flight per faction).
@@ -822,7 +840,7 @@ async function sitrepJob(faction, c, callSit, orders, langs, warTimeSec) {
   const st = srFor(faction), t0 = Date.now();
   st.inflight = true;
   try {
-    const pr = buildSitrepPrompt({ sit: callSit, orders });
+    const pr = buildSitrepPrompt({ config: c, sit: callSit, orders });
     const sections = sectionStats(pr.sections);
     let sr, source;
     if (sitrepIsFake(c)) {
@@ -1953,6 +1971,7 @@ async function handleOrders(req, res) {
       if (valid) { sc.manual = false; sc.baseline = sit; sc.lastLlmAt = now; sc.lastWakeReason = wake.reason; sc.lastWakeTriggers = wake.triggers; }
       const callSit = !valid ? sit : v2 ? { ...annotateContacts(sit), events: sc.pendingEvents.slice(-15), wake } : { ...sit, wake };
       if (valid) sc.pendingEvents = [];
+      if (valid && v2) recordSituation(faction, sit);
       const srCfg = snapshot.sitrep, srSt = srFor(faction);
       const wantSitrep = v2 && !!srCfg?.enabled && !srSt.inflight && Date.now() >= srSt.retryAt && (!srSt.lastAt || Date.now() - srSt.lastAt >= srCfg.intervalSec * 1000 || dec.reason === "manual" || dec.triggers.some((t) => /objective|tickets|lost/i.test(t)));
       const srFake = wantSitrep && sitrepIsFake(snapshot);

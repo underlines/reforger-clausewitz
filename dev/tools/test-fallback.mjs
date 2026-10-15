@@ -80,7 +80,7 @@ const stub = http.createServer((req, res) => {
     if (mode === "garbage") content = "I cannot help with that.";
     else if (kind === "translate") { const lang = /\((\w{2})\)/.exec(sys)?.[1] ?? "??"; content = JSON.stringify(Object.fromEntries(Object.entries(JSON.parse(usr)).map(([k, v]) => [k, `<${j.model}:${lang}> ${v}`]))); }
     else if (kind === "hq") content = JSON.stringify({ reply: "Roger from " + j.model });
-    else content = /"v":/.test(usr) ? JSON.stringify({ keep: true }) : JSON.stringify({ orders: [] }); // the sidecar's own /api/test situation has no protocol version
+    else content = (/"v":/.test(usr) || /SITUATION FIELDS/.test(sys)) ? JSON.stringify({ keep: true }) : JSON.stringify({ orders: [] }); // v2+ prompt: "v" in the raw situation, or the v2 rules (lean drops "v"); the sidecar's own /api/test situation has no protocol version
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ id: "x", object: "chat.completion", created: 1, model: j.model, choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }], usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 } }));
   });
