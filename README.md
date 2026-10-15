@@ -14,7 +14,12 @@ The commanders run on a built-in rule engine out of the box. Optionally, an **LL
 - Control points, tickets, supplies and income, bases with respawn, FOBs, convoys, vehicle depots, arsenals; war ends on tickets, hold-all or time limit.
 - Human players join HQ squads from the deploy/groups menu, receive missions as squad leaders, read SITREPs (journal, `/sitrep`), and use `/request`, `/report`, `/hq <free text>` and the HQ menu at request terminals.
 - English and German texts; with the LLM, every player gets SITREPs and HQ replies in their own language.
-- Loadouts (beta): save your kit at any arsenal; server loadout library on the dashboard.
+- HQ radial menu (hold **U**, or `/hqr`): report contacts (what, count, distance, direction or "ahead"), cancel your last report, call for backup, requests (vehicle by type, resupply, squad, reinforce, mission, status), SITREP, full HQ menu.
+- Natural-language radio: `/hq 2 enemy infantry 100m north` becomes a contact report, `/hq need help` a backup call (needs the LLM sidecar).
+- Weather and time in the setup menu: day speed 0x-96x, start date and hour, six weather slots (or random) blended over the war; HQ gets weather and daylight updates.
+- HQ commander traits per side (aggressive, defensive, methodical, cautious, opportunistic, crazy, or random): they shape the rule commander, the LLM's decisions, SITREP tone and radio style.
+- Loadouts (beta): save your kit at any arsenal; server loadout library on the dashboard with item names, types and prices. Works alongside loadout-editor mods such as WCS_LoadoutEditor.
+- Pack factions field their own soldiers: missing roles are filled from the faction's own roster, borrowed kin vehicles carry the side's own infantry; arsenal items without a price get a default by type (`Configs/CLW/ArsenalPrices.conf`).
 - No dependencies: base game only. RHS / WCS / GRS content is picked up automatically when loaded alongside.
 
 ## Playing / hosting without the LLM
@@ -89,7 +94,7 @@ CLW_HOST=0.0.0.0 CLW_ALLOWED_HOSTS=clw.example.com node llm_sidecar.mjs
 | `CLW_LLM`, `CLW_MODEL` | `fake` | initial provider/model before the first save in the dashboard |
 
 ## Chat commands (in game)
-`/war` (setup / status), `/sitrep`, `/request <what>`, `/report`, `/hq <message>` (free-text radio to your HQ, needs the LLM), `/hq language <code>`, `/hqmenu`.
+`/war` (setup / status), `/sitrep`, `/request <what>`, `/report <count> <inf|veh|armor|air|unknown> <dist> [dir|ahead|bearing]`, `/report cancel`, `/backup [note]` (help call, any role), `/hq <message>` (free-text radio to your HQ, needs the LLM), `/hq language <code>`, `/hqmenu`, `/hqr` (radial menu without the key; default key U).
 
 ## Repository layout
 - `addon/`: the Reforger addon (`addon.gproj`, GUID `C1A05E7B3D9F4A28`), the only part that is published to the Workshop.

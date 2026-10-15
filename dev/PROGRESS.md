@@ -202,3 +202,15 @@ Plan `notes/loadouts-arsenal-plan.md`, contract `notes/loadouts-impl.md`; G1 rol
 - [x] Workshop https://reforger.armaplatform.com/workshop/C1A05E7B3D9F4A28 (3 scenarios), public repo https://github.com/underlines/reforger-clausewitz (MIT, tags + GitHub release).
 - [x] Configurable sidecar endpoint (-clwSidecar / sidecarUrl, token -clwSidecarToken / sidecarToken, sidecar CLW_ALLOWED_HOSTS), verified on the DS with a sidecar on port 8799.
 - [ ] Own mission images (.edds with sources): the vanilla loading screens are not bundled, so the scenarios have no thumbnail.
+
+## HQ comms, radial menu, weather/time, HQ traits (2026-10-14/15, branch `feature/hq-comms-env-traits`, builds #118-#120)
+Design `notes/hq-comms-env-traits-design.md`; implemented by Sonnet subagents (WP1-WP11, code only), DS e2e with RHS + WCS + GRS + TacticalFlava (72 packs).
+- [x] Radial HQ menu on U (vanilla radial + own input action, `/hqr` fallback), multi-level: report (what/count/distance/direction incl. camera "ahead"), cancel last report, backup, requests (vehicle types from the payload), mission, status, SITREP, full menu.
+- [x] New player registry actions REPORT_CONTACT / REPORT_CANCEL / REQUEST_BACKUP; `/report cancel`, `/backup`; help calls in the situation (`helpCalls[]`) and the commander prompt.
+- [x] `/hq` natural language -> report / cancel (fast path: own `POST /hq`, one REST context per channel `hq` / `cmd-<faction>`, because a game RestContext runs requests one at a time). Open: `/hq` backup and chat `/backup` tests (see `notes/llm-latency-plan.md`).
+- [x] Weather and time setup (day speed, date/hour, 6 weather slots), blended over half a slot through the states in between; env block + events for HQ, SITREP line.
+- [x] HQ traits per side (random or chosen): rule-commander tuning, LLM commander / SITREP / radio persona.
+- [x] Own-faction squad roles (stand-ins from the own roster, no kin soldiers), kin imports carry own infantry sized to the seats.
+- [x] Saved loadouts independent of vanilla's flag (own server->client state), custom spawn always applies our record; works with WCS_LoadoutEditor. Loadout item details on the dashboard.
+- [x] Default arsenal prices for unpriced items (written at pool build; modding SCR_ArsenalItem breaks every catalog: "Unknown class").
+- Known: the LLM commander times out on ling-3.1-flash (20 s): next milestone `notes/llm-latency-plan.md`. Spawn-screen paging glitches are vanilla. Sidecar loadout POST sometimes times out (game file stays the source of truth).
