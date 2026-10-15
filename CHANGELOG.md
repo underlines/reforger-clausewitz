@@ -5,6 +5,8 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-15
+
 ### Added
 - Sidecar: dashboard map of worlds from Workshop mods via extra addon dirs (env `CLW_ADDON_DIRS`, config `addonDirs`, Docker `MODS_DIR`); a mod world without its own satellite image (e.g. Takistan) shows the road, building and location map.
 
