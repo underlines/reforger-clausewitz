@@ -5,6 +5,8 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-15
+
 ### Added
 - HQ radial menu: hold `U` (or `/hqr`) for reports, help calls, requests, missions and status in one menu.
 - Radio reports: `/report cancel`, `ahead`/`air`/`unknown` reports, and `/backup [note]` help calls (any role): the HQ sends the nearest free group. With the LLM, `/hq` understands natural-language contact reports, help calls and cancels (English and German).
