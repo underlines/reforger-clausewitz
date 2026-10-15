@@ -24,7 +24,7 @@ jobs:
           cache: npm
           cache-dependency-path: dev/tools/package-lock.json
       - run: npm ci
-      - name: Offline tests (one at a time: several start their own sidecar on fixed ports)
+      - name: "Offline tests (one at a time, several start their own sidecar on fixed ports)"
         run: |
           fail=0
           for f in agent/test_*.mjs test-*.mjs; do
