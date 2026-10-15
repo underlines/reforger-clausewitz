@@ -1,0 +1,50 @@
+# Clausewitz LLM sidecar for a dedicated server host. Every host-specific value is a ${VAR} (see .env.example).
+#
+# The game server reaches the sidecar on http://127.0.0.1:8788/ (the mod's default URL), so the port is published on
+# the host's loopback only. That also works for a game server in host networking mode (e.g. a server manager container).
+# The dashboard is meant to go through a reverse proxy (Traefik labels below, optional: set TRAEFIK_ENABLE=false to skip).
+#
+#   docker compose -f docker/docker-compose.yml up -d --build      (from dev/tools, or with SIDECAR_BUILD_CONTEXT set)
+name: clausewitz-sidecar
+
+networks:
+  clausewitz-sidecar-network:
+    driver: bridge
+    name: clausewitz-sidecar-network
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-rp-shared}
+
+services:
+  sidecar:
+    build:
+      # a local path (default: dev/tools of this repo) or a git URL, e.g.
+      # https://github.com/underlines/reforger-clausewitz.git#main:dev/tools
+      context: ${SIDECAR_BUILD_CONTEXT:-..}
+      dockerfile: docker/Dockerfile
+    image: clausewitz-sidecar:local
+    container_name: clausewitz-sidecar
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-UTC}
+      # host names the dashboard is reached under (reverse proxy), comma-separated
+      CLW_ALLOWED_HOSTS: ${CLW_ALLOWED_HOSTS:-}
+      # read-only game install for the dashboard map image (optional; the map stays blank without it)
+      ARMA_REFORGER_DIR: /game
+    volumes:
+      - ${SIDECAR_DATA_DIR:-./data}:/data
+      - ${GAME_DIR:-./no-game}:/game:ro
+    ports:
+      - "127.0.0.1:${SIDECAR_PORT:-8788}:8788"
+    networks:
+      - clausewitz-sidecar-network
+      - proxy
+    labels:
+      - traefik.enable=${TRAEFIK_ENABLE:-true}
+      - traefik.docker.network=${PROXY_NETWORK:-rp-shared}
+      - traefik.http.routers.clausewitz.rule=Host(`${SIDECAR_HOST:-clausewitz.localhost}`)
+      - traefik.http.routers.clausewitz.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+      - traefik.http.routers.clausewitz.tls=true
+      # an empty middleware list breaks the Traefik router: name at least one (or TRAEFIK_ENABLE=false and any value)
+      - traefik.http.routers.clausewitz.middlewares=${TRAEFIK_MIDDLEWARES:?set TRAEFIK_MIDDLEWARES, e.g. sec-headers@file}
+      - traefik.http.services.clausewitz.loadbalancer.server.port=8788
