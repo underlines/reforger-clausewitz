@@ -232,13 +232,14 @@ class CLW_ArsenalPrices
 		return "other";
 	}
 
-	// Logs once per faction and machine how many of the faction's pool items got a default price. 'items' = the unfiltered pool.
+	// Once per faction and machine: gives every pool item without a price its table price (written into the item, see CLW_PricedArsenalItem) and logs how many. 'items' = the unfiltered pool.
 	static void LogFaction(string factionKey, notnull array<SCR_ArsenalItem> items)
 	{
 		if (s_aLogged.Contains(factionKey))
 			return;
 
-		if (!GetActiveTable())
+		CLW_ArsenalPriceTable table = GetActiveTable();
+		if (!table)
 			return;
 
 		s_aLogged.Insert(factionKey);
@@ -251,9 +252,16 @@ class CLW_ArsenalPrices
 			if (!item)
 				continue;
 
-			int price = item.CLW_GetDefaultPrice(SCR_EArsenalSupplyCostType.DEFAULT);
+			if (CLW_PricedArsenalItem.OwnCost(item) > 0)
+				continue;
+
+			string lowerPath = item.GetItemResourceName();
+			lowerPath.ToLower();
+			int price = table.BaseCost(item.GetItemType(), item.GetItemMode(), lowerPath);
 			if (price <= 0)
 				continue;
+
+			CLW_PricedArsenalItem.SetCost(item, price);
 
 			priced++;
 			string label = TypeLabel(item);
@@ -289,64 +297,18 @@ class CLW_ArsenalPrices
 	}
 }
 
-modded class SCR_ArsenalItem
+// Writes the price of a vanilla catalog item. NOT a modded SCR_ArsenalItem: modding that [BaseContainerProps] class made every item
+// catalog fail to load ("Unknown class 'SCR_ArsenalItem'" x7825, DS e2e 2026-10-15). This subclass is never instanced; it only gives
+// the static setter access to the protected field. The write happens once per item, on every machine alike (same data, same table).
+class CLW_PricedArsenalItem : SCR_ArsenalItem
 {
-	// Cached table price (cost type DEFAULT, before the multiplier); -1 = not computed yet. Only filled while prices are active.
-	protected int m_iCLWDefaultBase = -1;
-
-	// Default price this item gets from the Clausewitz price table for the cost type; 0 when it has its own price, prices are
-	// inactive, or the table says free.
-	int CLW_GetDefaultPrice(SCR_EArsenalSupplyCostType costType)
+	static int OwnCost(notnull SCR_ArsenalItem item)
 	{
-		if (m_iSupplyCost > 0)
-			return 0;
-
-		CLW_ArsenalPriceTable table = CLW_ArsenalPrices.GetActiveTable();
-		if (!table)
-			return 0;
-
-		if (m_iCLWDefaultBase < 0)
-		{
-			string lowerPath = GetItemResourceName();
-			lowerPath.ToLower();
-			m_iCLWDefaultBase = table.BaseCost(m_eItemType, m_eItemMode, lowerPath);
-		}
-
-		return table.Scale(m_iCLWDefaultBase, costType);
+		return item.m_iSupplyCost;
 	}
 
-	override int GetSupplyCost(SCR_EArsenalSupplyCostType supplyCostType, bool addAdditionalCosts = true)
+	static void SetCost(notnull SCR_ArsenalItem item, int cost)
 	{
-		int cost = super.GetSupplyCost(supplyCostType, addAdditionalCosts);
-		if (m_iSupplyCost > 0)
-			return cost;
-
-		// An alternative cost of this cost type (SCR_ArsenalAlternativeCostData) above 0 is the item's own price
-		if (super.GetSupplyCost(supplyCostType, false) > 0)
-			return cost;
-
-		return cost + CLW_GetDefaultPrice(supplyCostType);
-	}
-
-	override int GetMilitarySupplyAllocationCost(SCR_EArsenalSupplyCostType supplyCostType, bool addAdditionalCosts = true)
-	{
-		int cost = super.GetMilitarySupplyAllocationCost(supplyCostType, addAdditionalCosts);
-		if (m_iSupplyCost > 0 || !m_bUseMilitarySupplyAllocation)
-			return cost;
-
-		if (super.GetMilitarySupplyAllocationCost(supplyCostType, false) > 0)
-			return cost;
-
-		return cost + CLW_GetDefaultPrice(supplyCostType);
-	}
-
-	// Refund base of vanilla: the (default) price, so a defaulted item refunds what it costs.
-	override protected int GetRefundAmountValue()
-	{
-		int value = super.GetRefundAmountValue();
-		if (value > 0)
-			return value;
-
-		return CLW_GetDefaultPrice(SCR_EArsenalSupplyCostType.DEFAULT);
+		item.m_iSupplyCost = cost;
 	}
 }
