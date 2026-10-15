@@ -97,3 +97,15 @@ expandTerse output feeds the existing `validateV2` unchanged (`{squad,command,ta
 - `prompt: {lean: bool, staticBlock: bool, cache: bool, contactMax: 5..60, contactMaxAgeSec: 60..1800}` default
   `{lean:true, staticBlock:true, cache:true, contactMax:25, contactMaxAgeSec:600}`.
 - Cooldowns: the HQ role has its own cooldown keys (`hq:<slot>|<model>`), so commander timeouts never cool down /hq.
+
+## B2 as built (planner split, tiering)
+Deviations / decisions (everything else as in the contracts above):
+- Planner prompt = `commanderPrompt.buildPlannerPrompt` (rules = `PLANNER_SYSTEM`, buy/fob COMMANDS + terse b/f/k spec, conditional FOB/LOGISTICS paragraphs, user = situation | ORDERS IN FORCE | HQ journal block | `PLANNER WAKE: <trigger>`). No persona, env or help-call text. Orders call (`SYSTEM_ORDERS_V2`, split mode of `buildCommanderPrompt`) has no buy/FOB/logistics wording and a `plan` section (`planBlock`) after the situation. Split is active when `config.planner.enabled` and the manifest has buy or fob intents (`plannerSplit`).
+- Planner cadence runs on EVERY running poll (the commander call is gated on most), not only on commander wakes. Manual wake (`/api/wake`) starts it and skips the 30 s failure backoff.
+- Delivery: pending result (120 s) re-validated with `validateV2` at attach time; attached to normal, keep and gated replies, never when the reply is a failure / rule fallback (`!r.ok`, `rules`, or gated after a failed call). Exchange gets `planner` (delivery info), `slot`, `escalated`; the planner call itself is an `llmCalls` entry with role `planner` (+ `GET /api/state planner`). Gated deliveries have no exchange (as before for gated polls).
+- Fake provider: planner inline after the orders part on every commander call (`fakeV2(sit, manifest, "all"|"orders"|"plan")`).
+- Cooldown keys: role hq uses `hq:<slot>|<model>`; `slotChain` returns `{slot, scope, primary, fallback}`, `coolLeftMs/noteCooldown(ch, cfg)` take the chain. Without a backup the commander, planner, journal and sitrep calls use the cooldown; hq agent turns only when a backup exists (as before).
+- `roles.hq = "weak"` makes the agent turn run on the weak slot's model (`runAgentTurn config: chain.primary`).
+- Journal default slot is now weak (was strong), per the roles default of the contract.
+- Escalation: `IMPORTANT_TRIGGER` regex over the wake trigger texts (contact N m from, casualties, lost, objective ..., tickets ...); not applied to scheduled/manual wakes.
+- Test env override `CLW_PLANNER_MIN_GAP_MS` (default 45000).

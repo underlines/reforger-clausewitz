@@ -1,6 +1,8 @@
 // Commander / SITREP prompt builders (extracted from llm_sidecar.mjs). Side-effect free: importable by tests, no I/O, no config access.
 //   buildCommanderPrompt({config, sit, manifest, journal}) -> {system, user, sections, spec}
 //   buildSitrepPrompt({config, sit, orders})               -> {system, user, sections}
+//   buildPlannerPrompt({config, sit, manifest, journal, orders, trigger}) -> {system, user, sections, spec}   (planner split: buy + FOB + logistics)
+//   buildCommanderPrompt with config.planner.enabled = the ORDERS call (no buy / FOB text, PLAN block in the user message)
 // `sections` = {name: text}, every part of system + user that the call sends, measurable with promptKit.sectionStats.
 // Layout of the v2 commander call (stable first, so providers can cache the prefix):
 //   system = rules | commands + reply spec | persona | conditional paragraphs (FOBS / LOGISTICS / HELP CALLS only when they apply)
@@ -42,6 +44,35 @@ SITUATION FIELDS
 war: your tickets, enemyTickets, supplies, income per minute, liveAI/aiCap, vehicles/vehicleCap; timeLeftSec = time limit (absent or -1 = no limit); tickets -1 = not used by this mode. war.mode {id,name,params} holds the rules of the chosen war mode (time limit, start tickets, ...): follow them; war.phase is "running" while you are consulted. objectives: id, name, pos [x,z], radius m, value, owner ("none" or a faction key), contested, progress (-100..100 toward the capturer). bases: base positions per faction. catalog: what you may buy (type, kind, cost, desc). squads: kind (infantry|recon|motorized|light|mech|armor|armored_recon), type, pos [x,y,z], agents/startAgents, vehicle {type,health,mounted,state} or null, humanLed, objective (its current order and status), mission (for human-led squads). contacts: pos, kind, desc, ageSec. events: what happened since your last decision. wake: why you are consulted now.
 `;
 // The COMMANDS / REPLY part of the v2 prompt is appended by commandsSection(manifest): the game's action manifest decides what exists.
+
+// Planner split (config planner.enabled): the commander call is the ORDERS call (orders + missions); economy, FOB and logistics text lives in PLANNER_SYSTEM.
+// This variant has no buy / FOB / logistics wording at all (tests check it); the planner's last result reaches it as the PLAN block in the user message.
+export const SYSTEM_ORDERS_V2 = `You are the HQ commander of one faction in a tactical war simulation (Arma Reforger). You see only what your units reported (fog of war): contacts may be old or incomplete.
+GOAL: win the war. Objectives (map points) decide it: the side holding fewer/less valuable objectives loses tickets over time (bleed), and tickets are also lost with every dead soldier and destroyed vehicle. Tickets at 0 = defeat. So: hold or take objectives and preserve your tickets. A separate planner officer handles reinforcements, forward bases and supply runs; you give orders and missions to the squads that exist.
+DOCTRINE
+- Combined arms: motorized/mech/light/armor units (fast, firepower) cover distance and support; infantry takes and holds objectives. Send recon first to unknown or fogged objectives.
+- Concentrate force: 2-3 units per target, never split into penny packets. Prefer one clear plan over many small moves. Do NOT keep units idle at the base: the game keeps a small garrison there itself (squads with garrison=true, never order them), and a squad that stands at the base without an order for baseRules.idleDespawnMin minutes is stood down and refunded (baseRules.recentlyDespawned counts them). Every unit should have a job.
+- AT teams (or armed vehicles) when enemy vehicles are in contacts. Weak squads (agents well below startAgents or vehicle.health below 0.4) FALL_BACK, do not attack. health and vehicle.health are fractions 0..1: 1 = undamaged / full health, 0 = destroyed.
+- Squads with idleSec (seconds without an order) need an order now; give every unordered non-garrison squad a task in your reply or accept that it will be stood down. Squads with a reserved field are busy with a task of the planner: never order them.
+- The PLAN block in the user message shows what the planner has arranged lately (reinforcements with the order their units receive on arrival, and when it runs next): plan your orders around it, do not duplicate it.
+- Do not re-order squads that already execute a sensible order (objective.status active, young ageSec).
+SITUATION FIELDS
+war: your tickets, enemyTickets, income per minute, liveAI/aiCap, vehicles/vehicleCap; timeLeftSec = time limit (absent or -1 = no limit); tickets -1 = not used by this mode. war.mode {id,name,params} holds the rules of the chosen war mode (time limit, start tickets, ...): follow them; war.phase is "running" while you are consulted. objectives: id, name, pos [x,z], radius m, value, owner ("none" or a faction key), contested, progress (-100..100 toward the capturer). bases: base positions per faction. squads: kind (infantry|recon|motorized|light|mech|armor|armored_recon), type, pos [x,y,z], agents/startAgents, vehicle {type,health,mounted,state} or null, humanLed, objective (its current order and status), mission (for human-led squads). contacts: pos, kind, desc, ageSec. events: what happened since your last decision. wake: why you are consulted now.
+`;
+const ORDERS_FLANK = "Consider flanks: a route off the direct axis can beat a frontal push. Each objective has side left|centre|right of the line from your HQ to the enemy HQ (seen from your HQ, facing the enemy).";
+
+// The PLANNER call (role planner): owns buy + FOB / logistics channels. Only economy doctrine, no squad-order text.
+export const PLANNER_SYSTEM = `You are the economy and logistics planner on the HQ staff of one faction in a tactical war simulation (Arma Reforger). You see only what your units reported (fog of war).
+Another officer gives the squad orders (ORDERS IN FORCE are in the user message); you decide what to buy, where to build forward bases and which supply convoys to send. You do NOT give squad orders.
+GOAL: win the war. Objectives (map points) decide it: the side holding fewer/less valuable objectives loses tickets over time (bleed), and tickets are also lost with every dead soldier and destroyed vehicle. Tickets at 0 = defeat. Supplies buy new units: spend them where they win or hold objectives, keep a reserve.
+DOCTRINE
+- SPAWN ON ASSIGNMENT: buy only for a concrete need (an objective to take or defend that has too few units in the orders in force, a recon target) and put the assignment into the same buy entry: "command" (MOVE|ATTACK|DEFEND|RECON) plus "target" (objective id) or "pos"; the new units get that order the moment they are ready. A buy entry without an assignment is dropped. Never buy "to have reserves". Squads that stand idle at the base (idleSec) mean enough units already exist: do not buy more for the same objective.
+- Keep supplies ~40 in reserve and respect the caps (liveAI<aiCap, vehicles<vehicleCap) and the catalog costs. Do not buy when war.engineAI.headroom is below the unit size (engine AI near its limit): the buy is refused.
+- Combined arms: infantry takes and holds objectives; motorized/mech/light/armor units cover distance and support; AT teams (or armed vehicles) when enemy vehicles are in contacts; recon for unknown objectives.
+- Reply with nothing when there is nothing worth doing now: you are consulted again soon.
+SITUATION FIELDS
+war: your tickets, enemyTickets, supplies, income per minute, liveAI/aiCap, vehicles/vehicleCap, engineAI.headroom; timeLeftSec = time limit (absent or -1 = no limit); war.mode {id,name,params} holds the rules of the chosen war mode: follow them. objectives: id, name, pos [x,z], radius m, value, owner ("none" or a faction key), contested, progress. bases: base positions per faction. catalog: what you may buy (type, kind, cost, desc). squads: kind, type, pos [x,y,z], agents/startAgents, vehicle, humanLed, objective (its current order and status). contacts: pos, kind, desc, ageSec. events: what happened lately.
+`;
 
 // Built-in manifest: used for v2 posts and when a v3 post names a manifest hash the sidecar does not know (it then asks the game to
 // resend with needManifest). Mirrors the game's Configs/CLW/Actions/Actions.conf at the time of protocol v3.
@@ -159,7 +190,7 @@ export function commandsSection(m, opts = {}) {
   }
   if (buys.length) t += buys.map((e) => `${e.name}: ${sentence(e.desc)}. Fields: ${fieldsText(e)}.\n`).join("");
   if (fobs.length) t += fobs.map((e) => `${e.name}: ${sentence(e.desc)}. Fields: ${fieldsText(e)}.\n`).join("");
-  t += offers.length
+  if (!opts.omitHuman) t += offers.length
     ? "HUMAN-LED SQUADS (humanLed=true) are never ordered. " + offers.map((e) => sentence(e.desc)).join(". ") + ".\n"
     : "HUMAN-LED SQUADS (humanLed=true) are never ordered and get no missions.\n";
   let reply;
@@ -181,17 +212,41 @@ export function commandsSection(m, opts = {}) {
   return { commands: t, reply };
 }
 
+// ---------------------------------------------------------------- planner split helpers
+const PLAN_CHANNELS = ["buy", "fob"];
+/** A manifest view without / with only the given channels (the orders call drops buy + fob, the planner call keeps only those). */
+const manifestWithout = (m, chs) => ({ ...m, intents: (m.intents ?? []).filter((e) => !chs.includes(e.channel ?? "orders")) });
+const manifestOnly = (m, chs) => ({ ...m, intents: (m.intents ?? []).filter((e) => chs.includes(e.channel ?? "orders")) });
+/** Does the planner own anything in this manifest (buy or fob intents)? */
+export const plannerChannels = (m) => PLAN_CHANNELS.some((ch) => channelOf(m ?? DEFAULT_MANIFEST, ch).length > 0);
+/** Is the planner split active for this config + manifest? (planner.enabled and something for it to do) */
+export const plannerSplit = (config, manifest) => !!config?.planner?.enabled && plannerChannels(manifest ?? DEFAULT_MANIFEST);
+
 const compact = (sections) => Object.fromEntries(Object.entries(sections).filter(([, v]) => v));
 const safe = (fn, sit) => { try { return fn(sit) || ""; } catch { return ""; } };
-const ORDER = ["rules", "commands", "persona", "fobs", "logistics", "helpCalls", "situation", "wake", "env", "journal"];
+const ORDER = ["rules", "commands", "persona", "fobs", "logistics", "helpCalls", "situation", "plan", "wake", "env", "journal"];
 const reorder = (s) => Object.fromEntries(ORDER.filter((k) => k in s).map((k) => [k, s[k]]));
 
+/** The PLAN block of the orders call (split mode): the planner's last result + when it runs next. plan = {buy, fobs, ageSec, nextInSec, running} | null. */
+export function planBlock(plan) {
+  const head = "PLAN (the planner handles reinforcements, forward bases and supply runs on its own schedule; you only give orders):\n";
+  if (!plan || (!plan.buy?.length && !plan.fobs?.length && plan.ageSec === undefined)) {
+    return head + "none yet" + (plan?.running ? " (the planner is working on it now)" : plan && isNum(plan.nextInSec) ? ` (the planner runs in about ${Math.round(plan.nextInSec)} s)` : "");
+  }
+  const buy = (plan.buy ?? []).map((b) => ({ type: b.type, count: b.count, command: b.command, ...(b.target ? { target: b.target } : b.pos ? { pos: b.pos } : {}), reason: b.reason ?? "" }));
+  const fobs = (plan.fobs ?? []).map((f) => ({ command: f.command, ...(f.site ? { site: f.site } : {}), ...(f.fob ? { fob: f.fob } : {}), ...(f.origin ? { origin: f.origin, dest: f.dest } : {}), reason: f.reason ?? "" }));
+  const o = { lastRunAgoSec: isNum(plan.ageSec) ? Math.round(plan.ageSec) : null, ...(plan.running ? { runningNow: true } : isNum(plan.nextInSec) ? { nextRunInSec: Math.round(plan.nextInSec) } : {}), buy, fobs };
+  return head + JSON.stringify(o);
+}
+
 /**
- * The commander call. config = the sidecar config (wakeup, memory, output groups are read), sit = the situation as sent to the model
+ * The commander call. config = the sidecar config (wakeup, memory, output, planner groups are read), sit = the situation as sent to the model
  * (v2 may carry "wake"; "structures" is stripped), manifest = the action manifest, journal = HQ JOURNAL block ("" = none).
+ * split (default: config.planner.enabled and the manifest has buy/fob intents) = this is the ORDERS call: buy / FOB / logistics leave the prompt and the reply spec,
+ * plan (planBlock input) is added to the user message.
  * -> {system, user, sections:{name:text}, spec: terse spec | null}
  */
-export function buildCommanderPrompt({ config = {}, sit = null, manifest = DEFAULT_MANIFEST, journal = "" } = {}) {
+export function buildCommanderPrompt({ config = {}, sit = null, manifest = DEFAULT_MANIFEST, journal = "", split, plan = null } = {}) {
   const v2 = !!sit && (sit.v === 2 || sit.v === 3 || sit.v === 4);
   const { structures: _structures, ...llmSit } = sit ?? {};
   const wakeText = config.wakeup?.dynamic ? wakeupText(config.wakeup) : "";
@@ -200,21 +255,54 @@ export function buildCommanderPrompt({ config = {}, sit = null, manifest = DEFAU
     const situation = "Current situation:\n" + JSON.stringify(llmSit);
     return { system, user: situation + (journal ? "\n\n" + journal : ""), sections: compact({ rules: system, situation, journal }), spec: null };
   }
-  const m = manifest ?? DEFAULT_MANIFEST;
+  const full = manifest ?? DEFAULT_MANIFEST;
+  const isSplit = split ?? plannerSplit(config, full);
+  const m = isSplit ? manifestWithout(full, PLAN_CHANNELS) : full;
   const terse = !!config.output?.terse;
   const spec = terse ? terseSpecOf(m, config) : null;
   const cs = commandsSection(m, { terse, spec });
-  const rules = SYSTEM_V2 + "\n" + J.FLANK_PROMPT + " " + J.SQUAD_NAME_PROMPT + (config.memory?.enabled ? " " + J.JOURNAL_RULE : "") + "\n";
+  const rules = isSplit
+    ? SYSTEM_ORDERS_V2 + "\n" + ORDERS_FLANK + " " + J.SQUAD_NAME_PROMPT + (config.memory?.enabled ? " " + J.JOURNAL_RULE.replace(", FOB", "") : "") + "\n"
+    : SYSTEM_V2 + "\n" + J.FLANK_PROMPT + " " + J.SQUAD_NAME_PROMPT + (config.memory?.enabled ? " " + J.JOURNAL_RULE : "") + "\n";
   const commands = cs.commands + cs.reply + (terse ? "" : wakeText) + "\n";
   const persona = safe(personaCommander, sit);
-  const fobs = fobRelevant(m, sit) ? FOB_PROMPT : "", logistics = logisticsRelevant(m, sit) ? LOGISTICS_PROMPT : "", helpCalls = helpCallsRelevant(sit) ? HELP_CALLS_PROMPT : "";
+  const fobs = !isSplit && fobRelevant(m, sit) ? FOB_PROMPT : "", logistics = !isSplit && logisticsRelevant(m, sit) ? LOGISTICS_PROMPT : "", helpCalls = helpCallsRelevant(sit) ? HELP_CALLS_PROMPT : "";
   const system = rules + commands + persona + fobs + logistics + helpCalls;
   const { wake, ...rest } = llmSit;
   const situation = "Current situation:\n" + JSON.stringify(rest);
+  const planText = isSplit ? planBlock(plan) : "";
   const wakeBlock = wake ? "WAKE (why you are consulted now):\n" + JSON.stringify(wake) : "";
   const env = safe(envPrompt, sit);
-  const user = situation + (wakeBlock ? "\n\n" + wakeBlock : "") + (env ? "\n\n" + env : "") + (journal ? "\n\n" + journal : "");
-  return { system, user, sections: reorder(compact({ rules, commands, persona, fobs, logistics, helpCalls, situation, wake: wakeBlock, env, journal })), spec };
+  const user = situation + (planText ? "\n\n" + planText : "") + (wakeBlock ? "\n\n" + wakeBlock : "") + (env ? "\n\n" + env : "") + (journal ? "\n\n" + journal : "");
+  return { system, user, sections: reorder(compact({ rules, commands, persona, fobs, logistics, helpCalls, situation, plan: planText, wake: wakeBlock, env, journal })), spec };
+}
+
+/**
+ * The PLANNER call (role planner): buy + FOB / logistics only. orders = the last validated orders [{squad, command, target|pos, reason}] (orders in force),
+ * journal = HQ JOURNAL block (intent + goals, "" = none), trigger = why the planner runs now (string, "" = scheduled).
+ * No persona, environment or help-call paragraph and no wake text beyond `trigger`.
+ * -> {system, user, sections:{rules, commands, fobs, logistics, situation, orders, journal, trigger}, spec: terse spec | null}
+ * The reply is b / f / k only (terse) or buy / fobs / keep (verbose); responseFormat for the call: promptKit.terseSchema(spec).
+ */
+export function buildPlannerPrompt({ config = {}, sit = null, manifest = DEFAULT_MANIFEST, journal = "", orders = [], trigger = "" } = {}) {
+  const { structures: _structures, wake: _wake, ...llmSit } = sit ?? {};
+  const m = manifestOnly(manifest ?? DEFAULT_MANIFEST, PLAN_CHANNELS);
+  const terse = !!config.output?.terse;
+  const spec = terse ? { ...terseSpecOf(m, config), wake: null, missions: false } : null;
+  const cs = commandsSection(m, { terse, spec, omitHuman: true });
+  const reply = cs.reply.replace('{"k":1} alone = keep all current orders.', '{"k":1} alone = nothing to buy or build now.');
+  const rules = PLANNER_SYSTEM;
+  const commands = cs.commands + reply + "\n";
+  const fobs = fobRelevant(m, sit) ? FOB_PROMPT : "", logistics = logisticsRelevant(m, sit) ? LOGISTICS_PROMPT : "";
+  const system = rules + commands + fobs + logistics;
+  const situation = "Current situation:\n" + JSON.stringify(llmSit);
+  const list = Array.isArray(orders) ? orders : [];
+  const ord = "ORDERS IN FORCE (last decision of the commander, with reasons):\n" + (list.length
+    ? JSON.stringify(list.map((o) => ({ squad: o.squad, command: o.command, ...(o.target ? { target: o.target } : o.pos ? { pos: o.pos } : {}), reason: o.reason ?? "" })))
+    : "none yet");
+  const trig = "PLANNER WAKE: " + (trigger || "scheduled run");
+  const user = situation + "\n\n" + ord + (journal ? "\n\n" + journal : "") + "\n\n" + trig;
+  return { system, user, sections: compact({ rules, commands, fobs, logistics, situation, orders: ord, journal, trigger: trig }), spec };
 }
 
 /**

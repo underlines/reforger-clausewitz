@@ -90,7 +90,7 @@ const stub = http.createServer((req, res) => {
 const MAIN_KEY = "sk-mainsecret9999";
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "clw-fb-"));
 const cfgFile = path.join(tmp, "cfg.json");
-fs.writeFileSync(cfgFile, JSON.stringify({ provider: "openai-compatible", model: "primary-m", baseUrl: STUB, apiKey: MAIN_KEY, timeoutSec: 1, memory: { enabled: false }, sitrep: { enabled: false } })); // an OLD config (memory/sitrep off: no background journal calls to count): no fallback anywhere
+fs.writeFileSync(cfgFile, JSON.stringify({ provider: "openai-compatible", model: "primary-m", baseUrl: STUB, apiKey: MAIN_KEY, timeoutSec: 1, memory: { enabled: false }, sitrep: { enabled: false }, planner: { enabled: false } })); // an OLD config (memory/sitrep off: no background journal / planner calls to count): no fallback anywhere
 const proc = spawn(process.execPath, [path.join(DIR, "llm_sidecar.mjs")], { env: { ...process.env, CLW_PORT: String(PORT), CLW_LLM: "fake", CLW_CONFIG: cfgFile, CLW_DATA_DIR: path.join(tmp, "data"), CLW_RATE_COOLDOWN_MS: String(COOL_MS) }, stdio: ["ignore", "pipe", "pipe"] });
 let log = "";
 proc.stdout.on("data", (d) => (log += d)); proc.stderr.on("data", (d) => (log += d));
