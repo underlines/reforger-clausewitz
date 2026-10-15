@@ -42,6 +42,12 @@ the game's RestContext (CLW_SidecarLink.Context, shared with the commander POST 
 queues behind the ~40 s orders call. Fix first: a separate RestContext for /hq (verify how GetRestApi().GetContext keys contexts),
 then retest. Steps 2 + 3 below also shrink the queue time.
 
+Update (same night): fixed with one RestContext per channel (`CLW_SidecarLink.Context(timeout, channel)`: hq, cmd-<faction>;
+sidecar strips `/ch/<name>/`). /hq then answered in 3-5 s (report + cancel worked). One more failure: msg 3 hung in the sidecar because
+the HQ agent shares the strong slot with the commander; the commander's timeouts put that model on cooldown, the HQ turn went to the
+backup model and the call never returned (fixed: hard cap on the whole turn). Still to do: give the HQ agent its own slot
+(fast model, own cooldown) so commander failures never touch /hq (fits step 7).
+
 ## Open tests (re-run once the commander call is fast / /hq has its own context)
 1. `/hq 2 enemy infantry about 100m north of my position` -> reply within seconds + REPORT_CONTACT (2 inf, 100 m, N).
 2. `/hq wir werden beschossen, brauchen Hilfe` -> REQUEST_BACKUP, nearest free group sent.
