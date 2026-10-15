@@ -1,0 +1,59 @@
+name: Sidecar
+
+# Offline tests of the LLM sidecar (dev/tools), then the Portainer redeploy of the docker variant (dev/tools/docker)
+# on a push to main. The addon itself is not built here (Workbench / Workshop).
+on:
+  push:
+    branches: [main]
+    paths: ["dev/tools/**", ".github/workflows/sidecar.yml"]
+  pull_request:
+    branches: [main]
+    paths: ["dev/tools/**", ".github/workflows/sidecar.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dev/tools
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dev/tools/package-lock.json
+      - run: npm ci
+      - name: Offline tests (one at a time: several start their own sidecar on fixed ports)
+        run: |
+          fail=0
+          for f in agent/test_*.mjs test-*.mjs; do
+            echo "::group::$f"
+            if timeout 600 node "$f"; then echo "OK $f"; else echo "::error::FAILED $f"; fail=1; fi
+            echo "::endgroup::"
+          done
+          exit $fail
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the sidecar image
+        run: docker build -f dev/tools/docker/Dockerfile -t clausewitz-sidecar:ci dev/tools
+
+  deploy:
+    needs: [test, docker]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Portainer redeploy
+        env:
+          WEBHOOK: ${{ secrets.PORTAINER_WEBHOOK_URL }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then
+            echo "::notice::PORTAINER_WEBHOOK_URL secret not set: skipping redeploy."
+            exit 0
+          fi
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$WEBHOOK")
+          echo "Portainer webhook responded $code"
+          case "$code" in 2*) : ;; *) echo "::error::Portainer webhook failed ($code)"; exit 1 ;; esac

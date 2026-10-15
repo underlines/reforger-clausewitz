@@ -1,0 +1,2476 @@
+{
+ "v": 4,
+ "faction": "RHS_USAF",
+ "side": 0,
+ "identity": "BLUFOR",
+ "time": 2710,
+ "timeLeftSec": 4180,
+ "war": {
+  "tickets": 412,
+  "enemyTickets": 365,
+  "supplies": 640,
+  "supplyTotal": 900,
+  "income": 58,
+  "liveAI": 148,
+  "aiCap": 220,
+  "vehicles": 14,
+  "vehicleCap": 24,
+  "engineAI": {
+   "active": 470,
+   "limit": 600,
+   "headroom": 84
+  },
+  "mode": {
+   "id": "conquest",
+   "name": "Conquest",
+   "params": {
+    "timeLimitMin": 90,
+    "startTickets": 600,
+    "startSupplies": 400,
+    "incomeMultiplier": 1,
+    "battleSize": "large",
+    "ticketBleed": true,
+    "fobMax": 2,
+    "idleDespawnMin": 6,
+    "garrisonSquads": 3,
+    "convoyMax": 2
+   }
+  },
+  "phase": "running",
+  "sides": [
+   {
+    "faction": "RHS_USAF",
+    "identity": "BLUFOR"
+   },
+   {
+    "faction": "RHS_AFRF",
+    "identity": "OPFOR"
+   }
+  ]
+ },
+ "objectives": [
+  {
+   "id": "A",
+   "name": "Morton",
+   "pos": [
+    1613,
+    2747
+   ],
+   "grid": "016-027",
+   "radius": 60,
+   "value": 1,
+   "owner": "RHS_USAF",
+   "contested": false,
+   "progress": 100,
+   "side": "left"
+  },
+  {
+   "id": "B",
+   "name": "Harbor Bridge",
+   "pos": [
+    3067,
+    3233
+   ],
+   "grid": "030-032",
+   "radius": 80,
+   "value": 2,
+   "owner": "RHS_USAF",
+   "contested": false,
+   "progress": 100,
+   "side": "centre"
+  },
+  {
+   "id": "C",
+   "name": "Chapel Hill",
+   "pos": [
+    4520,
+    3720
+   ],
+   "grid": "045-037",
+   "radius": 100,
+   "value": 3,
+   "owner": "RHS_USAF",
+   "contested": false,
+   "progress": 100,
+   "side": "right"
+  },
+  {
+   "id": "D",
+   "name": "Saint Philippe",
+   "pos": [
+    4413,
+    5347
+   ],
+   "grid": "044-053",
+   "radius": 60,
+   "value": 1,
+   "owner": "none",
+   "contested": true,
+   "progress": 38,
+   "side": "left"
+  },
+  {
+   "id": "E",
+   "name": "Le Moule",
+   "pos": [
+    5867,
+    5833
+   ],
+   "grid": "058-058",
+   "radius": 80,
+   "value": 2,
+   "owner": "none",
+   "contested": false,
+   "progress": 0,
+   "side": "centre"
+  },
+  {
+   "id": "F",
+   "name": "Meaux",
+   "pos": [
+    7320,
+    6320
+   ],
+   "grid": "073-063",
+   "radius": 100,
+   "value": 3,
+   "owner": "RHS_AFRF",
+   "contested": true,
+   "progress": -62,
+   "side": "right"
+  },
+  {
+   "id": "G",
+   "name": "Montignac",
+   "pos": [
+    7213,
+    7947
+   ],
+   "grid": "072-079",
+   "radius": 60,
+   "value": 1,
+   "owner": "RHS_AFRF",
+   "contested": false,
+   "progress": -100,
+   "side": "left"
+  },
+  {
+   "id": "H",
+   "name": "Gravette",
+   "pos": [
+    8667,
+    8433
+   ],
+   "grid": "086-084",
+   "radius": 80,
+   "value": 2,
+   "owner": "RHS_AFRF",
+   "contested": false,
+   "progress": -100,
+   "side": "centre"
+  }
+ ],
+ "bases": [
+  {
+   "id": "HQ",
+   "faction": "RHS_USAF",
+   "pos": [
+    1200,
+    1500
+   ],
+   "stock": 640
+  },
+  {
+   "id": "HQ",
+   "faction": "RHS_AFRF",
+   "pos": [
+    9600,
+    9300
+   ]
+  }
+ ],
+ "catalog": [
+  {
+   "type": "RHS_USAF_Rifle_squad",
+   "kind": "infantry",
+   "cost": 80,
+   "desc": "Rifle squad (9), OCP variant, AT loadout"
+  },
+  {
+   "type": "RHS_USAF_Fire_team",
+   "kind": "infantry",
+   "cost": 105,
+   "desc": "Fire team (9), woodland variant, support loadout"
+  },
+  {
+   "type": "RHS_USAF_AT_team",
+   "kind": "infantry",
+   "cost": 55,
+   "desc": "AT team (9), OCP variant, AT loadout"
+  },
+  {
+   "type": "RHS_USAF_AA_team",
+   "kind": "infantry",
+   "cost": 75,
+   "desc": "AA team (9), MARPAT variant, AT loadout"
+  },
+  {
+   "type": "RHS_USAF_MG_team",
+   "kind": "infantry",
+   "cost": 105,
+   "desc": "MG team (9), woodland variant, AT loadout"
+  },
+  {
+   "type": "RHS_USAF_Sniper_team",
+   "kind": "infantry",
+   "cost": 110,
+   "desc": "Sniper team (9), OCP variant, standard loadout"
+  },
+  {
+   "type": "RHS_USAF_Medic_team",
+   "kind": "infantry",
+   "cost": 90,
+   "desc": "Medic team (9), desert variant, AT loadout"
+  },
+  {
+   "type": "RHS_USAF_Engineer_squad",
+   "kind": "infantry",
+   "cost": 50,
+   "desc": "Engineer squad (9), woodland variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_Marksman_team",
+   "kind": "infantry",
+   "cost": 45,
+   "desc": "Marksman team (9), desert variant, standard loadout"
+  },
+  {
+   "type": "RHS_USAF_Grenadier_squad",
+   "kind": "infantry",
+   "cost": 65,
+   "desc": "Grenadier squad (9), MARPAT variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_Recon_team",
+   "kind": "recon",
+   "cost": 60,
+   "desc": "Recon team (4), desert variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_Scout_team",
+   "kind": "recon",
+   "cost": 110,
+   "desc": "Scout team (4), woodland variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_Forward_observer",
+   "kind": "recon",
+   "cost": 65,
+   "desc": "Forward observer (4), woodland variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_M1025_HMG",
+   "kind": "light",
+   "cost": 150,
+   "desc": "M1025 HMG (crew 2), OCP variant, support loadout"
+  },
+  {
+   "type": "RHS_USAF_M1025_MK19",
+   "kind": "light",
+   "cost": 220,
+   "desc": "M1025 MK19 (crew 3), desert variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_M1025_TOW",
+   "kind": "light",
+   "cost": 180,
+   "desc": "M1025 TOW (crew 3), MARPAT variant, support loadout"
+  },
+  {
+   "type": "RHS_USAF_M1165_HMG",
+   "kind": "light",
+   "cost": 235,
+   "desc": "M1165 HMG (crew 2), woodland variant, standard loadout"
+  },
+  {
+   "type": "RHS_USAF_M1151_HMG",
+   "kind": "light",
+   "cost": 235,
+   "desc": "M1151 HMG (crew 2), MARPAT variant, standard loadout"
+  },
+  {
+   "type": "RHS_USAF_M1151_MK19",
+   "kind": "light",
+   "cost": 220,
+   "desc": "M1151 MK19 (crew 4), MARPAT variant, AT loadout"
+  },
+  {
+   "type": "RHS_USAF_MRAP_RG_33",
+   "kind": "light",
+   "cost": 140,
+   "desc": "MRAP RG-33 (crew 4), OCP variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_MaxxPro",
+   "kind": "light",
+   "cost": 190,
+   "desc": "MaxxPro (crew 4), woodland variant, AT loadout"
+  },
+  {
+   "type": "RHS_USAF_Cougar_HMG",
+   "kind": "light",
+   "cost": 155,
+   "desc": "Cougar HMG (crew 3), MARPAT variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_LSSV",
+   "kind": "light",
+   "cost": 225,
+   "desc": "LSSV (crew 4), woodland variant, standard loadout"
+  },
+  {
+   "type": "RHS_USAF_M939_transport",
+   "kind": "motorized",
+   "cost": 120,
+   "desc": "M939 transport (crew 3 + cargo 10), woodland variant, AT loadout"
+  },
+  {
+   "type": "RHS_USAF_M35_transport",
+   "kind": "motorized",
+   "cost": 140,
+   "desc": "M35 transport (crew 3 + cargo 10), woodland variant, support loadout"
+  },
+  {
+   "type": "RHS_USAF_M977_HEMTT",
+   "kind": "motorized",
+   "cost": 95,
+   "desc": "M977 HEMTT (crew 4 + cargo 10), woodland variant, support loadout"
+  },
+  {
+   "type": "RHS_USAF_M1083_FMTV",
+   "kind": "motorized",
+   "cost": 160,
+   "desc": "M1083 FMTV (crew 3 + cargo 10), desert variant, standard loadout"
+  },
+  {
+   "type": "RHS_USAF_Supply_truck",
+   "kind": "motorized",
+   "cost": 110,
+   "desc": "Supply truck (crew 2 + cargo 10), desert variant, standard loadout"
+  },
+  {
+   "type": "RHS_USAF_M998_troop_carrier",
+   "kind": "motorized",
+   "cost": 105,
+   "desc": "M998 troop carrier (crew 2 + cargo 10), OCP variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_Ural_style_truck",
+   "kind": "motorized",
+   "cost": 115,
+   "desc": "Ural-style truck (crew 2 + cargo 10), woodland variant, standard loadout"
+  },
+  {
+   "type": "RHS_USAF_UTV_rifle_team",
+   "kind": "motorized",
+   "cost": 165,
+   "desc": "UTV rifle team (crew 3 + cargo 10), woodland variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_ATV_scout",
+   "kind": "motorized",
+   "cost": 105,
+   "desc": "ATV scout (crew 2 + cargo 10), woodland variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_Fuel_truck",
+   "kind": "motorized",
+   "cost": 90,
+   "desc": "Fuel truck (crew 3 + cargo 10), OCP variant, standard loadout"
+  },
+  {
+   "type": "RHS_USAF_M113A3",
+   "kind": "mech",
+   "cost": 315,
+   "desc": "M113A3 (crew 2 + cargo 8), desert variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_M2A3_Bradley",
+   "kind": "mech",
+   "cost": 430,
+   "desc": "M2A3 Bradley (crew 2 + cargo 8), OCP variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_M2A2_ODS",
+   "kind": "mech",
+   "cost": 485,
+   "desc": "M2A2 ODS (crew 3 + cargo 8), desert variant, standard loadout"
+  },
+  {
+   "type": "RHS_USAF_M1126_Stryker",
+   "kind": "mech",
+   "cost": 340,
+   "desc": "M1126 Stryker (crew 3 + cargo 8), OCP variant, standard loadout"
+  },
+  {
+   "type": "RHS_USAF_M1127_Stryker_RV",
+   "kind": "mech",
+   "cost": 400,
+   "desc": "M1127 Stryker RV (crew 3 + cargo 8), desert variant, AT loadout"
+  },
+  {
+   "type": "RHS_USAF_M1128_MGS",
+   "kind": "mech",
+   "cost": 480,
+   "desc": "M1128 MGS (crew 4 + cargo 8), woodland variant, AT loadout"
+  },
+  {
+   "type": "RHS_USAF_M1134_ATGM",
+   "kind": "mech",
+   "cost": 425,
+   "desc": "M1134 ATGM (crew 2 + cargo 8), OCP variant, standard loadout"
+  },
+  {
+   "type": "RHS_USAF_M1130_CV",
+   "kind": "mech",
+   "cost": 455,
+   "desc": "M1130 CV (crew 2 + cargo 8), MARPAT variant, support loadout"
+  },
+  {
+   "type": "RHS_USAF_M1131_FSV",
+   "kind": "mech",
+   "cost": 430,
+   "desc": "M1131 FSV (crew 4 + cargo 8), OCP variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_M1135_NBCRV",
+   "kind": "mech",
+   "cost": 315,
+   "desc": "M1135 NBCRV (crew 3 + cargo 8), OCP variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_M1A1_Abrams",
+   "kind": "armor",
+   "cost": 590,
+   "desc": "M1A1 Abrams (crew 2), woodland variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_M1A2_SEP",
+   "kind": "armor",
+   "cost": 805,
+   "desc": "M1A2 SEP (crew 4), OCP variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_M1A2_TUSK",
+   "kind": "armor",
+   "cost": 560,
+   "desc": "M1A2 TUSK (crew 3), MARPAT variant, standard loadout"
+  },
+  {
+   "type": "RHS_USAF_M60A3",
+   "kind": "armor",
+   "cost": 675,
+   "desc": "M60A3 (crew 2), woodland variant, AT loadout"
+  },
+  {
+   "type": "RHS_USAF_M551_Sheridan",
+   "kind": "armor",
+   "cost": 830,
+   "desc": "M551 Sheridan (crew 4), OCP variant, AT loadout"
+  },
+  {
+   "type": "RHS_USAF_M1117_ASV",
+   "kind": "armor",
+   "cost": 690,
+   "desc": "M1117 ASV (crew 3), woodland variant, standard loadout"
+  },
+  {
+   "type": "RHS_USAF_LAV_25",
+   "kind": "armor",
+   "cost": 715,
+   "desc": "LAV-25 (crew 4), desert variant, AT loadout"
+  },
+  {
+   "type": "RHS_USAF_LAV_AT",
+   "kind": "armor",
+   "cost": 830,
+   "desc": "LAV-AT (crew 3), desert variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_AAVP_7",
+   "kind": "armor",
+   "cost": 715,
+   "desc": "AAVP-7 (crew 4), woodland variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_M1128_Assault",
+   "kind": "armor",
+   "cost": 815,
+   "desc": "M1128 Assault (crew 4), MARPAT variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_Mortar_team",
+   "kind": "infantry",
+   "cost": 130,
+   "desc": "Mortar team (6), MARPAT variant, AT loadout"
+  },
+  {
+   "type": "RHS_USAF_Javelin_team",
+   "kind": "infantry",
+   "cost": 135,
+   "desc": "Javelin team (6), OCP variant, support loadout"
+  },
+  {
+   "type": "RHS_USAF_Stinger_team",
+   "kind": "infantry",
+   "cost": 130,
+   "desc": "Stinger team (6), desert variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_JTAC_team",
+   "kind": "infantry",
+   "cost": 135,
+   "desc": "JTAC team (6), MARPAT variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_EOD_team",
+   "kind": "infantry",
+   "cost": 115,
+   "desc": "EOD team (6), OCP variant, support loadout"
+  },
+  {
+   "type": "RHS_USAF_Combat_engineers",
+   "kind": "infantry",
+   "cost": 95,
+   "desc": "Combat engineers (6), OCP variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_Heavy_weapons_squad",
+   "kind": "infantry",
+   "cost": 85,
+   "desc": "Heavy weapons squad (6), MARPAT variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_M3A3_Bradley",
+   "kind": "armored_recon",
+   "cost": 295,
+   "desc": "M3A3 Bradley (crew 2), woodland variant, support loadout"
+  },
+  {
+   "type": "RHS_USAF_M1127_Stryker",
+   "kind": "armored_recon",
+   "cost": 300,
+   "desc": "M1127 Stryker (crew 2), OCP variant, standard loadout"
+  },
+  {
+   "type": "RHS_USAF_LAV_R",
+   "kind": "armored_recon",
+   "cost": 205,
+   "desc": "LAV-R (crew 2), OCP variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_AH_6_scout",
+   "kind": "armored_recon",
+   "cost": 265,
+   "desc": "AH-6 scout (crew 2), OCP variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_Cougar_CLS",
+   "kind": "armored_recon",
+   "cost": 210,
+   "desc": "Cougar CLS (crew 4), MARPAT variant, support loadout"
+  },
+  {
+   "type": "RHS_USAF_HMMWV_scout",
+   "kind": "armored_recon",
+   "cost": 230,
+   "desc": "HMMWV scout (crew 2), OCP variant, support loadout"
+  },
+  {
+   "type": "RHS_USAF_M706_Commando",
+   "kind": "armored_recon",
+   "cost": 330,
+   "desc": "M706 Commando (crew 4), OCP variant, light loadout"
+  },
+  {
+   "type": "RHS_USAF_ASV_recon",
+   "kind": "armored_recon",
+   "cost": 210,
+   "desc": "ASV recon (crew 2), MARPAT variant, standard loadout"
+  },
+  {
+   "type": "RHS_USAF_MRZR_scout",
+   "kind": "armored_recon",
+   "cost": 285,
+   "desc": "MRZR scout (crew 4), woodland variant, standard loadout"
+  },
+  {
+   "type": "RHS_USAF_Polaris_DAGOR",
+   "kind": "armored_recon",
+   "cost": 235,
+   "desc": "Polaris DAGOR (crew 2), OCP variant, AT loadout"
+  }
+ ],
+ "squads": [
+  {
+   "id": "RHS_USAF_Inf1",
+   "name": "Alpha 1-1",
+   "kind": "infantry",
+   "type": "RHS_USAF_Fire_Team",
+   "pos": [
+    1537,
+    88,
+    2498
+   ],
+   "agents": 9,
+   "startAgents": 11,
+   "vehicle": null,
+   "humanLed": false,
+   "wounded": 3,
+   "health": 0.87,
+   "speed": 0,
+   "heading": 221,
+   "state": "engaged",
+   "dormant": false,
+   "objective": {
+    "command": "DEFEND",
+    "target": "A",
+    "pos": [
+     1613,
+     2747
+    ],
+    "reason": "Seize the crossing before dusk",
+    "ageSec": 223,
+    "status": "active"
+   },
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Rec2",
+   "name": "Bravo 1-2",
+   "kind": "infantry",
+   "type": "RHS_USAF_MG_Team",
+   "pos": [
+    2873,
+    28,
+    3336
+   ],
+   "agents": 9,
+   "startAgents": 9,
+   "vehicle": null,
+   "humanLed": true,
+   "wounded": 0,
+   "health": 0.97,
+   "speed": 0.4,
+   "heading": 222,
+   "state": "moving",
+   "dormant": false,
+   "objective": {
+    "command": "DEFEND",
+    "target": "B",
+    "pos": [
+     3067,
+     3233
+    ],
+    "reason": "Hold the line, armor support inbound",
+    "ageSec": 75,
+    "status": "pending"
+   },
+   "mission": {
+    "state": "accepted",
+    "kind": "CAPTURE",
+    "target": "D",
+    "brief": "Squad leader, seize Saint Philippe from the east and report."
+   }
+  },
+  {
+   "id": "RHS_USAF_Lgt3",
+   "name": "Charlie 1-3",
+   "kind": "infantry",
+   "type": "RHS_USAF_Rifle_Squad",
+   "pos": [
+    4695,
+    43,
+    3780
+   ],
+   "agents": 9,
+   "startAgents": 9,
+   "vehicle": null,
+   "humanLed": true,
+   "wounded": 0,
+   "health": 0.98,
+   "speed": 3.8,
+   "heading": 106,
+   "state": "moving",
+   "dormant": false,
+   "objective": {
+    "command": "DEFEND",
+    "target": "C",
+    "pos": [
+     4520,
+     3720
+    ],
+    "reason": "Seize the crossing before dusk",
+    "ageSec": 590,
+    "status": "active"
+   },
+   "mission": {
+    "state": "offered",
+    "kind": "CAPTURE",
+    "target": "D",
+    "brief": "Squad leader, seize Saint Philippe from the east and report."
+   }
+  },
+  {
+   "id": "RHS_USAF_Mot4",
+   "name": "Delta 1-4",
+   "kind": "infantry",
+   "type": "RHS_USAF_Rifle_Squad",
+   "pos": [
+    4395,
+    5,
+    5225
+   ],
+   "agents": 9,
+   "startAgents": 9,
+   "vehicle": null,
+   "humanLed": false,
+   "wounded": 0,
+   "health": 0.77,
+   "speed": 0,
+   "heading": 311,
+   "state": "attacking",
+   "dormant": true,
+   "objective": {
+    "command": "MOVE",
+    "target": "D",
+    "pos": [
+     4413,
+     5347
+    ],
+    "reason": "Reinforce the contested point",
+    "ageSec": 322,
+    "status": "active"
+   },
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Mch5",
+   "name": "Echo 1-1",
+   "kind": "infantry",
+   "type": "RHS_USAF_Rifle_Squad",
+   "pos": [
+    6053,
+    61,
+    5684
+   ],
+   "agents": 9,
+   "startAgents": 11,
+   "vehicle": null,
+   "humanLed": false,
+   "wounded": 2,
+   "health": 0.73,
+   "speed": 4.6,
+   "heading": 151,
+   "state": "moving",
+   "dormant": false,
+   "objective": {
+    "command": "MOVE",
+    "target": "E",
+    "pos": [
+     5867,
+     5833
+    ],
+    "reason": "Reinforce the contested point",
+    "ageSec": 560,
+    "status": "active"
+   },
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Arm6",
+   "name": "Foxtrot 1-2",
+   "kind": "infantry",
+   "type": "RHS_USAF_Fire_Team",
+   "pos": [
+    6961,
+    78,
+    6611
+   ],
+   "agents": 9,
+   "startAgents": 9,
+   "vehicle": null,
+   "humanLed": false,
+   "wounded": 0,
+   "health": 0.97,
+   "speed": 0,
+   "heading": 334,
+   "state": "engaged",
+   "dormant": false,
+   "objective": {
+    "command": "MOVE",
+    "target": "F",
+    "pos": [
+     7320,
+     6320
+    ],
+    "reason": "Seize the crossing before dusk",
+    "ageSec": 111,
+    "status": "pending"
+   },
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Inf7",
+   "name": "Golf 1-3",
+   "kind": "infantry",
+   "type": "RHS_USAF_MG_Team",
+   "pos": [
+    7150,
+    87,
+    8083
+   ],
+   "agents": 9,
+   "startAgents": 9,
+   "vehicle": null,
+   "humanLed": false,
+   "wounded": 0,
+   "health": 0.53,
+   "speed": 6.7,
+   "heading": 131,
+   "state": "moving",
+   "dormant": false,
+   "objective": {
+    "command": "ATTACK",
+    "target": "G",
+    "pos": [
+     7213,
+     7947
+    ],
+    "reason": "Hold the line, armor support inbound",
+    "ageSec": 419,
+    "status": "active"
+   },
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Rec8",
+   "name": "Hotel 1-4",
+   "kind": "infantry",
+   "type": "RHS_USAF_Rifle_Squad",
+   "pos": [
+    8587,
+    45,
+    8332
+   ],
+   "agents": 9,
+   "startAgents": 9,
+   "vehicle": null,
+   "humanLed": false,
+   "wounded": 1,
+   "health": 0.93,
+   "speed": 0,
+   "heading": 279,
+   "state": "defending",
+   "dormant": false,
+   "objective": {
+    "command": "RECON",
+    "target": "H",
+    "pos": [
+     8667,
+     8433
+    ],
+    "reason": "Reinforce the contested point",
+    "ageSec": 484,
+    "status": "pending"
+   },
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Lgt9",
+   "name": "Alpha 2-1",
+   "kind": "infantry",
+   "type": "RHS_USAF_AT_Team",
+   "pos": [
+    1500,
+    55,
+    2659
+   ],
+   "agents": 9,
+   "startAgents": 11,
+   "vehicle": null,
+   "humanLed": false,
+   "wounded": 2,
+   "health": 0.59,
+   "speed": 0,
+   "heading": 111,
+   "state": "defending",
+   "dormant": false,
+   "idleSec": 384,
+   "objective": null,
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Mot10",
+   "name": "Bravo 2-2",
+   "kind": "infantry",
+   "type": "RHS_USAF_MG_Team",
+   "pos": [
+    3039,
+    89,
+    3109
+   ],
+   "agents": 9,
+   "startAgents": 9,
+   "vehicle": null,
+   "humanLed": false,
+   "wounded": 0,
+   "health": 0.88,
+   "speed": 0,
+   "heading": 248,
+   "state": "defending",
+   "dormant": true,
+   "objective": {
+    "command": "ATTACK",
+    "target": "B",
+    "pos": [
+     3067,
+     3233
+    ],
+    "reason": "Probe the flank, report contacts",
+    "ageSec": 69,
+    "status": "pending"
+   },
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Mch11",
+   "name": "Charlie 2-3",
+   "kind": "infantry",
+   "type": "RHS_USAF_Rifle_Squad",
+   "pos": [
+    4316,
+    60,
+    3493
+   ],
+   "agents": 9,
+   "startAgents": 9,
+   "vehicle": null,
+   "humanLed": false,
+   "wounded": 0,
+   "health": 0.55,
+   "speed": 0,
+   "heading": 31,
+   "state": "engaged",
+   "dormant": false,
+   "objective": {
+    "command": "ATTACK",
+    "target": "C",
+    "pos": [
+     4520,
+     3720
+    ],
+    "reason": "Cut the road north",
+    "ageSec": 564,
+    "status": "active"
+   },
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Arm12",
+   "name": "Delta 2-4",
+   "kind": "infantry",
+   "type": "RHS_USAF_AT_Team",
+   "pos": [
+    4410,
+    81,
+    5095
+   ],
+   "agents": 9,
+   "startAgents": 9,
+   "vehicle": null,
+   "humanLed": false,
+   "wounded": 0,
+   "health": 0.58,
+   "speed": 3.2,
+   "heading": 333,
+   "state": "moving",
+   "dormant": false,
+   "objective": {
+    "command": "DEFEND",
+    "target": "D",
+    "pos": [
+     4413,
+     5347
+    ],
+    "reason": "Cut the road north",
+    "ageSec": 107,
+    "status": "pending"
+   },
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Inf13",
+   "name": "Echo 2-1",
+   "kind": "infantry",
+   "type": "RHS_USAF_AT_Team",
+   "pos": [
+    5836,
+    31,
+    5763
+   ],
+   "agents": 9,
+   "startAgents": 11,
+   "vehicle": null,
+   "humanLed": false,
+   "wounded": 2,
+   "health": 0.87,
+   "speed": 5,
+   "heading": 278,
+   "state": "moving",
+   "dormant": false,
+   "objective": {
+    "command": "DEFEND",
+    "target": "E",
+    "pos": [
+     5867,
+     5833
+    ],
+    "reason": "Hold the line, armor support inbound",
+    "ageSec": 232,
+    "status": "active"
+   },
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Rec14",
+   "name": "Foxtrot 2-2",
+   "kind": "infantry",
+   "type": "RHS_USAF_Rifle_Squad",
+   "pos": [
+    7010,
+    70,
+    6162
+   ],
+   "agents": 9,
+   "startAgents": 9,
+   "vehicle": null,
+   "humanLed": false,
+   "wounded": 0,
+   "health": 0.95,
+   "speed": 4.4,
+   "heading": 41,
+   "state": "moving",
+   "dormant": false,
+   "objective": {
+    "command": "DEFEND",
+    "target": "F",
+    "pos": [
+     7320,
+     6320
+    ],
+    "reason": "Hold the line, armor support inbound",
+    "ageSec": 176,
+    "status": "active"
+   },
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Lgt15",
+   "name": "Golf 2-3",
+   "kind": "recon",
+   "type": "RHS_USAF_Recon_Team",
+   "pos": [
+    7230,
+    40,
+    7720
+   ],
+   "agents": 4,
+   "startAgents": 4,
+   "vehicle": null,
+   "humanLed": false,
+   "wounded": 1,
+   "health": 0.7,
+   "speed": 0,
+   "heading": 340,
+   "state": "defending",
+   "dormant": false,
+   "objective": {
+    "command": "MOVE",
+    "target": "G",
+    "pos": [
+     7213,
+     7947
+    ],
+    "reason": "Seize the crossing before dusk",
+    "ageSec": 323,
+    "status": "active"
+   },
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Mot16",
+   "name": "Hotel 2-4",
+   "kind": "light",
+   "type": "M1025_HMG",
+   "pos": [
+    8317,
+    32,
+    8683
+   ],
+   "agents": 3,
+   "startAgents": 3,
+   "vehicle": {
+    "type": "M1025 HMG",
+    "health": 0.84,
+    "mounted": true,
+    "state": "driving"
+   },
+   "humanLed": false,
+   "wounded": 0,
+   "health": 0.63,
+   "speed": 0,
+   "heading": 201,
+   "state": "engaged",
+   "dormant": true,
+   "objective": {
+    "command": "ATTACK",
+    "target": "H",
+    "pos": [
+     8667,
+     8433
+    ],
+    "reason": "Seize the crossing before dusk",
+    "ageSec": 377,
+    "status": "pending"
+   },
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Mch17",
+   "name": "Alpha 3-1",
+   "kind": "motorized",
+   "type": "M939_transport",
+   "pos": [
+    1584,
+    17,
+    2593
+   ],
+   "agents": 4,
+   "startAgents": 6,
+   "vehicle": {
+    "type": "M939 transport",
+    "health": 0.88,
+    "mounted": true,
+    "state": "driving"
+   },
+   "humanLed": false,
+   "wounded": 2,
+   "health": 0.96,
+   "speed": 4.8,
+   "heading": 156,
+   "state": "moving",
+   "dormant": false,
+   "objective": {
+    "command": "ATTACK",
+    "target": "A",
+    "pos": [
+     1613,
+     2747
+    ],
+    "reason": "Reinforce the contested point",
+    "ageSec": 551,
+    "status": "active"
+   },
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Arm18",
+   "name": "Bravo 3-2",
+   "kind": "mech",
+   "type": "M2A3_Bradley",
+   "pos": [
+    2799,
+    52,
+    3272
+   ],
+   "agents": 5,
+   "startAgents": 5,
+   "vehicle": {
+    "type": "M2A3 Bradley",
+    "health": 0.71,
+    "mounted": true,
+    "state": "driving"
+   },
+   "humanLed": false,
+   "wounded": 0,
+   "health": 0.92,
+   "speed": 0,
+   "heading": 98,
+   "state": "defending",
+   "dormant": false,
+   "idleSec": 351,
+   "objective": null,
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Inf19",
+   "name": "Charlie 3-3",
+   "kind": "armor",
+   "type": "M1A2_SEP",
+   "pos": [
+    4709,
+    57,
+    3703
+   ],
+   "agents": 3,
+   "startAgents": 3,
+   "vehicle": {
+    "type": "M1A2 SEP",
+    "health": 0.93,
+    "mounted": true,
+    "state": "driving"
+   },
+   "humanLed": false,
+   "wounded": 0,
+   "health": 0.72,
+   "speed": 0,
+   "heading": 285,
+   "state": "attacking",
+   "dormant": false,
+   "objective": {
+    "command": "DEFEND",
+    "target": "C",
+    "pos": [
+     4520,
+     3720
+    ],
+    "reason": "Reinforce the contested point",
+    "ageSec": 185,
+    "status": "pending"
+   },
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Rec20",
+   "name": "Delta 3-4",
+   "kind": "armored_recon",
+   "type": "M3A3_Bradley",
+   "pos": [
+    4264,
+    55,
+    5598
+   ],
+   "agents": 4,
+   "startAgents": 4,
+   "vehicle": {
+    "type": "M3A3 Bradley",
+    "health": 0.75,
+    "mounted": true,
+    "state": "driving"
+   },
+   "humanLed": false,
+   "wounded": 0,
+   "health": 0.81,
+   "speed": 0,
+   "heading": 7,
+   "state": "defending",
+   "dormant": false,
+   "objective": {
+    "command": "MOVE",
+    "target": "D",
+    "pos": [
+     4413,
+     5347
+    ],
+    "reason": "Seize the crossing before dusk",
+    "ageSec": 452,
+    "status": "active"
+   },
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Lgt21",
+   "name": "Echo 3-1",
+   "kind": "infantry",
+   "type": "RHS_USAF_AT_Team",
+   "pos": [
+    5701,
+    57,
+    5891
+   ],
+   "agents": 5,
+   "startAgents": 7,
+   "vehicle": null,
+   "humanLed": false,
+   "wounded": 2,
+   "health": 0.61,
+   "speed": 0,
+   "heading": 287,
+   "state": "engaged",
+   "dormant": false,
+   "reserved": "FOB_2",
+   "objective": {
+    "command": "DEFEND",
+    "target": "E",
+    "pos": [
+     5867,
+     5833
+    ],
+    "reason": "Probe the flank, report contacts",
+    "ageSec": 244,
+    "status": "pending"
+   },
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Mot22",
+   "name": "Foxtrot 3-2",
+   "kind": "infantry",
+   "type": "RHS_USAF_Rifle_Squad",
+   "pos": [
+    7143,
+    29,
+    6300
+   ],
+   "agents": 3,
+   "startAgents": 3,
+   "vehicle": null,
+   "humanLed": false,
+   "wounded": 1,
+   "health": 0.5,
+   "speed": 3,
+   "heading": 128,
+   "state": "moving",
+   "dormant": true,
+   "reserved": "FOB_2",
+   "objective": {
+    "command": "ATTACK",
+    "target": "F",
+    "pos": [
+     7320,
+     6320
+    ],
+    "reason": "Probe the flank, report contacts",
+    "ageSec": 564,
+    "status": "active"
+   },
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Mch23",
+   "name": "Golf 3-3",
+   "kind": "infantry",
+   "type": "RHS_USAF_Fire_Team",
+   "pos": [
+    6995,
+    21,
+    8113
+   ],
+   "agents": 4,
+   "startAgents": 4,
+   "vehicle": null,
+   "humanLed": false,
+   "wounded": 0,
+   "health": 0.8,
+   "speed": 2.3,
+   "heading": 356,
+   "state": "moving",
+   "dormant": false,
+   "objective": {
+    "command": "MOVE",
+    "target": "G",
+    "pos": [
+     7213,
+     7947
+    ],
+    "reason": "Hold the line, armor support inbound",
+    "ageSec": 441,
+    "status": "active"
+   },
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Arm24",
+   "name": "Hotel 3-4",
+   "kind": "infantry",
+   "type": "RHS_USAF_AT_Team",
+   "pos": [
+    8284,
+    37,
+    8368
+   ],
+   "agents": 5,
+   "startAgents": 5,
+   "vehicle": null,
+   "humanLed": false,
+   "wounded": 0,
+   "health": 0.68,
+   "speed": 0,
+   "heading": 347,
+   "state": "defending",
+   "dormant": false,
+   "objective": {
+    "command": "MOVE",
+    "target": "H",
+    "pos": [
+     8667,
+     8433
+    ],
+    "reason": "Cut the road north",
+    "ageSec": 559,
+    "status": "active"
+   },
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Inf25",
+   "name": "Alpha 4-1",
+   "kind": "recon",
+   "type": "RHS_USAF_Recon_Team",
+   "pos": [
+    1337,
+    80,
+    2489
+   ],
+   "agents": 4,
+   "startAgents": 6,
+   "vehicle": null,
+   "humanLed": false,
+   "wounded": 2,
+   "health": 0.69,
+   "speed": 4.9,
+   "heading": 50,
+   "state": "moving",
+   "dormant": false,
+   "objective": {
+    "command": "ATTACK",
+    "target": "A",
+    "pos": [
+     1613,
+     2747
+    ],
+    "reason": "Hold the line, armor support inbound",
+    "ageSec": 323,
+    "status": "active"
+   },
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Rec26",
+   "name": "Bravo 4-2",
+   "kind": "light",
+   "type": "M1025_HMG",
+   "pos": [
+    3067,
+    23,
+    3088
+   ],
+   "agents": 4,
+   "startAgents": 4,
+   "vehicle": {
+    "type": "M1025 HMG",
+    "health": 0.63,
+    "mounted": true,
+    "state": "driving"
+   },
+   "humanLed": false,
+   "wounded": 0,
+   "health": 0.81,
+   "speed": 0,
+   "heading": 340,
+   "state": "engaged",
+   "dormant": false,
+   "objective": {
+    "command": "ATTACK",
+    "target": "B",
+    "pos": [
+     3067,
+     3233
+    ],
+    "reason": "Reinforce the contested point",
+    "ageSec": 183,
+    "status": "active"
+   },
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Lgt27",
+   "name": "Charlie 4-3",
+   "kind": "motorized",
+   "type": "M939_transport",
+   "pos": [
+    4335,
+    46,
+    3788
+   ],
+   "agents": 5,
+   "startAgents": 5,
+   "vehicle": {
+    "type": "M939 transport",
+    "health": 0.98,
+    "mounted": true,
+    "state": "driving"
+   },
+   "humanLed": false,
+   "wounded": 0,
+   "health": 0.99,
+   "speed": 0.7,
+   "heading": 2,
+   "state": "moving",
+   "dormant": false,
+   "idleSec": 248,
+   "objective": null,
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Mot28",
+   "name": "Delta 4-4",
+   "kind": "mech",
+   "type": "M2A3_Bradley",
+   "pos": [
+    1200,
+    16,
+    1500
+   ],
+   "agents": 3,
+   "startAgents": 3,
+   "vehicle": {
+    "type": "M2A3 Bradley",
+    "health": 0.81,
+    "mounted": true,
+    "state": "driving"
+   },
+   "humanLed": false,
+   "wounded": 0,
+   "health": 0.58,
+   "speed": 0,
+   "heading": 314,
+   "state": "idle",
+   "dormant": true,
+   "garrison": true,
+   "objective": null,
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Mch29",
+   "name": "Echo 4-1",
+   "kind": "armor",
+   "type": "M1A2_SEP",
+   "pos": [
+    1200,
+    6,
+    1500
+   ],
+   "agents": 4,
+   "startAgents": 6,
+   "vehicle": {
+    "type": "M1A2 SEP",
+    "health": 0.63,
+    "mounted": false,
+    "state": "driving"
+   },
+   "humanLed": false,
+   "wounded": 3,
+   "health": 0.94,
+   "speed": 0,
+   "heading": 289,
+   "state": "idle",
+   "dormant": false,
+   "garrison": true,
+   "objective": null,
+   "mission": null
+  },
+  {
+   "id": "RHS_USAF_Arm30",
+   "name": "Foxtrot 4-2",
+   "kind": "armored_recon",
+   "type": "M3A3_Bradley",
+   "pos": [
+    1200,
+    73,
+    1500
+   ],
+   "agents": 5,
+   "startAgents": 5,
+   "vehicle": {
+    "type": "M3A3 Bradley",
+    "health": 0.89,
+    "mounted": true,
+    "state": "driving"
+   },
+   "humanLed": false,
+   "wounded": 0,
+   "health": 0.82,
+   "speed": 0,
+   "heading": 92,
+   "state": "idle",
+   "dormant": false,
+   "garrison": true,
+   "objective": null,
+   "mission": null
+  }
+ ],
+ "contacts": [
+  {
+   "pos": [
+    4328,
+    20,
+    5467
+   ],
+   "size": "a single vehicle",
+   "kind": "vehicle",
+   "vehicles": 2,
+   "infantry": 2,
+   "place": "near Morton",
+   "grid": "043-054",
+   "ageSec": 0
+  },
+  {
+   "pos": [
+    6076,
+    49,
+    5402
+   ],
+   "size": "a squad-sized element",
+   "kind": "infantry",
+   "vehicles": 0,
+   "infantry": 9,
+   "place": "north of Harbor Bridge",
+   "grid": "060-054",
+   "ageSec": 17
+  },
+  {
+   "pos": [
+    7782,
+    72,
+    6492
+   ],
+   "size": "a platoon-sized element",
+   "kind": "infantry",
+   "vehicles": 0,
+   "infantry": 10,
+   "place": "at Chapel Hill",
+   "grid": "077-064",
+   "ageSec": 40
+  },
+  {
+   "pos": [
+    7019,
+    70,
+    7885
+   ],
+   "size": "a fire team",
+   "kind": "vehicle",
+   "vehicles": 2,
+   "infantry": 2,
+   "place": "between Saint Philippe and Le Moule",
+   "grid": "070-078",
+   "ageSec": 57
+  },
+  {
+   "pos": [
+    8476,
+    8,
+    8812
+   ],
+   "size": "a vehicle section",
+   "kind": "infantry",
+   "vehicles": 0,
+   "infantry": 14,
+   "place": "west of Meaux",
+   "grid": "084-088",
+   "ageSec": 70
+  },
+  {
+   "pos": [
+    4879,
+    50,
+    5570
+   ],
+   "size": "a large mechanized force with dismounts",
+   "kind": "infantry",
+   "vehicles": 0,
+   "infantry": 9,
+   "place": "near Montignac",
+   "grid": "048-055",
+   "ageSec": 88
+  },
+  {
+   "pos": [
+    6238,
+    71,
+    5570
+   ],
+   "size": "a single vehicle",
+   "kind": "vehicle",
+   "vehicles": 3,
+   "infantry": 3,
+   "place": "south of Gravette",
+   "grid": "062-055",
+   "ageSec": 107
+  },
+  {
+   "pos": [
+    6986,
+    71,
+    5849
+   ],
+   "size": "a squad-sized element",
+   "kind": "infantry",
+   "vehicles": 0,
+   "infantry": 2,
+   "place": "unlocated",
+   "grid": "069-058",
+   "ageSec": 126
+  },
+  {
+   "pos": [
+    7406,
+    55,
+    7917
+   ],
+   "size": "a platoon-sized element",
+   "kind": "infantry",
+   "vehicles": 0,
+   "infantry": 6,
+   "place": "near Morton",
+   "grid": "074-079",
+   "ageSec": 146
+  },
+  {
+   "pos": [
+    8455,
+    7,
+    8255
+   ],
+   "size": "a fire team",
+   "kind": "vehicle",
+   "vehicles": 1,
+   "infantry": 4,
+   "place": "north of Harbor Bridge",
+   "grid": "084-082",
+   "ageSec": 153
+  },
+  {
+   "pos": [
+    3972,
+    79,
+    5035
+   ],
+   "size": "a vehicle section",
+   "kind": "infantry",
+   "vehicles": 0,
+   "infantry": 10,
+   "place": "at Chapel Hill",
+   "grid": "039-050",
+   "ageSec": 175
+  },
+  {
+   "pos": [
+    6252,
+    59,
+    5457
+   ],
+   "size": "a large mechanized force with dismounts",
+   "kind": "infantry",
+   "vehicles": 0,
+   "infantry": 5,
+   "place": "between Saint Philippe and Le Moule",
+   "grid": "062-054",
+   "ageSec": 195
+  },
+  {
+   "pos": [
+    7012,
+    34,
+    6271
+   ],
+   "size": "a single vehicle",
+   "kind": "vehicle",
+   "vehicles": 2,
+   "infantry": 0,
+   "place": "west of Meaux",
+   "grid": "070-062",
+   "ageSec": 214
+  },
+  {
+   "pos": [
+    7710,
+    34,
+    7976
+   ],
+   "size": "a squad-sized element",
+   "kind": "infantry",
+   "vehicles": 0,
+   "infantry": 12,
+   "place": "near Montignac",
+   "grid": "077-079",
+   "ageSec": 230
+  },
+  {
+   "pos": [
+    8973,
+    6,
+    8147
+   ],
+   "size": "a platoon-sized element",
+   "kind": "infantry",
+   "vehicles": 0,
+   "infantry": 6,
+   "place": "south of Gravette",
+   "grid": "089-081",
+   "ageSec": 241
+  },
+  {
+   "pos": [
+    4904,
+    28,
+    5746
+   ],
+   "size": "a fire team",
+   "kind": "vehicle",
+   "vehicles": 2,
+   "infantry": 3,
+   "place": "unlocated",
+   "grid": "049-057",
+   "ageSec": 262
+  },
+  {
+   "pos": [
+    5398,
+    20,
+    5632
+   ],
+   "size": "a vehicle section",
+   "kind": "infantry",
+   "vehicles": 0,
+   "infantry": 14,
+   "place": "near Morton",
+   "grid": "053-056",
+   "ageSec": 273
+  },
+  {
+   "pos": [
+    7628,
+    38,
+    6718
+   ],
+   "size": "a large mechanized force with dismounts",
+   "kind": "infantry",
+   "vehicles": 0,
+   "infantry": 4,
+   "place": "north of Harbor Bridge",
+   "grid": "076-067",
+   "ageSec": 297
+  },
+  {
+   "pos": [
+    6885,
+    4,
+    7964
+   ],
+   "size": "a single vehicle",
+   "kind": "vehicle",
+   "vehicles": 1,
+   "infantry": 5,
+   "place": "at Chapel Hill",
+   "grid": "068-079",
+   "ageSec": 310
+  },
+  {
+   "pos": [
+    8240,
+    51,
+    8311
+   ],
+   "size": "a squad-sized element",
+   "kind": "infantry",
+   "vehicles": 0,
+   "infantry": 4,
+   "place": "between Saint Philippe and Le Moule",
+   "grid": "082-083",
+   "ageSec": 330
+  },
+  {
+   "pos": [
+    4805,
+    75,
+    5121
+   ],
+   "size": "a platoon-sized element",
+   "kind": "infantry",
+   "vehicles": 0,
+   "infantry": 6,
+   "place": "west of Meaux",
+   "grid": "048-051",
+   "ageSec": 341
+  },
+  {
+   "pos": [
+    5989,
+    68,
+    6136
+   ],
+   "size": "a fire team",
+   "kind": "vehicle",
+   "vehicles": 2,
+   "infantry": 4,
+   "place": "near Montignac",
+   "grid": "059-061",
+   "ageSec": 367
+  },
+  {
+   "pos": [
+    7522,
+    72,
+    6661
+   ],
+   "size": "a vehicle section",
+   "kind": "infantry",
+   "vehicles": 0,
+   "infantry": 11,
+   "place": "south of Gravette",
+   "grid": "075-066",
+   "ageSec": 1140
+  },
+  {
+   "pos": [
+    7203,
+    2,
+    7717
+   ],
+   "size": "a large mechanized force with dismounts",
+   "kind": "infantry",
+   "vehicles": 0,
+   "infantry": 11,
+   "place": "unlocated",
+   "grid": "072-077",
+   "ageSec": 1160
+  },
+  {
+   "pos": [
+    8724,
+    61,
+    8897
+   ],
+   "size": "a single vehicle",
+   "kind": "vehicle",
+   "vehicles": 4,
+   "infantry": 6,
+   "place": "near Morton",
+   "grid": "087-088",
+   "ageSec": 1180
+  }
+ ],
+ "events": [
+  "objective D contested",
+  "RHS_USAF_Inf5 took casualties (3)",
+  "mission offered to RHS_USAF_Inf2: CAPTURE D",
+  "FOB_2 construction 45%",
+  "RHS_USAF_Arm9 destroyed a BMP-2 near Chapel Hill",
+  "convoy CV_3 loading at HQ",
+  "enemy air activity reported north",
+  "RHS_USAF_Rec5 lost"
+ ],
+ "fobs": [
+  {
+   "id": "FOB_1",
+   "site": "S2",
+   "name": "Pine Ridge",
+   "pos": [
+    3900,
+    4300
+   ],
+   "grid": "039-043",
+   "state": "active",
+   "build": 100,
+   "tier": 1,
+   "services": [
+    "spawn",
+    "command",
+    "cache",
+    "arsenal"
+   ],
+   "underAttack": true,
+   "stock": 260
+  },
+  {
+   "id": "FOB_2",
+   "site": "S3",
+   "name": "Quarry Road",
+   "pos": [
+    5200,
+    5600
+   ],
+   "grid": "052-056",
+   "state": "building",
+   "build": 45,
+   "tier": 1,
+   "services": [
+    "spawn"
+   ],
+   "underAttack": false,
+   "stock": 0,
+   "builder": "RHS_USAF_Lgt21"
+  }
+ ],
+ "fobSites": [
+  {
+   "id": "S4",
+   "name": "Marais Crossing",
+   "pos": [
+    6100,
+    6400
+   ],
+   "grid": "061-064",
+   "place": "near Saint Philippe",
+   "distFromHq": 6900,
+   "front": "D",
+   "toFront": 420
+  },
+  {
+   "id": "S5",
+   "name": "Rue du Moulin",
+   "pos": [
+    5800,
+    6900
+   ],
+   "grid": "058-069",
+   "place": "north of Saint Philippe",
+   "distFromHq": 7100,
+   "front": "D",
+   "toFront": 640
+  },
+  {
+   "id": "S6",
+   "name": "Les Hauts",
+   "pos": [
+    6500,
+    5800
+   ],
+   "grid": "065-058",
+   "place": "east of Chapel Hill",
+   "distFromHq": 6700,
+   "front": "D",
+   "toFront": 710
+  },
+  {
+   "id": "S7",
+   "name": "Pont Rouge",
+   "pos": [
+    5400,
+    7300
+   ],
+   "grid": "054-073",
+   "place": "near Le Moule",
+   "distFromHq": 7500,
+   "front": "D",
+   "toFront": 980
+  }
+ ],
+ "fobRules": {
+  "max": 2,
+  "live": 1,
+  "inProgress": 1,
+  "cost": 300,
+  "upgradeCost": 150,
+  "build": "convoy",
+  "buildSec": 240,
+  "logistics": true,
+  "earliestSec": 300,
+  "elapsedSec": 2710,
+  "ready": false,
+  "readyReason": "a FOB is already in progress"
+ },
+ "baseRules": {
+  "garrisonSquads": 3,
+  "garrison": 3,
+  "idleDespawnMin": 6,
+  "recentlyDespawned": 2,
+  "hqReserve": 50,
+  "lastDespawn": {
+   "squad": "RHS_USAF_Inf11",
+   "kind": "infantry",
+   "refund": 45,
+   "agoSec": 380
+  }
+ },
+ "convoys": [
+  {
+   "id": "CV_3",
+   "from": "HQ",
+   "to": "FOB_2",
+   "cargo": 400,
+   "state": "loading",
+   "pos": [
+    1200,
+    1500
+   ],
+   "grid": "012-015",
+   "truck": "RHS_USAF_Mot22"
+  },
+  {
+   "id": "CV_2",
+   "from": "HQ",
+   "to": "FOB_1",
+   "cargo": 400,
+   "state": "delivered",
+   "pos": [
+    3900,
+    4300
+   ],
+   "grid": "039-043"
+  }
+ ],
+ "logisticsRules": {
+  "convoyMax": 2,
+  "inFlight": 1,
+  "minCargo": 40,
+  "hqReserve": 50,
+  "lowStock": 120,
+  "truckCargo": 400
+ },
+ "requests": [
+  {
+   "id": 17,
+   "player": "Underlines",
+   "role": "leader",
+   "kind": "VEHICLE",
+   "args": "M1025 HMG",
+   "status": "granted",
+   "reason": "",
+   "ageSec": 120
+  },
+  {
+   "id": 16,
+   "player": "Corporal_K",
+   "role": "soldier",
+   "kind": "SQUAD",
+   "args": "",
+   "status": "refused",
+   "reason": "soldiers cannot request squads",
+   "ageSec": 300
+  },
+  {
+   "id": 15,
+   "player": "Underlines",
+   "role": "leader",
+   "kind": "RESUPPLY",
+   "args": "ammo",
+   "status": "granted",
+   "reason": "",
+   "ageSec": 520
+  },
+  {
+   "id": 14,
+   "player": "Sgt_Moreau",
+   "role": "leader",
+   "kind": "REINFORCE",
+   "args": "2 squads",
+   "status": "refused",
+   "reason": "supplies below reserve",
+   "ageSec": 800
+  },
+  {
+   "id": 13,
+   "player": "Sgt_Moreau",
+   "role": "leader",
+   "kind": "RECON",
+   "args": "Gravette",
+   "status": "granted",
+   "reason": "",
+   "ageSec": 1100
+  }
+ ],
+ "structures": [
+  {
+   "base": "HQ",
+   "kind": "spawn",
+   "label": "Structure 1",
+   "pos": [
+    1200,
+    1500
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "HQ",
+   "kind": "cache",
+   "label": "Structure 2",
+   "pos": [
+    1207,
+    1509
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "HQ",
+   "kind": "spawn",
+   "label": "Structure 3",
+   "pos": [
+    1214,
+    1518
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "HQ",
+   "kind": "depot",
+   "label": "Structure 4",
+   "pos": [
+    1221,
+    1527
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "HQ",
+   "kind": "cache",
+   "label": "Structure 5",
+   "pos": [
+    1228,
+    1536
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "HQ",
+   "kind": "arsenal",
+   "label": "Structure 6",
+   "pos": [
+    1235,
+    1500
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "HQ",
+   "kind": "command",
+   "label": "Structure 7",
+   "pos": [
+    1242,
+    1509
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "HQ",
+   "kind": "spawn",
+   "label": "Structure 8",
+   "pos": [
+    1249,
+    1518
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "HQ",
+   "kind": "depot",
+   "label": "Structure 9",
+   "pos": [
+    1256,
+    1527
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "HQ",
+   "kind": "arsenal",
+   "label": "Structure 10",
+   "pos": [
+    1263,
+    1536
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "HQ",
+   "kind": "spawn",
+   "label": "Structure 11",
+   "pos": [
+    1270,
+    1500
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "HQ",
+   "kind": "spawn",
+   "label": "Structure 12",
+   "pos": [
+    1277,
+    1509
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "FOB_1",
+   "kind": "depot",
+   "label": "Structure 13",
+   "pos": [
+    1284,
+    1518
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "FOB_1",
+   "kind": "command",
+   "label": "Structure 14",
+   "pos": [
+    1291,
+    1527
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "FOB_1",
+   "kind": "depot",
+   "label": "Structure 15",
+   "pos": [
+    1298,
+    1536
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "FOB_1",
+   "kind": "spawn",
+   "label": "Structure 16",
+   "pos": [
+    1305,
+    1500
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "FOB_1",
+   "kind": "spawn",
+   "label": "Structure 17",
+   "pos": [
+    1312,
+    1509
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "FOB_1",
+   "kind": "spawn",
+   "label": "Structure 18",
+   "pos": [
+    1319,
+    1518
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "FOB_1",
+   "kind": "arsenal",
+   "label": "Structure 19",
+   "pos": [
+    1326,
+    1527
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "FOB_1",
+   "kind": "spawn",
+   "label": "Structure 20",
+   "pos": [
+    1333,
+    1536
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "FOB_2",
+   "kind": "cache",
+   "label": "Structure 21",
+   "pos": [
+    1340,
+    1500
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "FOB_2",
+   "kind": "command",
+   "label": "Structure 22",
+   "pos": [
+    1347,
+    1509
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "FOB_2",
+   "kind": "command",
+   "label": "Structure 23",
+   "pos": [
+    1354,
+    1518
+   ],
+   "grid": "012-015"
+  },
+  {
+   "base": "FOB_2",
+   "kind": "depot",
+   "label": "Structure 24",
+   "pos": [
+    1361,
+    1527
+   ],
+   "grid": "012-015"
+  }
+ ],
+ "env": {
+  "time": "19:40",
+  "date": "2026-10-15",
+  "daySpeed": 6,
+  "daylight": "dusk",
+  "sunrise": "06:12",
+  "sunset": "19:55",
+  "weather": "Overcast",
+  "next": "Rain",
+  "nextInMin": 18,
+  "plan": [
+   "Overcast",
+   "Rain",
+   "Rain",
+   "Clear"
+  ]
+ },
+ "hq": {
+  "trait": "aggressive"
+ },
+ "helpCalls": [
+  {
+   "id": 4,
+   "player": "Underlines",
+   "squad": "RHS_USAF_Rec2",
+   "grid": "058-072",
+   "pos": [
+    5800,
+    7200
+   ],
+   "note": "taking fire from the treeline",
+   "ageSec": 45,
+   "answeredBy": ""
+  },
+  {
+   "id": 3,
+   "player": "Corporal_K",
+   "squad": "RHS_USAF_Lgt3",
+   "grid": "049-061",
+   "pos": [
+    4900,
+    6100
+   ],
+   "note": "need AT, armor ahead",
+   "ageSec": 210,
+   "answeredBy": "RHS_USAF_Lgt15"
+  }
+ ]
+}

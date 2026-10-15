@@ -311,3 +311,17 @@ table.lo-itemtable { width: 100%; border-collapse: collapse; font-size: 12.5px; 
 .lo-itemtable tr.lo-grp th { background: rgba(255,255,255,.06); color: var(--mut); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
 .lo-type { font-size: 11px; margin-left: 4px; }
 @media (max-width: 600px) { .lo-sum { min-width: 150px; } .lo-itemwrap { max-height: 60vh; } .lo-type { display: block; margin-left: 0; } }
+
+/* latency tab */
+.slow { color: var(--warn); font-weight: 600; }
+tr.slowrow { box-shadow: inset 3px 0 0 var(--warn); }
+tr.secdetail td { white-space: normal; background: rgba(255,255,255,.02); padding: 8px 14px 10px; }
+.secbars h3 { margin: 0 0 6px; font-size: 11px; color: var(--mut); text-transform: uppercase; letter-spacing: .06em; }
+.secrow { display: grid; grid-template-columns: minmax(110px, 200px) minmax(80px, 1fr) minmax(150px, 230px); gap: 10px; align-items: center; padding: 2px 0; }
+.secname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.secbar { height: 8px; border-radius: 4px; background: rgba(255,255,255,.08); overflow: hidden; }
+.secbar i { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
+.secval { text-align: right; white-space: nowrap; }
+.metrics { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--mut); margin-bottom: 6px; }
+.metrics b { color: var(--fg); font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) { .secrow { grid-template-columns: 1fr; gap: 2px; } .secval { text-align: left; } }

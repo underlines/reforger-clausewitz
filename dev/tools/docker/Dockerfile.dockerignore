@@ -1,0 +1,12 @@
+# Build context = dev/tools. Only the sidecar runtime goes into the image.
+node_modules
+.cache
+docker
+fixtures
+**/test-*.mjs
+**/test_*.mjs
+*.log
+*.err
+sidecar-config.json
+echo_server.*
+real_hq_probe.mjs

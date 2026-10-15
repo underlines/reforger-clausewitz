@@ -1,0 +1,456 @@
+{
+ "hash": "large-1",
+ "faction": "RHS_USAF",
+ "mode": "conquest",
+ "capabilities": [
+  "fob",
+  "logistics",
+  "requests"
+ ],
+ "builtin": false,
+ "primitives": [],
+ "intents": [
+  {
+   "name": "MOVE",
+   "layer": "intent",
+   "channel": "orders",
+   "authority": "hq",
+   "cost": 0,
+   "tags": [
+    "movement"
+   ],
+   "requires": [],
+   "desc": "Redeploy the squad to the objective or position.",
+   "params": [
+    {
+     "name": "squad",
+     "type": "unit",
+     "required": true,
+     "hint": "squad id from the situation, humanLed=false, one order per squad"
+    },
+    {
+     "name": "target",
+     "type": "string",
+     "required": false,
+     "hint": "objective id from the situation"
+    },
+    {
+     "name": "pos",
+     "type": "position",
+     "required": false,
+     "hint": "[x, z]; alternative to target"
+    },
+    {
+     "name": "reason",
+     "type": "string",
+     "required": false,
+     "hint": "short text"
+    }
+   ]
+  },
+  {
+   "name": "ATTACK",
+   "layer": "intent",
+   "channel": "orders",
+   "authority": "hq",
+   "cost": 0,
+   "tags": [
+    "offence"
+   ],
+   "requires": [],
+   "desc": "Assault the objective or position (on an objective = capture it).",
+   "params": [
+    {
+     "name": "squad",
+     "type": "unit",
+     "required": true,
+     "hint": "squad id from the situation, humanLed=false, one order per squad"
+    },
+    {
+     "name": "target",
+     "type": "string",
+     "required": false,
+     "hint": "objective id from the situation"
+    },
+    {
+     "name": "pos",
+     "type": "position",
+     "required": false,
+     "hint": "[x, z]; alternative to target"
+    },
+    {
+     "name": "reason",
+     "type": "string",
+     "required": false,
+     "hint": "short text"
+    }
+   ]
+  },
+  {
+   "name": "DEFEND",
+   "layer": "intent",
+   "channel": "orders",
+   "authority": "hq",
+   "cost": 0,
+   "tags": [
+    "defence"
+   ],
+   "requires": [],
+   "desc": "Hold the objective or position.",
+   "params": [
+    {
+     "name": "squad",
+     "type": "unit",
+     "required": true,
+     "hint": "squad id from the situation, humanLed=false, one order per squad"
+    },
+    {
+     "name": "target",
+     "type": "string",
+     "required": false,
+     "hint": "objective id from the situation"
+    },
+    {
+     "name": "pos",
+     "type": "position",
+     "required": false,
+     "hint": "[x, z]; alternative to target"
+    },
+    {
+     "name": "reason",
+     "type": "string",
+     "required": false,
+     "hint": "short text"
+    }
+   ]
+  },
+  {
+   "name": "RECON",
+   "layer": "intent",
+   "channel": "orders",
+   "authority": "hq",
+   "cost": 0,
+   "tags": [
+    "recon"
+   ],
+   "requires": [],
+   "desc": "Go there and observe, no assault.",
+   "params": [
+    {
+     "name": "squad",
+     "type": "unit",
+     "required": true,
+     "hint": "squad id from the situation, humanLed=false, one order per squad"
+    },
+    {
+     "name": "target",
+     "type": "string",
+     "required": false,
+     "hint": "objective id from the situation"
+    },
+    {
+     "name": "pos",
+     "type": "position",
+     "required": false,
+     "hint": "[x, z]; alternative to target"
+    },
+    {
+     "name": "reason",
+     "type": "string",
+     "required": false,
+     "hint": "short text"
+    }
+   ]
+  },
+  {
+   "name": "FALL_BACK",
+   "layer": "intent",
+   "channel": "orders",
+   "authority": "hq",
+   "cost": 0,
+   "tags": [
+    "defence"
+   ],
+   "requires": [],
+   "desc": "Retreat. No target = own base.",
+   "params": [
+    {
+     "name": "squad",
+     "type": "unit",
+     "required": true,
+     "hint": "squad id from the situation, humanLed=false, one order per squad"
+    },
+    {
+     "name": "target",
+     "type": "string",
+     "required": false,
+     "hint": "objective id from the situation"
+    },
+    {
+     "name": "pos",
+     "type": "position",
+     "required": false,
+     "hint": "[x, z]; alternative to target"
+    },
+    {
+     "name": "reason",
+     "type": "string",
+     "required": false,
+     "hint": "short text"
+    }
+   ]
+  },
+  {
+   "name": "BUY",
+   "layer": "intent",
+   "channel": "buy",
+   "authority": "hq",
+   "cost": 0,
+   "tags": [
+    "economy"
+   ],
+   "requires": [],
+   "desc": "Buy new units from the catalog for a concrete assignment (max 3 entries per reply, total cost within war.supplies). Every entry names the order its units get when they arrive (command + target or pos): units are not bought to idle at the base. Idle squads at the base are stood down after war.mode.params.idleDespawnMin minutes and refunded.",
+   "params": [
+    {
+     "name": "type",
+     "type": "string",
+     "required": true,
+     "hint": "catalog type from the situation"
+    },
+    {
+     "name": "count",
+     "type": "int",
+     "required": false,
+     "hint": "1 to 3"
+    },
+    {
+     "name": "command",
+     "type": "string",
+     "required": true,
+     "hint": "REQUIRED assignment of the new units: MOVE, ATTACK, DEFEND or RECON (they get this order the moment they are ready; nothing is bought to wait at the base)"
+    },
+    {
+     "name": "target",
+     "type": "string",
+     "required": false,
+     "hint": "objective id from the situation for that order"
+    },
+    {
+     "name": "pos",
+     "type": "position",
+     "required": false,
+     "hint": "[x, z]; alternative to target"
+    },
+    {
+     "name": "reason",
+     "type": "string",
+     "required": false,
+     "hint": "short text"
+    }
+   ]
+  },
+  {
+   "name": "OFFER_MISSION",
+   "layer": "intent",
+   "channel": "missions",
+   "authority": "hq",
+   "cost": 0,
+   "tags": [
+    "missions"
+   ],
+   "requires": [],
+   "desc": "Offer up to 3 missions to a human-led squad (humanLed=true): each offer has kind CAPTURE|DEFEND|RECON|DESTROY, a target (objective id) or pos [x, z], and a brief (max 240 chars, in the voice of HQ). Skip squads whose mission.state is accepted.",
+   "params": [
+    {
+     "name": "squad",
+     "type": "unit",
+     "required": true,
+     "hint": "human-led squad id from the situation"
+    }
+   ]
+  },
+  {
+   "name": "ESTABLISH_FOB",
+   "layer": "intent",
+   "channel": "fob",
+   "authority": "hq",
+   "cost": 0,
+   "tags": [
+    "fob"
+   ],
+   "requires": [],
+   "desc": "Establish a forward operating base (FOB) at a candidate site: pays the FOB cost, a transport with an escort drives out and builds it. A FOB gives a spawn point, a command post, a supply cache and an arsenal near the front. Only one FOB may be in progress per side, max war.mode.params.fobMax per side. Choose a site from fobSites; check fobRules for the cost and your supplies.",
+   "params": [
+    {
+     "name": "site",
+     "type": "string",
+     "required": true,
+     "hint": "site id from fobSites in the situation"
+    },
+    {
+     "name": "reason",
+     "type": "string",
+     "required": false,
+     "hint": "short text"
+    }
+   ]
+  },
+  {
+   "name": "UPGRADE_FOB",
+   "layer": "intent",
+   "channel": "fob",
+   "authority": "hq",
+   "cost": 0,
+   "tags": [
+    "fob"
+   ],
+   "requires": [],
+   "desc": "Add a vehicle depot to an active FOB (tier 2) for half the FOB cost (fobRules.upgradeCost).",
+   "params": [
+    {
+     "name": "fob",
+     "type": "string",
+     "required": true,
+     "hint": "id of an active FOB (state active, tier 1) from fobs in the situation"
+    },
+    {
+     "name": "reason",
+     "type": "string",
+     "required": false,
+     "hint": "short text"
+    }
+   ]
+  },
+  {
+   "name": "RESUPPLY",
+   "layer": "intent",
+   "channel": "fob",
+   "authority": "hq",
+   "cost": 0,
+   "tags": [
+    "logistics"
+   ],
+   "requires": [],
+   "desc": "Send a supply truck convoy from the HQ to a FOB: the cargo is added to the FOB stock on arrival.",
+   "params": [
+    {
+     "name": "fob",
+     "type": "string",
+     "required": true,
+     "hint": "id of an active FOB from fobs in the situation"
+    },
+    {
+     "name": "reason",
+     "type": "string",
+     "required": false,
+     "hint": "short text"
+    }
+   ]
+  },
+  {
+   "name": "CONVOY",
+   "layer": "intent",
+   "channel": "fob",
+   "authority": "hq",
+   "cost": 0,
+   "tags": [
+    "logistics"
+   ],
+   "requires": [],
+   "desc": "Move supply stock between two bases with a truck convoy.",
+   "params": [
+    {
+     "name": "origin",
+     "type": "base",
+     "required": true,
+     "hint": "origin base id (HQ or a FOB id)"
+    },
+    {
+     "name": "dest",
+     "type": "base",
+     "required": true,
+     "hint": "destination base id"
+    },
+    {
+     "name": "reason",
+     "type": "string",
+     "required": false,
+     "hint": "short text"
+    }
+   ]
+  },
+  {
+   "name": "REQUEST_VEHICLE",
+   "layer": "intent",
+   "channel": "player",
+   "authority": "player",
+   "cost": 0,
+   "tags": [
+    "request"
+   ],
+   "requires": [],
+   "desc": "A player asks for a vehicle at his position.",
+   "params": [
+    {
+     "name": "vehicle",
+     "type": "string",
+     "required": true,
+     "hint": "vehicle type"
+    }
+   ]
+  },
+  {
+   "name": "REQUEST_BACKUP",
+   "layer": "intent",
+   "channel": "player",
+   "authority": "player",
+   "cost": 0,
+   "tags": [
+    "request"
+   ],
+   "requires": [],
+   "desc": "A player calls for urgent help.",
+   "params": [
+    {
+     "name": "note",
+     "type": "string",
+     "required": false,
+     "hint": "short text"
+    }
+   ]
+  },
+  {
+   "name": "REPORT_CONTACT",
+   "layer": "intent",
+   "channel": "player",
+   "authority": "player",
+   "cost": 0,
+   "tags": [
+    "report"
+   ],
+   "requires": [],
+   "desc": "A player reports an enemy sighting.",
+   "params": [
+    {
+     "name": "kind",
+     "type": "string",
+     "required": true,
+     "hint": "inf|veh|armor|air"
+    },
+    {
+     "name": "distance",
+     "type": "int",
+     "required": true,
+     "hint": "metres"
+    },
+    {
+     "name": "direction",
+     "type": "string",
+     "required": true,
+     "hint": "N..NW"
+    }
+   ]
+  }
+ ]
+}

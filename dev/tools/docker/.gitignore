@@ -1,0 +1,4 @@
+# local runtime folders of a compose run from this directory (settings incl. API key, caches)
+data/
+no-game/
+.env

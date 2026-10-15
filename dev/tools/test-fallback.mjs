@@ -80,7 +80,7 @@ const stub = http.createServer((req, res) => {
     if (mode === "garbage") content = "I cannot help with that.";
     else if (kind === "translate") { const lang = /\((\w{2})\)/.exec(sys)?.[1] ?? "??"; content = JSON.stringify(Object.fromEntries(Object.entries(JSON.parse(usr)).map(([k, v]) => [k, `<${j.model}:${lang}> ${v}`]))); }
     else if (kind === "hq") content = JSON.stringify({ reply: "Roger from " + j.model });
-    else content = /"v":/.test(usr) ? JSON.stringify({ keep: true }) : JSON.stringify({ orders: [] }); // the sidecar's own /api/test situation has no protocol version
+    else content = (/"v":/.test(usr) || /SITUATION FIELDS/.test(sys)) ? JSON.stringify({ keep: true }) : JSON.stringify({ orders: [] }); // v2+ prompt: "v" in the raw situation, or the v2 rules (lean drops "v"); the sidecar's own /api/test situation has no protocol version
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ id: "x", object: "chat.completion", created: 1, model: j.model, choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }], usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 } }));
   });
@@ -90,7 +90,7 @@ const stub = http.createServer((req, res) => {
 const MAIN_KEY = "sk-mainsecret9999";
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "clw-fb-"));
 const cfgFile = path.join(tmp, "cfg.json");
-fs.writeFileSync(cfgFile, JSON.stringify({ provider: "openai-compatible", model: "primary-m", baseUrl: STUB, apiKey: MAIN_KEY, timeoutSec: 1, memory: { enabled: false }, sitrep: { enabled: false } })); // an OLD config (memory/sitrep off: no background journal calls to count): no fallback anywhere
+fs.writeFileSync(cfgFile, JSON.stringify({ provider: "openai-compatible", model: "primary-m", baseUrl: STUB, apiKey: MAIN_KEY, timeoutSec: 1, memory: { enabled: false }, sitrep: { enabled: false }, planner: { enabled: false } })); // an OLD config (memory/sitrep off: no background journal / planner calls to count): no fallback anywhere
 const proc = spawn(process.execPath, [path.join(DIR, "llm_sidecar.mjs")], { env: { ...process.env, CLW_PORT: String(PORT), CLW_LLM: "fake", CLW_CONFIG: cfgFile, CLW_DATA_DIR: path.join(tmp, "data"), CLW_RATE_COOLDOWN_MS: String(COOL_MS) }, stdio: ["ignore", "pipe", "pipe"] });
 let log = "";
 proc.stdout.on("data", (d) => (log += d)); proc.stderr.on("data", (d) => (log += d));

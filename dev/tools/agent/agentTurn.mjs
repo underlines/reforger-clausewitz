@@ -14,6 +14,7 @@
 // The final model text is the radio reply to the player. No MCP, no raw game commands, nothing the manifest does not list.
 import { ToolLoopAgent, tool, stepCountIs, toolSearch } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { reasoningParam } from "./llmCall.mjs";
 import { z } from "zod";
 import { JOURNAL_RULE } from "./journal.mjs";
 import { normLang, normSetLanguage, hqLanguageRules, parseStructuredReply } from "./i18n.mjs";
@@ -181,7 +182,8 @@ export function createModel(config) {
   if (provider === "openrouter" || provider === "openai-compatible") {
     if (!config.apiKey && provider === "openrouter") throw new Error("API key not set");
     const or = createOpenRouter({ apiKey: config.apiKey || undefined, ...(config.baseUrl ? { baseURL: config.baseUrl } : {}) });
-    return or.chat(config.model, { usage: { include: true } });
+    const rz = provider === "openrouter" ? reasoningParam(config.output?.reasoning ?? "off") : null; // see llmCall.reasoningParam (config output.reasoning)
+    return or.chat(config.model, { usage: { include: true }, ...(rz ? { reasoning: rz } : {}) });
   }
   throw new Error(`agent turns support openrouter / openai-compatible, not ${provider}`);
 }

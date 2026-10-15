@@ -82,6 +82,18 @@ CLW_HOST=0.0.0.0 CLW_ALLOWED_HOSTS=clw.example.com node llm_sidecar.mjs
 - For the dashboard over the internet, put an HTTPS reverse proxy (Caddy, nginx, ...) in front and forward `X-Forwarded-Proto`. Plain http sends the dashboard password in clear text.
 - Private network addresses (10.x, 192.168.x, 172.16-31.x, `*.lan`, `*.local`) are accepted automatically with `CLW_HOST=0.0.0.0`.
 
+### 5. Docker
+[`dev/tools/docker/`](dev/tools/docker) runs the sidecar as a container next to a dedicated server:
+```sh
+cd dev/tools/docker
+cp .env.example .env   # edit: data dir, game dir, host name, reverse proxy
+docker compose up -d --build
+```
+- The port is published on the host's loopback only (`127.0.0.1:8788`), so the game server on the same host needs no URL setting. This also works for a game server in host networking mode (e.g. a server manager container).
+- Settings and caches live in `SIDECAR_DATA_DIR` (writable by uid 1000). The API key, game token and dashboard password are set in the dashboard, not in `.env`.
+- The dashboard goes through a reverse proxy (Traefik labels in the compose file; `TRAEFIK_ENABLE=false` to skip them). Set a game token as soon as it is reachable from outside, and the same token on the game server (step 3).
+- `SIDECAR_BUILD_CONTEXT` can be a git URL (`https://github.com/underlines/reforger-clausewitz.git#main:dev/tools`), or deploy the compose file as a Portainer git stack (compose path `dev/tools/docker/docker-compose.yml`). The `Sidecar` GitHub workflow runs the sidecar tests and an image build, then calls the `PORTAINER_WEBHOOK_URL` repo secret on a push to `main`.
+
 ### Environment variables
 | Variable | Default | Meaning |
 |---|---|---|
