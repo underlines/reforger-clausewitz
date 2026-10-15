@@ -2158,7 +2158,9 @@ async function handleApi(req, res, url) {
 }
 
 http.createServer((req, res) => {
-  const url = (req.url ?? "/").split("?")[0];
+  // "/ch/<channel>/<route>" -> "/<route>": the game opens one REST context per channel (hq, cmd-<faction>) because one context runs its
+  // requests one after another (CLW_SidecarLink.Context); the prefix only selects the game-side context.
+  const url = (req.url ?? "/").split("?")[0].replace(/^\/ch\/[A-Za-z0-9_.-]+(?=\/)/, "");
   // game channel: no cookie, header X-CLW-Token when config gameToken is set
   if (GAME_ROUTES.has(url) && !AUTH.gameTokenOk(req, cfg.gameToken)) return send(res, 401, { error: "bad or missing X-CLW-Token" });
   if (url === "/control" || url.startsWith("/loadouts/")) {

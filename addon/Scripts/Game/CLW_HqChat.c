@@ -309,7 +309,7 @@ class CLW_HqChat
 	// The situation POST carries the message too (GetJson) as the fallback; the sidecar dedupes by message, so only one of the two runs it.
 	protected static void SendFast(CLW_HqMessage msg)
 	{
-		RestContext ctx = CLW_SidecarLink.Context(CLW_HqConfig.FAST_TIMEOUT_SEC);
+		RestContext ctx = CLW_SidecarLink.Context(CLW_HqConfig.FAST_TIMEOUT_SEC, "hq");	// own context: never queued behind a commander call
 		if (!ctx)
 		{
 			Print(string.Format("CLW: hq #%1 fast path: no REST context, situation path only", msg.m_iId), LogLevel.WARNING);
