@@ -2155,7 +2155,9 @@ async function resolveMap(force = false) {
     for (const sk of ad.skipped) if (!warnedAddonDirs.has(sk.path)) { warnedAddonDirs.add(sk.path); console.log(`map addon dir skipped: ${sk.path} (${sk.reason})`); }
     const r = await mod.resolveMapImage({
       mapPrefab: info.mapPrefab, worldFile: info.worldFile, gameDir, extraDirs: ad.dirs, maxSize: cfg.mapMaxSize,
-      cacheDir: path.join(CACHE_DIR, "maps"), overrideDir: path.join(DIR, "maps"),
+      // overrides: dev/tools/maps (repo) and <data dir>/maps-override (persistent, e.g. Docker: a dedicated server install has no UI map
+      // textures, so the PNG rendered from a game client goes there as <world file name>.png, e.g. CLW_Arland.png)
+      cacheDir: path.join(CACHE_DIR, "maps"), overrideDir: [path.join(DIR, "maps"), path.join(CACHE_DIR, "maps-override")],
     });
     if (mapState.key !== key) return; // world changed meanwhile
     if (!r || !r.pngPath) mapState.status = "notfound";

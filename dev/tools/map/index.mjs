@@ -51,8 +51,13 @@ function pngSize(file) {
   return { width: b.readUInt32BE(16), height: b.readUInt32BE(20) };
 }
 
+// overrideDir: one dir or a list (first hit wins)
 function fromOverride(overrideDir, names) {
   if (!overrideDir) return null;
+  if (Array.isArray(overrideDir)) {
+    for (const d of overrideDir) { const r = fromOverride(d, names); if (r) return r; }
+    return null;
+  }
   for (const n of names) {
     const png = findCaseInsensitive(overrideDir, `${n}.png`);
     if (!png) continue;

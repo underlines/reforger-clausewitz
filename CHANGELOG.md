@@ -5,6 +5,9 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 
 ## [Unreleased]
 
+### Added
+- Sidecar: map image overrides in `<data dir>/maps-override/<world file name>.png` (e.g. `CLW_Arland.png`), for hosts with only a dedicated-server install, which ships no UI map textures. Render one on a machine with the game client: `node map/index.mjs Arland CLW_Arland.png 2048`.
+
 ## [1.4.0] - 2026-10-15
 
 ### Added
