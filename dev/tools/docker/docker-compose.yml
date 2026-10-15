@@ -27,6 +27,11 @@ services:
     pull_policy: build
     container_name: clausewitz-sidecar
     restart: unless-stopped
+    # public resolvers for the LLM API host: an unreachable first resolver of the host (e.g. a macvlan DNS container the host
+    # cannot reach) added ~4 s to EVERY LLM call (DNS timeout before the fallback). Override with SIDECAR_DNS1 / SIDECAR_DNS2.
+    dns:
+      - ${SIDECAR_DNS1:-1.1.1.1}
+      - ${SIDECAR_DNS2:-1.0.0.1}
     environment:
       TZ: ${TZ:-UTC}
       # host names the dashboard is reached under (reverse proxy), comma-separated
