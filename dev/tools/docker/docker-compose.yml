@@ -23,6 +23,8 @@ services:
       context: ${SIDECAR_BUILD_CONTEXT:-..}
       dockerfile: docker/Dockerfile
     image: clausewitz-sidecar:local
+    # local image only: never pull it (a Portainer webhook redeploy runs "compose pull" first and failed with "pull access denied")
+    pull_policy: build
     container_name: clausewitz-sidecar
     restart: unless-stopped
     environment:
