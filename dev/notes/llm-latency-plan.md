@@ -48,11 +48,12 @@ the HQ agent shares the strong slot with the commander; the commander's timeouts
 backup model and the call never returned (fixed: hard cap on the whole turn). Still to do: give the HQ agent its own slot
 (fast model, own cooldown) so commander failures never touch /hq (fits step 7).
 
-## Open tests (re-run once the commander call is fast / /hq has its own context)
-1. `/hq 2 enemy infantry about 100m north of my position` -> reply within seconds + REPORT_CONTACT (2 inf, 100 m, N).
-2. `/hq wir werden beschossen, brauchen Hilfe` -> REQUEST_BACKUP, nearest free group sent.
-3. `/hq cancel my last report` -> REPORT_CANCEL removes the last report.
-4. `/backup taking fire` (chat, no LLM) -> group sent; also via the radial "Backup!" (already passed via the radial on 2026-10-15).
+## Test checklist (DS e2e, RHS_USAF vs RHS_AFRF, 72 packs)
+- [x] 1. `/hq 2 enemy infantry about 100m north of my position` -> fast path, REPORT_CONTACT 2 inf 100 m N, grid 025-018 (2026-10-15, build #120; 18 s right after war start)
+- [ ] 2. `/hq wir werden beschossen, brauchen Hilfe` -> REQUEST_BACKUP, nearest free group sent. Failed once: HQ turn hung on the backup model (hard cap added since); re-test after the HQ slot split (step 7).
+- [x] 3. `/hq cancel my last report` -> REPORT_CANCEL removed the report at grid 025-018 (5 s)
+- [ ] 4. `/backup taking fire` (chat, no LLM) -> group sent. The radial "Backup!" already passed (RHS_USAF_Car3 sent, 191 m).
+- [ ] 5. After steps 1-3 of this plan: commander call on ling-3.1-flash well under 10 s, `orders>0` again (sidecar log `orders faction=... <ms>`).
 
 Recommendation: 1 + 2 + 3 first (small, high payoff, low risk; expected commander call on ling-3.1-flash well under 10 s), then 4
 with 5 + 6 inside it; 7 + 8 as standing practice. Implementation via Sonnet subagents (disjoint files), lead does the DS e2e.
