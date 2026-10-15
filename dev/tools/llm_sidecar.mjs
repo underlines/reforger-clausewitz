@@ -1358,7 +1358,12 @@ async function hqRun(job) {
     const ch = slotChain(c, "hq");
     const fallback = ch.fallback ? { config: ch.fallback, primaryCooling: () => coolLeftMs(ch.slot, ch.primary) > 0,
       onFailure: (which, err) => noteCooldown(ch.slot, which === "primary" ? ch.primary : ch.fallback, err, true), onFallback: (err) => noteFellBack(ch.slot, ch.primary.model, err) } : null;
-    const r = await mod.runAgentTurn({ manifest, situation: sit, message: entry.msg, config: c, agentConfig: { maxSteps: c.agent.maxSteps, timeoutSec: entry.fast ? Math.min(c.agent.timeoutSec, HQ_FAST_TURN_SEC) : c.agent.timeoutSec }, journal: journalBlock(faction, c, sit), fallback });
+    const turnSec = entry.fast ? Math.min(c.agent.timeoutSec, HQ_FAST_TURN_SEC) : c.agent.timeoutSec;
+    // hard cap on the whole turn: a backup-model call (primary cooling down after commander timeouts) hung past the agent timeout and
+    // the turn never finished (DS e2e 2026-10-15, msg 3); the player then waited for the game's 90 s timeout
+    let hardTimer;
+    const hard = new Promise((_, reject) => { hardTimer = setTimeout(() => reject(new Error(`turn exceeded ${turnSec + 5} s (hard cap)`)), (turnSec + 5) * 1000); });
+    const r = await Promise.race([mod.runAgentTurn({ manifest, situation: sit, message: entry.msg, config: c, agentConfig: { maxSteps: c.agent.maxSteps, timeoutSec: turnSec }, journal: journalBlock(faction, c, sit), fallback }), hard]).finally(() => clearTimeout(hardTimer));
     if ((r.fellBack ? ch.fallback?.provider : c.provider) === "openrouter") recordUsage(r.modelUsed ?? c.model, faction, r.usage);
     hqFinish(entry, faction, r);
   } catch (e) {
