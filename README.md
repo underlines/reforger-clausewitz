@@ -91,6 +91,7 @@ docker compose up -d --build
 ```
 - The port is published on the host's loopback only (`127.0.0.1:8788`), so the game server on the same host needs no URL setting. This also works for a game server in host networking mode (e.g. a server manager container).
 - Settings and caches live in `SIDECAR_DATA_DIR` (writable by uid 1000). The API key, game token and dashboard password are set in the dashboard, not in `.env`.
+- `MODS_DIR` (optional) mounts the server manager's Workshop mod cache read-only (`.../mods/reforger/addons`, the folder of `<Name>_<GUID>` addon dirs) so the dashboard can draw maps of mod worlds (e.g. Takistan); mods are opened lazily, only when the current world needs them.
 - The dashboard goes through a reverse proxy (Traefik labels in the compose file; `TRAEFIK_ENABLE=false` to skip them). Set a game token as soon as it is reachable from outside, and the same token on the game server (step 3).
 - `SIDECAR_BUILD_CONTEXT` can be a git URL (`https://github.com/underlines/reforger-clausewitz.git#main:dev/tools`), or deploy the compose file as a Portainer git stack (compose path `dev/tools/docker/docker-compose.yml`). The `Sidecar` GitHub workflow runs the sidecar tests and an image build, then calls the `PORTAINER_WEBHOOK_URL` repo secret on a push to `main`.
 
@@ -103,6 +104,7 @@ docker compose up -d --build
 | `CLW_CONFIG` | `dev/tools/sidecar-config.json` | settings file |
 | `CLW_DATA_DIR` | `dev/tools/.cache` | sessions, loadout store, map caches |
 | `ARMA_REFORGER_DIR` | auto (Steam) | game install, used to render the dashboard map. Without it the map has no background image |
+| `CLW_ADDON_DIRS` | | extra addon dirs for maps of worlds in Workshop mods (Takistan, own wrapper worlds). Separated by `;` (Windows) / `:` (Linux) or `,`; each entry is one addon dir (holds `*.pak`) or a parent folder of addon dirs. Listed before the dashboard setting `addonDirs`; game paks are searched first, then these in order, each opened only when needed (Docker: `MODS_DIR`) |
 | `CLW_LLM`, `CLW_MODEL` | `fake` | initial provider/model before the first save in the dashboard |
 
 ## Chat commands (in game)

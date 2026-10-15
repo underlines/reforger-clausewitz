@@ -31,9 +31,12 @@ services:
       CLW_ALLOWED_HOSTS: ${CLW_ALLOWED_HOSTS:-}
       # read-only game install for the dashboard map image (optional; the map stays blank without it)
       ARMA_REFORGER_DIR: /game
+      # read-only Workshop mod cache (addon dirs, or a folder of them) for maps of mod worlds, e.g. Takistan (optional; only used when MODS_DIR has content)
+      CLW_ADDON_DIRS: /mods
     volumes:
       - ${SIDECAR_DATA_DIR:-./data}:/data
       - ${GAME_DIR:-./no-game}:/game:ro
+      - ${MODS_DIR:-./no-mods}:/mods:ro
     ports:
       - "127.0.0.1:${SIDECAR_PORT:-8788}:8788"
     networks:

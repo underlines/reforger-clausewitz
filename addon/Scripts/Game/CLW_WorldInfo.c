@@ -60,7 +60,6 @@ class CLW_WorldCallback : RestCallback
 
 class CLW_WorldInfo
 {
-	static const string BASE_URL = "http://127.0.0.1:8788/";
 	static const int KIND_WORLD = 0;
 	static const int KIND_ROADS = 1;
 	static const int KIND_LOCATIONS = 2;
@@ -236,11 +235,10 @@ class CLW_WorldInfo
 				m_aCallbacks.Remove(i);
 		}
 
-		RestContext ctx = GetGame().GetRestApi().GetContext(BASE_URL);
+		// own channel (one request at a time per context); sidecar URL and token header come from CLW_SidecarLink
+		RestContext ctx = CLW_SidecarLink.Context(10, "world");
 		if (!ctx)
 			return;
-		ctx.SetTimeout(10);
-		ctx.SetHeaders("Content-Type,application/json");
 		CLW_WorldCallback cb = new CLW_WorldCallback(this, kind);
 		m_aCallbacks.Insert(cb);
 		if (ctx.POST(cb, path, body) < 0)

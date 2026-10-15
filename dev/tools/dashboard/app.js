@@ -1299,13 +1299,14 @@ async function postJson(url, body) {
 function MapCard({ toast }) {
   const [w, setW] = useState(null);
   const [gameDir, setGameDir] = useState(null);
+  const [addonDirs, setAddonDirs] = useState(null); // one dir per line
   const [maxSize, setMaxSize] = useState(2048);
   const load = useCallback(async () => {
     try { setW(await (await fetch("/api/world", { cache: "no-store" })).json()); } catch { /* offline */ }
   }, []);
   useEffect(() => {
     load(); const t = setInterval(load, 3000);
-    fetch("/api/config", { cache: "no-store" }).then((r) => r.json()).then((c) => { setGameDir(c.gameDir ?? ""); setMaxSize(c.mapMaxSize ?? 2048); }).catch(() => {});
+    fetch("/api/config", { cache: "no-store" }).then((r) => r.json()).then((c) => { setGameDir(c.gameDir ?? ""); setAddonDirs((c.addonDirs ?? []).join("\n")); setMaxSize(c.mapMaxSize ?? 2048); }).catch(() => {});
     return () => clearInterval(t);
   }, [load]);
   const act = async (url, body, okMsg) => {
@@ -1321,9 +1322,11 @@ function MapCard({ toast }) {
       ${v.roads == null || v.locations == null || v.buildings == null ? html`<div class="dim">${t("mc.waiting")}</div>` : null}
       <div class="muted">${t("mc.detected", w?.detectedGameDir || t("common.none"))}</div>
       <label class="field"><span>${t("mc.gameDir")}</span><input type="text" value=${gameDir ?? ""} placeholder=${t("mc.gameDirPh")} onInput=${(e) => setGameDir(e.target.value)} /></label>
+      <div class="muted">${t("mc.addonsEff", w?.addonDirs?.count ?? 0)}${w?.addonDirs?.paths?.length ? html` <span title=${w.addonDirs.paths.join("\n")}>(${w.addonDirs.paths.slice(0, 3).join(", ")}${w.addonDirs.paths.length > 3 ? ", ..." : ""})</span>` : ""}${w?.addonDirs?.skipped?.length ? " " + t("mc.addonsSkipped", w.addonDirs.skipped.map((x) => x.path).join(", ")) : ""}</div>
+      <label class="field"><span>${t("mc.addonDirs")}</span><textarea rows="3" value=${addonDirs ?? ""} placeholder=${t("mc.addonDirsPh")} onInput=${(e) => setAddonDirs(e.target.value)}></textarea></label>
       <label class="field"><span>${t("mc.maxSize")}</span><input type="number" min="256" max="8192" value=${maxSize} onInput=${(e) => setMaxSize(e.target.value)} /></label>
       <div class="btns">
-        <button class="btn" type="button" onClick=${() => act("/api/config", { gameDir: gameDir ?? "", mapMaxSize: Number(maxSize) }, t("mc.saved"))}><${Icon} n="save" /> ${t("common.save")}</button>
+        <button class="btn" type="button" onClick=${() => act("/api/config", { gameDir: gameDir ?? "", addonDirs: (addonDirs ?? "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean), mapMaxSize: Number(maxSize) }, t("mc.saved"))}><${Icon} n="save" /> ${t("common.save")}</button>
         <button class="btn ghost" type="button" onClick=${() => act("/api/map/reload", {}, t("mc.reresolving"))}><${Icon} n="reset" /> ${t("mc.reresolve")}</button>
         <button class="btn ghost" type="button" onClick=${() => act("/api/vector/reset", {}, t("mc.vectorCleared"))}><${Icon} n="reset" /> ${t("mc.resend")}</button></div>
       <small class="muted">${t("mc.note")}</small>

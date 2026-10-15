@@ -19,7 +19,6 @@ class CLW_TakeoverFlags
 class CLW_WarRuntime
 {
 	protected static const bool RUN_ORDER_SPIKE = false;
-	protected static const bool RUN_REST_SPIKE = false;	// M1 test (needs dev/tools/echo_server), off for normal play
 	protected static const int SQUAD_RETRY_MS = 5000;		// player squad search interval
 	protected static const int SQUAD_RETRY_MAX = 24;		// 2 min, then a free infantry squad is spawned
 	protected static const int SQUAD_RETRY_EXTRA = 12;		// further tries for that squad to appear
@@ -243,8 +242,6 @@ class CLW_WarRuntime
 		if (m_bTakeover)
 			CheckHost(switchName);
 
-		if (RUN_REST_SPIKE)
-			GetGame().GetCallqueue().CallLater(CLW_RestSpike.Run, 10000);
 		if (RUN_ORDER_SPIKE)
 			GetGame().GetCallqueue().CallLater(SpikeOrderLoop, 15000);
 

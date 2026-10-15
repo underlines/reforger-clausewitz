@@ -7,12 +7,12 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, copyFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { createGameFs, findGameDir, defaultWorkshopDir } from './gamefs.mjs';
+import { createGameFs, findGameDir, defaultWorkshopDir, resolveAddonDirs, mergeAddonDirEntries } from './gamefs.mjs';
 import { parseEdds } from './edds.mjs';
 import { decodeToRgba } from './bc7.mjs';
 import { encodePng } from './png.mjs';
 
-export { findGameDir, createGameFs };
+export { findGameDir, createGameFs, resolveAddonDirs, mergeAddonDirEntries };
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CACHE = resolve(HERE, '..', '.cache', 'maps');

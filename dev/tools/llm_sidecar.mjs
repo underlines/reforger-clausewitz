@@ -232,6 +232,7 @@ const cfg = {
   skipUnchanged: true,
   stopAtLimit: true,
   gameDir: "",       // Arma Reforger install dir for the map image; empty = auto-detect
+  addonDirs: [],     // extra addon dirs for map worlds in Workshop mods (an addon dir or a parent of addon dirs); merged after env CLW_ADDON_DIRS
   mapMaxSize: 2048,  // longest side of the served map PNG
   // HQ scheduler: how often the LLM is called (see "HQ scheduler" below)
   wakeup: { dynamic: true, defaultSec: 60, minSec: 20, maxSec: 300, budgetStretch: true },
@@ -429,6 +430,15 @@ function validateConfig(inp) {
       case "gameDir":
         if (typeof v !== "string" || v.length > 400 || /[\r\n]/.test(v)) return { error: "gameDir must be a single-line string" };
         out.gameDir = v.trim(); break;
+      case "addonDirs": {
+        if (!Array.isArray(v) || v.length > 20) return { error: "addonDirs must be an array of at most 20 strings" };
+        const list = [];
+        for (const d of v) {
+          if (typeof d !== "string" || d.length > 400 || /[\r\n]/.test(d)) return { error: "addonDirs entries must be single-line strings (max 400)" };
+          if (d.trim() && !list.includes(d.trim())) list.push(d.trim());
+        }
+        out.addonDirs = list; break;
+      }
       case "mapMaxSize":
         if (!Number.isInteger(v) || v < 256 || v > 8192) return { error: "mapMaxSize must be an integer 256..8192" };
         out.mapMaxSize = v; break;
@@ -2091,7 +2101,8 @@ const CACHE_DIR = DATA_DIR;
 const WORLD_FILE = path.join(CACHE_DIR, "world.json");
 const VECTOR_DIR = path.join(CACHE_DIR, "vector");
 const worldState = { info: null, key: "", ts: 0 };
-const mapState = { status: "none", key: "", pngPath: null, width: 0, height: 0, source: "", texturePath: "", calibration: null, error: null, ts: 0, detectedGameDir: "" };
+const mapState = { status: "none", key: "", pngPath: null, width: 0, height: 0, source: "", texturePath: "", calibration: null, error: null, ts: 0, detectedGameDir: "", addonDirs: [], addonSkipped: [] };
+const warnedAddonDirs = new Set(); // addon dir problems are logged once per path
 const vectors = new Map();   // worldKey -> {roads: [...]|null, locations: [...]|null}
 const roadAsm = new Map();   // worldKey -> {chunks: Map(idx -> roads), total: -1}
 const bldAsm = new Map();    // same for buildings: chunks of [cx,cz,w,d,yaw,cat]
@@ -2138,8 +2149,12 @@ async function resolveMap(force = false) {
     let gameDir = cfg.gameDir;
     try { mapState.detectedGameDir = (await mod.findGameDir?.()) || ""; } catch { mapState.detectedGameDir = ""; }
     if (!gameDir) gameDir = mapState.detectedGameDir;
+    // extra addon dirs (Workshop mods with their own worlds): env CLW_ADDON_DIRS first, then cfg.addonDirs; each is an addon dir or a parent of addon dirs
+    const ad = mod.resolveAddonDirs(mod.mergeAddonDirEntries(process.env.CLW_ADDON_DIRS, cfg.addonDirs));
+    mapState.addonDirs = ad.dirs; mapState.addonSkipped = ad.skipped;
+    for (const sk of ad.skipped) if (!warnedAddonDirs.has(sk.path)) { warnedAddonDirs.add(sk.path); console.log(`map addon dir skipped: ${sk.path} (${sk.reason})`); }
     const r = await mod.resolveMapImage({
-      mapPrefab: info.mapPrefab, worldFile: info.worldFile, gameDir, extraDirs: [], maxSize: cfg.mapMaxSize,
+      mapPrefab: info.mapPrefab, worldFile: info.worldFile, gameDir, extraDirs: ad.dirs, maxSize: cfg.mapMaxSize,
       cacheDir: path.join(CACHE_DIR, "maps"), overrideDir: path.join(DIR, "maps"),
     });
     if (mapState.key !== key) return; // world changed meanwhile
@@ -2168,6 +2183,7 @@ function worldView() {
     map: { status: mapState.status, width: mapState.width, height: mapState.height, source: mapState.source, texturePath: mapState.texturePath, flipY: !!mapState.calibration?.flipY, error: mapState.error, ts: mapState.ts, extent: mapExtent() },
     vector: { roads: v.roads ? v.roads.length : null, locations: v.locations ? v.locations.length : null, buildings: v.buildings ? v.buildings.length : null },
     gameDir: cfg.gameDir, detectedGameDir: mapState.detectedGameDir, mapMaxSize: cfg.mapMaxSize,
+    addonDirs: { count: mapState.addonDirs.length, paths: mapState.addonDirs, skipped: mapState.addonSkipped, env: process.env.CLW_ADDON_DIRS || "", config: cfg.addonDirs },
   };
 }
 
