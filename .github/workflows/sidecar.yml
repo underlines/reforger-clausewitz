@@ -28,6 +28,8 @@ jobs:
         run: |
           fail=0
           for f in agent/test_*.mjs test-*.mjs; do
+            # agent/test_http.mjs talks to a sidecar you start yourself (CLW_PORT=8799): manual only
+            [ "$f" = agent/test_http.mjs ] && continue
             echo "::group::$f"
             if timeout 600 node "$f"; then echo "OK $f"; else echo "::error::FAILED $f"; fail=1; fi
             echo "::endgroup::"
