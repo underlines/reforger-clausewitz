@@ -1360,7 +1360,7 @@ function BackupBox({ v, setV, meta, busy, onTest, res }) {
 const ROLE_KEYS = ["commander", "planner", "sitrep", "journal", "hq", "translate"];
 const LAT_GROUPS = {
   sitrep: { enabled: ["b", true], intervalSec: ["n", 120, 30, 3600] },
-  output: { mode: ["s", "json_object"], terse: ["b", true], reasonWords: ["n", 12, 4, 30] },
+  output: { mode: ["s", "json_object"], terse: ["b", true], reasonWords: ["n", 12, 4, 30], reasoning: ["s", "off"] },
   planner: { enabled: ["b", true], intervalSec: ["n", 180, 60, 900] },
   roles: { commander: ["s", "strong"], planner: ["s", "strong"], sitrep: ["s", "weak"], journal: ["s", "weak"], hq: ["s", "strong"], translate: ["s", "weak"] },
   escalate: { enabled: ["b", false], slot: ["s", "strong"] },
@@ -1403,7 +1403,10 @@ function LatencySettings({ f, setG }) {
         <option value="json_object">${t("cfg.l.mode.json_object")}</option><option value="json_schema">${t("cfg.l.mode.json_schema")}</option><option value="text">${t("cfg.l.mode.text")}</option></select>
         <small>${t("cfg.l.modeHelp")}</small></label>
       <div class="pair">${sw("output", "terse", t("cfg.l.terse"))}${nm("output", "reasonWords", t("cfg.l.reasonWords"))}</div>
-      <small class="muted">${t("cfg.l.terseHelp")}</small>`}
+      <small class="muted">${t("cfg.l.terseHelp")}</small>
+      <label class="field"><span>${t("cfg.l.reasoning")}</span><select value=${f.output.reasoning} onChange=${(e) => setG("output", "reasoning", e.target.value)}>
+        ${["off", "default", "low", "medium", "high"].map((m) => html`<option value=${m}>${t("cfg.l.reasoning." + m)}</option>`)}</select>
+        <small>${t("cfg.l.reasoningHelp")}</small></label>`}
     ${has_("planner") && html`<h3 class="cfgh">${t("cfg.l.planner")}</h3>
       <div class="pair">${sw("planner", "enabled", t("cfg.l.plannerOn"))}${nm("planner", "intervalSec", t("cfg.l.plannerInt"))}</div>
       <small class="muted">${t("cfg.l.plannerHelp")}</small>`}

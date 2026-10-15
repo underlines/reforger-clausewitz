@@ -81,7 +81,7 @@ try {
   const F = api(FAKE);
   eq((await F.post("/manifest", manifest)).status, 200, "manifest accepted");
   const cf = await F.get("/api/config");
-  eq([cf.output, cf.prompt], [{ mode: "json_object", terse: true, reasonWords: 12 }, { lean: true, staticBlock: true, cache: true, contactMax: 25, contactMaxAgeSec: 600 }], "default output + prompt groups");
+  eq([cf.output, cf.prompt], [{ mode: "json_object", terse: true, reasonWords: 12, reasoning: "off" }, { lean: true, staticBlock: true, cache: true, contactMax: 25, contactMaxAgeSec: 600 }], "default output + prompt groups");
   eq(cf.roles.sitrep, "weak", "role sitrep maps to the weak slot");
   const o1 = await F.post("/orders", sit("US", { langs: ["de"] }));
   ok(o1.json.sitrep?.headline && o1.json.sitrep.text_by_lang?.de, "fake: sitrep (+ translation) is in the same reply");
@@ -114,7 +114,7 @@ try {
   eq((await F.post("/api/config", { prompt: { contactMaxAgeSec: 30 } })).status, 400, "prompt.contactMaxAgeSec 60..1800");
   eq((await F.post("/api/config", { prompt: { nope: 1 } })).status, 400, "unknown prompt key rejected");
   const sv = await F.post("/api/config", { output: { mode: "json_schema", reasonWords: 20 }, prompt: { cache: false, contactMax: 40 } });
-  eq([sv.status, sv.json.config.output, sv.json.config.prompt.cache, sv.json.config.prompt.contactMax], [200, { mode: "json_schema", terse: true, reasonWords: 20 }, false, 40], "groups merge onto the current values");
+  eq([sv.status, sv.json.config.output, sv.json.config.prompt.cache, sv.json.config.prompt.contactMax], [200, { mode: "json_schema", terse: true, reasonWords: 20, reasoning: "off" }, false, 40], "groups merge onto the current values");
   await F.post("/api/config", { output: { mode: "json_object", reasonWords: 12 }, prompt: { cache: true, contactMax: 25 } });
 
   // ---------- 2. mock provider ----------

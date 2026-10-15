@@ -63,9 +63,18 @@ assert.equal(r.responseFormatUsed, null);
   assert.equal(reqs.at(-1).headers.authorization, "Bearer k");
   assert.equal(b.messages[0].content, "SYS");
 }
-// openai-compatible: no usage.include
-await call({ provider: "openai-compatible" });
+// reasoning: no field unless set; off -> disabled, low|medium|high -> effort, default -> none
+assert.equal(reqs.at(-1).body.reasoning, undefined);
+await call({ provider: "openrouter", reasoning: "off" });
+assert.deepEqual(reqs.at(-1).body.reasoning, { enabled: false });
+await call({ provider: "openrouter", reasoning: "medium" });
+assert.deepEqual(reqs.at(-1).body.reasoning, { effort: "medium" });
+await call({ provider: "openrouter", reasoning: "default" });
+assert.equal(reqs.at(-1).body.reasoning, undefined);
+// openai-compatible: no usage.include, no reasoning field
+await call({ provider: "openai-compatible", reasoning: "off" });
 assert.equal(reqs.at(-1).body.usage, undefined);
+assert.equal(reqs.at(-1).body.reasoning, undefined);
 
 // --- ttft after delayed first token; reasoning deltas not counted
 handler = async (req, res) => {

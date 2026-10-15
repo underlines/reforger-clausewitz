@@ -250,8 +250,10 @@ const cfg = {
   // per-role provider timeout in seconds, 0 = the slot's timeoutSec (hq: the fast-path cap HQ_FAST_TURN_SEC still applies on top)
   roleTimeouts: { commander: 0, planner: 0, sitrep: 0, journal: 0, hq: 0 },
   // commander reply format: mode = response_format sent to openrouter/openai-compatible (json_object | json_schema | text = none); terse = compact tuple replies
-  // (promptKit.terseSpec / expandTerse) instead of the verbose JSON; reasonWords = words asked per reason (validation tolerates 1.5x, 120 chars hard cap)
-  output: { mode: "json_object", terse: true, reasonWords: 12 },
+  // (promptKit.terseSpec / expandTerse) instead of the verbose JSON; reasonWords = words asked per reason (validation tolerates 1.5x, 120 chars hard cap);
+  // reasoning = OpenRouter reasoning for every call incl. /hq (off = reasoning:{enabled:false}, default = model default, low|medium|high = effort).
+  // Off by default: reasoning models (e.g. ling-3.1-flash) spent ~90% of a commander call on hidden reasoning (9 s vs 1.5 s, DS e2e 2026-10-15)
+  output: { mode: "json_object", terse: true, reasonWords: 12, reasoning: "off" },
   // prompt shaping: lean = tabular lean situation to the model, staticBlock = its static part at the end of the system prompt, cache = cache hints on the (stable) system prompt
   prompt: { lean: true, staticBlock: true, cache: true, contactMax: 25, contactMaxAgeSec: 600 },
   // HQ chat (/hq <text>): AI SDK agent turn per player message, see agent/agentTurn.mjs and "HQ chat" below
@@ -268,6 +270,7 @@ const cfg = {
 
 // Group settings: "bool", [min, max] number range or ["a", "b"] string enum per key. Partial objects are merged onto the current group.
 const OUTPUT_MODES = ["json_object", "json_schema", "text"];
+const REASONING_MODES = ["off", "default", "low", "medium", "high"];
 const SLOT_NAMES = ["strong", "weak"];
 const GROUP_SPECS = {
   sitrep: { enabled: "bool", intervalSec: [30, 3600] },
@@ -275,7 +278,7 @@ const GROUP_SPECS = {
   roles: { commander: SLOT_NAMES, planner: SLOT_NAMES, sitrep: SLOT_NAMES, journal: SLOT_NAMES, hq: SLOT_NAMES, translate: SLOT_NAMES },
   escalate: { enabled: "bool", slot: SLOT_NAMES },
   roleTimeouts: { commander: [0, 300], planner: [0, 300], sitrep: [0, 300], journal: [0, 300], hq: [0, 300] },
-  output: { mode: OUTPUT_MODES, terse: "bool", reasonWords: [4, 30] },
+  output: { mode: OUTPUT_MODES, terse: "bool", reasonWords: [4, 30], reasoning: REASONING_MODES },
   prompt: { lean: "bool", staticBlock: "bool", cache: "bool", contactMax: [5, 60], contactMaxAgeSec: [60, 1800] },
   agent: { enabled: "bool", maxSteps: [1, 8], timeoutSec: [5, 120], maxConcurrent: [1, 10] },
   memory: { enabled: "bool", reviewMin: [1, 60] },
@@ -1194,6 +1197,7 @@ async function callProvider(c, sit, opts = {}) {
     const res = await chatCall({
       provider: c.provider, baseUrl: c.baseUrl, apiKey: c.apiKey, model: c.model, system, user: userMsg, maxTokens: opts.maxTokens ?? c.maxTokens,
       timeoutMs: (opts.timeoutSec ?? c.timeoutSec) * 1000, responseFormat: opts.responseFormat ?? null, cacheSystem: !!opts.cacheSystem, rateCooldownMs: RATE_COOLDOWN_MS,
+      reasoning: cfg.output?.reasoning ?? "off",
     });
     const metrics = rec({ inTok: res.usage.input, outTok: res.usage.output, cachedTok: res.usage.cached ?? 0, ttftMs: res.ttftMs, totalMs: res.totalMs, outputMode: res.responseFormatUsed?.type ?? "text", cost: res.usage.cost });
     return { ...res, metrics };

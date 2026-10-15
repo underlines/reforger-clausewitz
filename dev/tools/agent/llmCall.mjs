@@ -68,8 +68,16 @@ export function createSseParser(onEvent) {
   };
 }
 
+/** OpenRouter `reasoning` body field for a reasoning mode: off -> disabled, low|medium|high -> effort, default / unset -> none (model default). */
+export function reasoningParam(mode) {
+  if (mode === "off") return { enabled: false };
+  if (mode === "low" || mode === "medium" || mode === "high") return { effort: mode };
+  return null;
+}
+
 /**
- * o = {provider, baseUrl, apiKey, model, system, user, maxTokens, timeoutMs, responseFormat, cacheSystem, stream (default true), rateCooldownMs, fetchImpl}
+ * o = {provider, baseUrl, apiKey, model, system, user, maxTokens, timeoutMs, responseFormat, cacheSystem, stream (default true), rateCooldownMs, fetchImpl,
+ *      reasoning: "off"|"default"|"low"|"medium"|"high" (openrouter only)}
  * -> {raw, usage:{input, output, cached?, cost?}, ttftMs, totalMs, streamed, responseFormatUsed}
  */
 export async function chatCall(o) {
@@ -103,7 +111,7 @@ export async function chatCall(o) {
         body = { model: o.model, max_tokens: o.maxTokens, messages: [{ role: "system", content: sys }, { role: "user", content: o.user }] };
         if (fmt) body.response_format = fmt;
         if (stream) { body.stream = true; body.stream_options = { include_usage: true }; }
-        if (o.provider === "openrouter") body.usage = { include: true };
+        if (o.provider === "openrouter") { body.usage = { include: true }; const rz = reasoningParam(o.reasoning); if (rz) body.reasoning = rz; }
       }
       if (stream) headers.accept = "text/event-stream";
       const r = await doFetch(url, { method: "POST", signal: ac.signal, headers, body: JSON.stringify(body) });
