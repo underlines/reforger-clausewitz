@@ -12,10 +12,10 @@
 [BaseContainerProps()]
 class CLW_RandomLayoutSetup
 {
-	[Attribute("350", UIWidgets.EditBox, "HQs stay this far (m) inside the terrain edge")]
+	[Attribute("250", UIWidgets.EditBox, "HQs stay this far (m) inside the terrain edge")]
 	float m_fEdgeMarginM;
 
-	[Attribute("0.15", UIWidgets.EditBox, "HQ distance = battle-size distance minus up to this fraction (never above it)")]
+	[Attribute("0.25", UIWidgets.EditBox, "HQ distance = battle-size distance minus up to this fraction (never above it)")]
 	float m_fDistanceTolerance;
 
 	[Attribute("120", UIWidgets.EditBox, "Attempts (one dry HQ A wish checked each) before falling back to the fixed layout")]
@@ -78,7 +78,7 @@ class CLW_RandomLayoutSetup
 	[Attribute("150", UIWidgets.EditBox, "Radius (m) in which buildings are counted to keep an HQ out of a town")]
 	float m_fTownRadiusM;
 
-	[Attribute("30", UIWidgets.EditBox, "Max buildings within m_fTownRadiusM of an HQ (-1 = HQs may stand in towns)")]
+	[Attribute("-1", UIWidgets.EditBox, "Max buildings within m_fTownRadiusM of an HQ (-1 = no limit: HQs may stand in villages and town centres)")]
 	int m_iMaxBuildingsNear;
 
 	[Attribute("1", UIWidgets.EditBox, "Of 7 samples along the HQ line this many may be water (sea / big lake)")]
@@ -129,7 +129,7 @@ class CLW_RandomLayoutSetup
 	[Attribute("5", UIWidgets.EditBox, "Urban: ring samples that must be clear (small clearable objects count as clear)")]
 	int m_iUrbanRingMinFree;
 
-	[Attribute("150", UIWidgets.EditBox, "Urban: max buildings within m_fTownRadiusM (a dense town centre is still rejected)")]
+	[Attribute("100000", UIWidgets.EditBox, "Urban: max buildings within m_fTownRadiusM (default = no limit: only room for the base and a road matter; negative = no limit too)")]
 	int m_iUrbanMaxBuildings;
 
 	[Attribute("60", UIWidgets.EditBox, "Urban: candidate sites tried per HQ")]
@@ -146,6 +146,17 @@ class CLW_RandomLayoutSetup
 
 	[Attribute("1", UIWidgets.EditBox, "Urban: weight of the room cost (free service ring samples)")]
 	float m_fWeightRoom;
+
+	// ---- pair variety (M4.6): several valid HQ pairs are collected, one is picked at random, the sides are tossed ----
+
+	[Attribute("6", UIWidgets.EditBox, "Valid HQ pairs to collect before one is picked at random (1 = take the first)")]
+	int m_iPairTarget;
+
+	[Attribute("6000", UIWidgets.EditBox, "Once one pair is found, collecting stops after this many ms (bounds the cost of the pair search)")]
+	int m_iCollectBudgetMs;
+
+	[Attribute("300", UIWidgets.EditBox, "A new pair counts as a duplicate when both HQs are within this distance (m) of an already collected pair")]
+	float m_fPairSeparationM;
 
 	void FillUrbanDefaults()
 	{
@@ -167,8 +178,14 @@ class CLW_RandomLayoutSetup
 			m_fUrbanRingOuterM = 45;
 		if (m_iUrbanRingMinFree <= 0)
 			m_iUrbanRingMinFree = 5;
-		if (m_iUrbanMaxBuildings <= 0)
-			m_iUrbanMaxBuildings = 150;
+		if (m_iUrbanMaxBuildings == 0)
+			m_iUrbanMaxBuildings = 100000;
+		if (m_iPairTarget <= 0)
+			m_iPairTarget = 6;
+		if (m_iCollectBudgetMs <= 0)
+			m_iCollectBudgetMs = 6000;
+		if (m_fPairSeparationM <= 0)
+			m_fPairSeparationM = 300;
 		if (m_iSiteSamples <= 0)
 			m_iSiteSamples = 60;
 		if (m_iSiteValid <= 0)
@@ -184,8 +201,8 @@ class CLW_RandomLayoutSetup
 	// Same values as the attribute defaults, for a scenario without the block.
 	void SetDefaults()
 	{
-		m_fEdgeMarginM = 350;
-		m_fDistanceTolerance = 0.15;
+		m_fEdgeMarginM = 250;
+		m_fDistanceTolerance = 0.25;
 		m_iMaxAttempts = 120;
 		m_iLandSamples = 300;
 		m_iTimeBudgetMs = 25000;
@@ -206,7 +223,7 @@ class CLW_RandomLayoutSetup
 		m_iRingSamples = 24;
 		m_iRingMinFree = 8;
 		m_fTownRadiusM = 150;
-		m_iMaxBuildingsNear = 30;
+		m_iMaxBuildingsNear = -1;
 		m_iMaxWaterSamples = 1;
 		m_fSnapRadiusM = 350;
 		m_fObjectiveHalfM = 8;
@@ -268,6 +285,11 @@ class CLW_RandomLayout
 	vector m_vHqB;
 	vector m_vCentre;
 	float m_fAxisDeg;
+	// statistics of the last FindHqPair (valid after it returned true)
+	int m_iPairsFound;
+	int m_iPairPicked;
+	bool m_bSidesFlipped;
+	int m_iSearchMs;
 	// authored -> new transform (valid after a successful Generate)
 	vector m_vMid0;
 	vector m_vMid;
@@ -291,8 +313,14 @@ class CLW_RandomLayout
 		string source = "param";
 		if (layout.m_iSeed <= 0)
 		{
-			layout.m_iSeed = Math.RandomInt(1, 9999999);
-			source = "time based";
+			// Math.RandomInt alone repeats across server starts (the global generator starts from a fixed state): mix the wall clock and
+			// the uptime ticks, and seed the global generator with it too so the CLW_FreeSpot ring angles differ per start as well.
+			int clock = System.GetUnixTime();
+			int ticks = System.GetTickCount();
+			int mixed = (clock * 31 + ticks * 7919) ^ (clock >> 7);
+			layout.m_iSeed = (mixed & 0x7FFFFF) % 9999999 + 1;
+			Math.Randomize(layout.m_iSeed);
+			source = "time based, fresh per start";
 		}
 
 		layout.m_Rng.SetSeed(layout.m_iSeed);
@@ -320,6 +348,9 @@ class CLW_RandomLayout
 		loose.m_iMaxWaterSamples = Math.Max(m_Cfg.m_iMaxWaterSamples, 2);
 		loose.m_aSnapTypes = m_Cfg.m_aSnapTypes;
 		loose.m_bNoUrban = true;	// the old open-ground rules
+		loose.m_iPairTarget = m_Cfg.m_iPairTarget;
+		loose.m_iCollectBudgetMs = m_Cfg.m_iCollectBudgetMs;
+		loose.m_fPairSeparationM = m_Cfg.m_fPairSeparationM;
 		m_Cfg = loose;
 		Print("CLW: layout random search relaxed (no road needed, towns allowed, smaller core, double attempts)", LogLevel.WARNING);
 	}
@@ -396,14 +427,26 @@ class CLW_RandomLayout
 		// uniform wishes, 25 of 60 attempts were "water at the wish" and 25 "no clear core ground" (forest).
 		int DIRS = 12;
 		int startTick = System.GetTickCount();
+		// Several valid pairs are collected (bounded by the pair target, the collect budget after the first pair, the attempts and the
+		// overall time budget), then one is picked at random and the sides are tossed: taking the first pair and giving side A the
+		// first HQ found put A mostly west / B east in 2-3 spots on Arland whatever the seed.
+		array<vector> pairsA = {};
+		array<vector> pairsB = {};
+		array<float> pairsHeading = {};
+		array<int> pairsAttempt = {};
+		int pairTarget = Math.Max(1, m_Cfg.m_iPairTarget);
 		for (int attempt = 1; attempt <= m_Cfg.m_iMaxAttempts; attempt++)
 		{
-			if (m_Cfg.m_iTimeBudgetMs > 0 && System.GetTickCount() - startTick > m_Cfg.m_iTimeBudgetMs)
+			int elapsed = System.GetTickCount() - startTick;
+			if (m_Cfg.m_iTimeBudgetMs > 0 && elapsed > m_Cfg.m_iTimeBudgetMs)
 			{
 				Reject("time budget used up");
-				Print(string.Format("CLW: layout random search stopped after %1 attempts: time budget of %2 ms used up", attempt - 1, m_Cfg.m_iTimeBudgetMs), LogLevel.WARNING);
+				Print(string.Format("CLW: layout random search stopped after %1 attempts: time budget of %2 ms used up (%3 pairs collected)", attempt - 1, m_Cfg.m_iTimeBudgetMs, pairsA.Count()), LogLevel.WARNING);
 				break;
 			}
+
+			if (!pairsA.IsEmpty() && (pairsA.Count() >= pairTarget || (m_Cfg.m_iCollectBudgetMs > 0 && elapsed > m_Cfg.m_iCollectBudgetMs)))
+				break;
 
 			m_iAttempts = attempt;
 			vector wishA;
@@ -425,6 +468,8 @@ class CLW_RandomLayout
 
 			float startHeading = m_Rng.RandFloatXY(0, Math.PI2);
 			int tried;
+			bool pairFound;
+			bool duplicate;
 			for (int d = 0; d < DIRS; d++)
 			{
 				float heading = startHeading + Math.PI2 * d / DIRS;
@@ -464,22 +509,81 @@ class CLW_RandomLayout
 					continue;
 				}
 
-				m_vHqA = posA;
-				m_vHqB = posB;
-				m_vCentre = (posA + posB) * 0.5;
-				m_fAxisDeg = heading * Math.RAD2DEG;
-				Print(string.Format("CLW: layout random seed=%1 axis=%2 centre=%3 hqA=%4 hqB=%5 (attempts %6, direction %7 of %8)", m_iSeed, Math.Round(m_fAxisDeg), m_vCentre, m_vHqA, m_vHqB, m_iAttempts, d + 1, DIRS), LogLevel.NORMAL);
-				Print(string.Format("CLW: layout random HQ distance %1 m (wanted %2 m), grid A %3 B %4", Math.Round(actual), Math.Round(wanted), CLW_Places.Grid(m_vHqA), CLW_Places.Grid(m_vHqB)), LogLevel.NORMAL);
-				LogRejects("found");
-				return true;
+				if (IsDuplicatePair(pairsA, pairsB, posA, posB))
+				{
+					Reject("duplicate pair");
+					duplicate = true;
+					break;	// next attempt: another HQ A wish
+				}
+
+				pairsA.Insert(posA);
+				pairsB.Insert(posB);
+				pairsHeading.Insert(heading);
+				pairsAttempt.Insert(attempt);
+				pairFound = true;
+				Print(string.Format("CLW: layout random pair %1 collected (attempt %2, direction %3 of %4, %5 ms): A %6 grid %7, B %8 grid %9, distance %10 m", pairsA.Count(), attempt, d + 1, DIRS, System.GetTickCount() - startTick, posA, CLW_Places.Grid(posA), posB, CLW_Places.Grid(posB), Math.Round(actual)), LogLevel.NORMAL);
+				break;
 			}
 
-			Reject("HQ A ok, no HQ B");
-			Print(string.Format("CLW: layout random attempt %1: HQ A ok at %2, no HQ B in %3 directions (%4 reached the HQ check, last: %5)", attempt, posA, DIRS, tried, why), LogLevel.NORMAL);
+			if (!pairFound && !duplicate)
+			{
+				Reject("HQ A ok, no HQ B");
+				Print(string.Format("CLW: layout random attempt %1: HQ A ok at %2, no HQ B in %3 directions (%4 reached the HQ check, last: %5)", attempt, posA, DIRS, tried, why), LogLevel.NORMAL);
+			}
 		}
 
-		Print(string.Format("CLW: layout random seed=%1: no valid HQ pair in %2 attempts", m_iSeed, m_iAttempts), LogLevel.WARNING);
-		LogRejects("failed");
+		int spent = System.GetTickCount() - startTick;
+		if (pairsA.IsEmpty())
+		{
+			Print(string.Format("CLW: layout random seed=%1: no valid HQ pair in %2 attempts (%3 ms)", m_iSeed, m_iAttempts, spent), LogLevel.WARNING);
+			LogRejects("failed");
+			return false;
+		}
+
+		// random pick + coin toss for the sides, both from the seeded generator
+		int picked = m_Rng.RandInt(0, pairsA.Count());
+		bool flip = m_Rng.RandFloat01() < 0.5;
+		vector pickA = pairsA[picked];
+		vector pickB = pairsB[picked];
+		float pickHeading = pairsHeading[picked];
+		if (flip)
+		{
+			pickA = pairsB[picked];
+			pickB = pairsA[picked];
+			pickHeading = pickHeading + Math.PI;
+		}
+
+		m_vHqA = pickA;
+		m_vHqB = pickB;
+		m_vCentre = (pickA + pickB) * 0.5;
+		m_fAxisDeg = pickHeading * Math.RAD2DEG;
+		if (m_fAxisDeg >= 360)
+			m_fAxisDeg = m_fAxisDeg - 360;
+		m_iPairsFound = pairsA.Count();
+		m_iPairPicked = picked + 1;
+		m_bSidesFlipped = flip;
+		m_iSearchMs = spent;
+		float pickedDist = vector.DistanceXZ(pickA, pickB);
+		Print(string.Format("CLW: layout random seed=%1 axis=%2 centre=%3 hqA=%4 hqB=%5 (attempts %6)", m_iSeed, Math.Round(m_fAxisDeg), m_vCentre, m_vHqA, m_vHqB, m_iAttempts), LogLevel.NORMAL);
+		Print(string.Format("CLW: layout random HQ distance %1 m (wanted %2 m), grid A %3 B %4", Math.Round(pickedDist), Math.Round(wanted), CLW_Places.Grid(m_vHqA), CLW_Places.Grid(m_vHqB)), LogLevel.NORMAL);
+		Print(string.Format("CLW: layout random HQ pick: %1 valid pair(s) found, picked #%2 (found at attempt %3), sides flipped=%4, search took %5 ms", m_iPairsFound, m_iPairPicked, pairsAttempt[picked], flip, spent), LogLevel.NORMAL);
+		LogRejects("found");
+		return true;
+	}
+
+	// True when both HQs of the new pair lie within m_fPairSeparationM of the same collected pair (one-to-one, either orientation).
+	protected bool IsDuplicatePair(notnull array<vector> pairsA, notnull array<vector> pairsB, vector posA, vector posB)
+	{
+		float sep = m_Cfg.m_fPairSeparationM;
+		for (int i = 0; i < pairsA.Count(); i++)
+		{
+			if (vector.DistanceXZ(pairsA[i], posA) < sep && vector.DistanceXZ(pairsB[i], posB) < sep)
+				return true;
+
+			if (vector.DistanceXZ(pairsA[i], posB) < sep && vector.DistanceXZ(pairsB[i], posA) < sep)
+				return true;
+		}
+
 		return false;
 	}
 
@@ -847,7 +951,7 @@ class CLW_RandomLayout
 			}
 
 			int build = CountBuildings(cand);
-			if (build > m_Cfg.m_iUrbanMaxBuildings)
+			if (m_Cfg.m_iUrbanMaxBuildings > 0 && build > m_Cfg.m_iUrbanMaxBuildings)
 			{
 				SiteReject(siteRej, "too many buildings");
 				continue;
@@ -892,7 +996,7 @@ class CLW_RandomLayout
 			float roomCost = (ringSamples - free) * 8.0 / ringSamples;
 			float densCost = 0;
 			if (build > 40)
-				densCost = (build - 40) * 0.03;
+				densCost = (build - 40) * 0.003;	// a town centre is as good as open ground: only a tiny tie-breaker
 
 			vector snapped;
 			int nav = CLW_Placement.NavmeshCheck(cand, CLW_WarConfig.PLACE_BASE_NAVMESH_TOL_M, snapped);
