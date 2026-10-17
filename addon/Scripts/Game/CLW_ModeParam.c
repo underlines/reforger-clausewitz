@@ -16,6 +16,7 @@ class CLW_ModeParam
 	float m_fStep = 1;
 	float m_fValue;				// INT/FLOAT value; BOOL 0/1; CHOICE index into m_aChoices
 	ref array<string> m_aChoices = {};
+	bool m_bHidden;				// not shown in the setup dialog (still settable via /war start, overrides.json "setup")
 
 	static CLW_ModeParam CreateNumber(string id, string label, string description, int type, float min, float max, float step, float value)
 	{
@@ -156,6 +157,7 @@ class CLW_ModeParam
 		copy.m_fStep = m_fStep;
 		copy.m_fValue = m_fValue;
 		copy.m_aChoices.Copy(m_aChoices);
+		copy.m_bHidden = m_bHidden;
 		return copy;
 	}
 

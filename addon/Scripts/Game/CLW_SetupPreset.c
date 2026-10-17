@@ -6,7 +6,8 @@
 //                  only pre-fills the setup menu. Replaces the scenario's m_iAutoStartSec.
 //   mode         : war mode id (missing = scenario default mode)
 //   factionA/B   : faction keys of side A / B (missing = scenario sides)
-//   any other key: a parameter of that mode (missing = mode default)
+//   any other key: a parameter of that mode (missing = mode default), e.g. aiDifficultyA / aiDifficultyB (easy | normal | hard | veteran;
+//                  aiDifficulty sets both), randomSeed (hidden in the setup dialog, a layout seed > 0 for admins; 0 = automatic)
 // Details: dev/notes/overrides.md
 class CLW_SetupPreset
 {
@@ -69,7 +70,10 @@ class CLW_SetupPreset
 				// string values like the chat command: SetFromText parses numbers, bools and choices from text
 				if (!preset.m_sValuesJson.IsEmpty())
 					preset.m_sValuesJson += ",";
-				preset.m_sValuesJson += "\"" + CLW_ModeParam.Escape(key) + "\":\"" + CLW_ModeParam.Escape(value) + "\"";
+				if (key == CLW_AiDifficulty.PARAM_BOTH)		// "aiDifficulty":"hard" = both sides
+					preset.m_sValuesJson += "\"" + CLW_AiDifficulty.PARAM_A + "\":\"" + CLW_ModeParam.Escape(value) + "\",\"" + CLW_AiDifficulty.PARAM_B + "\":\"" + CLW_ModeParam.Escape(value) + "\"";
+				else
+					preset.m_sValuesJson += "\"" + CLW_ModeParam.Escape(key) + "\":\"" + CLW_ModeParam.Escape(value) + "\"";
 			}
 		}
 

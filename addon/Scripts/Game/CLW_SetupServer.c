@@ -29,6 +29,11 @@ class CLW_SetupServer
 	protected string m_sBattleText;
 	protected ref array<int> m_aWaitSent = {};
 	protected ref array<int> m_aSeen = {};		// players seen in one poll (waiting hint goes out on the second)
+	protected ref map<string, string> m_mDefaults = new map<string, string>();	// "M:<mode>\t<param>" -> default value text (overrides.json preset or built-in)
+	protected bool m_bRemembered;				// the menu is prefilled with the last accepted setup (CLW_SetupMemory)
+	protected string m_sRememberedMode;
+	protected string m_sRememberedA;
+	protected string m_sRememberedB;
 
 	// Called by CLW_WarState.Init (server only).
 	static void Start(CLW_WarState war, CLW_ScenarioConfig scenario)
@@ -43,6 +48,7 @@ class CLW_SetupServer
 		s_Instance.m_War = war;
 		s_Instance.m_Scenario = scenario;
 		s_Instance.m_sBattleText = scenario.GetFactionKey(0) + " vs " + scenario.GetFactionKey(1);
+		s_Instance.Prepare();
 		GetGame().GetCallqueue().CallLater(s_Instance.Poll, POLL_MS, true);
 
 		array<string> keys = {};
@@ -54,6 +60,92 @@ class CLW_SetupServer
 			list += " " + key + "='" + names[i] + "'";
 		}
 		Print("CLW: setup server started; factions offered:" + list, LogLevel.NORMAL);
+	}
+
+	// Snapshots the defaults (what "Reset to defaults" restores: the overrides.json preset, already applied by CLW_WarState.Init, else the built-in
+	// values), then prefills the modes with the last accepted setup (CLW_SetupMemory, M4.6). The seed is never part of it. A preset that starts
+	// the war unattended (autoStartSec >= 0) wins: that server wants exactly its own settings every round.
+	protected void Prepare()
+	{
+		m_mDefaults.Clear();
+		m_bRemembered = false;
+		m_sRememberedMode = "";
+		m_sRememberedA = "";
+		m_sRememberedB = "";
+		for (int i = 0; i < m_War.GetModeCount(); i++)
+		{
+			CLW_WarMode mode = m_War.GetModeAt(i);
+			if (!mode)
+				continue;
+
+			array<ref CLW_ModeParam> params = {};
+			mode.GetParams(params);
+			foreach (CLW_ModeParam param : params)
+			{
+				m_mDefaults.Set("M:" + mode.GetId() + "\t" + param.m_sId, param.ValueText());
+			}
+		}
+
+		CLW_SetupPreset preset = m_War.GetPreset();
+		if (preset && preset.IsAutoStart())
+		{
+			Print("CLW: setup memory: not used, the overrides.json setup preset starts the war unattended and wins", LogLevel.NORMAL);
+			return;
+		}
+
+		if (!CLW_SetupMemory.Has())
+		{
+			Print("CLW: setup memory: nothing remembered yet, the menu shows the defaults", LogLevel.NORMAL);
+			return;
+		}
+
+		map<string, string> values = CLW_SetupMemory.Values();
+		string modeId;
+		values.Find(CLW_SetupMemory.KEY_MODE, modeId);
+		CLW_WarMode target = FindMode(modeId);
+		if (!target)
+		{
+			Print("CLW: setup memory: remembered mode '" + modeId + "' does not exist any more, using the defaults", LogLevel.WARNING);
+			return;
+		}
+
+		values.Find(PARAM_FACTION_A, m_sRememberedA);
+		values.Find(PARAM_FACTION_B, m_sRememberedB);
+		m_sRememberedMode = modeId;
+		int applied;
+		int skipped;
+		foreach (string key, string value : values)
+		{
+			if (key == CLW_SetupMemory.KEY_MODE || key == PARAM_FACTION_A || key == PARAM_FACTION_B || key == CLW_SetupMemory.KEY_SEED)
+				continue;
+
+			string error;
+			string one = "{\"" + CLW_ModeParam.Escape(key) + "\":\"" + CLW_ModeParam.Escape(value) + "\"}";
+			if (target.ApplyParamsJson(one, error))
+			{
+				applied++;
+			}
+			else
+			{
+				skipped++;
+				Print("CLW: setup memory: skipped remembered value: " + error, LogLevel.NORMAL);
+			}
+		}
+
+		m_bRemembered = true;
+		Print(string.Format("CLW: setup memory: menu prefilled with the last setup: mode '%1' %2 vs %3, %4 values applied, %5 skipped (no seed)", modeId, m_sRememberedA, m_sRememberedB, applied, skipped), LogLevel.NORMAL);
+	}
+
+	// Sides the last accepted setup used ("" when nothing is remembered or a preset wins). For an auto start without a preset.
+	static void GetRememberedSides(out string factionA, out string factionB)
+	{
+		factionA = "";
+		factionB = "";
+		if (s_Instance && s_Instance.m_bRemembered)
+		{
+			factionA = s_Instance.m_sRememberedA;
+			factionB = s_Instance.m_sRememberedB;
+		}
 	}
 
 	// ---- public entry points used by the player controller RPCs (server) ----
@@ -353,6 +445,7 @@ class CLW_SetupServer
 		}
 
 		m_sBattleText = m_Scenario.GetFactionKey(0) + " vs " + m_Scenario.GetFactionKey(1);
+		CLW_SetupMemory.Save(FindMode(modeId), keyA, keyB);		// next round's menu is prefilled with this (never the seed)
 
 		Print("CLW: setup ACCEPTED from player " + playerId + ", war is starting", LogLevel.NORMAL);
 		return "";
@@ -487,6 +580,12 @@ class CLW_SetupServer
 			string key = token.Substring(0, eq);
 			string value = token.Substring(eq + 1, token.Length() - eq - 1);
 			string piece = "\"" + CLW_ModeParam.Escape(key) + "\":\"" + CLW_ModeParam.Escape(value) + "\"";
+			if (key == CLW_AiDifficulty.PARAM_BOTH)		// aiDifficulty=hard: both sides
+			{
+				string escaped = CLW_ModeParam.Escape(value);
+				piece = "\"" + CLW_AiDifficulty.PARAM_A + "\":\"" + escaped + "\",\"" + CLW_AiDifficulty.PARAM_B + "\":\"" + escaped + "\"";
+			}
+
 			if (key == PARAM_FACTION_A || key == PARAM_FACTION_B)
 			{
 				if (!battleJson.IsEmpty())
@@ -553,7 +652,8 @@ class CLW_SetupServer
 		}
 	}
 
-	protected void BuildBattleParams(notnull array<ref CLW_ModeParam> outParams)
+	// remembered: use the sides of the last accepted setup (the menu values); false = the defaults ("Reset to defaults")
+	protected void BuildBattleParams(notnull array<ref CLW_ModeParam> outParams, bool remembered = true)
 	{
 		array<string> keys = {};
 		array<string> names = {};
@@ -574,6 +674,11 @@ class CLW_SetupServer
 			defaultA = preset.m_sFactionA;
 		if (preset && keys.Contains(preset.m_sFactionB))
 			defaultB = preset.m_sFactionB;
+		if (remembered && m_bRemembered && keys.Contains(m_sRememberedA) && keys.Contains(m_sRememberedB) && m_sRememberedA != m_sRememberedB)
+		{
+			defaultA = m_sRememberedA;
+			defaultB = m_sRememberedB;
+		}
 
 		outParams.Insert(CLW_ModeParam.CreateChoice(PARAM_FACTION_A, "#CLW-Param_factionA", CLW_Loc.W("#CLW-Param_factionA_Desc", list), keys, defaultA));
 		outParams.Insert(CLW_ModeParam.CreateChoice(PARAM_FACTION_B, "#CLW-Param_factionB", "#CLW-Param_factionB_Desc", keys, defaultB));
@@ -604,8 +709,12 @@ class CLW_SetupServer
 		return text;
 	}
 
-	protected static string WireParam(string group, CLW_ModeParam param)
+	// defaultText: the value "Reset to defaults" restores (field 11). Hidden parameters (the seed) are not sent at all.
+	protected static string WireParam(string group, CLW_ModeParam param, string defaultText)
 	{
+		if (param.m_bHidden)
+			return "";
+
 		string choices;
 		foreach (int i, string choice : param.m_aChoices)
 		{
@@ -614,26 +723,38 @@ class CLW_SetupServer
 			choices += Clean(choice);
 		}
 
-		string line = "P\t" + group + "\t" + Clean(param.m_sId) + "\t" + Clean(param.m_sLabel);
-		line += "\t" + Clean(param.m_sDescription) + "\t" + param.m_eType.ToString();
-		line += "\t" + param.m_fMin.ToString() + "\t" + param.m_fMax.ToString() + "\t" + param.m_fStep.ToString();
-		line += "\t" + Clean(param.ValueText()) + "\t" + choices + "\n";
+		string line = "P	" + group + "	" + Clean(param.m_sId) + "	" + Clean(param.m_sLabel);
+		line += "	" + Clean(param.m_sDescription) + "	" + param.m_eType.ToString();
+		line += "	" + param.m_fMin.ToString() + "	" + param.m_fMax.ToString() + "	" + param.m_fStep.ToString();
+		line += "	" + Clean(param.ValueText()) + "	" + choices + "	" + Clean(defaultText) + "
+";
 		return line;
 	}
 
 	// Line based menu payload (fields separated by TAB, lines by LF), parsed by CLW_SetupClient:
-	//   H  default mode id
-	//   P  group (B = battle, M:<mode id>), id, label, description, type (0 int,1 float,2 bool,3 choice), min, max, step, value, choices joined by |
+	//   H  mode id the menu pre-selects, default mode id ("Reset to defaults"), 1 when the values are the remembered last setup
+	//   P  group (B = battle, M:<mode id>), id, label, description, type (0 int,1 float,2 bool,3 choice), min, max, step, value, choices joined by |, default value
 	//   M  mode id, name, description
 	// The client has no verified reader for mixed-type JSON, so the display data is flat text; the SUBMIT stays JSON (CLW_ModeParam.ValuesToJson).
 	protected string BuildWire()
 	{
-		string wire = "H\t" + Clean(m_War.GetDefaultModeId()) + "\n";
+		string shownMode = m_War.GetDefaultModeId();
+		string remembered = "0";
+		if (m_bRemembered)
+		{
+			shownMode = m_sRememberedMode;
+			remembered = "1";
+		}
+
+		string wire = "H	" + Clean(shownMode) + "	" + Clean(m_War.GetDefaultModeId()) + "	" + remembered + "
+";
 		array<ref CLW_ModeParam> battle = {};
 		BuildBattleParams(battle);
-		foreach (CLW_ModeParam param : battle)
+		array<ref CLW_ModeParam> battleDefaults = {};
+		BuildBattleParams(battleDefaults, false);
+		foreach (int b, CLW_ModeParam param : battle)
 		{
-			wire += WireParam("B", param);
+			wire += WireParam("B", param, battleDefaults[b].ValueText());
 		}
 
 		for (int i = 0; i < m_War.GetModeCount(); i++)
@@ -642,12 +763,15 @@ class CLW_SetupServer
 			if (!mode)
 				continue;
 
-			wire += "M\t" + Clean(mode.GetId()) + "\t" + Clean(mode.GetName()) + "\t" + Clean(mode.GetDescription()) + "\n";
+			wire += "M	" + Clean(mode.GetId()) + "	" + Clean(mode.GetName()) + "	" + Clean(mode.GetDescription()) + "
+";
 			array<ref CLW_ModeParam> params = {};
 			mode.GetParams(params);
 			foreach (CLW_ModeParam modeParam : params)
 			{
-				wire += WireParam("M:" + mode.GetId(), modeParam);
+				string defaultText = modeParam.ValueText();
+				m_mDefaults.Find("M:" + mode.GetId() + "	" + modeParam.m_sId, defaultText);
+				wire += WireParam("M:" + mode.GetId(), modeParam, defaultText);
 			}
 		}
 

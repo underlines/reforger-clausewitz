@@ -30,9 +30,33 @@ class CLW_SetupMode
 
 class CLW_SetupData
 {
-	string m_sDefaultMode;
+	string m_sDefaultMode;				// mode the dialog pre-selects (the remembered one after a rematch)
+	string m_sResetMode;				// mode "Reset to defaults" selects
+	bool m_bRemembered;					// the values are the last round's setup
 	ref array<ref CLW_SetupParam> m_aBattle = {};
 	ref array<ref CLW_SetupMode> m_aModes = {};
+
+	// Widget value of a wire value text (BOOL 0/1, CHOICE index, number).
+	static float ValueFromText(CLW_SetupParam param, string valueText)
+	{
+		if (param.m_iType == CLW_ModeParam.TYPE_BOOL)
+		{
+			if (valueText == "true")
+				return 1;
+
+			return 0;
+		}
+
+		if (param.m_iType == CLW_ModeParam.TYPE_CHOICE)
+		{
+			int index = param.m_aChoices.Find(valueText);
+			if (index < 0)
+				index = 0;
+			return index;
+		}
+
+		return valueText.ToFloat();
+	}
 
 	// Parses the line based payload (see CLW_SetupServer.BuildWire). Null when nothing usable arrived.
 	static CLW_SetupData Parse(string wire)
@@ -50,6 +74,11 @@ class CLW_SetupData
 			if (f[0] == "H" && f.Count() >= 2)
 			{
 				data.m_sDefaultMode = f[1];
+				data.m_sResetMode = f[1];
+				if (f.Count() >= 3 && !f[2].IsEmpty())
+					data.m_sResetMode = f[2];
+				if (f.Count() >= 4 && f[3] == "1")
+					data.m_bRemembered = true;
 			}
 			else if (f[0] == "M" && f.Count() >= 4)
 			{
@@ -75,27 +104,16 @@ class CLW_SetupData
 				if (f.Count() >= 11 && !f[10].IsEmpty())
 					f[10].Split("|", param.m_aChoices, true);
 
-				string valueText = f[9];
-				if (param.m_iType == CLW_ModeParam.TYPE_BOOL)
+				if (param.m_iType == CLW_ModeParam.TYPE_CHOICE)
 				{
-					if (valueText == "true")
-						param.m_fValue = 1;
-				}
-				else if (param.m_iType == CLW_ModeParam.TYPE_CHOICE)
-				{
-					int index = param.m_aChoices.Find(valueText);
-					if (index < 0)
-						index = 0;
-					param.m_fValue = index;
 					param.m_fMin = 0;
 					param.m_fMax = Math.Max(0, param.m_aChoices.Count() - 1);
 				}
-				else
-				{
-					param.m_fValue = valueText.ToFloat();
-				}
 
+				param.m_fValue = ValueFromText(param, f[9]);
 				param.m_fDefault = param.m_fValue;
+				if (f.Count() >= 12)
+					param.m_fDefault = ValueFromText(param, f[11]);		// "Reset to defaults" (the remembered values may differ)
 				if (f[1] == "B")
 				{
 					data.m_aBattle.Insert(param);
@@ -130,12 +148,16 @@ class CLW_SetupDialog : SCR_ConfigurableDialogUi
 	ref CLW_SetupData m_Data;			// set by CLW_SetupClient before the dialog is created
 	protected bool m_bOpen;
 	protected bool m_bSubmitting;
-	protected Widget m_wBattleParams;
 	protected Widget m_wModeBox;
-	protected Widget m_wModeParams;
+	protected Widget m_wTabBox;
+	protected Widget m_wSectionParams;
 	protected RichTextWidget m_wModeDesc;
 	protected SCR_SpinBoxComponent m_ModeSpin;
+	protected SCR_SpinBoxComponent m_SectionSpin;
 	protected CLW_SetupMode m_CurrentMode;
+	protected int m_iSection = CLW_SetupSections.BASICS;		// section shown (CLW_SetupSections)
+	protected ref array<int> m_aSectionIds = {};				// section id per entry of the section selector (empty sections are left out)
+	protected ref array<ref array<CLW_SetupParam>> m_aSectionParams = {};	// parameters of the current mode per section id, in display order
 
 	bool IsOpen()
 	{
@@ -157,42 +179,43 @@ class CLW_SetupDialog : SCR_ConfigurableDialogUi
 			return;
 		}
 
-		m_wBattleParams = root.FindAnyWidget("BattleParams");
 		m_wModeBox = root.FindAnyWidget("ModeBox");
-		m_wModeParams = root.FindAnyWidget("ModeParams");
+		m_wTabBox = root.FindAnyWidget("TabBox");
+		m_wSectionParams = root.FindAnyWidget("SectionParams");
 		m_wModeDesc = RichTextWidget.Cast(root.FindAnyWidget("ModeDesc"));
-		if (!m_wBattleParams || !m_wModeBox || !m_wModeParams)
+		if (!m_wModeBox || !m_wTabBox || !m_wSectionParams)
 		{
-			Print("CLW: setup menu layout is missing its containers (BattleParams / ModeBox / ModeParams)", LogLevel.ERROR);
+			Print("CLW: setup menu layout is missing its containers (ModeBox / TabBox / SectionParams)", LogLevel.ERROR);
 			return;
 		}
 
-		RichTextWidget battleHeader = RichTextWidget.Cast(root.FindAnyWidget("BattleHeader"));
-		if (battleHeader)
-			battleHeader.SetText(CLW_Loc.Fmt("#CLW-Setup_Battle"));
 		RichTextWidget modeHeader = RichTextWidget.Cast(root.FindAnyWidget("ModeHeader"));
 		if (modeHeader)
 			modeHeader.SetText(CLW_Loc.Fmt("#CLW-Setup_WarMode"));
+		RichTextWidget tabHeader = RichTextWidget.Cast(root.FindAnyWidget("TabHeader"));
+		if (tabHeader)
+			tabHeader.SetText(CLW_Loc.Fmt("#CLW-Setup_Options"));
 
 		SetTitle(CLW_Loc.Fmt("#CLW-Setup_Title"));
-		SetMessage(CLW_Loc.Fmt("#CLW-Setup_Intro"));
+		string intro = CLW_Loc.Fmt("#CLW-Setup_Intro");
+		if (m_Data.m_bRemembered)
+			intro += " " + CLW_Loc.Fmt("#CLW-Setup_Remembered");
+		SetMessage(intro);
+		Print(string.Format("CLW: setup menu prefilled from the last round: %1", m_Data.m_bRemembered), LogLevel.NORMAL);
 		m_OnButtonPressed.Insert(OnTagPressed);
 
 		BuildAll();
 	}
 
-	// Battle group + mode selector + the selected mode's parameters.
+	// Mode selector, then the section selector + the parameters of the shown section (battle parameters and the selected mode's).
 	protected void BuildAll()
 	{
-		ClearChildren(m_wBattleParams);
+		ReleaseControls();
 		ClearChildren(m_wModeBox);
-		ClearChildren(m_wModeParams);
+		ClearChildren(m_wTabBox);
+		ClearChildren(m_wSectionParams);
 		m_ModeSpin = null;
-
-		foreach (CLW_SetupParam param : m_Data.m_aBattle)
-		{
-			AddParamRow(m_wBattleParams, param);
-		}
+		m_SectionSpin = null;
 
 		Widget spinWidget = GetGame().GetWorkspace().CreateWidgets(LAYOUT_SPINBOX, m_wModeBox);
 		if (spinWidget)
@@ -238,10 +261,117 @@ class CLW_SetupDialog : SCR_ConfigurableDialogUi
 		if (m_wModeDesc)
 			m_wModeDesc.SetText(CLW_Loc.Resolve(m_CurrentMode.m_sDescription));
 
-		ClearChildren(m_wModeParams);
-		foreach (CLW_SetupParam param : m_CurrentMode.m_aParams)
+		ReleaseControls();
+		ComputeSections();
+		BuildSectionSelector();
+	}
+
+	// The widgets are about to be removed: forget them (the parameter keeps its value in m_fValue, the events keep it in sync).
+	protected void ReleaseControls()
+	{
+		foreach (CLW_SetupParam battleParam : m_Data.m_aBattle)
 		{
-			AddParamRow(m_wModeParams, param);
+			battleParam.m_Comp = null;
+		}
+
+		foreach (CLW_SetupMode mode : m_Data.m_aModes)
+		{
+			foreach (CLW_SetupParam modeParam : mode.m_aParams)
+			{
+				modeParam.m_Comp = null;
+			}
+		}
+	}
+
+	// Sorts the battle parameters and the current mode's parameters into the sections (by key, CLW_SetupSections).
+	protected void ComputeSections()
+	{
+		m_aSectionParams.Clear();
+		for (int i = 0; i < CLW_SetupSections.COUNT; i++)
+		{
+			m_aSectionParams.Insert(new array<CLW_SetupParam>());
+		}
+
+		foreach (CLW_SetupParam battleParam : m_Data.m_aBattle)
+		{
+			PlaceInSection(battleParam);
+		}
+
+		if (!m_CurrentMode)
+			return;
+
+		foreach (CLW_SetupParam modeParam : m_CurrentMode.m_aParams)
+		{
+			PlaceInSection(modeParam);
+		}
+	}
+
+	protected void PlaceInSection(CLW_SetupParam param)
+	{
+		array<CLW_SetupParam> list = m_aSectionParams[CLW_SetupSections.SectionOf(param.m_sId)];
+		int order = CLW_SetupSections.OrderOf(param.m_sId);
+		int at = list.Count();
+		for (int i = 0; i < list.Count(); i++)
+		{
+			if (CLW_SetupSections.OrderOf(list[i].m_sId) > order)
+			{
+				at = i;
+				break;
+			}
+		}
+
+		list.InsertAt(param, at);
+	}
+
+	// The section selector (a spin box: arrows or click, like the war mode) and the first / previously shown section.
+	protected void BuildSectionSelector()
+	{
+		ClearChildren(m_wTabBox);
+		m_SectionSpin = null;
+		m_aSectionIds.Clear();
+
+		Widget spinWidget = GetGame().GetWorkspace().CreateWidgets(LAYOUT_SPINBOX, m_wTabBox);
+		if (spinWidget)
+			m_SectionSpin = SCR_SpinBoxComponent.Cast(spinWidget.FindHandler(SCR_SpinBoxComponent));
+
+		int current;
+		for (int s = 0; s < CLW_SetupSections.COUNT; s++)
+		{
+			if (m_aSectionParams[s].IsEmpty())
+				continue;
+
+			if (s == m_iSection)
+				current = m_aSectionIds.Count();
+			m_aSectionIds.Insert(s);
+			if (m_SectionSpin)
+				m_SectionSpin.AddItem(CLW_Loc.Resolve(CLW_SetupSections.Name(s)));
+		}
+
+		if (m_aSectionIds.IsEmpty())
+			return;
+
+		if (m_SectionSpin)
+		{
+			m_SectionSpin.SetLabel(CLW_Loc.Fmt("#CLW-Setup_SectionLabel"));
+			m_SectionSpin.SetCurrentItem(current, false, false, false);
+			m_SectionSpin.m_OnChanged.Insert(OnSpinChanged);
+		}
+		else
+		{
+			Print("CLW: setup menu cannot create the section selector, showing the first section only", LogLevel.ERROR);
+		}
+
+		ShowSection(m_aSectionIds[current]);
+	}
+
+	protected void ShowSection(int section)
+	{
+		ReleaseControls();
+		ClearChildren(m_wSectionParams);
+		m_iSection = section;
+		foreach (CLW_SetupParam param : m_aSectionParams[section])
+		{
+			AddParamRow(m_wSectionParams, param);
 		}
 	}
 
@@ -397,6 +527,13 @@ class CLW_SetupDialog : SCR_ConfigurableDialogUi
 			return;
 		}
 
+		if (comp == m_SectionSpin)
+		{
+			if (index >= 0 && index < m_aSectionIds.Count())
+				ShowSection(m_aSectionIds[index]);
+			return;
+		}
+
 		CLW_SetupParam param = FindParam(comp);
 		if (param)
 			param.m_fValue = index;
@@ -409,7 +546,8 @@ class CLW_SetupDialog : SCR_ConfigurableDialogUi
 		if (tag != "defaults")
 			return;
 
-		Print("CLW: setup menu: defaults", LogLevel.NORMAL);
+		Print("CLW: setup menu: reset to defaults (overrides.json preset or built-in values, not the last round)", LogLevel.NORMAL);
+		m_Data.m_sDefaultMode = m_Data.m_sResetMode;
 		foreach (CLW_SetupParam param : m_Data.m_aBattle)
 		{
 			param.m_fValue = param.m_fDefault;
