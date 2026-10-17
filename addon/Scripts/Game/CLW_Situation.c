@@ -168,8 +168,16 @@ class CLW_Situation
 			return;
 
 		string fobsJson = CLW_FobManager.FobsJson(m_sFaction);
-		string sitesJson = CLW_FobManager.SitesJson(m_sFaction);
-		string extra = ",\"fobs\":[" + fobsJson + "],\"fobSites\":[" + sitesJson + "],\"fobRules\":" + CLW_FobManager.RulesJson(m_sFaction);
+		string extra = ",\"fobs\":[" + fobsJson + "],\"fobRules\":" + CLW_FobManager.RulesJson(m_sFaction);
+		// M4.6: the FOB tool's macro picture (fobMap, replaces the 4 precomputed fobSites) while the side could place one now
+		string readyWhy;
+		if (CLW_FobManager.CountLive(m_sFaction) < CLW_FobManager.GetMax() && CLW_FobManager.CountInProgress(m_sFaction) == 0 && CLW_FobManager.IsReady(m_sFaction, readyWhy))
+		{
+			string mapJson = CLW_MapDigest.MacroJson(m_sFaction);
+			if (!mapJson.IsEmpty())
+				extra += ",\"fobMap\":" + mapJson;
+		}
+
 		json = CLW_Str.DropLast(json) + extra + "}";
 		AppendFobTasks(json);	// WP3: builder / escort positions for the dashboard arrows
 	}

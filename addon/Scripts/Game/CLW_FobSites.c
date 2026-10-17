@@ -1,6 +1,9 @@
 // FOB sites (M3 phase F, design section 4): where a side may establish a forward operating base.
 // Candidates come from DATA (CLW_ScenarioConfig.m_aFobSites: absolute positions or positions relative to the HQ line, so they follow the
-// battle-size layout) plus a few computed ones along the HQ line. Every candidate is validated once at war start (after the battle layout
+// battle-size layout) plus, M4.6, computed ones per objective and side (on the own side of the objective, in a distance band from it and away from
+// the own HQ, so every flank gets one; the HQ-line sites are only a last resort). The LLM commander no longer picks from this pool: it places its
+// FOB with the two-step tool (CLW_MapDigest + CLW_FobPlacer, which adds validated "llm" sites with AddDynamic); the pool is the RULE doctrine's
+// candidate list (CLW_FobDoctrine). Every candidate is validated once at war start (after the battle layout
 // moved the HQs/objectives): dry, flat, near a road, away from both bases, the objectives and the other sites. PickSites() then filters
 // the pool for one side at the moment of choosing (enemy contacts, existing FOBs, own half of the map) and orders it toward the contested
 // centre. No coordinates and no faction/prefab names in this code. Server only. Log prefix: "CLW: fob site".
@@ -39,8 +42,9 @@ class CLW_FobSite
 	string m_sName;
 	vector m_vPos;
 	int m_iSide;			// -1 either, 0 / 1 scenario side slot
-	string m_sSource;		// data | computed
+	string m_sSource;		// data | computed | llm
 	float m_fRoadDist;
+	string m_sObjective;	// computed per objective (M4.6): the objective this candidate was made for ("" = data / line / llm)
 }
 
 class CLW_FobSites
@@ -56,16 +60,73 @@ class CLW_FobSites
 	static const float LATERAL_FRAC = 0.05;			// computed sites: offset from the HQ line, fraction of the HQ distance
 	static const int MAX_COMPUTED = 6;
 	static const int MIN_SITES_WARN = 4;	// fewer pool sites than this is logged as a warning
+	// M4.6 rule fallback: candidates per objective on the own side of it
+	static const float OBJ_BAND_FRAC = 0.3;			// target distance from the objective, fraction of its distance from the own HQ ...
+	static const float OBJ_BAND_MAX_FRAC = 0.5;		// ... never further than this fraction (or lo + OBJ_BAND_SLACK_M, whichever is larger)
+	static const float OBJ_BAND_MARGIN_M = 60;		// beyond capture radius + FOB_MIN_OBJECTIVE_DIST_M
+	static const float OBJ_BAND_SLACK_M = 210;
+	static const float HQ_AWAY_FACTOR = 1.5;		// at least this many base clearances away from the own HQ
+	static const float COVER_M = 900;				// an objective this close to a live / planned own FOB counts as covered (authored, scaled)
+	static const int MAX_PER_SIDE = 8;				// objective candidates per side
+	static const int MIN_PER_SIDE = 2;				// fewer than this and the old HQ-line sites are added as a last resort
+	static const int MAX_POOL = 64;					// pool size cap (data + computed + dynamic)
 
 	protected static ref array<ref CLW_FobSite> s_aSites = {};
 	protected static ref map<string, string> s_mLastPick = new map<string, string>();	// side -> "<site>@<front>" last logged (one pick line per change)
 	protected static int s_iComputed;
+	protected static int s_iDynamic;
 
 	static void Reset()
 	{
 		s_aSites.Clear();
 		s_mLastPick.Clear();
 		s_iComputed = 0;
+		s_iDynamic = 0;
+		CLW_MapDigest.Reset();		// the digest (terrain classes) is per world / war; rebuilt on first use
+		CLW_FobPlanner.Reset();
+	}
+
+	// A site the HQ commander (LLM) picked and CLW_FobPlacer validated: added to the pool so ESTABLISH_FOB {site} and the builder logic
+	// (site switch, relocation) treat it like any other. Null when the pool is full.
+	static CLW_FobSite AddDynamic(string side, vector pos, float roadDist)
+	{
+		if (s_aSites.Count() >= MAX_POOL)
+		{
+			Print("CLW: fob site pool full, dynamic site refused", LogLevel.WARNING);
+			return null;
+		}
+
+		CLW_ScenarioConfig scenario = CLW_ScenarioConfig.Get();
+		s_iDynamic++;
+		CLW_FobSite entry = new CLW_FobSite();
+		entry.m_sId = "FSL" + s_iDynamic;
+		entry.m_vPos = pos;
+		if (scenario)
+			entry.m_iSide = scenario.GetSideIndex(side);
+		else
+			entry.m_iSide = -1;
+		entry.m_sSource = "llm";
+		entry.m_fRoadDist = roadDist;
+		string place = CLW_Places.PlaceLabel(pos, CLW_GameMode.GetControlPoints());
+		if (place.IsEmpty())
+			entry.m_sName = "FOB site " + entry.m_sId;
+		else
+			entry.m_sName = "FOB site near " + place;
+		s_aSites.Insert(entry);
+		return entry;
+	}
+
+	// Drops a pool site (a dynamic site whose ESTABLISH_FOB did not go through).
+	static void RemoveSite(string id)
+	{
+		for (int i = s_aSites.Count() - 1; i >= 0; i--)
+		{
+			if (s_aSites[i].m_sId == id)
+			{
+				s_aSites.Remove(i);
+				return;
+			}
+		}
 	}
 
 	static int Count()
@@ -203,9 +264,80 @@ class CLW_FobSites
 			}
 		}
 
-		// 2. computed along the HQ line: fractions of the way, first half = first side. A map without data sites (auto scenario) lives on
-		// these alone: every fraction tries the lateral offsets in turn (alternating sides, then twice as far out) until a site is accepted,
-		// so a fraction whose first spot has no road or is forest does not cost a site.
+		// 2. M4.6 rule fallback: one candidate per objective and side, on the own side of the objective (toward that side's HQ), at a sensible
+		// distance band from it (beyond capture radius + FOB_MIN_OBJECTIVE_DIST_M, about 30 % of the way to the HQ, but at least
+		// HQ_AWAY_FACTOR base clearances away from the HQ), so every flank objective gets one. A straight try first, then +-30 degrees
+		// around the objective so the snap (road / dry / flat) has a second and third chance.
+		int fromObjective = 0;
+		if (points)
+		{
+			float frontMin = bases.ScaleDistance(CLW_FobManager.FRONT_MIN_M);
+			for (int sideSlot = 0; sideSlot < 2; sideSlot++)
+			{
+				vector hqSide = hqFirst;
+				if (sideSlot == 1)
+					hqSide = hqSecond;
+
+				int madeForSide = 0;
+				for (int oi = 0; oi < points.Count(); oi++)
+				{
+					if (madeForSide >= MAX_PER_SIDE)
+						break;
+
+					CLW_ControlPoint obj = points.Get(oi);
+					if (!obj)
+						continue;
+
+					float objDist = vector.DistanceXZ(obj.m_vPos, hqSide);
+					if (objDist < frontMin)
+						continue;	// close to this HQ: the HQ itself covers it, no FOB needed
+
+					float oNeed = obj.m_fRadius + CLW_WarConfig.FOB_MIN_OBJECTIVE_DIST_M;
+					float oLo = oNeed + OBJ_BAND_MARGIN_M;
+					float oHi = Math.Max(oLo + OBJ_BAND_SLACK_M, objDist * OBJ_BAND_MAX_FRAC);
+					float oMaxFrom = objDist - baseClear * HQ_AWAY_FACTOR;
+					if (oMaxFrom < oLo)
+					{
+						Print(string.Format("CLW: fob site objective %1 side %2: no band (objective %3 m from the HQ, needs %4 m clear of the objective and %5 m clear of the HQ)", obj.m_sId, sideSlot, Math.Round(objDist), Math.Round(oLo), Math.Round(baseClear * HQ_AWAY_FACTOR)), LogLevel.NORMAL);
+						continue;
+					}
+
+					float oWant = Math.Min(Math.Clamp(objDist * OBJ_BAND_FRAC, oLo, oHi), oMaxFrom);
+					float ux = (hqSide[0] - obj.m_vPos[0]) / objDist;
+					float uz = (hqSide[2] - obj.m_vPos[2]) / objDist;
+					bool solved = false;
+					array<float> angles = {0, 0.5236, -0.5236};
+					foreach (float ang : angles)
+					{
+						if (solved)
+							break;
+
+						float cs = Math.Cos(ang);
+						float sn = Math.Sin(ang);
+						vector cand = Vector(obj.m_vPos[0] + (ux * cs - uz * sn) * oWant, 0, obj.m_vPos[2] + (ux * sn + uz * cs) * oWant);
+						if (!ShiftClear(cand, objPos, objNeed, hqSide))
+							continue;
+
+						s_iComputed++;
+						if (TryAdd("FSO" + obj.m_sId + "_" + sideSlot, "", cand, sideSlot, "computed", radius, spacing, avoid, avoidDist, points))
+						{
+							s_aSites[s_aSites.Count() - 1].m_sObjective = obj.m_sId;
+							solved = true;
+							madeForSide++;
+							fromObjective++;
+						}
+					}
+
+					if (!solved)
+						Print(string.Format("CLW: fob site objective %1 side %2: no acceptable ground in the band %3-%4 m from the objective", obj.m_sId, sideSlot, Math.Round(oLo), Math.Round(oWant)), LogLevel.NORMAL);
+				}
+			}
+		}
+
+		// 3. last resort: computed along the HQ line, fractions of the way, first half = first side. Only for a side with fewer than
+		// MIN_PER_SIDE candidates so far (no objectives / no ground near them). Every fraction tries the lateral offsets in turn
+		// (alternating sides, then twice as far out) until a site is accepted, so a fraction whose first spot has no road or is forest
+		// does not cost a site.
 		array<float> fractions = {0.22, 0.35, 0.65, 0.78, 0.45, 0.55, 0.15, 0.85};
 		array<float> laterals = {1, -1, 2.5, -2.5, 0};
 		int fromComputed;
@@ -219,6 +351,9 @@ class CLW_FobSites
 				side = 1;
 			if (fraction == 0.5)
 				side = -1;
+
+			if (side >= 0 && CountForSide(side) >= MIN_PER_SIDE)
+				continue;
 
 			vector hqNear = hqFirst;
 			if (side == 1)
@@ -251,7 +386,20 @@ class CLW_FobSites
 		if (s_aSites.Count() < MIN_SITES_WARN)
 			Print(string.Format("CLW: fob site WARNING only %1 sites on this map (roads / clear ground too sparse near the HQ line): FOB builds will be limited", s_aSites.Count()), LogLevel.WARNING);
 
-		Print(string.Format("CLW: fob site pool ready: %1 sites (%2 from data, %3 computed), hq distance %4 m, base clear %5 m, spacing %6 m", s_aSites.Count(), fromData, fromComputed, Math.Round(hqDist), Math.Round(baseClear), Math.Round(spacing)), LogLevel.NORMAL);
+		Print(string.Format("CLW: fob site pool ready: %1 sites (%2 from data, %3 per objective, %4 along the HQ line), hq distance %5 m, base clear %6 m, spacing %7 m", s_aSites.Count(), fromData, fromObjective, fromComputed, Math.Round(hqDist), Math.Round(baseClear), Math.Round(spacing)), LogLevel.NORMAL);
+	}
+
+	// Pool sites usable by a side slot (0 / 1) or by either side.
+	protected static int CountForSide(int sideSlot)
+	{
+		int count;
+		foreach (CLW_FobSite site : s_aSites)
+		{
+			if (site.m_iSide == sideSlot || site.m_iSide < 0)
+				count++;
+		}
+
+		return count;
 	}
 
 	// Moves 'wish' straight away from the objective it violates most until every objective is 'objNeed' clear (+5 m). Degenerate
@@ -451,6 +599,35 @@ class CLW_FobSites
 	// the side does not hold, the nearest to its HQ that is held by the enemy or contested; else the nearest not held. Null when there is none.
 	static CLW_ControlPoint FrontObjective(string side)
 	{
+		// M4.6: objectives an own live / planned FOB already covers come last, so a second FOB goes to the next flank
+		CLW_ControlPoint uncovered = FrontObjectiveEx(side, true);
+		if (uncovered)
+			return uncovered;
+
+		return FrontObjectiveEx(side, false);
+	}
+
+	// An own live or planned FOB stands within COVER_M (scaled) of the objective.
+	static bool IsCovered(string side, CLW_ControlPoint point)
+	{
+		CLW_Bases bases = CLW_GameMode.GetBases();
+		if (!point || !bases)
+			return false;
+
+		float cover = bases.ScaleDistance(COVER_M);
+		array<CLW_Fob> fobs = {};
+		CLW_FobManager.GetFobs(side, fobs);
+		foreach (CLW_Fob fob : fobs)
+		{
+			if (vector.DistanceXZ(fob.m_vPos, point.m_vPos) < cover)
+				return true;
+		}
+
+		return false;
+	}
+
+	protected static CLW_ControlPoint FrontObjectiveEx(string side, bool skipCovered)
+	{
 		CLW_ControlPoints points = CLW_GameMode.GetControlPoints();
 		CLW_Bases bases = CLW_GameMode.GetBases();
 		if (!points || !bases)
@@ -465,6 +642,9 @@ class CLW_FobSites
 		{
 			CLW_ControlPoint point = points.Get(i);
 			if (!point || point.m_sOwner == side)
+				continue;
+
+			if (skipCovered && IsCovered(side, point))
 				continue;
 
 			float dist = vector.DistanceXZ(point.m_vPos, hq);
