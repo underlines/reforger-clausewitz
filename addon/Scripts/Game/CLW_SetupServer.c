@@ -723,11 +723,10 @@ class CLW_SetupServer
 			choices += Clean(choice);
 		}
 
-		string line = "P	" + group + "	" + Clean(param.m_sId) + "	" + Clean(param.m_sLabel);
-		line += "	" + Clean(param.m_sDescription) + "	" + param.m_eType.ToString();
-		line += "	" + param.m_fMin.ToString() + "	" + param.m_fMax.ToString() + "	" + param.m_fStep.ToString();
-		line += "	" + Clean(param.ValueText()) + "	" + choices + "	" + Clean(defaultText) + "
-";
+		string line = "P\t" + group + "\t" + Clean(param.m_sId) + "\t" + Clean(param.m_sLabel);
+		line += "\t" + Clean(param.m_sDescription) + "\t" + param.m_eType.ToString();
+		line += "\t" + param.m_fMin.ToString() + "\t" + param.m_fMax.ToString() + "\t" + param.m_fStep.ToString();
+		line += "\t" + Clean(param.ValueText()) + "\t" + choices + "\t" + Clean(defaultText) + "\n";
 		return line;
 	}
 
@@ -746,8 +745,7 @@ class CLW_SetupServer
 			remembered = "1";
 		}
 
-		string wire = "H	" + Clean(shownMode) + "	" + Clean(m_War.GetDefaultModeId()) + "	" + remembered + "
-";
+		string wire = "H\t" + Clean(shownMode) + "\t" + Clean(m_War.GetDefaultModeId()) + "\t" + remembered + "\n";
 		array<ref CLW_ModeParam> battle = {};
 		BuildBattleParams(battle);
 		array<ref CLW_ModeParam> battleDefaults = {};
@@ -763,14 +761,13 @@ class CLW_SetupServer
 			if (!mode)
 				continue;
 
-			wire += "M	" + Clean(mode.GetId()) + "	" + Clean(mode.GetName()) + "	" + Clean(mode.GetDescription()) + "
-";
+			wire += "M\t" + Clean(mode.GetId()) + "\t" + Clean(mode.GetName()) + "\t" + Clean(mode.GetDescription()) + "\n";
 			array<ref CLW_ModeParam> params = {};
 			mode.GetParams(params);
 			foreach (CLW_ModeParam modeParam : params)
 			{
 				string defaultText = modeParam.ValueText();
-				m_mDefaults.Find("M:" + mode.GetId() + "	" + modeParam.m_sId, defaultText);
+				m_mDefaults.Find("M:" + mode.GetId() + "\t" + modeParam.m_sId, defaultText);
 				wire += WireParam("M:" + mode.GetId(), modeParam, defaultText);
 			}
 		}

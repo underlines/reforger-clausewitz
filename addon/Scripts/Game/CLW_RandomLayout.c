@@ -521,7 +521,7 @@ class CLW_RandomLayout
 				pairsHeading.Insert(heading);
 				pairsAttempt.Insert(attempt);
 				pairFound = true;
-				Print(string.Format("CLW: layout random pair %1 collected (attempt %2, direction %3 of %4, %5 ms): A %6 grid %7, B %8 grid %9, distance %10 m", pairsA.Count(), attempt, d + 1, DIRS, System.GetTickCount() - startTick, posA, CLW_Places.Grid(posA), posB, CLW_Places.Grid(posB), Math.Round(actual)), LogLevel.NORMAL);
+				Print(string.Format("CLW: layout random pair %1 collected (attempt %2, direction %3 of %4, %5 ms): A %6 grid %7, B %8 grid %9", pairsA.Count(), attempt, d + 1, DIRS, System.GetTickCount() - startTick, posA, CLW_Places.Grid(posA), posB, CLW_Places.Grid(posB)) + string.Format(", distance %1 m", Math.Round(actual)), LogLevel.NORMAL);
 				break;
 			}
 

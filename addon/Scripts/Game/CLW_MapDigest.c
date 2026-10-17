@@ -486,7 +486,7 @@ class CLW_MapDigest
 
 		s_bBuilt = true;
 		s_sStaticJson = BuildStaticJson(places);
-		Print(string.Format("CLW: fob map: macro digest built %1 x %2 cells of %3 m (world %4 x %5 m), %6 tree probes, %7 town cells, %8 roads, static part %9 chars (~%10 tokens), %11 ms", s_iCols, s_iRows, Math.Round(s_fCell), Math.Round(spanX), Math.Round(spanZ), probes, townCells, roadCount, s_sStaticJson.Length(), s_sStaticJson.Length() / 4, System.GetTickCount() - startMs), LogLevel.NORMAL);
+		Print(string.Format("CLW: fob map: macro digest built %1 x %2 cells of %3 m (world %4 x %5 m), %6 tree probes, %7 town cells, %8 roads, static part %9 chars", s_iCols, s_iRows, Math.Round(s_fCell), Math.Round(spanX), Math.Round(spanZ), probes, townCells, roadCount, s_sStaticJson.Length()) + string.Format(" (~%1 tokens), %2 ms", s_sStaticJson.Length() / 4, System.GetTickCount() - startMs), LogLevel.NORMAL);
 		return true;
 	}
 

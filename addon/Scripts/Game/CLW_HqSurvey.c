@@ -75,7 +75,7 @@ class CLW_HqSurvey
 			spotText += CLW_Places.Grid(spots[i]) + "x" + spotCounts[i];
 		}
 
-		Print(string.Format("CLW: hqsurvey SUMMARY world='%1': %2 of %3 seeds found a pair; %4 distinct HQ spots (merge radius %5 m) over %6 HQs; side A west of B in %7, east in %8; coin toss flipped %9 times; avg search %10 ms, survey took %11 ms", worldName, found, seeds, spots.Count(), Math.Round(SPOT_MERGE_M), found * 2, aWest, aEast, flips, totalMs / Math.Max(1, found), System.GetTickCount() - startTick), LogLevel.NORMAL);
+		Print(string.Format("CLW: hqsurvey SUMMARY world='%1': %2 of %3 seeds found a pair; %4 distinct HQ spots (merge radius %5 m) over %6 HQs; side A west of B in %7, east in %8; coin toss flipped %9 times", worldName, found, seeds, spots.Count(), Math.Round(SPOT_MERGE_M), found * 2, aWest, aEast, flips) + string.Format("; avg search %1 ms, survey took %2 ms", totalMs / Math.Max(1, found), System.GetTickCount() - startTick), LogLevel.NORMAL);
 		Print(string.Format("CLW: hqsurvey spots (grid x count): %1", spotText), LogLevel.NORMAL);
 	}
 
