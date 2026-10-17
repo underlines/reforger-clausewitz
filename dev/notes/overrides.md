@@ -64,6 +64,8 @@ The object is flat and uses the same keys and values as the menu and `/war start
 | `factionA`, `factionB` | faction keys of side A / B (missing = scenario sides) |
 | anything else | a parameter of that mode (missing = mode default), e.g. `startPositions`, `battleSize`, `startTickets`, `fobMax`, `fobEarliestMin` (default 6, 0 = no FOB timing gate), `garrisonSquads` (default 1), `idleDespawnMin` (default 6, 0 = off), `cap_logistics`, the friendly-map switches `mapMe` (true), `mapSquadmates` (true), `mapSquads` (false), `mapVehicles` (false) |
 
+- M4.6 keys: `aiDifficultyA` / `aiDifficultyB` (`easy` | `normal` (default, vanilla, a no-op) | `hard` | `veteran`; `aiDifficulty` sets both) apply a vanilla AI skill + perception preset to every AI of that side (`CLW_AiDifficulty.c`, dev/research/ai-difficulty.md). `randomSeed` (layout seed > 0, 0 = a fresh random one per start) is hidden in the setup dialog: it exists only here and as `/war start randomSeed=N`.
+- Remembered setup (M4.6): every accepted setup is written to `$profile:Clausewitz/lastSetup.json` (never the seed) and prefills the next round's menu, also after a server restart. A preset with `autoStartSec >= 0` wins over it; delete the file to forget. The dialog's **Reset to defaults** restores this preset (or the built-in values), not the last round. Code: `CLW_SetupMemory.c`.
 - The preset values are also the menu defaults, so a human who joins before the auto start sees them and can still change them and start earlier.
 - An invalid preset (unknown mode, faction or parameter, bad value) is NOT replaced by defaults. The war stays in setup, and the log shows
   `CLW: ERROR setup preset ...` plus the `StartWar refused` reason. Players get a chat line pointing them to `/war setup`.

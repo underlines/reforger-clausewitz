@@ -282,7 +282,14 @@ class CLW_WarMode
 		CLW_RandomLayout randomLayout;
 		if (GetChoiceParam("startPositions") == "random")
 		{
-			CLW_RandomLayout candidate = CLW_RandomLayout.Create(scenario, GetIntParam("randomSeed", 0));
+			// the seed is automatic (<= 0 = a fresh random one per start, chosen and logged by CLW_RandomLayout); a value > 0 only comes from an admin
+			// (/war start randomSeed=N or overrides.json "setup"), never from the setup dialog or the remembered setup
+			int seedParam = GetIntParam("randomSeed", 0);
+			if (seedParam > 0)
+				Print("CLW: layout seed " + seedParam + " fixed by an admin value (randomSeed)", LogLevel.NORMAL);
+			else
+				Print("CLW: layout seed automatic (randomSeed " + seedParam + ": a fresh random seed for this start)", LogLevel.NORMAL);
+			CLW_RandomLayout candidate = CLW_RandomLayout.Create(scenario, seedParam);
 			if (bases.ApplyRandomLayout(scenario, GetBattleSizeName(), GetDistanceScale(), GetMinHqDistanceM(), candidate, mid, factor))
 				randomLayout = candidate;
 			else

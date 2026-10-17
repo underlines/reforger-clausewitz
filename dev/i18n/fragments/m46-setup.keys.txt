@@ -1,0 +1,21 @@
+CLW-Param_aiDifficultyA ::: AI difficulty, side A ::: KI-Schwierigkeit, Seite A
+CLW-Param_aiDifficultyA_Desc ::: Skill and perception of every AI soldier and crew of side A. Normal is the unchanged vanilla behaviour; Easy aims worse and spots enemies slower; Hard and Veteran aim better and spot enemies faster. ::: Fähigkeit und Wahrnehmung jedes KI-Soldaten und jeder Besatzung von Seite A. Normal ist das unveränderte Standardverhalten; Leicht zielt schlechter und erkennt Feinde langsamer; Schwer und Veteran zielen besser und erkennen Feinde schneller.
+CLW-Choice_aiDifficultyA_easy ::: easy ::: leicht
+CLW-Choice_aiDifficultyA_normal ::: normal ::: normal
+CLW-Choice_aiDifficultyA_hard ::: hard ::: schwer
+CLW-Choice_aiDifficultyA_veteran ::: veteran ::: Veteran
+CLW-Param_aiDifficultyB ::: AI difficulty, side B ::: KI-Schwierigkeit, Seite B
+CLW-Param_aiDifficultyB_Desc ::: Skill and perception of every AI soldier and crew of side B. Normal is the unchanged vanilla behaviour; Easy aims worse and spots enemies slower; Hard and Veteran aim better and spot enemies faster. ::: Fähigkeit und Wahrnehmung jedes KI-Soldaten und jeder Besatzung von Seite B. Normal ist das unveränderte Standardverhalten; Leicht zielt schlechter und erkennt Feinde langsamer; Schwer und Veteran zielen besser und erkennen Feinde schneller.
+CLW-Choice_aiDifficultyB_easy ::: easy ::: leicht
+CLW-Choice_aiDifficultyB_normal ::: normal ::: normal
+CLW-Choice_aiDifficultyB_hard ::: hard ::: schwer
+CLW-Choice_aiDifficultyB_veteran ::: veteran ::: Veteran
+CLW-Setup_Options ::: OPTIONS ::: OPTIONEN
+CLW-Setup_SectionLabel ::: Section ::: Bereich
+CLW-Setup_SectionBasics ::: Basics ::: Grundlagen
+CLW-Setup_SectionForces ::: Forces and economy ::: Streitkräfte und Wirtschaft
+CLW-Setup_SectionMap ::: Map, HQs and FOBs ::: Karte, HQs und FOBs
+CLW-Setup_SectionEnvironment ::: Weather and time ::: Wetter und Zeit
+CLW-Setup_SectionAdvanced ::: Advanced ::: Erweitert
+CLW-Setup_Remembered ::: The values are the settings of the last round. ::: Die Werte sind die Einstellungen der letzten Runde.
+CLW-Setup_ResetDefaults ::: Reset to defaults ::: Auf Standard zurücksetzen
