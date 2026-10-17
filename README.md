@@ -9,14 +9,15 @@ The commanders run on a built-in rule engine out of the box. Optionally, an **LL
 - **License:** MIT (see `LICENSE`)
 
 ## Features
-- Own game mode with a setup menu: factions for both sides (any playable faction incl. RHS, WCS and other packs), war mode, battle size, fixed or random start positions, objectives.
+- Own game mode with a setup menu in sections (simple options first): factions for both sides (any playable faction incl. RHS, WCS and other packs), war mode, battle size, AI difficulty per side, fixed or random start positions (several valid HQ pairs, random pick and sides), objectives. The menu remembers the last round's settings and has a "Reset to defaults" button.
 - Any map: ready scenarios for Arland, Everon and Kolguyev, plus an automatic scenario on other maps (HQs and objectives found at game start).
 - Control points, tickets, supplies and income, bases with respawn, FOBs, convoys, vehicle depots, arsenals; war ends on tickets, hold-all or time limit.
-- Human players join HQ squads from the deploy/groups menu, receive missions as squad leaders, read SITREPs (journal, `/sitrep`), and use `/request`, `/report`, `/hq <free text>` and the HQ menu at request terminals.
+- Human players join HQ squads from the deploy/groups menu, receive missions as squad leaders (visible to the whole squad, completed when the objective is taken; a human leads again after respawning), read SITREPs (journal, `/sitrep`), and use `/request`, `/report`, `/hq <free text>` and the HQ menu (U menu).
 - English and German texts; with the LLM, every player gets SITREPs and HQ replies in their own language.
 - HQ radial menu (hold **U**, or `/hqr`): report contacts (what, count, distance, direction or "ahead"), cancel your last report, call for backup, requests (vehicle by type, resupply, squad, reinforce, mission, status), SITREP, full HQ menu.
 - Natural-language radio: `/hq 2 enemy infantry 100m north` becomes a contact report, `/hq need help` a backup call (needs the LLM sidecar).
-- Weather and time in the setup menu: day speed 0x-96x, start date and hour, six weather slots (or random) blended over the war; HQ gets weather and daylight updates.
+- Weather and time in the setup menu: day speed 0x-96x, start date and hour, six weather slots (or random) blended over the war at a slow, normal or fast change rate; HQ gets weather and daylight updates.
+- With the LLM, HQ picks its FOB sites itself from a map picture (area first, then a zoomed spot); the rule commander places FOBs per flank.
 - HQ commander traits per side (aggressive, defensive, methodical, cautious, opportunistic, crazy, or random): they shape the rule commander, the LLM's decisions, SITREP tone and radio style.
 - Loadouts (beta): save your kit at any arsenal; server loadout library on the dashboard with item names, types and prices. Works alongside loadout-editor mods such as WCS_LoadoutEditor.
 - Pack factions field their own soldiers: missing roles are filled from the faction's own roster, borrowed kin vehicles carry the side's own infantry; arsenal items without a price get a default by type (`Configs/CLW/ArsenalPrices.conf`).
