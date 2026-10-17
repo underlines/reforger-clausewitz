@@ -216,26 +216,28 @@ Design `notes/hq-comms-env-traits-design.md`; implemented by Sonnet subagents (W
 - Known: the LLM commander times out on ling-3.1-flash (20 s): next milestone `notes/llm-latency-plan.md`. Spawn-screen paging glitches are vanilla. Sidecar loadout POST sometimes times out (game file stays the source of truth).
 
 ## Planned: M4.6 - Playtest fixes (owner feedback 2026-10-16, `VISION.md` 13b)
-Status 2026-10-17: coded by 6 Sonnet subagents, merged on branch `feature/m4.6-playtest-fixes`, compiles (DS build #125). Spawn bugs not fixed yet (repro planned in the e2e).
-Verified unattended on the DS (RHS packs): HQ pair search (6 pairs, random pick, side flip, fresh seed, ~2.3 s), AI difficulty (hard applied to side A, normal untouched),
-weather rate slow, LLM FOB tool end to end (macro -> zoom -> validate -> retry -> streak), setup memory "nothing remembered" / preset wins.
-Next (needs the owner in game): setup screen sections/reset/no seed, custom loadout spawn, no HQ box + U-menu request, mission completion + taken-offer, leader after respawn,
-rematch memory; then a no-packs run for the vanilla spawn bug. Findings to look at: compact random layouts (HQs 1322 m apart) leave almost no FOB ground
-(pool 2 sites, per-objective band empty, LLM spots rejected for the 300 m keep-out); HQ services landed farther from the command post (supply 21.8 m, limit 10 m).
+Status 2026-10-17 (owner e2e, RHS packs, DS builds #126-#130): verified in game: setup sections, no seed, AI difficulty per side, weather rate, Reset to defaults,
+setup memory after a rematch, no HQ box + U-menu requests, leader after respawn keeps the mission, every spawn slot incl. the saved loadout. Fixed during the e2e:
+all CLW spawn slots refused with CANNOT_VALIDATE (Bind() now writes m_sLoadoutResource; `CLW_SpawnDiag` logs the spawn check), the HQ spawn icon stayed at the
+authored base on clients after a base move (the point is now replaced, not moved), fast weather (10 min slots, >= 90 s per blend hop, rain fade-out by override).
+Open: mission completion on capture, squad-wide mission visibility + human-to-human leader handover (2nd player), mobile map (phone), no-packs run for the vanilla
+spawn bug. Findings to look at: compact random layouts leave almost no FOB ground (pool 2 sites, LLM spots rejected for the 300 m keep-out); HQ services landed
+farther from the command post (supply 21.8 m, limit 10 m).
 - [ ] Mission completes on capture (LLM offers by name/position resolve to the objective; captured unaccepted offers show as completed)
 - [ ] Offers (read-only) and the accepted mission visible to every squad member
-- [ ] FOB placement as an LLM HQ tool (two-step macro -> zoom picture), improved flank-aware algorithm as fallback
-- [ ] AI difficulty preset per side in the setup screen
-- [ ] HQ variety: several valid pairs, random pick, coin-flip sides, relaxed rules (towns allowed), check the time-based seed
+- [x] FOB placement as an LLM HQ tool (two-step macro -> zoom picture), improved flank-aware algorithm as fallback (DS e2e unattended 2026-10-17)
+- [x] AI difficulty preset per side in the setup screen
+- [x] HQ variety: several valid pairs, random pick, coin-flip sides, relaxed rules (towns allowed), check the time-based seed
 - [ ] Vanilla factions: players cannot spawn (bug)
-- [ ] Seed removed from the setup screen (automatic, logged, overrides only)
-- [ ] Weather changes too fast (slow the weather progression)
-- [ ] Remove the HQ Box (HQ menu + request menu items): the persistent U menu already launches the HQ menu and everything else
-- [ ] Squad leader for humans: a respawned human becomes squad leader again; if the human leader dies with several humans in the squad, another human takes over (random or highest rank, whichever is easier)
+- [x] Seed removed from the setup screen (automatic, logged, overrides only)
+- [x] Weather changes too fast (slow the weather progression); fast = 10 min slots, rain fades out (owner 2026-10-17)
+- [x] Remove the HQ Box (HQ menu + request menu items): the persistent U menu already launches the HQ menu and everything else
+- [x] Squad leader for humans: a respawned human becomes squad leader again (solo verified); handover between several humans still needs a 2nd player
 - [ ] Sidecar map on some mobile browsers: neither zoom nor pan works (touch/pinch handling)
-- [ ] Setup screen remembers the last settings: after a win/loss restart it shows again, prefilled with the previous values, plus a "Reset to defaults" button (config file defaults, else the mod's defaults)
-- [ ] Setup screen more intuitive: tabs or sections, simple options first, complex/detailed options further down
-- [ ] Bug: selecting the custom (saved) loadout on the spawn screen gives "spawn point not available"; every selectable spawn option must be spawnable
+- [x] Setup screen remembers the last settings: after a win/loss restart it shows again, prefilled with the previous values, plus a "Reset to defaults" button (config file defaults, else the mod's defaults)
+- [x] Setup screen more intuitive: tabs or sections, simple options first, complex/detailed options further down
+- [x] Bug: selecting the custom (saved) loadout on the spawn screen gives "spawn point not available"; every selectable spawn option must be spawnable (all CLW slots were refused: CANNOT_VALIDATE)
+- [x] Bug (owner 2026-10-17): the deploy map showed the HQ spawn icon at the authored base position after a random/scaled layout moved the HQ
 
 ## Planned: M4.7 - Mod compatibility list (owner idea 2026-10-16, `VISION.md` 10b)
 - [ ] Data file in the addon (ID, name, category, status, note, tested versions, date); README + Workshop text generated from it

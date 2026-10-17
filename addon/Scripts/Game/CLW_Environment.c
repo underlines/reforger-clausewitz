@@ -20,6 +20,10 @@ class CLW_Environment
 	static const string RATE_FAST = "fast";
 	static const int RATE_SLOW_MIN = 45;					// slow: a weather state holds at least this many real minutes before the change to the next starts
 	static const int RATE_NORMAL_MIN = 25;
+	static const int RATE_FAST_MIN = 10;					// owner 2026-10-17: fast without a floor (200 s slots in a 20 min war) changed too often; 10 min slot = ~5 min steady + ~5 min change
+	static const float MIN_STEP_SEC = 90;					// one blend hop (e.g. Overcast -> Cloudy) takes at least this long; 33 s hops looked like a cut
+	static const float RAIN_FADE_MIN = 0.05;				// rain intensity above this is faded out by hand when the weather turns milder
+	static const int RAIN_FADE_MS = 1000;
 	static const string RANDOM = "random";
 	static const string MODE_SLOTS = "slots";
 	static const string MODE_WORLD = "world";
@@ -46,6 +50,12 @@ class CLW_Environment
 	protected static ref array<float> s_aStepSec;
 	protected static ref array<string> s_aStepEvent;		// "" or the event pushed when the step starts (first step of a change)
 	protected static int s_iStep;
+	// rain fade-out (owner 2026-10-17: rain stopped at once when the state left the rainy one): the rain intensity is held with the override
+	// and ramped to 0 over the first milder hop, then handed back to the weather state
+	protected static bool s_bRainFading;
+	protected static float s_fRainFrom;
+	protected static int s_iRainFadeStartMs;
+	protected static float s_fRainFadeSec;
 	protected static string s_sDaylight;
 	protected static float s_fDaySpeed;
 
@@ -129,7 +139,7 @@ class CLW_Environment
 		if (rate == RATE_NORMAL)
 			minSlotMin = RATE_NORMAL_MIN;
 		else if (rate == RATE_FAST)
-			minSlotMin = 0;
+			minSlotMin = RATE_FAST_MIN;
 		if (s_fSlotSec < minSlotMin * 60)
 			s_fSlotSec = minSlotMin * 60;
 		Print(string.Format("CLW: env weather rate %1: slot %2 s (limit %3 min)", rate, Math.Round(s_fSlotSec), limitMin), LogLevel.NORMAL);
@@ -155,6 +165,7 @@ class CLW_Environment
 	static void Stop()
 	{
 		GetGame().GetCallqueue().Remove(Poll);
+		EndRainFade(GetManager(), "war stop");
 		s_bActive = false;
 		s_iSlot = 0;
 		s_iStep = 0;
@@ -330,8 +341,10 @@ class CLW_Environment
 			}
 			path.Insert(to);
 
-			float start = border * s_fSlotSec - window;
-			float step = window / path.Count();
+			// every hop at least MIN_STEP_SEC: a change with several hops starts earlier (never before the slot it leaves began)
+			float changeWindow = Math.Min(Math.Max(window, path.Count() * MIN_STEP_SEC), s_fSlotSec);
+			float start = border * s_fSlotSec - changeWindow;
+			float step = changeWindow / path.Count();
 			foreach (int k, string state : path)
 			{
 				s_aStepAt.Insert(start + k * step);
@@ -395,6 +408,7 @@ class CLW_Environment
 			float elapsed = war.GetElapsedSec();
 			while (s_aStepAt && s_iStep < s_aStepAt.Count() && elapsed >= s_aStepAt[s_iStep])
 			{
+				MaybeFadeRain(manager, s_aStepState[s_iStep], s_aStepSec[s_iStep]);
 				ForceWeather(manager, s_aStepState[s_iStep], s_aStepSec[s_iStep]);
 				if (!s_aStepEvent[s_iStep].IsEmpty())
 					PushAll(war, s_aStepEvent[s_iStep]);
@@ -409,6 +423,59 @@ class CLW_Environment
 			PushAll(war, DaylightEvent(manager, daylight));
 			Print("CLW: env daylight " + daylight + " at " + TimeText(manager.GetTimeOfTheDay()), LogLevel.NORMAL);
 		}
+	}
+
+	// Server: a hop to a milder state (lower in the world's state order) while it rains holds the current rain and ramps it to 0 over the hop.
+	protected static void MaybeFadeRain(TimeAndWeatherManagerEntity manager, string nextState, float stepSec)
+	{
+		if (s_bRainFading || stepSec <= 0)
+			return;
+
+		float rain = manager.GetRainIntensity();
+		int current = s_aStateNames.Find(CurrentName(manager));
+		int next = s_aStateNames.Find(nextState);
+		if (rain <= RAIN_FADE_MIN || current < 0 || next < 0 || next >= current)
+			return;
+
+		s_bRainFading = true;
+		s_fRainFrom = rain;
+		s_fRainFadeSec = stepSec;
+		s_iRainFadeStartMs = System.GetTickCount();
+		manager.SetRainIntensityOverride(true, rain);
+		GetGame().GetCallqueue().CallLater(RainFadeTick, RAIN_FADE_MS, true);
+		Print(string.Format("CLW: env rain fade %1 -> 0 over %2 s (%3 -> %4)", rain, Math.Round(stepSec), CurrentName(manager), nextState), LogLevel.NORMAL);
+	}
+
+	protected static void RainFadeTick()
+	{
+		TimeAndWeatherManagerEntity manager = GetManager();
+		if (!manager || !s_bRainFading)
+		{
+			EndRainFade(manager, "no manager");
+			return;
+		}
+
+		float t = (System.GetTickCount() - s_iRainFadeStartMs) / (s_fRainFadeSec * 1000);
+		if (t >= 1)
+		{
+			EndRainFade(manager, "done");
+			return;
+		}
+
+		manager.SetRainIntensityOverride(true, s_fRainFrom * (1 - t));
+	}
+
+	protected static void EndRainFade(TimeAndWeatherManagerEntity manager, string why)
+	{
+		GetGame().GetCallqueue().Remove(RainFadeTick);
+		if (!s_bRainFading)
+			return;
+
+		s_bRainFading = false;
+		if (manager)
+			manager.SetRainIntensityOverride(false);
+
+		Print("CLW: env rain fade end (" + why + "), rain back to the weather state", LogLevel.NORMAL);
 	}
 
 	protected static void PushAll(CLW_WarState war, string text)

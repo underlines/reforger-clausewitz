@@ -19,7 +19,7 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 - The layout seed is always automatic; the seed field is gone from the setup screen (`randomSeed` remains an admin value for `/war start` and `overrides.json`).
 - Random start positions compare several valid HQ pairs, pick one at random and toss a coin for the sides, so side A is no longer mostly west. HQs may stand in villages and town centres; edge margin and distance tolerance are relaxed for small maps.
 - Rule commander FOB sites are computed per objective and side (own side of each objective, away from the HQ), so every flank can get a FOB; a second FOB goes to the next uncovered flank. Two failed or declined LLM FOB decisions in a row hand the next FOB to the rule commander.
-- Weather changes are slower and rarer by default.
+- Weather changes are slower and rarer by default. "Fast" holds a weather for about 5 minutes and changes over about 5 minutes; every blend step takes at least 90 s, and rain fades out instead of stopping at once.
 
 ### Removed
 - The HQ request box at the HQ and FOBs; everything is reached through the U menu.
@@ -28,6 +28,8 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 - Missions are matched to their objective by id, name or position, so a capture completes the mission; a capture offer taken before it was accepted is shown as completed (no reward) instead of vanishing.
 - A human squad leader leads again after respawning; with several humans, another human takes over when the leader dies, and the mission moves with the leadership.
 - A time-based random seed is fresh on every server start instead of repeating.
+- Spawn menu: every Clausewitz slot (role slots and "My saved loadout") could be refused with "spawn point not available" when other mods were loaded; all slots spawn again.
+- Deploy map: the HQ spawn icon stayed at the scenario's original base after the HQ was moved (random or scaled layout); it now shows at the real HQ.
 - Sidecar dashboard map works on phones and tablets (drag to pan, pinch to zoom, double-tap to zoom in, tap to select); panning an empty map no longer snaps back.
 
 ## [1.4.0] - 2026-10-15
