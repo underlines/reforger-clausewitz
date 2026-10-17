@@ -236,3 +236,6 @@ Design `notes/hq-comms-env-traits-design.md`; implemented by Sonnet subagents (W
 - [ ] In-game warning when an `incompatible` mod is loaded (log + chat/setup once, never blocks)
 - [ ] Compat test packs per category; test the AI-commanding mods (AI Kommandanten, BGC_Core) and AI overhauls first
 - [ ] Factions: Modern US Army Revamped 2026 vs US Army 2026
+
+## Backlog (not scheduled)
+- [ ] Bug (owner 2026-10-17): a broken vehicle cannot be repaired near the HQ or the vehicle depot, and an armed vehicle cannot be rearmed there either. Goal: repair + rearm work near the HQ and FOBs. Rearm is a vanilla action ("Rearm Vehicle", F at the trunk of some vehicles), so first check why it is unavailable at our bases (supply source in range? our services' supply link / virtual containers?). Repair likely has no such vanilla action at a base: research vanilla repair (repair kit / `SCR_RepairSupportStation`-style service stations) before designing our own action.
