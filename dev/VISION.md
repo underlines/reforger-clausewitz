@@ -443,6 +443,55 @@ optional packs when present, vanilla otherwise, and the server admin decides las
   each role resolved to); the admin edits overrides WYSIWYG (pick/exclude/reorder per role, side, set), saves `overrides.json`, restarts
   and plays.
 
+### 10b. Mod compatibility list: recommended / incompatible (owner idea 2026-10-16, refined)
+A curated list of mods we tested with Clausewitz. **Not a dependency, no guarantee:** no mod is ever required, untested mods keep working
+untouched, and an entry only says what we saw with the version and date noted (mods change). Only we maintain it (no admin overrides).
+- **One data file is the source:** a `.conf` in the addon (Workshop ID, name, category, status, note, tested mod version, tested Clausewitz
+  version, date). The README section and the Workshop description are generated from it (small `_tools/` script), so they never drift.
+- **Statuses:** `recommended` (works well, adds value) / `works` / `untested` (on the test list) / `issues` (works with known problems,
+  note says which) / `incompatible`.
+- **In-game warning for incompatible mods only** (owner's original ask): at war start the server reads the loaded addon IDs (API to confirm
+  in research: `GameProject` loaded-addon list) and, if an `incompatible` one is loaded, logs it and says it once in chat / the setup screen
+  with the note. Never blocks, never warns about unknown or untested mods.
+- **Testing:** one pack file per category in `_dedicated/` (e.g. `packs-compat-ai.txt`), one mod at a time on top of a known-good base
+  (vanilla, then RHS); the check per mod: players spawn, squads follow HQ waypoints, missions show and complete, vehicles drive and dismount,
+  FOB builders arrive, no new script errors in the log. Results go into the `.conf` and `notes/mod-compat.md` (details, log excerpts).
+- **Risk to test first:** mods that command AI groups themselves (*AI Kommandanten*, *BGC_Core - Battlegroup Command*) will likely fight our
+  HQ for the same squads; AI behaviour overhauls (*DCO_AI*, *B.l.T.C.H*, *Instinct AI Brain*, *SilenceAI*, *JMinfanteriAI*) may override or drop
+  our waypoints. Narrow mods (perception, medical, rearm, drones) are expected to work. A mod that takes over our squads may still be usable
+  if we can tell it to leave HQ-owned groups alone (check for a per-group opt-out).
+
+Initial list (2026-10-16):
+
+| Category | Mod | Workshop ID | Status |
+|---|---|---|---|
+| Factions | Vanilla (US / USSR / FIA) | - | `issues`: players cannot spawn (bug, M4.6 / 13b) |
+| Factions | RHS - Status Quo (RHS_USAF / RHS_AFRF) | - | `recommended` (our main test pack) |
+| Factions | Modern US Army Revamped 2026 | 696214A3D7FAD490 | `untested` (compare with the next) |
+| Factions | US Army 2026 | 69276B29270B7610 | `untested` |
+| AI driving | JMVehicleAI | 6A8490E1621E7B3C | `untested` |
+| AI driving | DCO_Extensions | 6A16AC294F079592 | `untested` |
+| AI driving | SilenceAI - Enhanced Combat | 6A1AA2A95D40BC57 | `untested` |
+| AI | AI Rearm | 40B5686CC205703A | `untested` |
+| AI | Tactical Infantry CORE | 6A20332365D59388 | `untested` |
+| AI | AI Perception Rebalance | 6A3AAAF98E81E458 | `untested` |
+| AI | SNK Medical AI | 6A6D7ED52BCB5A2D | `untested` |
+| AI | Instinct AI Brain | 6A76BEF304FC5ECA | `untested` |
+| AI | DCO_AI Reforger | 5EDAAE0D3CC60D6B | `untested` |
+| AI | AI Kommandanten | A7C3E91B5D2F4601 | `untested` (likely conflict: commands AI) |
+| AI | JMinfanteriAI | 6A8C5AC06DB4C1E0 | `untested` |
+| AI | B.l.T.C.H AI Framework | 6A8CEC76AE67E69D | `untested` |
+| AI | BGC_Core - Battlegroup Command | 32C5A359B406A788 | `untested` (likely conflict: commands AI) |
+| AI | AI Use Drones | 690D33EDCB46C4B9 | `untested` |
+| Gear | Kova x ATAK | 6A49417788E13618 | `untested` |
+| Ambient | Ambient Civilians | 68D8F6DC0619FF94 | `untested` (check: civilians must not count as contacts / targets for the HQ) |
+| Air | Air Assets for KOVA x ATAK | C66A8B796DC7457E | `untested` (needs Kova x ATAK) |
+| Air | Deko Flight Model | 6A97655F4AA129D3 | `untested` |
+| Air | JMHeliAI | 6A8B08E874AA5F96 | `untested` |
+| Air | JMParaAI | 6A8C8CA472C34B77 | `untested` |
+
+Earlier packs already run in e2e tests (WCS, GRS, TacticalFlava; `_dedicated/packs-e2e-*.txt`) get entries from those results.
+
 ---
 
 ## 11. Humans: chat, voice and radio
@@ -507,6 +556,8 @@ Own game mode `CLW_GameMode` (see `notes/decision-game-mode.md`). Live status: `
 | **M3 - Logistics, bases & requests** (draft: `notes/m3-design.md`) | Action registry (section 5a), base services (command post, vehicle depot, arsenal, medical/repair), FOBs and supply convoys gated by war-mode capabilities, player requests (fast path + LLM agent turn), player reports, arsenals/loadouts with RHS/WCS/GRS | Logistics, humans in the loop |
 | **M4 - Any map, any pack** | **Maps (option A):** wrapper worlds for the vanilla maps (Everon, Arland, Kolguyev) + a generator (`_tools/` or Workbench plugin) that builds the wrapper for any map mod as a tiny compat addon; **auto scenario** when a map has no `.conf` (HQs via random layout, objectives from the map prefab's places, FOB sites computed); **spike (option C):** take over a map's own Game Master scenario at runtime (map addon + ours + its GM scenario ID, no wrapper), keep if clean. **Content:** side pools for vehicles/groups/loadouts + one role resolver with style sets and admin overrides (section 10a, fixes missing pack roles such as supply trucks), own base structures + HQ menu (section 6a), reliable FOB builders + convoys for pack factions | Runs on any map with any packs |
 | **M4.5 - Terrain-aware war** (section 13a) | HQs at settlement borders, objectives from places of interest (villages, crossroads, bridges, high ground), per-objective terrain descriptors for the LLM, saved loadouts (3 slots), journal review reliability, collision-free vehicle spawns | Realistic ground, usable LLM spatial picture |
+| **M4.6 - Playtest fixes** (section 13b) | Mission completion on capture, missions visible to the whole squad, LLM-placed FOBs (two-step zoom tool) with a flank-aware fallback, AI difficulty per side, HQ positions with real variety (no side bias, towns allowed), automatic seed, slower weather, no HQ Box, human squad-leader succession, mobile map zoom/pan, setup screen remembers the last settings + Reset to defaults, tabbed setup screen with simple options first, custom loadout spawn fix | Missions and setup feel right in multiplayer |
+| **M4.7 - Mod compatibility list** (section 10b) | Curated recommended / incompatible list as addon data, README + Workshop text generated from it, in-game warning for incompatible mods only, compat test runs per category (factions, AI, AI driving, gear, ambient, air) | Players know which mods to pick, without forced dependencies |
 | **M5 - Scale & realism** | Population manager (collapse/expand far groups, engine active-AI budget), chain-of-command echelons with delayed reports, friendly picture on the in-game map with the setup marker level (section 8a), LLM robustness (timeouts on big prompts, `/hq` eval set per model) | Size of war |
 | **Later** | Dashboard config editor (WYSIWYG overrides, section 10a), runtime takeover of other scenario types (option B, only if C proves the approach), Story mode (section 3a), Squad-leader LLM agents (section 4a), Voice/radio, virtual battlefield (experimental), Conflict adapter | - |
 
@@ -515,6 +566,7 @@ Own game mode `CLW_GameMode` (see `notes/decision-game-mode.md`). Live status: `
   (> 150 within 150 m) and a blocked 24 x 24 m core; static obstacles cannot be cleared (not replicated, `object-norpl`). Next: score the distance to the nearest
   BUILDING (15-60 m), not to the place label, require a village (>= 8 buildings within 150 m) and a road <= 30 m, keep the ~40 x 40 m free flat ground for the
   compact base. A weighted preference, so open ground still wins where no village fits; never inside dense centres (vehicle jams, CQB at the HQ).
+  **Superseded by 13b (owner 2026-10-16): HQs may sit anywhere, town centres included.**
 - **Loadouts:** planned in `notes/loadouts-arsenal-plan.md`: 7 server loadouts per faction on the spawn screen (dashboard editor, admin login), one custom
   loadout per player saved/loaded only at arsenals (kit cost charged), AI squads by official `ROLE_*` roles + squad-type compositions.
 - **Objectives from places of interest.** Root cause today: with random start positions the objectives are a rotated/scaled pattern on the HQ line, then
@@ -533,6 +585,64 @@ Own game mode `CLW_GameMode` (see `notes/decision-game-mode.md`). Live status: `
   last rejection reason on the dashboard Journal tab.
 - **Vehicle spawns without clipping** (branch `feature/m5-polish`, built, untested): one `CLW_VehicleSpot` helper for every vehicle spawn, road first within 50 m,
   bounds-sized box check, keep-out around our services, reservations, post-spawn tilt/overlap check.
+
+### 13b. M4.6 - Playtest fixes (owner feedback 2026-10-16, refined the same day)
+- **Mission not completed after a capture (bug).** The completion check runs every 5 s (`CLW_MissionBoard.TICK_MS`) against the same `m_sOwner` the
+  sidecar map draws, so plain lag is at most ~5 s. Two likely causes, not yet confirmed from a log (the prod log only reached back 3 min):
+  (a) an LLM offer that names the objective by name ("Timber Hub") instead of its id, or by position only, becomes a positional offer
+  (`CLW_ActionsCore.c`, offer parse); a positional CAPTURE completes only when the leader stands within `RECON_RADIUS_M` (75 m) of that point, the owner
+  is ignored. (b) A CAPTURE that was only offered, not accepted in the J menu, is silently deleted on capture (`PruneOffers`, "point already ours").
+  Fix: resolve an offer to an objective by id, name or position inside a capture radius (+ margin) before falling back to a bare position; show an
+  unaccepted offer whose objective we took as completed (no reward) instead of deleting it; log both paths. Verify in a DS run with the LLM on.
+- **Missions visible to the whole squad.** Today offers and the accepted task are EXECUTOR-visible for the leading player only
+  (`CLW_MissionBoard.CreateOfferTask`). Owner decision: members see the offers too (read-only) and the accepted mission (map marker, J menu, progress,
+  completion); only the leader accepts. Add every squad member as a task executor per player (not the group: a real GroupID silences the commander voice
+  and move marker), keep it in sync on join/leave/respawn, and keep the accept/abandon handlers leader-only (`HandleAssigneeAdded` already checks the
+  player id). Check whether vanilla lets a non-leader executor "assign" an offer; if yes, block it or re-route it to the leader.
+- **FOB placement is the HQ's strategic decision (LLM tool, two-step zoom).** Today auto-scenario sites are computed on the HQ line only (fractions
+  0.15-0.35 / 0.65-0.85, lateral offset 5 % of the HQ distance, >= 250 m outside every capture radius), so they hug the HQ and never cover flank
+  objectives; the LLM only picks from 4 precomputed sites (`CLW_Fob.SitesJson`). New: placing a FOB (or not) is an HQ tool the commander knows about.
+  Step 1 (macro): a coarse picture of the whole map: rough landscape (coast, ridges, forests, towns, main roads), a few key POIs and the objectives on
+  coarse coordinates / grid squares, front state; the LLM picks a rough area (grid square + intent) or declines. Step 2 (zoom): only that area again at
+  higher resolution: topography, roads, buildings/cover, POIs, nearby objectives and known contacts; the LLM picks the exact spot. The game validates
+  it (dry, flat, road reach, clear of the HQs and capture radii) and snaps to the nearest valid ground, else answers with the reason so the model can
+  retry once. Shares the map digest with the 13a "LLM spatial picture". Fallback (rule commander, LLM off/failing): the algorithm, improved: candidates
+  per objective / flank on the own side, a sensible distance band from the objective and away from the HQ, so every flank can get one.
+- **AI difficulty in the setup screen, per side.** Preset per side (e.g. Easy / Normal / Hard / Veteran) mapped to the vanilla AI skill level and
+  perception / reaction, applied to every AI we spawn (squads, garrison, FOB teams, imports), also as `/war start` key and `overrides.json` setup value.
+  Research the exact vanilla knobs first (`SCR_AICombatComponent` skill, perception factor) with the enfusion-mcp API tools.
+- **HQ positions: variety and no side bias.** Side A always gets the HQ found first and the search stops at the first valid pair
+  (`CLW_RandomLayout.FindHqPair`), so on Arland side A lands mostly west, side B east, in 2-3 spots whatever the seed. Fix: collect several valid
+  pairs (time budget allowing), pick one at random, flip the side assignment by coin toss; relax the strict rules for small maps (edge margin 350 m,
+  max 30 buildings near, 44 x 44 m clear core, distance tolerance 0.15); HQs may sit anywhere incl. villages and town centres (owner decision: only room
+  for the base services and a road matter). Also check that the "time based" seed is really random per start (`Math.RandomInt` without
+  `Math.Randomize` may repeat across server starts). Measure: log 20 seeds per vanilla map, count distinct HQ spots and the side split.
+- **Vanilla factions: players cannot spawn (bug).** With the vanilla factions only (no packs) players do not get a spawn. Vanilla is the
+  baseline of every compat test (10b), so it must work. Reproduce on the local DS without packs, read the spawn / loadout / role-slot log lines.
+- **Seed is automatic.** Remove the seed field from the setup screen; always a fresh random seed, still logged (and kept as an `overrides.json` /
+  `/war start` value for admins who want to reproduce a layout).
+- **Weather changes too fast.** Slow the weather progression (research the weather manager / time-acceleration settings first; make the rate a
+  setup / override value if it is cheap).
+- **Remove the HQ Box.** The box in the HQ with the HQ menu and request menu items is redundant: the persistent U menu already opens the HQ menu
+  and all other functions. Remove the box (prefab/spawn, user actions) and make sure nothing else depends on it.
+- **Human squad leader.** When a human in a squad with AI dies, vanilla promotes someone else (an AI) to leader. Rule: a respawned human
+  becomes leader again; with several humans in the squad, if the human leader dies, another human takes over (random or highest ranking,
+  whichever is easier to implement). Hook into the group's leader-change / player join-leave events via `CLW_PlayerSquad`; keep the
+  mission accept rights (leader-only) in sync with the new leader.
+- **Sidecar map on mobile browsers.** On some mobile browsers neither zoom nor pan works. Check the touch handling (pointer/touch events,
+  pinch, `touch-action: none` on the map element, passive listeners) and test on iOS Safari and Android Chrome.
+- **Setup screen remembers the last settings.** When the first player sets up and starts a war, the next round (after a win or loss restart) shows the
+  setup screen again, prefilled with the settings of the previous round, so they only change what they want. A **Reset to defaults** button in the
+  setup screen reloads the defaults: the config file / `overrides.json` values if present, else the mod's built-in defaults. The previous settings
+  must survive the restart (persist them server-side, e.g. in the saved setup record next to the config), and the seed stays automatic (13b above),
+  so a restart never repeats the previous layout by accident.
+- **Setup screen: more intuitive.** Group the options into tabs or sections (e.g. Basics / Forces / Map & HQs / Advanced). Simple, commonly changed
+  options come first (map, sides/factions, AI difficulty, start); complex or detailed ones go further down or into an Advanced section. Applies to
+  the new options of this milestone too (difficulty, reset button), and keeps working with the remembered settings above.
+- **Custom loadout cannot spawn (bug).** Choosing the custom (player-saved) loadout on the spawn screen fails with "spawn point not available".
+  Rule: every option the spawn screen offers must be spawnable (server loadouts, the custom/saved loadout, all spawn points). Reproduce on the
+  local DS, read the spawn / loadout log lines, and check the custom-loadout path (saved record lookup, availability/cost check, spawn point
+  validation). Possibly related to the vanilla-factions no-spawn bug above; check both together.
 
 ## 14. Open questions / risks
 

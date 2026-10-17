@@ -214,3 +214,25 @@ Design `notes/hq-comms-env-traits-design.md`; implemented by Sonnet subagents (W
 - [x] Saved loadouts independent of vanilla's flag (own server->client state), custom spawn always applies our record; works with WCS_LoadoutEditor. Loadout item details on the dashboard.
 - [x] Default arsenal prices for unpriced items (written at pool build; modding SCR_ArsenalItem breaks every catalog: "Unknown class").
 - Known: the LLM commander times out on ling-3.1-flash (20 s): next milestone `notes/llm-latency-plan.md`. Spawn-screen paging glitches are vanilla. Sidecar loadout POST sometimes times out (game file stays the source of truth).
+
+## Planned: M4.6 - Playtest fixes (owner feedback 2026-10-16, `VISION.md` 13b)
+- [ ] Mission completes on capture (LLM offers by name/position resolve to the objective; captured unaccepted offers show as completed)
+- [ ] Offers (read-only) and the accepted mission visible to every squad member
+- [ ] FOB placement as an LLM HQ tool (two-step macro -> zoom picture), improved flank-aware algorithm as fallback
+- [ ] AI difficulty preset per side in the setup screen
+- [ ] HQ variety: several valid pairs, random pick, coin-flip sides, relaxed rules (towns allowed), check the time-based seed
+- [ ] Vanilla factions: players cannot spawn (bug)
+- [ ] Seed removed from the setup screen (automatic, logged, overrides only)
+- [ ] Weather changes too fast (slow the weather progression)
+- [ ] Remove the HQ Box (HQ menu + request menu items): the persistent U menu already launches the HQ menu and everything else
+- [ ] Squad leader for humans: a respawned human becomes squad leader again; if the human leader dies with several humans in the squad, another human takes over (random or highest rank, whichever is easier)
+- [ ] Sidecar map on some mobile browsers: neither zoom nor pan works (touch/pinch handling)
+- [ ] Setup screen remembers the last settings: after a win/loss restart it shows again, prefilled with the previous values, plus a "Reset to defaults" button (config file defaults, else the mod's defaults)
+- [ ] Setup screen more intuitive: tabs or sections, simple options first, complex/detailed options further down
+- [ ] Bug: selecting the custom (saved) loadout on the spawn screen gives "spawn point not available"; every selectable spawn option must be spawnable
+
+## Planned: M4.7 - Mod compatibility list (owner idea 2026-10-16, `VISION.md` 10b)
+- [ ] Data file in the addon (ID, name, category, status, note, tested versions, date); README + Workshop text generated from it
+- [ ] In-game warning when an `incompatible` mod is loaded (log + chat/setup once, never blocks)
+- [ ] Compat test packs per category; test the AI-commanding mods (AI Kommandanten, BGC_Core) and AI overhauls first
+- [ ] Factions: Modern US Army Revamped 2026 vs US Army 2026
