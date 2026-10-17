@@ -269,12 +269,36 @@ class CLW_Bases
 		setup.m_aVehicleSlots = new array<ref CLW_SpawnSlot>();	// authored slots belong to the old position
 		setup.m_aInfantrySlots = new array<ref CLW_SpawnSlot>();
 		m_aPlace[i] = new CLW_BasePlacement(setup, site);
-		SCR_SpawnPoint own = m_aOwnSpawns[i];
-		if (own)
-			own.SetOrigin(site);	// [verify] spawn point transform replicates to clients
-
+		bool pointMoved = ReplaceOwnPoint(setup, i, site, -1);
 		int moved = MoveHumans(old, site);
-		Print(string.Format("CLW: bases %1 moved %2 -> %3 (slots dropped, spawn point moved=%4, humans moved=%5)", m_aKeys[i], old, site, own != null, moved), LogLevel.NORMAL);
+		Print(string.Format("CLW: bases %1 moved %2 -> %3 (slots dropped, spawn point moved=%4, humans moved=%5)", m_aKeys[i], old, site, pointMoved, moved), LogLevel.NORMAL);
+	}
+
+	// Our base spawn point of side i goes to pos: a NEW point is spawned there and the old one deleted. SetOrigin on the existing point
+	// moved it on the server only; clients kept it at the authored base, so the deploy map showed the HQ spawn icon at the old place while
+	// players spawned at the real HQ (owner 2026-10-17). radius <= 0 keeps the current spawn radius. False when side i has no point.
+	protected bool ReplaceOwnPoint(notnull CLW_FactionSetup setup, int i, vector pos, float radius)
+	{
+		SCR_SpawnPoint old = m_aOwnSpawns[i];
+		if (!old)
+			return false;
+
+		if (radius <= 0)
+			radius = old.GetSpawnRadius();
+
+		SCR_SpawnPoint point = SpawnBasePoint(setup, pos, old.GetSpawnPointName());
+		if (!point)
+		{
+			Print(string.Format("CLW: bases WARNING %1 new spawn point at %2 failed, the old one stays at %3", setup.m_sKey, pos, old.GetOrigin()), LogLevel.WARNING);
+			return false;
+		}
+
+		point.SetSpawnRadius(radius);
+		point.SetPriority(HQ_PRIORITY);	// base points always carry it (Init)
+		m_aOwnSpawns[i] = point;
+		old.SetSpawnPointEnabled_S(false);
+		SCR_EntityHelper.DeleteEntityAndChildren(old);
+		return true;
 	}
 
 	// Players on foot within LAYOUT_HUMAN_MOVE_M of the old HQ keep their offset from it at the new HQ.
@@ -414,21 +438,24 @@ class CLW_Bases
 	// players appear beside the HQ building. The base position (GetBasePos) stays. Returns false when the faction has no spawn point.
 	bool MoveBasePoint(string factionKey, vector pos, float radius)
 	{
-		SCR_SpawnPoint point = GetSpawnPoint(factionKey);
-		if (!point)
+		int i = m_aKeys.Find(factionKey);
+		CLW_ScenarioConfig scenario = CLW_ScenarioConfig.Get();
+		CLW_FactionSetup setup;
+		if (scenario)
+			setup = scenario.FindFaction(factionKey);
+		if (i < 0 || !setup || !m_aOwnSpawns[i])
 		{
 			Print(string.Format("CLW: bases %1 spawn point not moved: none exists", factionKey), LogLevel.NORMAL);
 			return false;
 		}
 
-		vector old = point.GetOrigin();
+		vector old = m_aOwnSpawns[i].GetOrigin();
+		float oldRadius = m_aOwnSpawns[i].GetSpawnRadius();
 		CLW_Placement.SurfaceAt(pos);
-		point.SetOrigin(pos);	// [verify] spawn point transform replicates to clients (same as MoveBase)
-		float oldRadius = point.GetSpawnRadius();
-		if (radius > 0)
-			point.SetSpawnRadius(radius);
+		if (!ReplaceOwnPoint(setup, i, pos, radius))
+			return false;
 
-		Print(string.Format("CLW: bases %1 spawn point moved %2 -> %3 (%4 m), radius %5 -> %6", factionKey, old, pos, Math.Round(vector.DistanceXZ(old, pos)), oldRadius, point.GetSpawnRadius()), LogLevel.NORMAL);
+		Print(string.Format("CLW: bases %1 spawn point moved %2 -> %3 (%4 m), radius %5 -> %6 (new point entity)", factionKey, old, pos, Math.Round(vector.DistanceXZ(old, pos)), oldRadius, m_aOwnSpawns[i].GetSpawnRadius()), LogLevel.NORMAL);
 		return true;
 	}
 

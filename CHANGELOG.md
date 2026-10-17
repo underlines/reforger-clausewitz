@@ -7,6 +7,30 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 
 ### Added
 - Sidecar: map image overrides in `<data dir>/maps-override/<world file name>.png` (e.g. `CLW_Arland.png`), for hosts with only a dedicated-server install, which ships no UI map textures. Render one on a machine with the game client: `node map/index.mjs Arland CLW_Arland.png 2048`.
+- FOB placement is an HQ commander decision in two steps: it picks a map area from a coarse map picture (or declines), then the exact spot from a 100 m zoom of that area. The game checks the spot (dry, flat, road, clear of HQs, objectives, FOBs and enemy contacts), snaps it to valid ground, and tells the commander why if it refuses (one retry).
+- The whole squad sees the leader's mission offers and the accepted mission (map marker, task menu, progress); only the squad leader can accept or abandon.
+- AI difficulty per side (Easy / Normal / Hard / Veteran) in the setup screen, `/war start aiDifficultyA=` / `aiDifficultyB=` / `aiDifficulty=` and the `overrides.json` `setup` object.
+- The setup screen remembers the last round's settings (also across a server restart); a Reset to defaults button restores the `overrides.json` or built-in defaults.
+- Setup option "Weather change rate" (`weatherRate`: slow / normal / fast).
+- Debug launch argument `-clwHqSurvey [N]`: logs distinct HQ spots and the side split for N seeds.
+
+### Changed
+- The setup screen is split into sections (Basics, Forces and economy, Map/HQs/FOBs, Weather and time, Advanced), common options first.
+- The layout seed is always automatic; the seed field is gone from the setup screen (`randomSeed` remains an admin value for `/war start` and `overrides.json`).
+- Random start positions compare several valid HQ pairs, pick one at random and toss a coin for the sides, so side A is no longer mostly west. HQs may stand in villages and town centres; edge margin and distance tolerance are relaxed for small maps.
+- Rule commander FOB sites are computed per objective and side (own side of each objective, away from the HQ), so every flank can get a FOB; a second FOB goes to the next uncovered flank. Two failed or declined LLM FOB decisions in a row hand the next FOB to the rule commander.
+- Weather changes are slower and rarer by default. "Fast" holds a weather for about 5 minutes and changes over about 5 minutes; every blend step takes at least 90 s, and rain fades out instead of stopping at once.
+
+### Removed
+- The HQ request box at the HQ and FOBs; everything is reached through the U menu.
+
+### Fixed
+- Missions are matched to their objective by id, name or position, so a capture completes the mission; a capture offer taken before it was accepted is shown as completed (no reward) instead of vanishing.
+- A human squad leader leads again after respawning; with several humans, another human takes over when the leader dies, and the mission moves with the leadership.
+- A time-based random seed is fresh on every server start instead of repeating.
+- Spawn menu: every Clausewitz slot (role slots and "My saved loadout") could be refused with "spawn point not available" when other mods were loaded; all slots spawn again.
+- Deploy map: the HQ spawn icon stayed at the scenario's original base after the HQ was moved (random or scaled layout); it now shows at the real HQ.
+- Sidecar dashboard map works on phones and tablets (drag to pan, pinch to zoom, double-tap to zoom in, tap to select); panning an empty map no longer snaps back.
 
 ## [1.4.0] - 2026-10-15
 

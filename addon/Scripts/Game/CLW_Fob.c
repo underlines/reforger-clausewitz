@@ -634,6 +634,15 @@ class CLW_FobManager
 	// All checks of an ESTABLISH_FOB (no side effects): capability, cap, one at a time, supplies, site.
 	static bool CanEstablish(string side, CLW_FobSite site, out string why)
 	{
+		if (!CanStart(side, why))
+			return false;
+
+		return CheckSite(side, site, why);
+	}
+
+	// The checks of CanEstablish that do not depend on the site (M4.6 FOB tool: asked before the zoom step starts).
+	static bool CanStart(string side, out string why)
+	{
 		CLW_WarState war = CLW_GameMode.GetWarState();
 		if (!war || !war.IsRunning())
 		{
@@ -672,7 +681,7 @@ class CLW_FobManager
 			return false;
 		}
 
-		return CheckSite(side, site, why);
+		return true;
 	}
 
 	// Pays the cost and creates the FOB (state PLANNED). The tick finds / buys the builder. False with why when refused.

@@ -18,9 +18,11 @@ class CLW_ServerLoadout : SCR_FactionPlayerLoadout
 	[Attribute("1", UIWidgets.EditBox, "Spawn slot 1..7 (the library entry with this order fills it)")]
 	int m_iSlot;
 
-	// Both machines: list the slot for its side's faction, or hide it.
+	// Both machines: list the slot for its side's faction, or hide it. The base prefab is also written into the vanilla field: mods that read
+	// m_sLoadoutResource directly instead of GetLoadoutResource() refused the spawn request with CANNOT_VALIDATE (DS e2e 2026-10-17, RHS packs).
 	void Bind()
 	{
+		m_sLoadoutResource = CLW_LoadoutSlots.Prefab(m_iSide, m_iSlot);
 		if (CLW_LoadoutSlots.IsVisible(m_iSide, m_iSlot))
 			m_sAffiliatedFaction = CLW_LoadoutSlots.SideKey(m_iSide);
 		else

@@ -364,6 +364,7 @@ class CLW_WarRuntime
 		GetGame().GetCallqueue().Remove(PollContacts);
 		GetGame().GetCallqueue().Remove(ThinkCommanders);
 		CLW_Environment.Stop();
+		CLW_AiDifficulty.Stop();
 		m_Activity.RematchReset();
 		foreach (string markerKey, CLW_ContactMarkers markers : m_mMarkers)
 		{
@@ -689,6 +690,7 @@ class CLW_WarRuntime
 		CLW_RequestService.OnWarStart();	// M3 phase Q: report marker parser, request costs to the players
 		CLW_FobManager.OnWarStart(m_War);	// M3 phase F: FOB site pool (after the battle layout) + FOB tick
 		CLW_Convoys.OnWarStart(m_War);	// M3 phase L: logistics (per-base stock, convoys); needs the FOB manager
+		CLW_AiDifficulty.OnWarStart(m_War);	// M4.6: AI difficulty per side, a sweep over the spawned agents (no spawner involved)
 		if (m_Spawner)
 			m_Spawner.SpawnStartForces();
 		CLW_SquadGroups.LockNewGroups();	// HQ squads are the only player groups; the registry registers them in its next sweep

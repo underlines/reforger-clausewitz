@@ -14,8 +14,10 @@ class CLW_SideCustomLoadout : SCR_PlayerArsenalLoadout
 	int m_iSide;
 
 	// Both machines: list the entry for its side's faction, or hide it.
+	// The base prefab also goes into the vanilla field (see CLW_ServerLoadout.Bind).
 	void Bind()
 	{
+		m_sLoadoutResource = CLW_LoadoutSlots.Prefab(m_iSide, 0);
 		if (CLW_LoadoutSlots.IsVisible(m_iSide, 0))
 			m_sAffiliatedFaction = CLW_LoadoutSlots.SideKey(m_iSide);
 		else

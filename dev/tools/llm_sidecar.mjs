@@ -55,6 +55,11 @@
 //     unchanged: GET /api/state factions[<name>].situation.requests (dashboard Requests tab). Protocol stays v3.
 //     Base structures: the situation carries "structures":[{"base","kind","label","pos":[x,z],"grid"}] (own side, one per placed service, same set as the in-game map markers). Dashboard map layer only (GET /api/state factions[<name>].situation.structures); stripped from the LLM prompt.
 //     Reply channels: orders / buy / missions (same command JSON as v2) + "fobs" (M3 phase F: [{"command":"ESTABLISH_FOB","site":"<fobSites id>"} or {"command":"UPGRADE_FOB","fob":"<fobs id>"}], max 1; phase L adds {"command":"RESUPPLY","fob":"<fobs id>"} and {"command":"CONVOY","origin":"<base id>","dest":"<base id>"}, max 3 per reply in total, only with the logistics capability + blocks convoys[] / logisticsRules; situation blocks fobs[] / fobSites[] / fobRules). New channels need game + sidecar support.
+//     FOB tool (M4.6, notes/fob-tool-design.md): placing a FOB is a two-step HQ decision. Situation block fobMap (whole-map digest: terrain / road glyph rows, towns, objectives by macro cell, hq, front, own FOBs,
+//     contacts; replaces fobSites) -> step 1 on the fobs channel: {"command":"ESTABLISH_FOB","area":"<cell id>","intent":"..","reason":".."} (terse ["ESTABLISH_FOB","D5","why"]; area "none" = decline; a bare
+//     "pos":[x,z] is accepted too; "site" stays for the rule doctrine / old games). Step 2: the game POSTs /fobzoom {v,faction,area,intent,attempt,retry?:{reason,pos},zoom:<100 m digest>} and gets
+//     {ok:true,cell:"f7"|pos:[x,z],reason} | {ok:true,decline:true,reason} | {ok:false,error} on that request (one small LLM call, role fobzoom = strong slot, agent/fobZoomPrompt.mjs; fake provider
+//     picks deterministically). The game validates / snaps the spot and asks again once (attempt 2) when it refuses. Log: "fobzoom faction=.. area=.. attempt=.. -> cell f7|DECLINE|ERROR"; GET /api/state fobZoom.
 //
 //   POST /hq {faction, msg:{id,player,role,squad,grid,pos,lang,text,ageSec,history}} (WP11 fast path, X-CLW-Token): runs the /hq agent turn at once against the
 //     faction's cached situation (capped at 25 s) and answers ON THAT REQUEST {handled:true, hqReplies?, hqActions?}; {handled:false, reason} = nothing started (no cached
@@ -192,6 +197,7 @@ import * as LO from "./loadouts.mjs"; // loadout library store + REST handlers (
 import { chatCall } from "./agent/llmCall.mjs"; // one provider call: streaming, TTFT, usage, response_format, prompt caching
 import { sectionStats, approxTokens, terseSchema, expandTerse } from "./agent/promptKit.mjs";
 // prompts (commander, SITREP), the built-in manifest and the SITREP template live in agent/commanderPrompt.mjs (persona + environment hooks inside)
+import { buildFobZoomPrompt, parseZoomReply, normalizeZoomReply, fakeZoomPick } from "./agent/fobZoomPrompt.mjs"; // FOB tool step 2 (POST /fobzoom)
 import { DEFAULT_MANIFEST, channelOf, orderNamesOf, SITREP_KEYS, SITREP_TITLES, SITREP_CAP, SITREP_HEADLINE_CAP, SITREP_FRESH_SEC, buildCommanderPrompt, buildSitrepPrompt, buildPlannerPrompt, plannerSplit } from "./agent/commanderPrompt.mjs";
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -733,7 +739,7 @@ function composeSitrep(faction, sit, gameSitrep) {
 // ---------- i18n (protocol v4) ----------
 // Roles -> slots. Every LLM call names a role; config "roles" {commander, planner, sitrep, journal, hq, translate} maps it to "strong" | "weak" (defaults below).
 // A role on "weak" while no weak slot is configured is answered by the strong slot. escalate.slot overrides the slot of an orders call (see escalation()).
-const DEFAULT_ROLES = { commander: "strong", planner: "strong", sitrep: "weak", journal: "weak", hq: "strong", translate: "weak" };
+const DEFAULT_ROLES = { commander: "strong", planner: "strong", sitrep: "weak", journal: "weak", hq: "strong", translate: "weak", fobzoom: "strong" }; // fobzoom (FOB tool step 2) is not a configurable role: strong slot
 const roleSlotName = (c, role) => (c.roles?.[role] === "weak" || c.roles?.[role] === "strong" ? c.roles[role] : DEFAULT_ROLES[role] ?? "strong");
 const hasWeak = (c) => !!(c.weak && c.weak.provider && c.weak.provider !== "none");
 /** The slot ("strong"|"weak") that answers `role` right now; slotName (optional) overrides the configured one (escalation). */
@@ -1041,6 +1047,18 @@ function fakeOrders(sit) {
   return orders;
 }
 
+/** Fake provider, FOB step 1: the macro cell one step from fobMap.frontCell toward the own HQ cell (the front cell itself when they coincide); null without a fobMap. */
+function fakeFobArea(sit) {
+  const m = sit?.fobMap;
+  if (!m || typeof m.cols !== "string" || !isNum(m.n) || typeof m.frontCell !== "string") return null;
+  const parse = (id) => { const c = m.cols.indexOf(String(id)[0]), r = Number(String(id).slice(1)); return c >= 0 && r >= 1 && r <= m.n ? [c, r] : null; };
+  const front = parse(m.frontCell), own = parse(m.hq?.own ?? "");
+  if (!front) return null;
+  const step = (a, b) => (b === undefined || a === b ? 0 : b > a ? 1 : -1);
+  const c = front[0] + (own ? step(front[0], own[0]) : 0), r = front[1] + (own ? step(front[1], own[1]) : 0);
+  return m.cols[Math.min(Math.max(c, 0), m.cols.length - 1)] + Math.min(Math.max(r, 1), m.n);
+}
+
 // Fake provider, protocol v2: simple doctrine, content-agnostic (everything from the situation).
 // part: "all" (planner disabled: one combined answer) | "orders" (orders + missions: the commander call of the planner split) | "plan" (buy + fobs: the fake planner).
 const xz = (p) => (Array.isArray(p) ? (p.length > 2 ? [p[0], p[2]] : [p[0], p[1]]) : [NaN, NaN]);
@@ -1081,8 +1099,10 @@ function fakeV2(sit, manifest = DEFAULT_MANIFEST, part = "all") {
   if (doPlan && fobNames.size && isNum(fobRules.cost) && isNum(fobRules.max)) {
     const minute = Math.floor((isNum(sit.time) ? sit.time : 0) / 60);
     const mine = Array.isArray(sit.fobs) ? sit.fobs : [], sites = Array.isArray(sit.fobSites) ? sit.fobSites : [];
-    if (fobNames.has("ESTABLISH_FOB") && fobRules.ready !== false && sites[0] && fobRules.live < fobRules.max && !fobRules.inProgress && supplies >= fobRules.cost + 100 && minute % 3 === 1)
-      out.fobs.push({ command: "ESTABLISH_FOB", site: sites[0].id, reason: `fake provider: forward base at ${sites[0].name ?? sites[0].id}` });
+    const fakeArea = fakeFobArea(sit); // M4.6 two-step tool: the fake provider answers step 1 with a macro cell (one step from the front toward the own HQ)
+    if (fobNames.has("ESTABLISH_FOB") && fobRules.ready !== false && (fakeArea || sites[0]) && fobRules.live < fobRules.max && !fobRules.inProgress && supplies >= fobRules.cost + 100 && minute % 3 === 1)
+      out.fobs.push(fakeArea ? { command: "ESTABLISH_FOB", area: fakeArea, intent: "fake provider: cover the front objective", reason: `fake provider: forward base in area ${fakeArea}` }
+        : { command: "ESTABLISH_FOB", site: sites[0].id, reason: `fake provider: forward base at ${sites[0].name ?? sites[0].id}` });
     else if (fobNames.has("UPGRADE_FOB") && isNum(fobRules.upgradeCost) && supplies >= fobRules.upgradeCost + 150 && minute % 3 === 2) {
       const up = mine.find((f) => f?.state === "active" && f.tier < 2);
       if (up) out.fobs.push({ command: "UPGRADE_FOB", fob: up.id, reason: "fake provider: vehicle depot" });
@@ -1285,6 +1305,11 @@ function validateV2(obj, sit, dropped = [], manifest = DEFAULT_MANIFEST, opts = 
   // FOB intents (channel "fob"): at most 1 per reply; the game validates again (cap, one in progress, site, supplies)
   const fobNames = new Set(channelOf(manifest, "fob").map((e) => e.name));
   const fobSites = new Set((Array.isArray(sit.fobSites) ? sit.fobSites : []).filter((x) => x && typeof x.id === "string").map((x) => x.id));
+  // M4.6 two-step tool: with a fobMap an ESTABLISH_FOB names an AREA (macro cell id, "none" = decline) instead of a pool site. A terse tuple ["ESTABLISH_FOB","D5","why"]
+  // arrives as {site:"D5"} (promptKit.expandTerse cannot tell a cell id from an old site id): with a fobMap it is read as the area.
+  const fobMap = sit.fobMap && typeof sit.fobMap === "object" ? sit.fobMap : null;
+  const fobAreaOk = (a) => !!fobMap && typeof fobMap.cols === "string" && /^[A-Z]{1,2}\d{1,2}$/.test(a) && fobMap.cols.includes(a[0]) && Number(a.slice(1)) >= 1 && Number(a.slice(1)) <= (isNum(fobMap.n) ? fobMap.n : 0);
+  const fobAreaOf = (f) => { const t = String(f?.area ?? f?.site ?? "").trim(); return t.toLowerCase() === "none" ? "none" : t.toUpperCase(); };
   const myFobs = new Map((Array.isArray(sit.fobs) ? sit.fobs : []).filter((x) => x && typeof x.id === "string").map((x) => [x.id, x]));
   const fr = sit.fobRules ?? {}, lr = sit.logisticsRules ?? {};
   const baseIds = new Set(["HQ", ...[...myFobs.values()].filter((x) => x.state === "active").map((x) => x.id)]);
@@ -1303,9 +1328,10 @@ function validateV2(obj, sit, dropped = [], manifest = DEFAULT_MANIFEST, opts = 
         : isNum(lr.minCargo) && left < lr.minCargo ? `HQ stock ${left} is below the minimum load ${lr.minCargo}` : null)
       : cmd === "CONVOY" ? (!baseIds.has(f.origin) || !baseIds.has(f.dest) ? `unknown or inactive base ${f.origin} -> ${f.dest}` : f.origin === f.dest ? "origin and destination are the same"
         : isNum(lr.convoyMax) && isNum(lr.inFlight) && lr.inFlight + res.fobs.filter((x) => x.command === "RESUPPLY" || x.command === "CONVOY").length >= lr.convoyMax ? "convoy limit reached" : null)
+      : cmd === "ESTABLISH_FOB" && fobMap && fobAreaOf(f) === "none" ? null // explicit decline: nothing to gate
       : cmd === "ESTABLISH_FOB" ? (fr.ready === false ? "too early for a FOB: " + (fr.readyReason ?? "not ready") + (isNum(fr.earliestSec) ? " (earliest " + fr.earliestSec + " s, elapsed " + (fr.elapsedSec ?? "?") + " s)" : "")
         : isNum(fr.earliestSec) && isNum(fr.elapsedSec) && fr.elapsedSec < fr.earliestSec ? "too early for a FOB: earliestSec " + fr.earliestSec + " not reached (elapsed " + fr.elapsedSec + ")"
-        : !fobSites.has(f.site) ? `unknown fob site ${f.site}`
+        : !(fobSites.has(f.site) || (fobMap && fobAreaOk(fobAreaOf(f))) || xzOk(f.pos)) ? (fobMap ? `unknown fob area ${f.area ?? f.site} (use a cell id of fobMap)` : `unknown fob site ${f.site}`)
         : isNum(fr.live) && isNum(fr.max) && fr.live >= fr.max ? "FOB limit reached"
         : fr.inProgress > 0 ? "another FOB is still being established"
         : isNum(fr.cost) && fr.cost > left ? `FOB cost ${fr.cost} exceeds remaining supplies ${left}` : null)
@@ -1313,11 +1339,20 @@ function validateV2(obj, sit, dropped = [], manifest = DEFAULT_MANIFEST, opts = 
         : isNum(fr.upgradeCost) && isNum(mine.stock) && fr.upgradeCost > mine.stock ? `upgrade cost ${fr.upgradeCost} exceeds the stock of ${f.fob} (${mine.stock}); RESUPPLY it first`
         : !isNum(mine.stock) && isNum(fr.upgradeCost) && fr.upgradeCost > left ? `upgrade cost ${fr.upgradeCost} exceeds remaining supplies ${left}` : null);
     if (why) { drop("fob", f, why); continue; }
-    if (cmd === "ESTABLISH_FOB") left -= fr.cost ?? 0;
+    const declined = cmd === "ESTABLISH_FOB" && !!fobMap && fobAreaOf(f) === "none";
+    if (cmd === "ESTABLISH_FOB" && !declined) left -= fr.cost ?? 0;
     else if (cmd === "UPGRADE_FOB" && !isNum(mine?.stock)) left -= fr.upgradeCost ?? 0;
     else if (cmd === "RESUPPLY" || (cmd === "CONVOY" && f.origin === "HQ")) left -= Math.min(isNum(lr.truckCargo) ? lr.truckCargo : 0, Math.max(0, left)); // the load leaves the HQ stock (approximation for CONVOY from a FOB)
-    const out = cmd === "ESTABLISH_FOB" ? { site: f.site } : cmd === "CONVOY" ? { origin: f.origin, dest: f.dest } : { fob: f.fob };
-    res.fobs.push({ command: cmd, ...out, reason: typeof f.reason === "string" ? clipReason(f.reason, rw) : "" });
+    const reason = typeof f.reason === "string" ? clipReason(f.reason, rw) : "";
+    let out;
+    if (cmd === "ESTABLISH_FOB") {
+      const area = fobMap ? fobAreaOf(f) : "";
+      if (fobMap && fobSites.has(f.site) && !fobAreaOk(area)) out = { site: f.site };
+      else if (area && (area === "none" || fobAreaOk(area))) out = area === "none" ? { area } : { area, intent: clipReason(typeof f.intent === "string" && f.intent ? f.intent : reason, rw) };
+      else if (!fobSites.has(f.site) && xzOk(f.pos)) out = { pos: [f.pos[0], f.pos[1]] };
+      else out = { site: f.site };
+    } else out = cmd === "CONVOY" ? { origin: f.origin, dest: f.dest } : { fob: f.fob };
+    res.fobs.push({ command: cmd, ...out, reason });
   }
 
   // buys after the FOB/logistics entries: the game applies them in that order too (a FOB is not starved by buys in the same reply)
@@ -1510,6 +1545,49 @@ async function handleManifest(req, res) {
   manifests[m.faction] = { ...m, receivedAt: Date.now() };
   console.log(`manifest faction=${m.faction} hash=${m.hash} mode=${m.mode || "?"} intents=${m.intents.length} primitives=${m.primitives.length} capabilities=[${m.capabilities.join(",")}]`);
   send(res, 200, { ok: true, hash: m.hash });
+}
+
+// ---------- FOB zoom (M4.6 FOB tool, step 2; dev/notes/fob-tool-design.md) ----------
+// Step 1 is the area pick in the commander / planner reply (fobs: ESTABLISH_FOB {area, intent}). The game then POSTs /fobzoom {v, faction, area, intent, attempt, retry?, zoom}
+// (zoom = the 100 m digest of that area) and gets the exact spot on THAT request: {ok:true, cell:"f7"|pos:[x,z], reason} | {ok:true, decline:true, reason} | {ok:false, error}.
+// One small stateless LLM call (role fobzoom, strong slot; agent/fobZoomPrompt.mjs); the retry prompt carries the game's refusal. The fake provider picks deterministically.
+// The game validates / snaps the spot itself and decides about the retry (attempt 2). Last 20 requests: fobZoom in GET /api/state.
+const fobZoomLog = []; // newest first
+async function handleFobZoom(req, res) {
+  let b;
+  try { b = JSON.parse(await readBody(req, 200_000)); } catch { return send(res, 400, { ok: false, error: "invalid JSON" }); }
+  const faction = typeof b?.faction === "string" ? b.faction : "?", area = typeof b?.area === "string" ? b.area : "?", attempt = isNum(b?.attempt) ? b.attempt : 1;
+  const entry = { ts: Date.now(), faction, area, attempt, intent: String(b?.intent ?? "").slice(0, 160), ok: false, result: null, ms: 0 };
+  fobZoomLog.unshift(entry); if (fobZoomLog.length > 20) fobZoomLog.length = 20;
+  const fin = (code, body, note) => {
+    entry.ms = Date.now() - t0; entry.ok = body.ok === true; entry.result = body.ok === true ? (body.decline ? "decline" : body.cell ?? JSON.stringify(body.pos)) : body.error;
+    console.log(`fobzoom faction=${faction} area=${area} attempt=${attempt} -> ${entry.ok ? (body.decline ? "DECLINE" : body.cell ? "cell " + body.cell : "pos [" + body.pos + "]") + ` (${body.reason ?? ""})` : "ERROR " + body.error} ${entry.ms}ms${note ? " " + note : ""}`);
+    return send(res, code, body);
+  };
+  const t0 = Date.now();
+  if (!b || typeof b !== "object" || !b.zoom || typeof b.zoom !== "object" || !Array.isArray(b.zoom.rows)) return fin(400, { ok: false, error: "fobzoom needs a zoom digest with rows" });
+  const c = { ...cfg };
+  if (!c.enabled || c.engine !== "llm" || paused) return fin(200, { ok: false, error: paused ? "HQ paused" : "LLM commander is off" });
+  try {
+    const pr = buildFobZoomPrompt({ config: c, req: b });
+    const sections = sectionStats(pr.sections);
+    let obj;
+    if (c.provider === "fake" || slotCfg(c, "fobzoom").provider === "fake") {
+      obj = fakeZoomPick(b);
+      recordFakeCall("fobzoom", faction, t0, { promptChars: pr.system.length + pr.user.length, sections });
+    } else {
+      if (budgetStopped(slotCfg(c, "fobzoom"))) throw new Error("budget limit reached");
+      session.requests++;
+      const p = await callWithFallback(c, { faction }, { role: "fobzoom", system: pr.system, userMsg: pr.user, sections, maxTokens: c.maxTokens, responseFormat: c.output?.mode === "text" ? null : { type: "json_object" }, cacheSystem: !!c.prompt?.cache });
+      if (p.provider === "openrouter") recordUsage(p.modelUsed, faction, p.usage);
+      obj = parseZoomReply(p.raw);
+    }
+    const r = normalizeZoomReply(obj, b);
+    return fin(200, r.ok ? { ok: true, ...(r.decline ? { decline: true } : r.cell ? { cell: r.cell } : { pos: r.pos }), reason: r.reason } : { ok: false, error: r.error });
+  } catch (e) {
+    state.counters.errors++;
+    return fin(200, { ok: false, error: e?.name === "AbortError" ? "timeout" : String(e?.message ?? e).slice(0, 200) });
+  }
 }
 
 // ---------- HQ chat (M3 phase A: /hq <free text>) ----------
@@ -1869,7 +1947,7 @@ function send(res, code, obj) {
 // ---------- auth + loadouts wiring (modules auth.mjs / loadouts.mjs) ----------
 const auth = AUTH.createAuth({ dataDir: DATA_DIR, getAdmin: () => cfg.admin, setAdmin: (a) => { cfg.admin = a; saveConfig(); } });
 const loadouts = LO.createStore(DATA_DIR, { log: (m) => console.log(m) });
-const GAME_ROUTES = new Set(["/health", "/orders", "/hq", "/manifest", "/translate", "/world", "/world/roads", "/world/locations", "/world/buildings", "/loadouts/player", "/loadouts/sync", "/loadouts/status", "/control"]);
+const GAME_ROUTES = new Set(["/health", "/orders", "/hq", "/manifest", "/fobzoom", "/translate", "/world", "/world/roads", "/world/locations", "/world/buildings", "/loadouts/player", "/loadouts/sync", "/loadouts/status", "/control"]);
 const redirect = (res, to) => { res.writeHead(302, { Location: to, "Cache-Control": "no-store" }); res.end(); };
 
 const MIME = {
@@ -2319,7 +2397,7 @@ async function handleApi(req, res, url) {
     return send(res, 200, {
       now: Date.now(), startedAt: state.startedAt, lastRequestTs: state.lastRequestTs,
       factions: state.factions, activeFactions: activeFactions(), staleAfterSec: STALE_FACTION_MS / 1000,
-      exchanges: state.exchanges, hq: hqLog.map(({ fast, ...e }) => e), debugLog: state.debugLog, manifests: manifestsView(), counters: state.counters, llmCalls: state.llmCalls, latency: latencyView(), modelCooldowns: cooldownsView(), config: publicConfig(), auth: { defaultPassword: auth.isDefaultPassword() }, loadouts: { bad: loadouts.badCount(), restartId: loadouts.restartId() }, usage: usageView(), scheduler: schedulerView(), planner: plannerView(), journals: journalsView(), paused,
+      exchanges: state.exchanges, hq: hqLog.map(({ fast, ...e }) => e), debugLog: state.debugLog, manifests: manifestsView(), counters: state.counters, llmCalls: state.llmCalls, latency: latencyView(), modelCooldowns: cooldownsView(), config: publicConfig(), auth: { defaultPassword: auth.isDefaultPassword() }, loadouts: { bad: loadouts.badCount(), restartId: loadouts.restartId() }, usage: usageView(), scheduler: schedulerView(), planner: plannerView(), fobZoom: fobZoomLog, journals: journalsView(), paused,
     });
   }
   if (req.method === "POST" && url === "/api/pause") {
@@ -2426,6 +2504,9 @@ http.createServer((req, res) => {
   }
   if (req.method === "POST" && url === "/translate") {
     return void handleTranslate(req, res).catch((e) => { if (!res.headersSent) send(res, 500, { error: String(e?.message ?? e) }); });
+  }
+  if (req.method === "POST" && url === "/fobzoom") {
+    return void handleFobZoom(req, res).catch((e) => { console.log(`  fobzoom handler error: ${e?.message ?? e}`); if (!res.headersSent) send(res, 500, { ok: false, error: "internal" }); });
   }
   if (req.method === "POST" && url === "/hq") {
     return void handleHq(req, res).catch((e) => { console.log(`  hq handler error: ${e?.message ?? e}`); if (!res.headersSent) send(res, 500, { error: "internal" }); });

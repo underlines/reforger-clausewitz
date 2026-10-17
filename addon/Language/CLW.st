@@ -20,6 +20,10 @@ StringTable {
    Target_en_us "Convoy %1 -> %2 started."
    Target_de_de "Konvoi %1 -> %2 gestartet."
   }
+  CustomStringTableItem CLW-Act_FobDeclined {
+   Target_en_us "HQ decided against a new FOB for now."
+   Target_de_de "Das HQ hat sich vorerst gegen einen neuen FOB entschieden."
+  }
   CustomStringTableItem CLW-Act_FobOrdered {
    Target_en_us "FOB ordered at site %1."
    Target_de_de "FOB am Standort %1 beauftragt."
@@ -27,6 +31,10 @@ StringTable {
   CustomStringTableItem CLW-Act_FobUpgrade {
    Target_en_us "FOB %1: upgrade ordered."
    Target_de_de "FOB %1: Ausbau beauftragt."
+  }
+  CustomStringTableItem CLW-Act_FobZoom {
+   Target_en_us "HQ is choosing the exact FOB spot in map area %1."
+   Target_de_de "Das HQ wählt den genauen FOB-Standort im Kartenbereich %1."
   }
   CustomStringTableItem CLW-Act_MacroDeep {
    Target_en_us "%1 is nested too deep."
@@ -95,6 +103,38 @@ StringTable {
   CustomStringTableItem CLW-Bkp_Sent {
    Target_en_us "Help call received. %1 is moving to your position, %2 m away."
    Target_de_de "Hilferuf empfangen. %1 rückt zu deiner Position vor, %2 m entfernt."
+  }
+  CustomStringTableItem CLW-Choice_aiDifficultyA_easy {
+   Target_en_us "easy"
+   Target_de_de "leicht"
+  }
+  CustomStringTableItem CLW-Choice_aiDifficultyA_hard {
+   Target_en_us "hard"
+   Target_de_de "schwer"
+  }
+  CustomStringTableItem CLW-Choice_aiDifficultyA_normal {
+   Target_en_us "normal"
+   Target_de_de "normal"
+  }
+  CustomStringTableItem CLW-Choice_aiDifficultyA_veteran {
+   Target_en_us "veteran"
+   Target_de_de "Veteran"
+  }
+  CustomStringTableItem CLW-Choice_aiDifficultyB_easy {
+   Target_en_us "easy"
+   Target_de_de "leicht"
+  }
+  CustomStringTableItem CLW-Choice_aiDifficultyB_hard {
+   Target_en_us "hard"
+   Target_de_de "schwer"
+  }
+  CustomStringTableItem CLW-Choice_aiDifficultyB_normal {
+   Target_en_us "normal"
+   Target_de_de "normal"
+  }
+  CustomStringTableItem CLW-Choice_aiDifficultyB_veteran {
+   Target_en_us "veteran"
+   Target_de_de "Veteran"
   }
   CustomStringTableItem CLW-Choice_battleSize_large {
    Target_en_us "large"
@@ -1260,6 +1300,14 @@ StringTable {
    Target_en_us "Mission failed"
    Target_de_de "Auftrag gescheitert"
   }
+  CustomStringTableItem CLW-Msn_HandoverText {
+   Target_en_us "You lead the squad now. The mission goes on: %1"
+   Target_de_de "Du führst die Truppe jetzt. Der Auftrag läuft weiter: %1"
+  }
+  CustomStringTableItem CLW-Msn_HandoverTitle {
+   Target_en_us "New squad leader"
+   Target_de_de "Neuer Truppführer"
+  }
   CustomStringTableItem CLW-Msn_Kind_CAPTURE {
    Target_en_us "Capture"
    Target_de_de "Einnehmen"
@@ -1296,6 +1344,14 @@ StringTable {
    Target_en_us "Recon %1"
    Target_de_de "%1 aufklären"
   }
+  CustomStringTableItem CLW-Msn_LeaderOnlyText {
+   Target_en_us "Only the squad leader can accept or abandon missions."
+   Target_de_de "Nur der Truppführer kann Aufträge annehmen oder abbrechen."
+  }
+  CustomStringTableItem CLW-Msn_LeaderOnlyTitle {
+   Target_en_us "Squad leader only"
+   Target_de_de "Nur der Truppführer"
+  }
   CustomStringTableItem CLW-Msn_LostText {
    Target_en_us "The task was removed."
    Target_de_de "Der Auftrag wurde entfernt."
@@ -1319,6 +1375,14 @@ StringTable {
   CustomStringTableItem CLW-Msn_NewTitle {
    Target_en_us "HQ: new missions"
    Target_de_de "HQ: neue Aufträge"
+  }
+  CustomStringTableItem CLW-Msn_TakenText {
+   Target_en_us "%1: your side took it before you accepted the mission. Completed, no reward."
+   Target_de_de "%1: Deine Seite hat es genommen, bevor du den Auftrag angenommen hast. Erledigt, keine Belohnung."
+  }
+  CustomStringTableItem CLW-Msn_TakenTitle {
+   Target_en_us "Objective taken"
+   Target_de_de "Ziel genommen"
   }
   CustomStringTableItem CLW-Msn_Task_CAPTURE {
    Target_en_us "[HQ] Capture %1"
@@ -1375,6 +1439,22 @@ StringTable {
   CustomStringTableItem CLW-Msn_Why_Timeout {
    Target_en_us "timed out after %1 min"
    Target_de_de "Zeit nach %1 Min. abgelaufen"
+  }
+  CustomStringTableItem CLW-Param_aiDifficultyA {
+   Target_en_us "AI difficulty, side A"
+   Target_de_de "KI-Schwierigkeit, Seite A"
+  }
+  CustomStringTableItem CLW-Param_aiDifficultyA_Desc {
+   Target_en_us "Skill and perception of every AI soldier and crew of side A. Normal is the unchanged vanilla behaviour; Easy aims worse and spots enemies slower; Hard and Veteran aim better and spot enemies faster."
+   Target_de_de "Fähigkeit und Wahrnehmung jedes KI-Soldaten und jeder Besatzung von Seite A. Normal ist das unveränderte Standardverhalten; Leicht zielt schlechter und erkennt Feinde langsamer; Schwer und Veteran zielen besser und erkennen Feinde schneller."
+  }
+  CustomStringTableItem CLW-Param_aiDifficultyB {
+   Target_en_us "AI difficulty, side B"
+   Target_de_de "KI-Schwierigkeit, Seite B"
+  }
+  CustomStringTableItem CLW-Param_aiDifficultyB_Desc {
+   Target_en_us "Skill and perception of every AI soldier and crew of side B. Normal is the unchanged vanilla behaviour; Easy aims worse and spots enemies slower; Hard and Veteran aim better and spot enemies faster."
+   Target_de_de "Fähigkeit und Wahrnehmung jedes KI-Soldaten und jeder Besatzung von Seite B. Normal ist das unveränderte Standardverhalten; Leicht zielt schlechter und erkennt Feinde langsamer; Schwer und Veteran zielen besser und erkennen Feinde schneller."
   }
   CustomStringTableItem CLW-Param_battleSize {
    Target_en_us "Battle size"
@@ -1720,6 +1800,14 @@ StringTable {
    Target_en_us "Slots: six weather steps spread over the time limit. World: leave the world's own automatic weather."
    Target_de_de "Slots: sechs Wetterstufen verteilt über das Zeitlimit. Welt: das eigene automatische Wetter der Welt bleibt."
   }
+  CustomStringTableItem CLW-Param_weatherRate {
+   Target_en_us "Weather change rate"
+   Target_de_de "Wetterwechsel-Tempo"
+  }
+  CustomStringTableItem CLW-Param_weatherRate_Desc {
+   Target_en_us "How often the weather changes (slots mode): slow = a weather lasts at least 45 min, normal = 25 min, fast = six equal steps over the time limit."
+   Target_de_de "Wie oft das Wetter wechselt (Modus Slots): slow = ein Wetter hält mindestens 45 Min., normal = 25 Min., fast = sechs gleiche Stufen über das Zeitlimit."
+  }
   CustomStringTableItem CLW-Persona_Told {
    Target_en_us "Your HQ commander is %1."
    Target_de_de "Euer HQ-Kommandeur ist %1."
@@ -2064,14 +2152,6 @@ StringTable {
    Target_en_us "HQ: %1 arrived at the base, but you have no squad to join; HQ keeps it."
    Target_de_de "HQ: %1 ist an der Basis eingetroffen, aber du hast keinen Trupp, dem es beitreten kann; das HQ behält es."
   }
-  CustomStringTableItem CLW-Req_TerminalOut {
-   Target_en_us "That request terminal is not in service."
-   Target_de_de "Dieses Anforderungsterminal ist außer Betrieb."
-  }
-  CustomStringTableItem CLW-Req_TerminalWrongSide {
-   Target_en_us "This terminal belongs to %1, you are %2."
-   Target_de_de "Dieses Terminal gehört %1, du bist %2."
-  }
   CustomStringTableItem CLW-Req_TooManyVehicles {
    Target_en_us "Too many requested vehicles in the field (%1), use or lose one first."
    Target_de_de "Zu viele angeforderte Fahrzeuge im Feld (%1), nutze oder verliere zuerst eines."
@@ -2272,6 +2352,10 @@ StringTable {
    Target_en_us "No war mode available."
    Target_de_de "Kein Kriegsmodus verfügbar."
   }
+  CustomStringTableItem CLW-Setup_Options {
+   Target_en_us "OPTIONS"
+   Target_de_de "OPTIONEN"
+  }
   CustomStringTableItem CLW-Setup_OwnerOnlyOpen {
    Target_en_us "Only the setup owner may open the setup menu."
    Target_de_de "Nur der Setup-Besitzer darf das Setup-Menü öffnen."
@@ -2283,6 +2367,38 @@ StringTable {
   CustomStringTableItem CLW-Setup_Rejected {
    Target_en_us "Rejected: %1"
    Target_de_de "Abgelehnt: %1"
+  }
+  CustomStringTableItem CLW-Setup_Remembered {
+   Target_en_us "The values are the settings of the last round."
+   Target_de_de "Die Werte sind die Einstellungen der letzten Runde."
+  }
+  CustomStringTableItem CLW-Setup_ResetDefaults {
+   Target_en_us "Reset to defaults"
+   Target_de_de "Auf Standard zurücksetzen"
+  }
+  CustomStringTableItem CLW-Setup_SectionAdvanced {
+   Target_en_us "Advanced"
+   Target_de_de "Erweitert"
+  }
+  CustomStringTableItem CLW-Setup_SectionBasics {
+   Target_en_us "Basics"
+   Target_de_de "Grundlagen"
+  }
+  CustomStringTableItem CLW-Setup_SectionEnvironment {
+   Target_en_us "Weather and time"
+   Target_de_de "Wetter und Zeit"
+  }
+  CustomStringTableItem CLW-Setup_SectionForces {
+   Target_en_us "Forces and economy"
+   Target_de_de "Streitkräfte und Wirtschaft"
+  }
+  CustomStringTableItem CLW-Setup_SectionLabel {
+   Target_en_us "Section"
+   Target_de_de "Bereich"
+  }
+  CustomStringTableItem CLW-Setup_SectionMap {
+   Target_en_us "Map, HQs and FOBs"
+   Target_de_de "Karte, HQs und FOBs"
   }
   CustomStringTableItem CLW-Setup_Sending {
    Target_en_us "Sending to the server..."
@@ -3023,10 +3139,6 @@ StringTable {
   CustomStringTableItem CLW-Squad_Title {
    Target_en_us "Squad"
    Target_de_de "Trupp"
-  }
-  CustomStringTableItem CLW-Terminal_OpenHq {
-   Target_en_us "Open HQ menu"
-   Target_de_de "HQ-Menü öffnen"
   }
   CustomStringTableItem CLW-Terminal_RequestResupply {
    Target_en_us "Request resupply"

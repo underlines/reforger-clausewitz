@@ -35,24 +35,10 @@ VerticalLayoutWidgetClass {
         Padding 0 0 14 0
        }
        {
-        RichTextWidgetClass "{7D3A91C45E200009}" : "{3FF33FC224E0C76C}UI/layouts/WidgetLibrary/RichTextWidgets/RichText_BodySmall.layout" {
-         Name "BattleHeader"
-         Slot LayoutSlot "{7D3A91C45E20000A}" {
-          Padding 0 8 0 4
-         }
-         Color 0.88 0.451 0.084 1
-         Text "#CLW-Setup_Battle"
-        }
-        VerticalLayoutWidgetClass "{7D3A91C45E20000B}" {
-         Name "BattleParams"
-         Slot LayoutSlot "{7D3A91C45E20000C}" {
-          HorizontalAlign 3
-         }
-        }
         RichTextWidgetClass "{7D3A91C45E20000D}" : "{3FF33FC224E0C76C}UI/layouts/WidgetLibrary/RichTextWidgets/RichText_BodySmall.layout" {
          Name "ModeHeader"
          Slot LayoutSlot "{7D3A91C45E20000E}" {
-          Padding 0 18 0 4
+          Padding 0 8 0 4
          }
          Color 0.88 0.451 0.084 1
          Text "#CLW-Setup_WarMode"
@@ -71,9 +57,23 @@ VerticalLayoutWidgetClass {
          Color 0.65 0.65 0.65 1
          Text ""
         }
-        VerticalLayoutWidgetClass "{7D3A91C45E200013}" {
-         Name "ModeParams"
-         Slot LayoutSlot "{7D3A91C45E200014}" {
+        RichTextWidgetClass "{7D3A91C45E200015}" : "{3FF33FC224E0C76C}UI/layouts/WidgetLibrary/RichTextWidgets/RichText_BodySmall.layout" {
+         Name "TabHeader"
+         Slot LayoutSlot "{7D3A91C45E200016}" {
+          Padding 0 12 0 4
+         }
+         Color 0.88 0.451 0.084 1
+         Text "#CLW-Setup_Options"
+        }
+        VerticalLayoutWidgetClass "{7D3A91C45E200017}" {
+         Name "TabBox"
+         Slot LayoutSlot "{7D3A91C45E200018}" {
+          HorizontalAlign 3
+         }
+        }
+        VerticalLayoutWidgetClass "{7D3A91C45E200019}" {
+         Name "SectionParams"
+         Slot LayoutSlot "{7D3A91C45E20001A}" {
           HorizontalAlign 3
          }
         }

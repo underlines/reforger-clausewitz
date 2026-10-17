@@ -372,6 +372,7 @@ class CLW_ActionRegistry
 		}
 
 		entry.Normalize();
+		CLW_FobActionSpec.Apply(entry);	// M4.6: ESTABLISH_FOB is a two-step tool; its params / description are defined in script (CLW_ActionsFob.c)
 		if (!entry.m_Executor && !entry.m_sExecutor.IsEmpty())
 		{
 			typename executorType = entry.m_sExecutor.ToType();

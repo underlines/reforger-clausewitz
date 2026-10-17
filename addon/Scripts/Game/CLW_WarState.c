@@ -283,7 +283,10 @@ class CLW_WarState
 		if (!m_Preset)
 		{
 			Print("CLW: war auto start (no setup happened)", LogLevel.NORMAL);
-			StartWar("", "", -1);
+			string rememberedA;
+			string rememberedB;
+			CLW_SetupServer.GetRememberedSides(rememberedA, rememberedB);	// M4.6: the last round's sides, empty when nothing is remembered
+			StartWar("", "", -1, rememberedA, rememberedB);
 			return;
 		}
 

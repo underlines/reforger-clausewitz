@@ -34,7 +34,12 @@ class CLW_WarMode_ShortConflict : CLW_WarMode
 		m_aParams.Insert(CLW_ModeParam.CreateChoice("startPositions", "#CLW-Param_startPositions", "#CLW-Param_startPositions_Desc", startModes, startDefault));
 		array<string> ownerModes = {"scenario", "none", "1", "2", "3"};
 		m_aParams.Insert(CLW_ModeParam.CreateChoice("startObjectives", "#CLW-Param_startObjectives", "#CLW-Param_startObjectives_Desc", ownerModes, "scenario"));
-		m_aParams.Insert(CLW_ModeParam.CreateNumber("randomSeed", "#CLW-Param_randomSeed", "#CLW-Param_randomSeed_Desc", CLW_ModeParam.TYPE_INT, 0, 9999999, 1, config.m_iRandomSeed));
+		// the seed is automatic (M4.6): not offered in the setup dialog, admins set it with /war start randomSeed=N or overrides.json "setup"
+		CLW_ModeParam seedParam = CLW_ModeParam.CreateNumber("randomSeed", "#CLW-Param_randomSeed", "#CLW-Param_randomSeed_Desc", CLW_ModeParam.TYPE_INT, 0, 9999999, 1, config.m_iRandomSeed);
+		seedParam.m_bHidden = true;
+		m_aParams.Insert(seedParam);
+		// AI difficulty per side (CLW_AiDifficulty: easy | normal | hard | veteran)
+		CLW_AiDifficulty.AddParams(m_aParams);
 		m_aParams.Insert(CLW_ModeParam.CreateBool("ticketBleed", "#CLW-Param_ticketBleed", "#CLW-Param_ticketBleed_Desc", config.m_bTicketBleed));
 		m_aParams.Insert(CLW_ModeParam.CreateNumber("holdAllWinMin", "#CLW-Param_holdAllWinMin", "#CLW-Param_holdAllWinMin_Desc", CLW_ModeParam.TYPE_INT, 0, 15, 1, config.m_iHoldAllWinMin));
 		// capability switches (CLW_Capabilities.Has): declared in GetCapabilities, "cap_<name>" turns one off in the setup menu
