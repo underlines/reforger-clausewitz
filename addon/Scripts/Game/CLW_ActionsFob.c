@@ -1,8 +1,35 @@
-// FOB intents on the action registry (M3 phase F): ESTABLISH_FOB <site> and UPGRADE_FOB <fob>. Entries live in Configs/CLW/Actions/Actions.conf
-// (channel "fob", requires capability `fob`, authority hq); the executors below do the work through CLW_FobManager. Also the rule
-// commander's FOB doctrine (CLW_FobDoctrine), which calls the same registry entries as the LLM. Executors hold no per-call state.
+// FOB intents on the action registry (M3 phase F): ESTABLISH_FOB and UPGRADE_FOB. Entries live in Configs/CLW/Actions/Actions.conf
+// (channel "fob", requires capability `fob`, authority hq); the ESTABLISH_FOB parameters and description are replaced in script
+// (CLW_FobActionSpec, applied by CLW_ActionRegistry.Register) for the M4.6 two-step tool. The executors below do the work through
+// CLW_FobManager. Also the rule commander's FOB doctrine (CLW_FobDoctrine), which calls the same registry entries as the LLM. Executors hold no
+// per-call state.
 
-// ESTABLISH_FOB: site (a candidate id from the situation's fobSites), reason. Pays the cost, then a builder drives out and builds.
+// Parameters / description of ESTABLISH_FOB as the LLM sees them (manifest) and the game validates them (M4.6, dev/notes/fob-tool-design.md).
+class CLW_FobActionSpec
+{
+	static const string NAME = "ESTABLISH_FOB";
+	static const string AREA_NONE = "none";
+
+	static void Apply(CLW_ActionEntry entry)
+	{
+		if (!entry || entry.m_sName != NAME)
+			return;
+
+		entry.Normalize();
+		entry.m_sDescription = "Place a forward operating base (FOB), or decline to. A FOB gives a spawn point, a command post, a supply cache and an arsenal near the front; it costs fobRules.cost supplies, a transport with an escort drives out and builds it. TWO STEPS. Step 1: look at fobMap (the whole map: terrain, roads, towns, objectives by cell, front, known contacts) and reply with area = the cell id (e.g. D5) where the base should stand plus intent = what it is for (cover a flank, shorten the way to an objective, ...); or area = \"none\" with a reason when no FOB is worth it now. Step 2: the game then shows you that cell at 100 m resolution and you pick the exact sub-cell; the game validates the spot (dry, flat, road within reach, clear of HQs, objectives, other FOBs and enemy contacts) and moves it to the nearest valid ground, or tells you why not so you can retry once. Only one FOB may be in progress per side, max war.mode.params.fobMax per side.";
+		entry.m_aParams.Clear();
+		entry.m_aParams.Insert(CLW_ActionParam.Create("area", "string", false, "step 1: cell id from fobMap (column letter + row number), or none to decline"));
+		entry.m_aParams.Insert(CLW_ActionParam.Create("intent", "string", false, "step 1: what the base is for, short"));
+		entry.m_aParams.Insert(CLW_ActionParam.Create("pos", "position", false, "step 2 (set by the game from your zoom pick): [x, z]"));
+		entry.m_aParams.Insert(CLW_ActionParam.Create("site", "string", false, "legacy: a site id of the rule commander's pool"));
+		entry.m_aParams.Insert(CLW_ActionParam.Create("reason", "string", false, "short text"));
+	}
+}
+
+// ESTABLISH_FOB, three shapes:
+//   area (+ intent)   step 1 of the LLM tool: asks the sidecar for the zoom (CLW_RemoteCommander.StartFobZoom); area "none" = decline
+//   pos               the validated zoom pick: CLW_FobPlacer.Resolve snaps it to valid ground and makes a pool site, then as `site`
+//   site              a pool site id (rule doctrine, legacy LLM replies): pays the cost, then a builder drives out and builds
 class CLW_Action_EstablishFob : CLW_ActionExecutor
 {
 	// Drops out of the manifest when the mode allows no FOBs (fobMax 0). Does not depend on the current FOB count (no manifest churn).
@@ -11,20 +38,16 @@ class CLW_Action_EstablishFob : CLW_ActionExecutor
 		return CLW_FobManager.GetMax() > 0;
 	}
 
-	override bool Validate(CLW_ActionCall call, out string error)
+	protected bool IsDecline(CLW_ActionCall call)
 	{
-		string siteId = call.GetString("site");
-		CLW_FobSite site = CLW_FobSites.FindSite(siteId);
-		if (!site)
-		{
-			error = "unknown FOB site " + siteId;
-			return false;
-		}
+		string area = call.GetString("area");
+		area.ToLower();
+		return area == CLW_FobActionSpec.AREA_NONE;
+	}
 
-		if (!CLW_FobManager.CanEstablish(call.m_sFaction, site, error))
-			return false;
-
-		// AI callers only (the LLM and the doctrine reach this action; players do not): the HQ keeps its reserve
+	// AI callers only (the LLM and the doctrine reach this action; players do not): the HQ keeps its reserve.
+	protected bool CheckReserve(CLW_ActionCall call, out string error)
+	{
 		string reserveWhy;
 		if (!CLW_EconomyGuard.CanAiSpend(call.m_sFaction, CLW_FobManager.GetCost(), reserveWhy))
 		{
@@ -38,16 +61,125 @@ class CLW_Action_EstablishFob : CLW_ActionExecutor
 		return true;
 	}
 
+	override bool Validate(CLW_ActionCall call, out string error)
+	{
+		if (IsDecline(call))
+			return true;	// "no FOB now" needs no gate
+
+		if (call.HasArg("site"))
+		{
+			string siteId = call.GetString("site");
+			CLW_FobSite site = CLW_FobSites.FindSite(siteId);
+			if (!site)
+			{
+				error = "unknown FOB site " + siteId;
+				return false;
+			}
+
+			if (!CLW_FobManager.CanEstablish(call.m_sFaction, site, error))
+				return false;
+
+			return CheckReserve(call, error);
+		}
+
+		if (!CLW_FobManager.CanStart(call.m_sFaction, error))
+			return false;
+
+		if (!CheckReserve(call, error))
+			return false;
+
+		if (call.HasPos("pos"))
+		{
+			// the zoom pick: validate + snap, then continue as a pool site (the id goes back into the call for Execute)
+			CLW_FobSite placed;
+			if (!CLW_FobPlacer.Resolve(call.m_sFaction, call.GetPos("pos"), placed, error))
+				return false;
+
+			call.SetString("site", placed.m_sId);
+			if (!CLW_FobManager.CanEstablish(call.m_sFaction, placed, error))
+			{
+				CLW_FobSites.RemoveSite(placed.m_sId);
+				call.SetString("site", "");
+				return false;
+			}
+
+			return true;
+		}
+
+		string area = call.GetString("area");
+		if (area.IsEmpty())
+		{
+			error = "ESTABLISH_FOB needs an area (step 1) or a pos (step 2)";
+			return false;
+		}
+
+		if (!CLW_MapDigest.AreaValid(area))
+		{
+			error = "unknown area '" + area + "': use a cell id from fobMap (column letter + row number)";
+			return false;
+		}
+
+		CLW_RemoteCommander commander = CLW_GameMode.GetCommander(call.m_sFaction);
+		if (!commander)
+		{
+			error = "no commander link for " + call.m_sFaction;
+			return false;
+		}
+
+		if (commander.IsFobZoomBusy())
+		{
+			error = "a FOB spot request is already in progress";
+			return false;
+		}
+
+		return true;
+	}
+
 	override bool Execute(CLW_ActionCall call, out string result)
 	{
+		if (IsDecline(call))
+		{
+			call.m_iApplied = 1;
+			result = "ESTABLISH_FOB declined";
+			call.m_sResultWire = CLW_Loc.W("#CLW-Act_FobDeclined");
+			if (CLW_FobPlanner.NoteFailure(call.m_sFaction, "declined", call.m_sReason))
+				CLW_FobDoctrine.Fallback(call.m_Rules, call.m_sFaction);
+
+			return true;
+		}
+
 		string siteId = call.GetString("site");
+		if (siteId.IsEmpty())
+		{
+			// step 1: the sidecar is asked for the zoom; the answer arrives later (CLW_RemoteCommander.OnFobZoomReply)
+			string area = call.GetString("area");
+			area.ToUpper();
+			CLW_RemoteCommander commander = CLW_GameMode.GetCommander(call.m_sFaction);
+			string zoomWhy;
+			if (!commander || !commander.StartFobZoom(area, call.GetString("intent"), call.m_sReason, zoomWhy))
+			{
+				result = zoomWhy;
+				return false;
+			}
+
+			call.m_iApplied = 1;
+			result = "ESTABLISH_FOB zoom " + area;
+			call.m_sResultWire = CLW_Loc.W("#CLW-Act_FobZoom", area);
+			return true;
+		}
+
 		string why;
 		if (!CLW_FobManager.Establish(call.m_sFaction, siteId, call.m_sSource, call.m_sReason, why))
 		{
+			CLW_FobSite failed = CLW_FobSites.FindSite(siteId);
+			if (failed && failed.m_sSource == "llm")
+				CLW_FobSites.RemoveSite(siteId);
+
 			result = why;
 			return false;
 		}
 
+		CLW_FobPlanner.NoteSuccess(call.m_sFaction);
 		call.m_iApplied = 1;
 		result = "ESTABLISH_FOB " + siteId;
 		call.m_sResultWire = CLW_Loc.W("#CLW-Act_FobOrdered", siteId);
@@ -88,7 +220,9 @@ class CLW_Action_UpgradeFob : CLW_ActionExecutor
 // Rule commander doctrine (called from CLW_RuleCommander.Think before it spends): with the `fob` capability on, fewer FOBs than fobMax,
 // none in progress, the timing gate open (CLW_FobManager.IsReady: fobEarliestMin of war time + front knowledge), a front objective far
 // enough from the HQ to need a forward base, and supplies for the cost plus the doctrine reserve, establish one at the first candidate
-// site (CLW_FobSites.PickSites: toward the front objective, not behind the HQ). An active FOB at tier 1 is upgraded when supplies are plentiful. Same registry entries as the LLM.
+// site (CLW_FobSites.PickSites: toward the front objective, not behind the HQ; M4.6: the pool has a candidate per objective and side, and an
+// objective an own FOB already covers comes last, so every flank gets one in turn). An active FOB at tier 1 is upgraded when supplies are
+// plentiful. Same registry entries as the LLM. Fallback() is the LLM commander's second chance: two failed / declined LLM FOB decisions in a row.
 class CLW_FobDoctrine
 {
 	static const float START_DELAY_SEC = 45;		// the start forces field first
@@ -98,7 +232,20 @@ class CLW_FobDoctrine
 	protected static ref map<string, float> s_mLast = new map<string, float>();
 	protected static ref map<string, string> s_mState = new map<string, string>();
 
-	static void Think(CLW_RuleCommander rules, string side, CLW_WarState war)
+	// The rule doctrine places a FOB now (no interval gate; every other gate still applies).
+	static void Fallback(CLW_RuleCommander rules, string side)
+	{
+		CLW_WarState war = CLW_GameMode.GetWarState();
+		if (!rules || !war)
+		{
+			Print(string.Format("CLW: fob fallback %1: no rule commander to run the doctrine", side), LogLevel.WARNING);
+			return;
+		}
+
+		Think(rules, side, war, true);
+	}
+
+	static void Think(CLW_RuleCommander rules, string side, CLW_WarState war, bool force = false)
 	{
 		if (!rules || !war || !CLW_Capabilities.Has("fob") || CLW_FobManager.GetMax() <= 0)
 			return;
@@ -112,7 +259,7 @@ class CLW_FobDoctrine
 		if (now < last)
 			last = -1000;	// a new session restarted the clock
 
-		if (now - last < INTERVAL_SEC)
+		if (!force && now - last < INTERVAL_SEC)
 			return;
 
 		s_mLast.Set(side, now);
@@ -155,10 +302,13 @@ class CLW_FobDoctrine
 
 			CLW_ActionCall call = NewCall("ESTABLISH_FOB", side, rules);
 			call.SetString("site", sites[0].m_sId);
-			call.m_sReason = "doctrine: one forward base toward the contested centre";
+			if (force)
+				call.m_sReason = "doctrine: the LLM commander gave no usable FOB";
+			else
+				call.m_sReason = "doctrine: one forward base toward the contested centre";
 			call.SetString("reason", call.m_sReason);
 			if (CLW_ActionRegistry.Get().Run(call, result))
-				Print(string.Format("CLW: fob doctrine %1: ESTABLISH_FOB %2 (%3)", side, sites[0].m_sId, sites[0].m_sName), LogLevel.NORMAL);
+				Print(string.Format("CLW: fob doctrine %1: ESTABLISH_FOB %2 (%3) objective '%4'", side, sites[0].m_sId, sites[0].m_sName, sites[0].m_sObjective), LogLevel.NORMAL);
 			else
 				Print(string.Format("CLW: fob doctrine %1: ESTABLISH_FOB %2 refused: %3", side, sites[0].m_sId, result), LogLevel.NORMAL);
 

@@ -39,14 +39,58 @@ class CLW_MissionDto
 }
 
 // Reply channel "fob" (M3 phase F): ESTABLISH_FOB {site} or UPGRADE_FOB {fob}. command is optional (site -> establish, fob -> upgrade).
+// M4.6 two-step tool: ESTABLISH_FOB {area, intent} (step 1, area "none" = decline; the game then asks POST /fobzoom for the exact spot) or
+// ESTABLISH_FOB {pos} (a direct spot).
 class CLW_FobDto
 {
 	string command;
 	string site;
+	string area;
+	string intent;
+	ref array<float> pos = {};
 	string fob;
 	string origin;	// CONVOY (M3 phase L): source and destination base ids ("HQ" or a FOB id); RESUPPLY uses fob
 	string dest;
 	string reason;
+}
+
+// Reply of POST /fobzoom: the exact FOB spot the model picked in the zoom (cell or pos), or a decline.
+class CLW_FobZoomReply
+{
+	bool ok;
+	bool decline;
+	string error;
+	string reason;
+	string cell;	// zoom sub-cell id ("f7")
+	ref array<float> pos = {};	// [x, z]
+}
+
+class CLW_FobZoomCallback : RestCallback
+{
+	protected CLW_RemoteCommander m_Owner;	// weak: the owner holds this callback
+
+	void CLW_FobZoomCallback(CLW_RemoteCommander owner)
+	{
+		m_Owner = owner;
+	}
+
+	override void OnSuccess(string data, int dataSize)
+	{
+		if (m_Owner)
+			m_Owner.OnFobZoomReply(true, data, "");
+	}
+
+	override void OnError(int errorCode)
+	{
+		if (m_Owner)
+			m_Owner.OnFobZoomReply(false, "", string.Format("error code=%1 http=%2 result=%3", errorCode, GetHttpCode(), GetRestResult()));
+	}
+
+	override void OnTimeout()
+	{
+		if (m_Owner)
+			m_Owner.OnFobZoomReply(false, "", "timeout");
+	}
 }
 
 class CLW_OrdersReply
@@ -149,6 +193,17 @@ class CLW_RemoteCommander
 	protected float m_fManifestSentAt;
 	protected float m_fLastManifestLogAt = -1000;
 	protected float m_fLastOkAt = -1000;	// world time of the last valid sidecar reply (IsOnline)
+	// FOB zoom (M4.6): step 2 of ESTABLISH_FOB, one request at a time per faction
+	protected ref CLW_FobZoomCallback m_ZoomCallback;	// must stay referenced until the reply arrives
+	protected bool m_bZoomInFlight;
+	protected float m_fZoomSentAt;
+	protected string m_sZoomArea;
+	protected string m_sZoomIntent;
+	protected string m_sZoomReason;
+	protected string m_sZoomJson;		// the zoom digest (reused for the retry)
+	protected int m_iZoomAttempt;
+	protected string m_sZoomRetryReason;
+	protected vector m_vZoomPrev;
 
 	void Init(string factionKey, CLW_ContactBook book, CLW_SquadRegistry registry)
 	{
@@ -577,7 +632,7 @@ class CLW_RemoteCommander
 
 			string action = item.command;
 			action.ToUpper();
-			if (action.IsEmpty() && !item.site.IsEmpty())
+			if (action.IsEmpty() && (!item.site.IsEmpty() || !item.area.IsEmpty()))
 				action = "ESTABLISH_FOB";
 			else if (action.IsEmpty() && !item.fob.IsEmpty())
 				action = "UPGRADE_FOB";
@@ -592,6 +647,10 @@ class CLW_RemoteCommander
 			CLW_ActionCall call = NewCall(action);
 			call.m_sReason = item.reason;
 			call.SetString("site", item.site);
+			call.SetString("area", item.area);
+			call.SetString("intent", item.intent);
+			if (item.pos && item.pos.Count() >= 2)
+				call.SetPos("pos", item.pos[0], item.pos[1]);
 			call.SetString("fob", item.fob);
 			call.SetString("origin", item.origin);
 			call.SetString("dest", item.dest);
@@ -611,6 +670,192 @@ class CLW_RemoteCommander
 		}
 
 		return applied;
+	}
+
+	// ---- FOB zoom: step 2 of the ESTABLISH_FOB tool (M4.6, dev/notes/fob-tool-design.md) ----
+
+	// A zoom request is in flight (a lost one is forgotten after STUCK_SECONDS).
+	bool IsFobZoomBusy()
+	{
+		if (!m_bZoomInFlight)
+			return false;
+
+		float now = GetGame().GetWorld().GetWorldTime() * 0.001;
+		if (now - m_fZoomSentAt > STUCK_SECONDS)
+		{
+			m_bZoomInFlight = false;
+			Print(string.Format("CLW: fob zoom %1: request for %2 lost (no callback), forgotten", m_sFaction, m_sZoomArea), LogLevel.WARNING);
+			return false;
+		}
+
+		return true;
+	}
+
+	// Builds the zoom digest of 'area' and asks the sidecar (POST /fobzoom) for the exact spot. The answer comes to OnFobZoomReply.
+	bool StartFobZoom(string area, string intent, string reason, out string why)
+	{
+		if (IsFobZoomBusy())
+		{
+			why = "a FOB spot request is already in progress";
+			return false;
+		}
+
+		string digestWhy;
+		string zoom = CLW_MapDigest.ZoomJson(m_sFaction, area, digestWhy);
+		if (zoom.IsEmpty())
+		{
+			why = digestWhy;
+			return false;
+		}
+
+		m_sZoomArea = area;
+		m_sZoomIntent = intent;
+		m_sZoomReason = reason;
+		m_sZoomJson = zoom;
+		m_iZoomAttempt = 0;
+		m_sZoomRetryReason = "";
+		Print(string.Format("CLW: fob zoom %1: area %2 intent '%3' requested (digest %4 chars, ~%5 tokens)", m_sFaction, area, intent, zoom.Length(), zoom.Length() / 4), LogLevel.NORMAL);
+		return SendFobZoom(why);
+	}
+
+	protected bool SendFobZoom(out string why)
+	{
+		RestContext ctx = CLW_SidecarLink.Context(TIMEOUT_SECONDS, "fobzoom-" + m_sFaction);	// its own context: the commander call of this faction may be in flight
+		if (!ctx)
+		{
+			why = "no REST context";
+			return false;
+		}
+
+		m_iZoomAttempt++;
+		string body = "{\"v\":1,\"faction\":\"" + CLW_Situation.Escape(m_sFaction) + "\",\"area\":\"" + CLW_Situation.Escape(m_sZoomArea) + "\",\"intent\":\"" + CLW_Situation.Escape(m_sZoomIntent) + "\",\"attempt\":" + m_iZoomAttempt;
+		if (!m_sZoomRetryReason.IsEmpty())
+			body += ",\"retry\":{\"reason\":\"" + CLW_Situation.Escape(m_sZoomRetryReason) + "\",\"pos\":[" + Math.Round(m_vZoomPrev[0]) + "," + Math.Round(m_vZoomPrev[2]) + "]}";
+		body += ",\"zoom\":" + m_sZoomJson + "}";
+		m_ZoomCallback = new CLW_FobZoomCallback(this);
+		m_bZoomInFlight = true;
+		m_fZoomSentAt = GetGame().GetWorld().GetWorldTime() * 0.001;
+		if (ctx.POST(m_ZoomCallback, "fobzoom", body) < 0)
+		{
+			m_bZoomInFlight = false;
+			why = "POST not sent";
+			return false;
+		}
+
+		return true;
+	}
+
+	// Called by the zoom REST callback (main thread).
+	void OnFobZoomReply(bool ok, string data, string failure)
+	{
+		m_bZoomInFlight = false;
+		CLW_WarState war = CLW_GameMode.GetWarState();
+		if (!war || !war.IsRunning())
+			return;
+
+		if (!ok)
+		{
+			FobZoomFailed("zoom call failed: " + failure);
+			return;
+		}
+
+		SCR_JsonLoadContext loader = new SCR_JsonLoadContext();
+		CLW_FobZoomReply reply = new CLW_FobZoomReply();
+		if (!loader.ImportFromString(data) || !loader.ReadValue("", reply))
+		{
+			FobZoomFailed("zoom reply is not valid JSON: " + data.Substring(0, Math.Min(data.Length(), 200)));
+			return;
+		}
+
+		m_fLastOkAt = GetGame().GetWorld().GetWorldTime() * 0.001;
+		if (!reply.ok)
+		{
+			FobZoomFailed("zoom reply error: " + reply.error);
+			return;
+		}
+
+		if (reply.decline)
+		{
+			Print(string.Format("CLW: fob zoom %1: LLM declined area %2 after the zoom (%3)", m_sFaction, m_sZoomArea, reply.reason), LogLevel.NORMAL);
+			if (CLW_FobPlanner.NoteFailure(m_sFaction, "declined (zoom)", reply.reason))
+				CLW_FobDoctrine.Fallback(m_Rules, m_sFaction);
+
+			return;
+		}
+
+		vector wish;
+		string pickText;
+		if (reply.pos && reply.pos.Count() >= 2)
+		{
+			wish = Vector(reply.pos[0], 0, reply.pos[1]);
+			pickText = "pos " + wish.ToString();
+			if (!CLW_MapDigest.InArea(m_sZoomArea, wish))
+			{
+				FobZoomRetryOrFail("the position " + wish.ToString() + " is outside area " + m_sZoomArea, wish);
+				return;
+			}
+		}
+		else if (!reply.cell.IsEmpty() && CLW_MapDigest.SubCellCenter(m_sZoomArea, reply.cell, wish))
+		{
+			pickText = "cell " + reply.cell;
+		}
+		else
+		{
+			FobZoomRetryOrFail("the reply names no valid sub-cell of area " + m_sZoomArea + " ('" + reply.cell + "') and no position", wish);
+			return;
+		}
+
+		Print(string.Format("CLW: fob zoom %1: area %2 pick %3 -> wish %4 grid %5 (attempt %6, %7)", m_sFaction, m_sZoomArea, pickText, wish, CLW_Places.Grid(wish), m_iZoomAttempt, reply.reason), LogLevel.NORMAL);
+		string why;
+		CLW_FobSite site;
+		if (!CLW_FobPlacer.Resolve(m_sFaction, wish, site, why))
+		{
+			FobZoomRetryOrFail(why, wish);
+			return;
+		}
+
+		CLW_ActionCall call = NewCall("ESTABLISH_FOB");
+		call.m_sReason = reply.reason;
+		if (call.m_sReason.IsEmpty())
+			call.m_sReason = m_sZoomIntent;
+		call.SetString("site", site.m_sId);
+		call.SetString("reason", call.m_sReason);
+		string result;
+		if (!CLW_ActionRegistry.Get().Run(call, result))
+		{
+			CLW_FobSites.RemoveSite(site.m_sId);
+			Print(string.Format("CLW: RemoteCommander %1: ESTABLISH_FOB at %2 rejected: %3", m_sFaction, site.m_sId, result), LogLevel.WARNING);
+			return;
+		}
+
+		CLW_Debug.Say(string.Format("%1 HQ (LLM): %2 (%3)", m_sFaction, result, call.m_sReason));
+		Print(string.Format("CLW: RemoteCommander %1: %2 (%3)", m_sFaction, result, call.m_sReason), LogLevel.NORMAL);
+	}
+
+	// A rejected spot: one retry with the reason, then it counts as a failure.
+	protected void FobZoomRetryOrFail(string why, vector wish)
+	{
+		if (m_iZoomAttempt < 2)
+		{
+			m_sZoomRetryReason = why;
+			m_vZoomPrev = wish;
+			string sendWhy;
+			Print(string.Format("CLW: fob zoom %1: retry 2 of 2 for area %2 after: %3", m_sFaction, m_sZoomArea, why), LogLevel.NORMAL);
+			if (SendFobZoom(sendWhy))
+				return;
+
+			FobZoomFailed("retry not sent: " + sendWhy);
+			return;
+		}
+
+		FobZoomFailed("spot rejected twice: " + why);
+	}
+
+	protected void FobZoomFailed(string reason)
+	{
+		Print(string.Format("CLW: fob zoom %1: area %2 failed: %3", m_sFaction, m_sZoomArea, reason), LogLevel.WARNING);
+		if (CLW_FobPlanner.NoteFailure(m_sFaction, "failed", reason))
+			CLW_FobDoctrine.Fallback(m_Rules, m_sFaction);
 	}
 
 	// ---- SITREP ----

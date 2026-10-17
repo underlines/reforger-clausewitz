@@ -21,6 +21,7 @@ const isNum = (n) => typeof n === "number" && Number.isFinite(n);
 // spec = {orders:[names], buy:bool, fobs:[names], missions:bool, wake:{minSec,maxSec,defaultSec}|null, reasonWords:12}
 export function terseSpec(spec = {}) {
   const orders = Array.isArray(spec.orders) ? spec.orders.filter((x) => typeof x === "string" && x) : [];
+  const fobMap = !!spec.fobMap;
   const fobs = Array.isArray(spec.fobs) ? spec.fobs.filter((x) => typeof x === "string" && x) : [];
   const buy = !!spec.buy, missions = !!spec.missions;
   const w = spec.wake && isNum(spec.wake.minSec) ? spec.wake : null;
@@ -40,9 +41,9 @@ export function terseSpec(spec = {}) {
     legend.push("b = buy [type, count 1-3, command, target, reason]");
   }
   if (fobs.length) {
-    const shape = (n) => (n === "CONVOY" ? `["CONVOY","<origin>","<dest>"]` : n === "ESTABLISH_FOB" ? `["ESTABLISH_FOB","<site>"]` : `["${n}","<fob>"]`);
+    const shape = (n) => (n === "CONVOY" ? `["CONVOY","<origin>","<dest>"]` : n === "ESTABLISH_FOB" ? (fobMap ? `["ESTABLISH_FOB","<fobMap cell or none>","why"]` : `["ESTABLISH_FOB","<site>"]`) : `["${n}","<fob>"]`);
     ex.push(`"f":[${fobs.map(shape).join(",")}]`);
-    legend.push("f = fobs [command, site|fob|origin+dest]");
+    legend.push(fobMap ? "f = fobs [command, cell id of fobMap (or none = no FOB) | fob | origin+dest, why]" : "f = fobs [command, site|fob|origin+dest]");
   }
   if (missions) {
     ex.push('"m":[["<human-led squad>",[["CAPTURE","D","brief"],["RECON",[x,z],"brief"]]]]');
@@ -123,7 +124,12 @@ function expandBuy(it) {
 function expandFob(it) {
   if (Array.isArray(it)) {
     const cmd = up(it[0]);
-    if (cmd === "ESTABLISH_FOB") return { command: cmd, site: it[1], ...withReason(it[2]) };
+    if (cmd === "ESTABLISH_FOB") {
+      // M4.6 two-step tool: ["ESTABLISH_FOB","D5","why"] stays {site:"D5"} here (a cell id and an old pool site id look alike); validateV2
+      // reads it as the area when the situation has a fobMap. [x,z] is a position.
+      if (Array.isArray(it[1])) return { command: cmd, pos: it[1].map(num), ...withReason(it[2]) };
+      return { command: cmd, site: it[1], ...withReason(it[2]) };
+    }
     if (cmd === "UPGRADE_FOB" || cmd === "RESUPPLY") return { command: cmd, fob: it[1], ...withReason(it[2]) };
     if (cmd === "CONVOY") return { command: cmd, origin: it[1], dest: it[2], ...withReason(it[3]) };
     return it;
@@ -197,6 +203,8 @@ export function expandTerse(obj) {
 
 const DROP_KEYS = new Set(["structures", "debug", "manifest", "v"]);
 const STATIC_SCALARS = new Set(["faction", "map", "world", "mapInfo", "mode"]);
+// fobMap (M4.6 FOB tool): the terrain picture is static (cacheable), what moves on it (objectives, front, contacts, FOBs) is dynamic
+const FOBMAP_STATIC = new Set(["cell", "x0", "zTop", "cols", "n", "legend", "rows", "towns", "pois"]);
 // array key -> {static: fields that go into the static block (in this order), sort: row sort key}
 const STATIC_ARRAYS = {
   objectives: { fields: ["id", "name", "pos", "grid", "radius", "value", "side"], sort: "id" },
@@ -279,6 +287,14 @@ export function leanSituation(sit, opts = {}) {
         const dyn1 = tabulate(dRows, jk);
         if (dyn1.cols.some((c) => !jk.includes(c))) dyn[key] = dyn1; // dynamic part of objectives / fobSites (owner, contested, progress, ...)
       }
+      continue;
+    }
+
+    if (key === "fobMap" && isObj(val)) {
+      const st = {}, dy = {};
+      for (const [k, v] of Object.entries(val)) (FOBMAP_STATIC.has(k) ? st : dy)[k] = v;
+      if (Object.keys(st).length) stat.fobMap = st;
+      if (Object.keys(dy).length) dyn.fobMap = dy;
       continue;
     }
 

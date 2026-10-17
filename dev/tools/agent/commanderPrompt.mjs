@@ -111,6 +111,10 @@ export const sentence = (t) => String(t ?? "").trim().replace(/\.$/, "");
 // FOB paragraph (M3 phase F): added to the prompt only when the manifest contains FOB intents (capability fob on, fobMax > 0).
 export const FOB_PROMPT = "FOBS: a FOB is a forward base (spawn point, command post, supply cache, arsenal) that a transport builds at a site you pick from fobSites (pos, grid, place, front, toFront); it costs fobRules.cost supplies up front (refunded if it fails), takes time to build and is lost if the enemy holds the zone. TIMING: establish a FOB only after the opening phase, toward the front you are fighting for, when it shortens reinforcement paths - never at war start. fobRules.ready says whether the game accepts one now (fobRules.earliestSec of war time must have passed AND you must know the front: an enemy contact, a contested or lost objective); while ready is false read fobRules.readyReason and do not send ESTABLISH_FOB (it is dropped). Prefer the first fobSites entry (best toward the front) once a front objective is clear and the FOB is worth fobRules.cost; keep ~100 supplies for units; fobRules.live < fobRules.max and fobRules.inProgress = 0; fobs[] lists yours (state planned|moving|building|active|lost, build %, tier, underAttack). Upgrade an active tier-1 FOB (adds the vehicle depot) when supplies are plentiful. Squads with a reserved field are building a FOB: do not order them.\n";
 
+// FOB paragraph of the M4.6 FOB tool (situation carries fobMap instead of fobSites): placing a FOB, or not, is the commander's decision in two steps.
+// The game answers step 1 (area) with a zoom of that area (POST /fobzoom, agent/fobZoomPrompt.mjs); the zoom is a separate small call.
+export const FOB_MAP_PROMPT = "FOBS: a FOB is a forward base (spawn point, command post, supply cache, arsenal) that a transport builds; it costs fobRules.cost supplies up front (refunded if it fails), takes time to build and is lost if the enemy holds the zone. WHERE it goes, or whether at all, is YOUR decision in two steps. STEP 1 (now): fobMap is the whole map on a grid (its legend explains the glyphs; a cell id is a column letter + row number): terrain and roads per cell, towns, objectives by cell (objs: id, name, cell, owner, contested 0/1), your HQ and the enemy HQ (hq), the front objective you fight for (front, frontCell), your FOBs, known enemy contacts by cell. Reply ESTABLISH_FOB with area = the cell where a base helps most (cover a flank objective, shorten reinforcement paths, support the objective you attack; on your side of the front, near roads, not on the coast, not beside enemy contacts) and intent = what it is for in a few words; or area = \"none\" with a reason when no FOB is worth fobRules.cost now. STEP 2: the game then shows you only that cell at 100 m resolution and you pick the exact spot; it validates the spot (dry, flat, road within reach, clear of HQs, objectives, other FOBs and enemy contacts) and moves it to the nearest valid ground, or tells you why not, once. TIMING: establish a FOB only after the opening phase, toward the front you are fighting for, when it shortens reinforcement paths - never at war start. fobRules.ready says whether the game accepts one now (fobRules.earliestSec of war time must have passed AND you must know the front: an enemy contact, a contested or lost objective); while ready is false read fobRules.readyReason and do not send ESTABLISH_FOB (it is dropped). Keep ~100 supplies for units; fobRules.live < fobRules.max and fobRules.inProgress = 0; fobs[] lists yours (state planned|moving|building|active|lost, build %, tier, underAttack). Several FOBs: put the next one on another flank, not next to the first. Upgrade an active tier-1 FOB (adds the vehicle depot) when supplies are plentiful. Squads with a reserved field are building a FOB: do not order them.\n";
+
 // Logistics paragraph (M3 phase L): added only when the manifest contains RESUPPLY (capability logistics on, FOBs allowed, a supply truck in the catalog).
 export const LOGISTICS_PROMPT = "LOGISTICS: stock is per base. war.supplies is the HQ stock (income lands there, units and FOBs are paid from it); each FOB has its own fobs[].stock, which its arsenal, requests and upgrade draw from, and a new FOB starts empty. A supply truck convoy (convoys[]: id, from, to, cargo, state loading|en_route|delivered|lost, pos, grid) loads min(truck capacity logisticsRules.truckCargo, source stock) at departure, drives to the destination and adds it to that stock on arrival; a destroyed truck loses its cargo. Keep every active FOB above logisticsRules.lowStock with RESUPPLY (HQ -> FOB) while the HQ can spare a load (keep ~50), one convoy at a time per FOB and at most logisticsRules.convoyMax in flight; CONVOY moves stock between two bases. Do not order squads that have a reserved field (convoy trucks).\n";
 
@@ -159,13 +163,19 @@ export function logisticsRelevant(manifest, sit) {
 }
 export const helpCallsRelevant = (sit) => Array.isArray(sit?.helpCalls) && sit.helpCalls.length > 0;
 
+/** The situation carries the M4.6 fobMap (two-step FOB tool) instead of the old fobSites list. */
+export const hasFobMap = (sit) => !!sit && typeof sit === "object" && sit.fobMap !== null && typeof sit.fobMap === "object";
+/** The FOB paragraph for this situation (the M4.6 two-step text with fobMap, else the old fobSites text). */
+const fobParagraph = (sit, lean) => (hasFobMap(sit) ? FOB_MAP_PROMPT : lean ? leanFob(FOB_PROMPT) : FOB_PROMPT);
+
 /** Spec for promptKit.terseSpec / terseSchema from the manifest + config (channels come from the manifest, wake from the config when dynamic). */
-export function terseSpecOf(manifest, c) {
+export function terseSpecOf(manifest, c, sit) {
   const m = manifest ?? DEFAULT_MANIFEST, w = c?.wakeup;
   return {
     orders: channelOf(m, "orders").map((e) => e.name),
     buy: channelOf(m, "buy").length > 0,
     fobs: channelOf(m, "fob").map((e) => e.name),
+    fobMap: hasFobMap(sit),
     missions: channelOf(m, "missions").length > 0,
     wake: w?.dynamic ? { minSec: w.minSec, maxSec: w.maxSec, defaultSec: w.defaultSec } : null,
     reasonWords: isNum(c?.output?.reasonWords) ? c.output.reasonWords : 12,
@@ -207,7 +217,7 @@ export function commandsSection(m, opts = {}) {
       keys.push("orders");
     }
     if (buys.length) { parts.push('"buy":[{"type":"<catalog type>","count":1,"command":"ATTACK","target":"C","reason":"short"}]'); keys.push("buy"); }
-    if (fobs.length) { parts.push('"fobs":[{"command":"ESTABLISH_FOB","site":"<fobSites id>","reason":"short"}]'); keys.push("fobs"); }
+    if (fobs.length) { parts.push(opts.fobMap ? '"fobs":[{"command":"ESTABLISH_FOB","area":"<fobMap cell id or none>","intent":"short","reason":"short"}]' : '"fobs":[{"command":"ESTABLISH_FOB","site":"<fobSites id>","reason":"short"}]'); keys.push("fobs"); }
     if (offers.length) { parts.push('"missions":[{"squad":"<human-led id>","offers":[{"kind":"CAPTURE","target":"D","brief":"..."}]}]'); keys.push("missions"); }
     reply = "REPLY with ONLY one JSON object, no prose, no code fences:\n{" + parts.join(",\n ") + "}\n"
       + (keys.length ? `${keys.join("/")} may be empty or omitted. ` : "") + replyLimits(buys, fobs) + '{"keep":true} alone = keep all current orders.';
@@ -226,9 +236,9 @@ export const STATIC_HEAD = "MAP AND CATALOG (static)";
 // Everything else passes through (content-agnostic: unknown fields stay). The orders call of a planner split has no buy / FOB / logistics rules, so it gets none of their data.
 export const LEAN_PROFILES = {
   commander: { drop: ["fobTasks", "env"], cols: { squads: ["dormant", "heading"], contacts: ["grid"] }, catalogDesc: true },
-  orders: { drop: ["fobTasks", "env", "catalog", "fobSites", "fobRules", "logisticsRules", "convoys"], cols: { squads: ["dormant", "heading"], contacts: ["grid"] }, catalogDesc: false },
+  orders: { drop: ["fobTasks", "env", "catalog", "fobSites", "fobMap", "fobRules", "logisticsRules", "convoys"], cols: { squads: ["dormant", "heading"], contacts: ["grid"] }, catalogDesc: false },
   planner: { drop: ["fobTasks", "env"], cols: { squads: ["dormant", "heading"], contacts: ["grid"] }, catalogDesc: true },
-  sitrep: { drop: ["fobTasks", "catalog", "fobSites", "fobRules", "logisticsRules"], cols: { squads: ["dormant", "heading"] }, catalogDesc: false },
+  sitrep: { drop: ["fobTasks", "catalog", "fobSites", "fobMap", "fobRules", "logisticsRules"], cols: { squads: ["dormant", "heading"] }, catalogDesc: false },
 };
 const dropCols = (tbl, names) => {
   if (!tbl || !Array.isArray(tbl.cols) || !names?.length) return tbl;
@@ -300,8 +310,8 @@ export function buildCommanderPrompt({ config = {}, sit = null, manifest = DEFAU
   const isSplit = split ?? plannerSplit(config, full);
   const m = isSplit ? manifestWithout(full, PLAN_CHANNELS) : full;
   const terse = !!config.output?.terse;
-  const spec = terse ? terseSpecOf(m, config) : null;
-  const cs = commandsSection(m, { terse, spec });
+  const spec = terse ? terseSpecOf(m, config, sit) : null;
+  const cs = commandsSection(m, { terse, spec, fobMap: hasFobMap(sit) });
   const lean = leanOn(config);
   const rules0 = isSplit
     ? SYSTEM_ORDERS_V2 + "\n" + ORDERS_FLANK + " " + J.SQUAD_NAME_PROMPT + (config.memory?.enabled ? " " + J.JOURNAL_RULE.replace(", FOB", "") : "") + "\n"
@@ -309,7 +319,7 @@ export function buildCommanderPrompt({ config = {}, sit = null, manifest = DEFAU
   const rules = lean ? leanRules(rules0) : rules0;
   const commands = cs.commands + cs.reply + (terse ? "" : wakeText) + "\n";
   const persona = safe(personaCommander, sit);
-  const fobs = !isSplit && fobRelevant(m, sit) ? (lean ? leanFob(FOB_PROMPT) : FOB_PROMPT) : "", logistics = !isSplit && logisticsRelevant(m, sit) ? LOGISTICS_PROMPT : "", helpCalls = helpCallsRelevant(sit) ? HELP_CALLS_PROMPT : "";
+  const fobs = !isSplit && fobRelevant(m, sit) ? fobParagraph(sit, lean) : "", logistics = !isSplit && logisticsRelevant(m, sit) ? LOGISTICS_PROMPT : "", helpCalls = helpCallsRelevant(sit) ? HELP_CALLS_PROMPT : "";
   const { wake, ...rest } = llmSit;
   const L = lean ? leanFor(rest, config, isSplit ? "orders" : "commander") : null;
   const stat = L ? staticText(L) : "", statSys = staticInSystem(config) ? stat : "";
@@ -333,13 +343,13 @@ export function buildPlannerPrompt({ config = {}, sit = null, manifest = DEFAULT
   const { structures: _structures, wake: _wake, ...llmSit } = sit ?? {};
   const m = manifestOnly(manifest ?? DEFAULT_MANIFEST, PLAN_CHANNELS);
   const terse = !!config.output?.terse;
-  const spec = terse ? { ...terseSpecOf(m, config), wake: null, missions: false } : null;
-  const cs = commandsSection(m, { terse, spec, omitHuman: true });
+  const spec = terse ? { ...terseSpecOf(m, config, sit), wake: null, missions: false } : null;
+  const cs = commandsSection(m, { terse, spec, omitHuman: true, fobMap: hasFobMap(sit) });
   const reply = cs.reply.replace('{"k":1} alone = keep all current orders.', '{"k":1} alone = nothing to buy or build now.');
   const lean = leanOn(config);
   const rules = lean ? leanRules(PLANNER_SYSTEM) : PLANNER_SYSTEM;
   const commands = cs.commands + reply + "\n";
-  const fobs = fobRelevant(m, sit) ? (lean ? leanFob(FOB_PROMPT) : FOB_PROMPT) : "", logistics = logisticsRelevant(m, sit) ? LOGISTICS_PROMPT : "";
+  const fobs = fobRelevant(m, sit) ? fobParagraph(sit, lean) : "", logistics = logisticsRelevant(m, sit) ? LOGISTICS_PROMPT : "";
   const L = lean ? leanFor(llmSit, config, "planner") : null;
   const stat = L ? staticText(L) : "", statSys = staticInSystem(config) ? stat : "";
   const system = rules + commands + fobs + logistics + statSys;
