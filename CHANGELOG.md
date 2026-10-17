@@ -5,6 +5,8 @@ Add a line under `[Unreleased]` with every user-visible change; `_tools/release.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-17
+
 ### Added
 - Sidecar: map image overrides in `<data dir>/maps-override/<world file name>.png` (e.g. `CLW_Arland.png`), for hosts with only a dedicated-server install, which ships no UI map textures. Render one on a machine with the game client: `node map/index.mjs Arland CLW_Arland.png 2048`.
 - FOB placement is an HQ commander decision in two steps: it picks a map area from a coarse map picture (or declines), then the exact spot from a 100 m zoom of that area. The game checks the spot (dry, flat, road, clear of HQs, objectives, FOBs and enemy contacts), snaps it to valid ground, and tells the commander why if it refuses (one retry).
