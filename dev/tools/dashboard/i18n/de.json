@@ -154,7 +154,7 @@
   "map.loadingImg": ", Kartenbild wird geladen...",
   "map.fit": "Einpassen",
   "map.resetView": "Ansicht zurücksetzen",
-  "map.hint": "Mausrad = Zoom, Ziehen = Verschieben, Trupp anklicken = auswählen, Mauszeiger darüber = Details",
+  "map.hint": "Mausrad/Pinch = Zoom, Ziehen = Verschieben, Trupp anklicken/antippen = auswählen, Mauszeiger/Tippen = Details",
   "map.layersTip": "Kartenhintergrund: Schalter, Bilddeckkraft; spiegeln = Bild-Y-Achse invertiert (Kalibrierung)",
   "map.keyTip": "Legende Objekte: Raute = Basis, Dreieck über Balken = Flugplatz, Ring = Hafen. Gebäude: grau = Haus, groß = größer als 250 m2, orange = militärisch / industriell",
   "map.keyText": "◆ Basis ▲ Flugplatz ◎ Hafen",
