@@ -14,6 +14,12 @@ class CLW_Environment
 	static const string KEY_START_DAY = "startDay";
 	static const string KEY_WEATHER_MODE = "weatherMode";
 	static const string KEY_WEATHER = "weather";			// weather1 .. weather6
+	static const string KEY_WEATHER_RATE = "weatherRate";	// slow | normal | fast (M4.6 13b: how often the weather changes)
+	static const string RATE_SLOW = "slow";
+	static const string RATE_NORMAL = "normal";
+	static const string RATE_FAST = "fast";
+	static const int RATE_SLOW_MIN = 45;					// slow: a weather state holds at least this many real minutes before the change to the next starts
+	static const int RATE_NORMAL_MIN = 25;
 	static const string RANDOM = "random";
 	static const string MODE_SLOTS = "slots";
 	static const string MODE_WORLD = "world";
@@ -66,6 +72,9 @@ class CLW_Environment
 		array<string> modes = {MODE_SLOTS, MODE_WORLD};
 		params.Insert(CLW_ModeParam.CreateChoice(KEY_WEATHER_MODE, "#CLW-Param_weatherMode", "#CLW-Param_weatherMode_Desc", modes, MODE_SLOTS));
 
+		array<string> rates = {RATE_SLOW, RATE_NORMAL, RATE_FAST};
+		params.Insert(CLW_ModeParam.CreateChoice(KEY_WEATHER_RATE, "#CLW-Param_weatherRate", "#CLW-Param_weatherRate_Desc", rates, RATE_SLOW));
+
 		array<string> names = {};
 		array<string> labels = {};
 		DiscoverStates(manager, names, labels);
@@ -113,6 +122,17 @@ class CLW_Environment
 		if (limitMin <= 0)
 			limitMin = DEFAULT_LIMIT_MIN;
 		s_fSlotSec = limitMin * 60 / SLOTS;
+		// M4.6 13b: the 6 slots of a 60 min war were 10 min each (a change with up to 3 hops every 10 min). weatherRate sets a minimum slot
+		// length: slow 45 min, normal 25 min, fast = the old limit / 6. Slots that start after the war ends are simply never reached.
+		string rate = mode.GetChoiceParam(KEY_WEATHER_RATE);
+		int minSlotMin = RATE_SLOW_MIN;
+		if (rate == RATE_NORMAL)
+			minSlotMin = RATE_NORMAL_MIN;
+		else if (rate == RATE_FAST)
+			minSlotMin = 0;
+		if (s_fSlotSec < minSlotMin * 60)
+			s_fSlotSec = minSlotMin * 60;
+		Print(string.Format("CLW: env weather rate %1: slot %2 s (limit %3 min)", rate, Math.Round(s_fSlotSec), limitMin), LogLevel.NORMAL);
 		s_iSlot = 0;
 
 		if (s_bWorldWeather)

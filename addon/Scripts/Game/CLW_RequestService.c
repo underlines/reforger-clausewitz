@@ -627,24 +627,9 @@ class CLW_RequestService
 			return true;
 		}
 
-		CLW_TerminalInfo terminal = CLW_RequestTerminals.FindAt(terminalPos);
-		if (!terminal)
-		{
-			refusal = "that request terminal is not in service";
-			refusalWire = CLW_Loc.W("#CLW-Req_TerminalOut");
-			Print(string.Format("CLW: request terminal at %1 unknown or removed: refused", terminalPos), LogLevel.NORMAL);
-			return false;
-		}
-
-		if (terminal.m_sSide != faction)
-		{
-			refusal = "this terminal belongs to " + terminal.m_sSide + ", you are " + faction;
-			refusalWire = CLW_Loc.W("#CLW-Req_TerminalWrongSide", CLW_Loc.FactionName(terminal.m_sSide), CLW_Loc.FactionName(faction));
-			Print(string.Format("CLW: request terminal %1 %2 refused a %3 requester", terminal.m_sSide, terminal.m_sBase, faction), LogLevel.NORMAL);
-			return false;
-		}
-
-		baseId = terminal.m_sBase;
+		// M4.6 13b: no request terminals any more. A position that is no depot of the requester's side is an HQ request (baseId empty).
+		Print(string.Format("CLW: request player=%1 position %2 is no depot of %3: handled as an HQ request", playerId, terminalPos, faction), LogLevel.NORMAL);
+		baseId = "";
 		return true;
 	}
 

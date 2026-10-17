@@ -25,3 +25,8 @@ Everything above is authority-only; the manager replicates date/time/day duratio
 
 ## Not verified at runtime
 daySpeed at 0x, transition behaviour with looping=true, whether `GetCurrentWeatherState()` flips at the start or the end of a transition, sunrise/sunset on non-default dates.
+
+## Why the weather changed fast (M4.6 13b, static analysis, no runtime test)
+- Not vanilla's state machine and not the day speed: `ForceWeather` converts real seconds to in-game hours (`sec * speed / 3600`), so ramps and holds scale correctly with the day speed. Mode `world` leaves vanilla's own random state machine alone (not changed).
+- Cause was our plan: 6 slots over the time limit (60 min war = 10 min per slot), the change to the next slot ran over the second half of the slot (BLEND_FRACTION 0.5 = 5 min) and was split into one forced hop per state in between (e.g. Rainy -> Overcast -> Cloudy -> Clear = 3 hops of ~100 s). So a state lasted ~5 min and each change took ~5 min.
+- Fix: setup param `weatherRate` (slow | normal | fast, default slow) = minimum slot length 45 / 25 / 0 min (fast = old limit/6). With slow in a 60 min war: one change, starting at 45 min with a ~22 min blend (~7 min per hop). Slots beyond the war end are never reached.
