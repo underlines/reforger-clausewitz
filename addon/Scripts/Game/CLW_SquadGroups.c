@@ -20,6 +20,16 @@ class CLW_SquadGroups
 		return group && s_aRegistered.Contains(group);
 	}
 
+	// Every squad we registered that is still alive (for tickers that look after the humans in them).
+	static void GetRegistered(notnull array<SCR_AIGroup> result)
+	{
+		foreach (SCR_AIGroup group : s_aRegistered)
+		{
+			if (group)
+				result.Insert(group);
+		}
+	}
+
 	static int Count(string factionKey = "")
 	{
 		int count;

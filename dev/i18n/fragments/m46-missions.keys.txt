@@ -1,0 +1,6 @@
+CLW-Msn_TakenTitle ::: Objective taken ::: Ziel genommen
+CLW-Msn_TakenText ::: %1: your side took it before you accepted the mission. Completed, no reward. ::: %1: Deine Seite hat es genommen, bevor du den Auftrag angenommen hast. Erledigt, keine Belohnung.
+CLW-Msn_HandoverTitle ::: New squad leader ::: Neuer Truppführer
+CLW-Msn_HandoverText ::: You lead the squad now. The mission goes on: %1 ::: Du führst die Truppe jetzt. Der Auftrag läuft weiter: %1
+CLW-Msn_LeaderOnlyTitle ::: Squad leader only ::: Nur der Truppführer
+CLW-Msn_LeaderOnlyText ::: Only the squad leader can accept or abandon missions. ::: Nur der Truppführer kann Aufträge annehmen oder abbrechen.
