@@ -154,7 +154,7 @@
   "map.loadingImg": ", loading map image...",
   "map.fit": "Fit",
   "map.resetView": "Reset view",
-  "map.hint": "wheel zoom, drag pan, click a squad to select, hover for details",
+  "map.hint": "wheel or pinch zoom, drag pan, click/tap a squad to select, hover/tap for details",
   "map.layersTip": "Map background: toggles, image opacity; flip = image y axis inverted (calibration)",
   "map.keyTip": "Objects key: diamond = base, triangle over a bar = airport, ring = port. Buildings: grey = house, large = bigger than 250 m2, orange = military / industrial",
   "map.keyText": "◆ base ▲ airport ◎ port",

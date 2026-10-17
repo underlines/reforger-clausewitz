@@ -321,7 +321,7 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall, act = "a
       if (p >= 1) v.anim = null;
     }
     if (c.width !== Math.round(r.width * dpr) || c.height !== Math.round(r.height * dpr)) { c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr); }
-    if (!v.fitted) fit(); // refits every frame until the first squad/contact arrives, then once
+    if (!v.fitted && !v.user) fit(); // refits every frame until the first squad/contact arrives (or the user pans/zooms), then once
     const ctx = c.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const sx = (x) => v.ox + x * v.s, sy = (z) => v.oy + (E.z1 - z) * v.s;
@@ -639,40 +639,79 @@ function MapPanel({ st, faction, rows, sel, onSel, layers, world, tall, act = "a
     return () => ro.disconnect();
   }, []);
 
-  // wheel needs a non-passive listener
+  // Input: Pointer Events (mouse, touch, pen) with pointer capture; touch events as fallback where PointerEvent is missing.
+  // One pointer = pan (tap = select/tooltip), two pointers = pinch zoom around the pinch centre + pan, wheel = zoom (desktop),
+  // double click = fit (mouse), double tap = zoom in x2 (touch). touch-action:none on the canvas (style.css) keeps the page from scrolling/zooming.
+  const pts = useRef(new Map()), lastTap = useRef(null);
+  latest.current.onSel = onSel;
   useEffect(() => {
-    const c = cv.current;
-    const onWheel = (e) => {
-      e.preventDefault();
-      const v = view.current, [mx, my] = local(e); v.anim = null;
-      const ns = Math.min(5, Math.max(0.02, v.s * (e.deltaY < 0 ? 1.2 : 1 / 1.2))), q = ns / v.s;
-      v.ox = mx - (mx - v.ox) * q; v.oy = my - (my - v.oy) * q; v.s = ns; v.user = true;
+    const c = cv.current, P = pts.current, v = view.current;
+    const loc = (cx, cy) => { const r = c.getBoundingClientRect(); return [cx - r.left, cy - r.top]; };
+    const zoomAt = (mx, my, q) => { const ns = Math.min(5, Math.max(0.02, v.s * q)), k = ns / v.s; v.ox = mx - (mx - v.ox) * k; v.oy = my - (my - v.oy) * k; v.s = ns; v.user = true; };
+    const pair = () => { const [a, b] = [...P.values()]; return { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 }; };
+    const begin = (id, cx, cy, type) => {
+      v.anim = null; P.set(id, { x: cx, y: cy, type });
+      if (P.size === 1) { drag.current = { x: cx, y: cy, moved: 0, type }; c.classList.add("grabbing"); }
+      else if (P.size === 2) { drag.current = drag.current ?? { x: cx, y: cy, moved: 0, type }; drag.current.moved = 1e6; drag.current.pinch = pair(); setTip(null); }
     };
-    c.addEventListener("wheel", onWheel, { passive: false });
-    return () => c.removeEventListener("wheel", onWheel);
-  }, []);
-
-  const onDown = (e) => { view.current.anim = null; drag.current = { x: e.clientX, y: e.clientY, moved: 0 }; cv.current.classList.add("grabbing"); };
-  const onMove = (e) => {
-    const d = drag.current, v = view.current;
-    if (d) {
-      d.moved += Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y);
-      v.user = true; v.ox += e.clientX - d.x; v.oy += e.clientY - d.y; d.x = e.clientX; d.y = e.clientY; setTip(null); return;
+    const move = (id, cx, cy, type) => {
+      const p = P.get(id), d = drag.current;
+      if (!p) { if (type === "mouse" && !P.size) { const [mx, my] = loc(cx, cy), h = pick(mx, my, false); setTip(h ? { x: mx, y: my, h } : null); } return; }
+      if (P.size >= 2 && d?.pinch) {
+        p.x = cx; p.y = cy;
+        const n = pair(), o = d.pinch, [ox, oy] = loc(o.cx, o.cy), [nx, ny] = loc(n.cx, n.cy);
+        zoomAt(ox, oy, n.d / o.d); v.ox += nx - ox; v.oy += ny - oy; d.pinch = n; setTip(null); return;
+      }
+      if (!d) return;
+      d.moved += Math.abs(cx - d.x) + Math.abs(cy - d.y);
+      v.user = true; v.ox += cx - d.x; v.oy += cy - d.y; d.x = cx; d.y = cy; p.x = cx; p.y = cy; setTip(null);
+    };
+    const end = (id, cx, cy, cancel) => {
+      const p = P.get(id); if (!p) return;
+      P.delete(id);
+      const d = drag.current;
+      if (P.size > 0) { // pinch ended with one finger left: continue as pan from its position, never as a tap
+        const q = [...P.values()][0]; if (d) { d.x = q.x; d.y = q.y; d.moved = 1e6; d.pinch = null; } return;
+      }
+      drag.current = null; c.classList.remove("grabbing");
+      if (cancel || !d || d.moved >= (p.type === "mouse" ? 4 : 10)) return;
+      const [mx, my] = loc(cx, cy), h = pick(mx, my, true);
+      latest.current.onSel?.(h ? h.key : null);
+      if (p.type !== "mouse") {
+        const now = performance.now(), lt = lastTap.current;
+        if (lt && now - lt.t < 350 && Math.hypot(lt.x - mx, lt.y - my) < 30) { zoomAt(mx, my, 2); lastTap.current = null; }
+        else { lastTap.current = { t: now, x: mx, y: my }; const hh = pick(mx, my, false); setTip(hh ? { x: mx, y: my, h: hh } : null); }
+      }
+    };
+    const onWheel = (e) => { e.preventDefault(); v.anim = null; const [mx, my] = loc(e.clientX, e.clientY); zoomAt(mx, my, e.deltaY < 0 ? 1.2 : 1 / 1.2); };
+    const L = [[c, "wheel", onWheel, { passive: false }]];
+    if (window.PointerEvent) {
+      L.push([c, "pointerdown", (e) => { try { c.setPointerCapture(e.pointerId); } catch {} begin(e.pointerId, e.clientX, e.clientY, e.pointerType || "mouse"); }, { passive: true }],
+        [c, "pointermove", (e) => { if (P.has(e.pointerId)) e.preventDefault(); move(e.pointerId, e.clientX, e.clientY, e.pointerType || "mouse"); }, { passive: false }],
+        [c, "pointerup", (e) => end(e.pointerId, e.clientX, e.clientY, false), { passive: true }],
+        [c, "pointercancel", (e) => end(e.pointerId, e.clientX, e.clientY, true), { passive: true }],
+        [c, "pointerleave", () => { if (!P.size) setTip(null); }, { passive: true }],
+        [c, "dblclick", (e) => { if (e.pointerType !== "touch" && e.pointerType !== "pen") fit(); }, { passive: true }]);
+    } else {
+      const each = (e, f) => { for (const t of e.changedTouches) f(t); };
+      L.push([c, "touchstart", (e) => { e.preventDefault(); each(e, (t) => begin(t.identifier, t.clientX, t.clientY, "touch")); }, { passive: false }],
+        [c, "touchmove", (e) => { e.preventDefault(); each(e, (t) => move(t.identifier, t.clientX, t.clientY, "touch")); }, { passive: false }],
+        [c, "touchend", (e) => { e.preventDefault(); each(e, (t) => end(t.identifier, t.clientX, t.clientY, false)); }, { passive: false }],
+        [c, "touchcancel", (e) => each(e, (t) => end(t.identifier, t.clientX, t.clientY, true)), { passive: true }],
+        [c, "mousedown", (e) => begin("m", e.clientX, e.clientY, "mouse"), { passive: true }],
+        [c, "mousemove", (e) => move("m", e.clientX, e.clientY, "mouse"), { passive: true }],
+        [c, "mouseup", (e) => end("m", e.clientX, e.clientY, false), { passive: true }],
+        [c, "mouseleave", () => { setTip(null); P.delete("m"); drag.current = null; c.classList.remove("grabbing"); }, { passive: true }],
+        [c, "dblclick", () => fit(), { passive: true }]);
     }
-    const [mx, my] = local(e), h = pick(mx, my, false);
-    setTip(h ? { x: mx, y: my, h } : null);
-  };
-  const onUp = (e) => {
-    const d = drag.current; drag.current = null; cv.current.classList.remove("grabbing");
-    if (d && d.moved < 4) { const [mx, my] = local(e), h = pick(mx, my, true); onSel(h ? h.key : null); }
-  };
+    for (const [el, n, f, o] of L) el.addEventListener(n, f, o);
+    return () => { for (const [el, n, f, o] of L) el.removeEventListener(n, f, o); P.clear(); drag.current = null; };
+  }, []);
 
   return html`<section class=${"panel" + (tall ? " tall" : "") + (compact ? " compact" : "")}>
     <h2>${compact ? t("map.missionMap") : t("map.title")} <span class="sub">${t("map.sub", Math.round(ext.x1 - ext.x0), Math.round(ext.z1 - ext.z0))}${world.map?.status === "resolving" ? t("map.loadingImg") : ""}</span></h2>
     <div class="mapbox" ref=${box}>
-      <canvas ref=${cv} onMouseDown=${onDown} onMouseMove=${onMove} onMouseUp=${onUp}
-        onMouseLeave=${() => { setTip(null); drag.current = null; cv.current.classList.remove("grabbing"); }}
-        onDblClick=${() => fit()}></canvas>
+      <canvas ref=${cv}></canvas>
       <button class="mapbtn" onClick=${() => fit()} title=${t("map.resetView")}><${Icon} n="reset" /> ${t("map.fit")}</button>
       <div class="maphint">${t("map.hint")}</div>
       ${tip && html`<div class="tip" style=${{ left: Math.min(tip.x + 14, (box.current?.clientWidth ?? 600) - 200) + "px", top: tip.y + 14 + "px" }}>
