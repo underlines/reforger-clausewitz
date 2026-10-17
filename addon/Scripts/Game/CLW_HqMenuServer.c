@@ -298,16 +298,7 @@ class CLW_HqMenuServer
 			if (!CLW_SupplyStore.IsHq(baseId))
 				baseLabel = baseId;
 		}
-		else if (terminalPos != vector.Zero)
-		{
-			CLW_TerminalInfo terminal = CLW_RequestTerminals.FindAt(terminalPos);
-			if (terminal && terminal.m_sSide == faction)
-			{
-				baseId = terminal.m_sBase;
-				if (!CLW_SupplyStore.IsHq(baseId))
-					baseLabel = baseId;
-			}
-		}
+		// M4.6 13b: no request terminals; anything that is not a depot of the player's side is the HQ (baseId empty)
 
 		int supplies;
 		if (running && !faction.IsEmpty())
