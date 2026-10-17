@@ -216,6 +216,12 @@ Design `notes/hq-comms-env-traits-design.md`; implemented by Sonnet subagents (W
 - Known: the LLM commander times out on ling-3.1-flash (20 s): next milestone `notes/llm-latency-plan.md`. Spawn-screen paging glitches are vanilla. Sidecar loadout POST sometimes times out (game file stays the source of truth).
 
 ## Planned: M4.6 - Playtest fixes (owner feedback 2026-10-16, `VISION.md` 13b)
+Status 2026-10-17: coded by 6 Sonnet subagents, merged on branch `feature/m4.6-playtest-fixes`, compiles (DS build #125). Spawn bugs not fixed yet (repro planned in the e2e).
+Verified unattended on the DS (RHS packs): HQ pair search (6 pairs, random pick, side flip, fresh seed, ~2.3 s), AI difficulty (hard applied to side A, normal untouched),
+weather rate slow, LLM FOB tool end to end (macro -> zoom -> validate -> retry -> streak), setup memory "nothing remembered" / preset wins.
+Next (needs the owner in game): setup screen sections/reset/no seed, custom loadout spawn, no HQ box + U-menu request, mission completion + taken-offer, leader after respawn,
+rematch memory; then a no-packs run for the vanilla spawn bug. Findings to look at: compact random layouts (HQs 1322 m apart) leave almost no FOB ground
+(pool 2 sites, per-objective band empty, LLM spots rejected for the 300 m keep-out); HQ services landed farther from the command post (supply 21.8 m, limit 10 m).
 - [ ] Mission completes on capture (LLM offers by name/position resolve to the objective; captured unaccepted offers show as completed)
 - [ ] Offers (read-only) and the accepted mission visible to every squad member
 - [ ] FOB placement as an LLM HQ tool (two-step macro -> zoom picture), improved flank-aware algorithm as fallback
