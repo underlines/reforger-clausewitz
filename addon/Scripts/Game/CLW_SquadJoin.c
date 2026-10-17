@@ -9,6 +9,8 @@
 class CLW_SquadJoin
 {
 	protected static bool s_bInit;
+	protected static const int LEADER_TICK_MS = 2000;
+	protected static const int LEADER_SPAWN_DELAY_MS = 3000;
 
 	// Server, once (game start).
 	static void Init()
@@ -20,7 +22,46 @@ class CLW_SquadJoin
 		SCR_AIGroup.GetOnPlayerAdded().Insert(OnPlayerAdded);	// [verify] static invoker (SCR_AIGroup group, int playerID)
 		SCR_AIGroup.GetOnPlayerRemoved().Insert(OnPlayerRemoved);
 		SCR_AIGroup.GetOnPlayerLeaderChanged().Insert(OnLeaderChanged);	// (int groupId, int playerId)
+		GetGame().GetCallqueue().CallLater(LeaderTick, LEADER_TICK_MS, true);	// death / respawn / incapacitated: polled, the vanilla events are too indirect
+		SCR_BaseGameMode mode = SCR_BaseGameMode.Cast(GetGame().GetGameMode());
+		if (mode)
+			mode.GetOnPlayerSpawned().Insert(OnPlayerSpawned);
 		Print("CLW: squad join hooks installed", LogLevel.NORMAL);
+	}
+
+	// ---- human squad leader (M4.6, rules in CLW_PlayerSquad.EnsureHumanLeader) ----
+
+	protected static void LeaderTick()
+	{
+		array<SCR_AIGroup> squads = {};
+		CLW_SquadGroups.GetRegistered(squads);
+		foreach (SCR_AIGroup squad : squads)
+		{
+			if (squad.GetPlayerCount() > 0)
+				CLW_PlayerSquad.EnsureHumanLeader(squad);
+		}
+	}
+
+	// A player (re)spawned: once his character is an agent of the squad (vanilla adds it after the gadgets are initialised) he leads again.
+	protected static void OnPlayerSpawned(int playerId, IEntity entity)
+	{
+		if (!Replication.IsServer())
+			return;
+
+		GetGame().GetCallqueue().CallLater(DoSpawned, LEADER_SPAWN_DELAY_MS, false, playerId);
+	}
+
+	protected static void DoSpawned(int playerId)
+	{
+		SCR_GroupsManagerComponent groups = SCR_GroupsManagerComponent.GetInstance();
+		SCR_AIGroup group;
+		if (groups)
+			group = groups.GetPlayerGroup(playerId);
+		if (!IsOurs(group))
+			return;
+
+		CLW_PlayerSquad.EnsureHumanLeader(group);
+		CLW_MissionBoard.RequestTick();
 	}
 
 	protected static bool IsOurs(SCR_AIGroup group)
@@ -71,12 +112,21 @@ class CLW_SquadJoin
 
 		CLW_PlayerSquad.Establish(group, playerId);
 		HintIfFar(group, playerId);
+		CLW_MissionBoard.RequestTick();	// the new member gets the squad's mission tasks
 	}
 
 	protected static void DoRemoved(SCR_AIGroup group, int playerId)
 	{
-		if (!group || group.GetPlayerCount() > 0)
+		if (!group)
 			return;
+
+		if (group.GetPlayerCount() > 0)
+		{
+			// another human stays: vanilla picked m_aPlayerIDs[0] as leader (maybe dead), our rule picks an able one
+			CLW_PlayerSquad.EnsureHumanLeader(group);
+			CLW_MissionBoard.RequestTick();	// the leaver loses the squad's mission tasks
+			return;
+		}
 
 		CLW_PlayerSquad.Release(group, "last human left (player " + playerId + ")");
 		CLW_MissionBoard.RequestTick();
@@ -88,7 +138,8 @@ class CLW_SquadJoin
 			return;
 
 		CLW_SquadGroups.ApplyName(group);	// SetGroupLeader wiped the name
-		CLW_MissionBoard.RequestTick();	// missions follow the human leader
+		CLW_PlayerSquad.EnsureHumanLeader(group);	// vanilla may have handed the lead to a dead human or an AI
+		CLW_MissionBoard.RequestTick();	// missions follow the human leader (the board moves offers / accepted mission to him)
 	}
 
 	// The squad is leaving the registry (wiped, faction left the war): unregister from the vanilla lists and free its humans.

@@ -40,6 +40,7 @@ class CLW_MissionRec
 	bool m_bFinishing;
 	bool m_bHoldLost;
 
+	ref array<int> m_aExecutors = {};		// player ids added as task executors (the leader + every connected human of the squad)
 	ref array<SCR_Task> m_aFinished = {};	// COMPLETED / FAILED tasks kept for the player's finished tab (bounded)
 	ref array<SCR_Task> m_aDoomed = {};		// tasks to delete on the next flush
 }
@@ -461,10 +462,7 @@ class CLW_MissionBoard : CLW_MissionHook
 
 				seen.Insert(key);
 				if (rec && rec.m_iPlayer != playerId)
-				{
-					Cleanup(rec, "leader changed to player " + playerId);
-					rec = null;
-				}
+					TransferLeader(rec, playerId, group);	// the mission (or its offers) goes on with the new human leader
 
 				if (!rec)
 				{
@@ -473,6 +471,7 @@ class CLW_MissionBoard : CLW_MissionHook
 					rec.m_sFaction = factionKey;
 					rec.m_sSquad = squadId;
 					rec.m_iPlayer = playerId;
+					rec.m_aExecutors.Insert(playerId);
 					m_mRecs.Set(key, rec);
 					Print(string.Format("CLW: mission squad %1 (%2) is human-led by player %3", squadId, factionKey, playerId), LogLevel.NORMAL);
 				}
@@ -511,6 +510,7 @@ class CLW_MissionBoard : CLW_MissionHook
 	protected void Evaluate(CLW_MissionRec rec, CLW_RuleCommander rules, SCR_AIGroup group, float now, bool leaderAlive)
 	{
 		FlushDoomed(rec);
+		SyncExecutors(rec, group);
 		if (rec.m_Task)
 		{
 			EvaluateAccepted(rec, rules, group, now, leaderAlive);
@@ -579,7 +579,11 @@ class CLW_MissionBoard : CLW_MissionHook
 			{
 				CLW_ControlPoint point = points.Find(offer.m_sTarget);
 				if (point && point.m_sOwner == rec.m_sFaction)
-					why = "point already ours";
+				{
+					// our side took it while it was only offered: show it as completed (no reward) instead of deleting it silently
+					CompleteTakenOffer(rec, i);
+					continue;
+				}
 			}
 
 			if (why.IsEmpty())
@@ -590,6 +594,30 @@ class CLW_MissionBoard : CLW_MissionHook
 			rec.m_aOffers.Remove(i);
 			rec.m_aTasks.Remove(i);
 		}
+	}
+
+	// A CAPTURE offer the leader never accepted, whose objective our side took meanwhile: COMPLETED without reward, kept in the
+	// finished tab, the leader gets a note. (Before M4.6 it was deleted silently and looked like a mission that never completed.)
+	protected void CompleteTakenOffer(CLW_MissionRec rec, int index)
+	{
+		CLW_MissionOffer offer = rec.m_aOffers[index];
+		SCR_Task task = rec.m_aTasks[index];
+		rec.m_aOffers.Remove(index);
+		rec.m_aTasks.Remove(index);
+
+		SCR_TaskSystem taskSystem = SCR_TaskSystem.GetInstance();
+		if (taskSystem)
+			taskSystem.SetTaskState(task, SCR_ETaskState.COMPLETED);
+
+		rec.m_aFinished.Insert(task);
+		while (rec.m_aFinished.Count() > MAX_FINISHED_KEPT)
+		{
+			DeleteTaskSafe(rec.m_aFinished[0]);
+			rec.m_aFinished.RemoveOrdered(0);
+		}
+
+		Print(string.Format("CLW: mission offer %1 %2 captured while offered -> completed, no reward (%3)", offer.m_sKind, TargetText(offer), rec.m_sSquad), LogLevel.NORMAL);
+		Notify(rec, CLW_Loc.W("#CLW-Msn_TakenTitle"), CLW_Loc.W("#CLW-Msn_TakenText", TaskName(offer)), SoundTaskSucceed(), string.Format("%1 offer %2 %3 completed without reward (objective taken while offered)", rec.m_sSquad, offer.m_sKind, TargetText(offer)));
 	}
 
 	protected void ClearOffers(CLW_MissionRec rec, string why)
@@ -687,14 +715,145 @@ class CLW_MissionBoard : CLW_MissionHook
 		CLW_Loc.SetTaskName(task, TaskName(offer));	// key + params: every client formats the title in its own language
 		CLW_Loc.SetTaskDescription(task, Brief(offer));
 
-		// visible and assignable to the leading PLAYER only; not assigned (the player accepts it himself)
+		// visible to the leading PLAYER and every human of his squad (one executor per player, never the group: a real GroupID would
+		// silence the commander voice and move marker). Not assigned: only the leader may accept (HandleAssigneeAdded rejects the rest).
 		taskSystem.SetTaskOwnership(task, SCR_ETaskOwnership.EXECUTOR);
 		taskSystem.SetTaskVisibility(task, SCR_ETaskVisibility.EXECUTOR);
 		SCR_TaskExecutor executor = SCR_TaskExecutor.FromPlayerID(rec.m_iPlayer);
 		if (executor)
 			taskSystem.AddTaskExecutor(task, executor);
 
+		foreach (int memberId : rec.m_aExecutors)
+		{
+			if (memberId == rec.m_iPlayer)
+				continue;
+
+			SCR_TaskExecutor memberExecutor = SCR_TaskExecutor.FromPlayerID(memberId);
+			if (memberExecutor)
+				taskSystem.AddTaskExecutor(task, memberExecutor);
+		}
+
 		return task;
+	}
+
+	// ---- squad visibility (M4.6) ----
+
+	// Every task of the record that is alive: offers, the accepted one, the finished ones kept for the finished tab.
+	protected void CollectTasks(CLW_MissionRec rec, notnull array<SCR_Task> result)
+	{
+		foreach (SCR_Task offerTask : rec.m_aTasks)
+		{
+			if (offerTask)
+				result.Insert(offerTask);
+		}
+
+		if (rec.m_Task && !result.Contains(rec.m_Task))
+			result.Insert(rec.m_Task);
+
+		foreach (SCR_Task finishedTask : rec.m_aFinished)
+		{
+			if (finishedTask && !result.Contains(finishedTask))
+				result.Insert(finishedTask);
+		}
+	}
+
+	// Keep the task executors equal to "the leader + every connected human in the squad": members see the offers and the accepted mission
+	// (map marker, J menu, progress, completion) read-only. One executor PER PLAYER, never the group. Runs every tick and on squad events.
+	protected void SyncExecutors(CLW_MissionRec rec, SCR_AIGroup group)
+	{
+		SCR_TaskSystem taskSystem = SCR_TaskSystem.GetInstance();
+		PlayerManager players = GetGame().GetPlayerManager();
+		if (!taskSystem || !players || !group)
+			return;
+
+		array<int> wanted = {};
+		wanted.Insert(rec.m_iPlayer);
+		foreach (int memberId : group.GetPlayerIDs())
+		{
+			if (memberId > 0 && !wanted.Contains(memberId) && players.IsPlayerConnected(memberId))
+				wanted.Insert(memberId);
+		}
+
+		array<SCR_Task> tasks = {};
+		CollectTasks(rec, tasks);
+
+		foreach (int addId : wanted)
+		{
+			if (rec.m_aExecutors.Contains(addId))
+				continue;
+
+			rec.m_aExecutors.Insert(addId);
+			foreach (SCR_Task addTask : tasks)
+			{
+				taskSystem.AddTaskExecutor(addTask, SCR_TaskExecutor.FromPlayerID(addId));
+			}
+
+			Print(string.Format("CLW: mission %1 visible to player %2 (%3 tasks, %4 viewers)", rec.m_sSquad, addId, tasks.Count(), rec.m_aExecutors.Count()), LogLevel.NORMAL);
+		}
+
+		for (int i = rec.m_aExecutors.Count() - 1; i >= 0; i--)
+		{
+			int oldId = rec.m_aExecutors[i];
+			if (wanted.Contains(oldId))
+				continue;
+
+			rec.m_aExecutors.Remove(i);
+			foreach (SCR_Task dropTask : tasks)
+			{
+				taskSystem.RemoveTaskExecutor(dropTask, SCR_TaskExecutor.FromPlayerID(oldId));
+			}
+
+			Print(string.Format("CLW: mission %1 hidden from player %2 (left the squad / disconnected, %3 viewers left)", rec.m_sSquad, oldId, rec.m_aExecutors.Count()), LogLevel.NORMAL);
+		}
+	}
+
+	// The squad has a new human leader (the old one died and another human took over, left the squad, or came back as leader):
+	// the offers and the accepted mission go on with him; he can accept / abandon from now on.
+	protected void TransferLeader(CLW_MissionRec rec, int newPlayerId, SCR_AIGroup group)
+	{
+		int oldPlayerId = rec.m_iPlayer;
+		rec.m_bFinishing = true;	// the unassign below must not count as an abandon
+		rec.m_iPlayer = newPlayerId;
+		SyncExecutors(rec, group);	// the new leader must be an executor before he is assigned
+		if (rec.m_Task)
+		{
+			SCR_TaskSystem taskSystem = SCR_TaskSystem.GetInstance();
+			if (taskSystem)
+			{
+				SCR_TaskExecutor oldExecutor = SCR_TaskExecutor.FromPlayerID(oldPlayerId);
+				SCR_TaskExecutor newExecutor = SCR_TaskExecutor.FromPlayerID(newPlayerId);
+				if (rec.m_Task.IsTaskAssignedTo(oldExecutor))
+					taskSystem.UnassignTask(rec.m_Task, oldExecutor);
+				taskSystem.AssignTask(rec.m_Task, newExecutor);
+				if (!rec.m_Task.IsTaskAssignedTo(newExecutor))
+					Print(string.Format("CLW: mission %1 could not assign the task to the new leader %2", rec.m_sSquad, newPlayerId), LogLevel.WARNING);
+			}
+		}
+
+		rec.m_bFinishing = false;
+		Print(string.Format("CLW: mission %1 leader %2 -> %3 (accepted mission %4, offers %5)", rec.m_sSquad, oldPlayerId, newPlayerId, rec.m_Task != null, rec.m_aOffers.Count()), LogLevel.NORMAL);
+		if (rec.m_Task && rec.m_Offer)
+			Notify(rec, CLW_Loc.W("#CLW-Msn_HandoverTitle"), CLW_Loc.W("#CLW-Msn_HandoverText", TaskName(rec.m_Offer)), "", string.Format("%1 leader is now player %2, mission %3 %4 goes on", rec.m_sSquad, newPlayerId, rec.m_Offer.m_sKind, TargetText(rec.m_Offer)));
+	}
+
+	// A squad member assigned himself to a mission task (vanilla allows it for every executor): take it back and tell him why.
+	protected void RejectAssignee(SCR_Task task, int playerId)
+	{
+		SCR_TaskSystem taskSystem = SCR_TaskSystem.GetInstance();
+		if (!task || !taskSystem)
+			return;
+
+		CLW_MissionRec rec = RecOfTask(task);
+		if (rec && rec.m_iPlayer == playerId)
+			return;	// became the leader meanwhile
+
+		SCR_TaskExecutor member = SCR_TaskExecutor.FromPlayerID(playerId);
+		if (!task.IsTaskAssignedTo(member))
+			return;
+
+		taskSystem.UnassignTask(task, member);
+		Print(string.Format("CLW: mission assign by player %1 refused (not the squad leader), unassigned again", playerId), LogLevel.NORMAL);
+		SendPopup(playerId, CLW_Loc.W("#CLW-Msn_LeaderOnlyTitle"), CLW_Loc.W("#CLW-Msn_LeaderOnlyText"), "");
 	}
 
 	// ---- accept / abandon ----
@@ -702,11 +861,22 @@ class CLW_MissionBoard : CLW_MissionHook
 	protected void HandleAssigneeAdded(SCR_Task task, SCR_TaskExecutor executor)
 	{
 		CLW_MissionRec rec = RecOfTask(task);
-		if (!rec || rec.m_Task)
+		if (!rec)
 			return;
 
 		SCR_TaskExecutorPlayer player = SCR_TaskExecutorPlayer.Cast(executor);
-		if (!player || player.GetPlayerID() != rec.m_iPlayer)
+		if (!player)
+			return;
+
+		// Vanilla lets EVERY owner executor assign itself (SCR_TaskSystem.CanTaskBeAssignedTo, ownership EXECUTOR): a squad member
+		// pressing "assign" in the J menu would become an assignee. Only the leader accepts / works the mission: unassign the member.
+		if (player.GetPlayerID() != rec.m_iPlayer)
+		{
+			GetGame().GetCallqueue().CallLater(RejectAssignee, 100, false, task, player.GetPlayerID());	// not inside the invoker
+			return;
+		}
+
+		if (rec.m_Task)
 			return;
 
 		int index = rec.m_aTasks.Find(task);
@@ -749,6 +919,11 @@ class CLW_MissionBoard : CLW_MissionHook
 	{
 		CLW_MissionRec rec = RecOfTask(task);
 		if (!rec || rec.m_Task != task || rec.m_bFinishing)
+			return;
+
+		// only the leader leaving the task is an abandon (a member unassigned by RejectAssignee / SyncExecutors is not)
+		SCR_TaskExecutorPlayer removedPlayer = SCR_TaskExecutorPlayer.Cast(executor);
+		if (removedPlayer && removedPlayer.GetPlayerID() != rec.m_iPlayer)
 			return;
 
 		SCR_ETaskState state = task.GetTaskState();

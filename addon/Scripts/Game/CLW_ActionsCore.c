@@ -341,23 +341,35 @@ class CLW_Action_OfferMission : CLW_ActionExecutor
 		if (offer.m_sBrief.Length() > CLW_RemoteCommander.MAX_BRIEF)
 			offer.m_sBrief = offer.m_sBrief.Substring(0, CLW_RemoteCommander.MAX_BRIEF);
 
-		CLW_ControlPoints points = CLW_GameMode.GetControlPoints();
-		if (!dto.target.IsEmpty() && points && points.Find(dto.target))
+		// resolve to an objective first (id, display name, position inside the capture radius + margin): only an offer that matches
+		// no objective stays a bare position. A positional CAPTURE completes only when the leader stands at the point (M4.6).
+		bool hasPos = false;
+		float x;
+		float z;
+		if (dto.pos && dto.pos.Count() >= 2)
 		{
-			offer.m_sTarget = dto.target;
+			x = dto.pos[0];
+			z = dto.pos[1];
+			hasPos = x == x && z == z && Math.AbsFloat(x) < 100000 && Math.AbsFloat(z) < 100000;
+		}
+
+		// a position names an objective only for CAPTURE / DEFEND (ownership matters there); RECON / DESTROY keep their exact point
+		bool posMayResolve = hasPos && (dto.kind == "CAPTURE" || dto.kind == "DEFEND");
+		string how;
+		CLW_ControlPoint resolved = CLW_MissionTarget.Resolve(dto.target, posMayResolve, x, z, how);
+		if (resolved)
+		{
+			offer.m_sTarget = resolved.m_sId;
+			Print(string.Format("CLW: mission offer %1 '%2' pos=%3 resolved to objective %4 by %5", dto.kind, dto.target, hasPos, resolved.m_sId, how), LogLevel.NORMAL);
 			return offer;
 		}
 
-		if (dto.pos && dto.pos.Count() >= 2)
+		if (hasPos)
 		{
-			float x = dto.pos[0];
-			float z = dto.pos[1];
-			if (x == x && z == z && Math.AbsFloat(x) < 100000 && Math.AbsFloat(z) < 100000)
-			{
-				offer.m_bHasPos = true;
-				offer.m_vPos = Vector(x, 0, z);
-				return offer;
-			}
+			offer.m_bHasPos = true;
+			offer.m_vPos = Vector(x, 0, z);
+			Print(string.Format("CLW: mission offer %1 '%2' matches no objective, kept as position %3/%4", dto.kind, dto.target, Math.Round(x), Math.Round(z)), LogLevel.NORMAL);
+			return offer;
 		}
 
 		Print(string.Format("CLW: RemoteCommander %1: offer rejected (no valid target / pos, target='%2')", call.m_sFaction, dto.target), LogLevel.WARNING);

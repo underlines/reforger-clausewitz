@@ -247,6 +247,97 @@ class CLW_PlayerSquad
 		}
 	}
 
+	// ---- human squad leader (M4.6) ----
+
+	protected static const float PROMOTE_THROTTLE_SEC = 6;	// a leader switch that did not stick is retried at most this often
+	protected static ref array<SCR_AIGroup> s_aPromotedSquads = {};	// weak; parallel to s_aPromotedAt
+	protected static ref array<float> s_aPromotedAt = {};
+
+	// A human who can lead right now: has a living, conscious body (not dead / respawning / incapacitated). body = that entity.
+	protected static bool IsAbleHuman(int playerId, out IEntity body)
+	{
+		body = GetGame().GetPlayerManager().GetPlayerControlledEntity(playerId);
+		if (!body)
+			return false;
+
+		CharacterControllerComponent charController = CharacterControllerComponent.Cast(body.FindComponent(CharacterControllerComponent));
+		return !charController || charController.GetLifeState() == ECharacterLifeState.ALIVE;
+	}
+
+	// Rule: a squad with a human in it is led by a human whenever one can lead.
+	//   - the human leader died / is incapacitated / left: another able human takes over (random pick; several humans only),
+	//   - a respawned human leads again when nobody (or only an AI) leads: vanilla promotes an AI leader agent when the human leader dies
+	//     and never gives the lead back,
+	//   - a living human leader who does not carry the AI group's leader agent gets it back.
+	// Idempotent and cheap: called by a ticker (CLW_SquadJoin) and by the join / leave / leader-change / spawn events. Server only.
+	// The mission board follows by itself: it reads the leader through CLW_SquadInfo.HumanLeaderEntity (see CLW_MissionBoard.Tick).
+	static void EnsureHumanLeader(SCR_AIGroup squad)
+	{
+		if (!Replication.IsServer() || !squad || squad.GetPlayerCount() == 0 || !squad.GetSlave())
+			return;	// no human, or the squad is not (yet) set up by Establish
+
+		array<int> humans = {};
+		foreach (int memberId : squad.GetPlayerIDs())
+		{
+			humans.Insert(memberId);
+		}
+
+		int leaderId = squad.GetLeaderID();
+		IEntity leaderBody;
+		int target = leaderId;
+		if (leaderId <= 0 || !humans.Contains(leaderId) || !IsAbleHuman(leaderId, leaderBody))
+		{
+			array<int> able = {};
+			foreach (int humanId : humans)
+			{
+				IEntity candidateBody;
+				if (humanId != leaderId && IsAbleHuman(humanId, candidateBody))
+					able.Insert(humanId);
+			}
+
+			if (able.IsEmpty())
+				return;	// nobody can lead right now; the first one to respawn takes over
+
+			target = able[Math.RandomInt(0, able.Count())];
+			squad.SetGroupLeader(target);
+			Print(string.Format("CLW: PlayerSquad leader squad=%1: player %2 cannot lead (dead / incapacitated / gone), player %3 takes over (%4 able of %5 humans)", squad, leaderId, target, able.Count(), humans.Count()), LogLevel.NORMAL);
+		}
+
+		// the AI group's leader agent must be the human's character too (vanilla gave it to an AI when the human died)
+		IEntity targetBody;
+		if (!IsAbleHuman(target, targetBody) || squad.GetLeaderEntity() == targetBody)
+			return;
+
+		float now = CLW_Orders.Now();
+		int slot = s_aPromotedSquads.Find(squad);
+		if (slot >= 0 && now - s_aPromotedAt[slot] < PROMOTE_THROTTLE_SEC)
+			return;
+
+		array<AIAgent> agents = {};
+		squad.GetAgents(agents);
+		foreach (AIAgent agent : agents)
+		{
+			if (agent && agent.GetControlledEntity() == targetBody)
+			{
+				if (slot >= 0)
+				{
+					s_aPromotedAt[slot] = now;
+				}
+				else
+				{
+					s_aPromotedSquads.Insert(squad);
+					s_aPromotedAt.Insert(now);
+				}
+
+				squad.SetNewLeader(agent);
+				Print(string.Format("CLW: PlayerSquad leader squad=%1: human player %2 leads again (leader entity was %3)", squad, target, squad.GetLeaderEntity()), LogLevel.NORMAL);
+				CLW_MissionBoard.RequestTick();
+				return;
+			}
+		}
+		// his new character is not an agent of the squad yet (respawn in progress): the next call retries
+	}
+
 	// ---- release ----
 
 	// The last human left the squad (switch, disconnect, faction change): the AI go back from the slave group to the master group,
