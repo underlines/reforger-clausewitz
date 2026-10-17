@@ -48,7 +48,7 @@ class CLW_RandomLayoutSetup
 	[Attribute("200", UIWidgets.EditBox, "An HQ may move this far (m) from its random wish to find clear ground")]
 	float m_fHqSearchRadiusM;
 
-	[Attribute("12", UIWidgets.EditBox, "Half size (m) of the clear square core of an HQ (spawn zone)")]
+	[Attribute("22", UIWidgets.EditBox, "Half size (m) of the clear square core of an HQ (spawn zone)")]
 	float m_fHqCoreHalfM;
 
 	[Attribute("0.12", UIWidgets.EditBox, "Max terrain grade (height range / width) over the HQ core and a service spot")]
@@ -213,7 +213,7 @@ class CLW_RandomLayoutSetup
 		m_fRoadOffsetMinM = 40;
 		m_fRoadOffsetMaxM = 120;
 		m_fHqSearchRadiusM = 200;
-		m_fHqCoreHalfM = 12;
+		m_fHqCoreHalfM = 22;
 		m_fMaxGrade = 0.12;
 		m_bRequireRoad = true;
 		m_fHqRoadMaxM = 150;
