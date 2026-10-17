@@ -244,10 +244,19 @@ class CLW_AutoScenario
 		float minHq = Math.Min(cfg.m_fMinHqDistanceM, wanted);
 		Print(string.Format("CLW: auto world='%1' area %2 .. %3 (shorter side %4 m): %5 map places, wanted HQ distance %6 m (data %7 m, map fraction %8)", worldName, bmin, bmax, Math.Round(minSide), places.Count(), Math.Round(wanted), Math.Round(cfg.m_fHqDistanceM), cfg.m_fMapFraction), LogLevel.NORMAL);
 
+		int surveySeeds = CLW_HqSurvey.RequestedSeeds();
+		if (surveySeeds > 0)
+		{
+			Print(string.Format("CLW: auto HQ survey requested (-%1): %2 seeds, then the normal start", CLW_HqSurvey.CLI_SURVEY, surveySeeds), LogLevel.WARNING);
+			CLW_HqSurvey.Run(scenario, worldName, wanted, minHq, surveySeeds);
+		}
+
 		CLW_RandomLayout layout = CLW_RandomLayout.Create(scenario, cfg.m_iSeed);
 		s_iSeed = layout.m_iSeed;
 		string how = "strict search";
 		bool found = layout.FindHqPair(wanted, minHq);
+		if (found)
+			how = string.Format("strict search (%1 valid pairs, picked #%2, sides flipped=%3, %4 ms)", layout.m_iPairsFound, layout.m_iPairPicked, layout.m_bSidesFlipped, layout.m_iSearchMs);
 		if (!found)
 		{
 			layout.Relax();
