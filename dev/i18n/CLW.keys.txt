@@ -175,7 +175,6 @@ CLW-Msn_Why_Reached ::: target reached ::: Ziel erreicht
 CLW-Msn_Why_Held ::: held %1 min ::: %1 Min. gehalten
 CLW-Msn_Why_Clear ::: no contact left ::: kein Kontakt mehr
 CLW-Depot_RequestVehicle ::: Request vehicle ::: Fahrzeug anfordern
-CLW-Terminal_OpenHq ::: Open HQ menu ::: HQ-Menü öffnen
 CLW-Terminal_RequestSquad ::: Request squad ::: Trupp anfordern
 CLW-Terminal_RequestResupply ::: Request resupply ::: Nachschub anfordern
 CLW-Req_Kind_vehicle ::: vehicle ::: Fahrzeug
@@ -193,8 +192,6 @@ CLW-Req_VehicleDelivered ::: HQ: vehicle delivered, grid %1. %2 ::: HQ: Fahrzeug
 CLW-Req_Unknown ::: Unknown request '%1'. Use /request vehicle|squad|resupply|reinforce|recon ::: Unbekannte Anforderung '%1'. Nutze /request vehicle|squad|resupply|reinforce|recon
 CLW-Req_NotStarted ::: The war has not started yet. ::: Der Krieg hat noch nicht begonnen.
 CLW-Req_NoSide ::: You are not on a side. ::: Du gehörst keiner Seite an.
-CLW-Req_TerminalOut ::: That request terminal is not in service. ::: Dieses Anforderungsterminal ist außer Betrieb.
-CLW-Req_TerminalWrongSide ::: This terminal belongs to %1, you are %2. ::: Dieses Terminal gehört %1, du bist %2.
 CLW-Req_DepotTooFar ::: You are too far from the vehicle depot. ::: Du bist zu weit vom Fahrzeugdepot entfernt.
 CLW-Req_NoWar ::: The war is not running. ::: Der Krieg läuft nicht.
 CLW-Req_NoPlayer ::: No requesting player. ::: Kein anfordernder Spieler.
@@ -752,3 +749,34 @@ CLW-HqRadial_Loading ::: Loading... ::: Lädt...
 CLW-Keybind_CLW_HqRadial ::: HQ radial menu ::: HQ-Radialmenü
 CLW-KeybindCategory_CLW ::: Clausewitz ::: Clausewitz
 CLW-KeybindSeparator_General ::: General ::: Allgemein
+CLW-Param_weatherRate ::: Weather change rate ::: Wetterwechsel-Tempo
+CLW-Param_weatherRate_Desc ::: How often the weather changes (slots mode): slow = a weather lasts at least 45 min, normal = 25 min, fast = six equal steps over the time limit. ::: Wie oft das Wetter wechselt (Modus Slots): slow = ein Wetter hält mindestens 45 Min., normal = 25 Min., fast = sechs gleiche Stufen über das Zeitlimit.
+CLW-Act_FobDeclined ::: HQ decided against a new FOB for now. ::: Das HQ hat sich vorerst gegen einen neuen FOB entschieden.
+CLW-Act_FobZoom ::: HQ is choosing the exact FOB spot in map area %1. ::: Das HQ wählt den genauen FOB-Standort im Kartenbereich %1.
+CLW-Msn_TakenTitle ::: Objective taken ::: Ziel genommen
+CLW-Msn_TakenText ::: %1: your side took it before you accepted the mission. Completed, no reward. ::: %1: Deine Seite hat es genommen, bevor du den Auftrag angenommen hast. Erledigt, keine Belohnung.
+CLW-Msn_HandoverTitle ::: New squad leader ::: Neuer Truppführer
+CLW-Msn_HandoverText ::: You lead the squad now. The mission goes on: %1 ::: Du führst die Truppe jetzt. Der Auftrag läuft weiter: %1
+CLW-Msn_LeaderOnlyTitle ::: Squad leader only ::: Nur der Truppführer
+CLW-Msn_LeaderOnlyText ::: Only the squad leader can accept or abandon missions. ::: Nur der Truppführer kann Aufträge annehmen oder abbrechen.
+CLW-Param_aiDifficultyA ::: AI difficulty, side A ::: KI-Schwierigkeit, Seite A
+CLW-Param_aiDifficultyA_Desc ::: Skill and perception of every AI soldier and crew of side A. Normal is the unchanged vanilla behaviour; Easy aims worse and spots enemies slower; Hard and Veteran aim better and spot enemies faster. ::: Fähigkeit und Wahrnehmung jedes KI-Soldaten und jeder Besatzung von Seite A. Normal ist das unveränderte Standardverhalten; Leicht zielt schlechter und erkennt Feinde langsamer; Schwer und Veteran zielen besser und erkennen Feinde schneller.
+CLW-Choice_aiDifficultyA_easy ::: easy ::: leicht
+CLW-Choice_aiDifficultyA_normal ::: normal ::: normal
+CLW-Choice_aiDifficultyA_hard ::: hard ::: schwer
+CLW-Choice_aiDifficultyA_veteran ::: veteran ::: Veteran
+CLW-Param_aiDifficultyB ::: AI difficulty, side B ::: KI-Schwierigkeit, Seite B
+CLW-Param_aiDifficultyB_Desc ::: Skill and perception of every AI soldier and crew of side B. Normal is the unchanged vanilla behaviour; Easy aims worse and spots enemies slower; Hard and Veteran aim better and spot enemies faster. ::: Fähigkeit und Wahrnehmung jedes KI-Soldaten und jeder Besatzung von Seite B. Normal ist das unveränderte Standardverhalten; Leicht zielt schlechter und erkennt Feinde langsamer; Schwer und Veteran zielen besser und erkennen Feinde schneller.
+CLW-Choice_aiDifficultyB_easy ::: easy ::: leicht
+CLW-Choice_aiDifficultyB_normal ::: normal ::: normal
+CLW-Choice_aiDifficultyB_hard ::: hard ::: schwer
+CLW-Choice_aiDifficultyB_veteran ::: veteran ::: Veteran
+CLW-Setup_Options ::: OPTIONS ::: OPTIONEN
+CLW-Setup_SectionLabel ::: Section ::: Bereich
+CLW-Setup_SectionBasics ::: Basics ::: Grundlagen
+CLW-Setup_SectionForces ::: Forces and economy ::: Streitkräfte und Wirtschaft
+CLW-Setup_SectionMap ::: Map, HQs and FOBs ::: Karte, HQs und FOBs
+CLW-Setup_SectionEnvironment ::: Weather and time ::: Wetter und Zeit
+CLW-Setup_SectionAdvanced ::: Advanced ::: Erweitert
+CLW-Setup_Remembered ::: The values are the settings of the last round. ::: Die Werte sind die Einstellungen der letzten Runde.
+CLW-Setup_ResetDefaults ::: Reset to defaults ::: Auf Standard zurücksetzen

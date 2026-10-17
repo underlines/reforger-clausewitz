@@ -1,2 +1,0 @@
-CLW-Act_FobDeclined ::: HQ decided against a new FOB for now. ::: Das HQ hat sich vorerst gegen einen neuen FOB entschieden.
-CLW-Act_FobZoom ::: HQ is choosing the exact FOB spot in map area %1. ::: Das HQ wählt den genauen FOB-Standort im Kartenbereich %1.
